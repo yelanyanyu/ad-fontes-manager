@@ -4,8 +4,10 @@
   "description": "YAML to PostgreSQL loader for Ad Fontes Prompts",
   "main": "loader.js",
   "dependencies": {
-    "pg": "^8.11.3",
+    "compromise": "^14.14.5",
+    "deep-diff": "^1.0.2",
+    "dotenv": "^16.3.1",
     "js-yaml": "^4.1.0",
-    "dotenv": "^16.3.1"
+    "pg": "^8.11.3"
   }
 }
