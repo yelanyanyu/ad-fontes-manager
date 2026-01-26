@@ -1,0 +1,45 @@
+const wordService = require('../services/wordService');
+
+class WordController {
+    async list(req, res) {
+        try {
+            const words = await wordService.listWords(req);
+            res.json(words);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    }
+
+    async check(req, res) {
+        const userWord = req.query.word;
+        if (!userWord) return res.status(400).json({ error: 'Word parameter required' });
+        
+        try {
+            const result = await wordService.checkWord(req, userWord);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    }
+
+    async save(req, res) {
+        const { yaml: yamlStr, forceUpdate } = req.body;
+        try {
+            const result = await wordService.saveWord(req, yamlStr, forceUpdate);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    }
+
+    async delete(req, res) {
+        try {
+            await wordService.deleteWord(req, req.params.id);
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    }
+}
+
+module.exports = new WordController();

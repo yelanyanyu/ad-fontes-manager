@@ -1,0 +1,4 @@
+{
+  "DATABASE_URL": "postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test",
+  "MAX_LOCAL_ITEMS": 2
+}
