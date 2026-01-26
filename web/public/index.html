@@ -3,9 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Etymos | Data Manager</title>
+    <link rel="icon" type="image/svg+xml" href="logo.svg">
+    <title>Etymos Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
     <script>
         tailwind.config = {
             theme: {
@@ -24,51 +26,42 @@
             }
         }
     </script>
-    <style>
-        body { background-color: #f8fafc; color: #0f172a; }
-        .glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
-        .diff-added { background-color: #dcfce7; }
-        .diff-removed { background-color: #fee2e2; }
-        
-        /* Resizer Styles */
-        .resizer {
-            width: 6px;
-            cursor: col-resize;
-            background-color: #e2e8f0;
-            border-radius: 9999px;
-            flex-shrink: 0;
-            transition: background-color 0.2s;
-            margin: 0 4px;
-        }
-        .resizer:hover, .resizer.active {
-            background-color: #3b82f6;
-        }
-    </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden bg-slate-50">
 
     <!-- Header -->
     <header class="glass sticky top-0 z-50 px-6 py-4 flex justify-between items-center shadow-sm flex-none">
-        <div class="flex items-center gap-3">
-            <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-bold text-lg">E</div>
-            <h1 class="font-semibold text-lg tracking-tight">Etymos Manager</h1>
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-3">
+                <img src="logo.svg" alt="Logo" class="w-8 h-8 rounded-lg shadow-sm">
+                <h1 class="font-semibold text-lg tracking-tight">Etymos Manager</h1>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex items-center gap-1 bg-slate-100/50 p-1 rounded-lg">
+                <a href="/words" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-white shadow-sm text-primary">Words</a>
+                <a href="/phrase" class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-white/50 transition-colors">Phrase</a>
+            </nav>
         </div>
         
         <!-- Search Bar -->
         <div class="flex-1 max-w-md mx-8 relative">
             <input type="text" id="searchInput" placeholder="Search word..." 
                 class="w-full bg-slate-100 border border-slate-200 rounded-lg py-2 px-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none"
-                onkeydown="if(event.key === 'Enter') checkWord()">
+                oninput="filterAndSortRecords()">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-3 top-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
         </div>
 
-        <div class="text-sm text-secondary flex items-center gap-4">
-            <div id="dbStatus">
-                <span class="w-2 h-2 inline-block rounded-full bg-yellow-400 mr-2"></span>
-                Connecting...
-            </div>
+        <div class="flex items-center gap-4">
+            <button onclick="openSettings()" class="text-secondary hover:text-primary transition-colors relative p-2 rounded-full hover:bg-slate-100">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span id="connStatusDot" class="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white"></span>
+            </button>
         </div>
     </header>
 
@@ -77,28 +70,47 @@
         
         <!-- Left: Input Area -->
         <div id="leftPanel" class="flex flex-col gap-4 h-full min-w-[300px]" style="width: 50%;">
-            <div class="bg-surface rounded-xl shadow-sm p-4 border border-slate-200 flex-1 flex flex-col min-h-0">
-                <div class="flex justify-between items-center mb-2 flex-none">
-                    <h2 class="text-sm font-medium text-slate-500 uppercase tracking-wider">YAML Input</h2>
-                    <div class="flex gap-3">
-                        <button onclick="clearInput()" class="text-xs text-slate-400 hover:text-primary">Clear</button>
+            <div class="bg-surface rounded-xl shadow-sm p-4 border border-slate-200 flex-1 flex flex-col min-h-0 relative group">
+                <!-- Editor View -->
+                <div id="editorView" class="flex flex-col h-full">
+                    <div class="flex justify-between items-center mb-2 flex-none">
+                        <h2 class="text-sm font-medium text-slate-500 uppercase tracking-wider">YAML Input</h2>
+                        <div class="flex gap-2">
+                            <button onclick="togglePreview()" class="text-xs text-slate-500 hover:text-primary px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                Preview
+                            </button>
+                            <button onclick="clearInput()" class="text-xs text-slate-400 hover:text-red-500 px-2 py-1">Clear</button>
+                        </div>
                     </div>
+                    <textarea id="yamlInput" class="flex-1 w-full font-mono text-sm bg-slate-50 p-4 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary focus:border-transparent resize-none outline-none transition-all" placeholder="Paste your YAML here..." spellcheck="false"></textarea>
                 </div>
-                <textarea id="yamlInput" class="flex-1 w-full font-mono text-sm bg-slate-50 p-4 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary focus:border-transparent resize-none outline-none transition-all" placeholder="Paste your YAML here..." spellcheck="false"></textarea>
-                <div class="mt-4 flex justify-end flex-none">
-                    <button onclick="saveData()" id="saveBtn" class="bg-primary hover:bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2">
+
+                <!-- Preview View (Hidden by default) -->
+                <div id="previewView" class="hidden flex-col h-full bg-white rounded-lg overflow-hidden">
+                    <div class="flex justify-between items-center mb-2 flex-none border-b border-slate-100 pb-2">
+                        <h2 class="text-sm font-medium text-primary uppercase tracking-wider">Preview</h2>
+                        <button onclick="togglePreview()" class="text-xs text-slate-500 hover:text-primary px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                            Edit
+                        </button>
+                    </div>
+                    <div id="previewContent" class="flex-1 overflow-y-auto p-4 bg-slate-50/50 rounded-lg border border-slate-100"></div>
+                </div>
+
+                <div class="mt-4 flex justify-end flex-none gap-2">
+                    <button onclick="saveData()" id="saveBtn" class="bg-primary hover:bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2 w-full justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
                         </svg>
-                        Save to Database
+                        <span id="saveBtnText">Save</span>
                     </button>
                 </div>
-            </div>
-            
-            <!-- Config Section -->
-            <div class="bg-surface rounded-xl shadow-sm p-4 border border-slate-200 flex-none">
-                <h2 class="text-sm font-medium text-slate-500 uppercase tracking-wider mb-2">Database Config</h2>
-                <input type="password" id="dbUrl" class="w-full text-sm p-2 rounded border border-slate-200 focus:ring-2 focus:ring-primary outline-none font-mono" placeholder="postgresql://...">
             </div>
         </div>
 
@@ -108,8 +120,26 @@
         <!-- Right: Data List -->
         <div id="rightPanel" class="flex-1 flex flex-col h-full min-w-[300px] min-h-0">
             <div class="bg-surface rounded-xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
-                <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-xl sticky top-0 flex-none">
-                    <h2 class="text-sm font-medium text-slate-500 uppercase tracking-wider">Recent Records</h2>
+                <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-xl sticky top-0 flex-none z-10">
+                    <div class="flex items-center gap-3">
+                        <h2 class="text-sm font-medium text-slate-500 uppercase tracking-wider">Records</h2>
+                        <select id="sortSelect" onchange="filterAndSortRecords()" class="text-xs border border-slate-200 rounded px-2 py-1 bg-slate-50 text-slate-600 outline-none focus:ring-1 focus:ring-primary">
+                            <option value="az">A-Z</option>
+                            <option value="za">Z-A</option>
+                            <option value="newest">Newest</option>
+                            <option value="oldest">Oldest</option>
+                        </select>
+                        <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-2 py-1">
+                            <span class="text-[10px] text-slate-400 uppercase font-bold">Size</span>
+                            <input type="number" id="pageSizeInput" value="20" min="1" max="500" class="w-10 text-xs bg-transparent outline-none text-center" onchange="updatePageSize()">
+                        </div>
+                        <button onclick="syncAll()" id="syncAllBtn" class="hidden text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200 transition-colors flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            Sync All
+                        </button>
+                    </div>
                     <button onclick="refreshRecords()" class="text-secondary hover:text-primary transition-colors" title="Reload All">
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -119,10 +149,53 @@
                 <div id="recordsList" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
                     <div class="text-center text-slate-400 py-10">Loading records...</div>
                 </div>
+                
+                <!-- Pagination Footer -->
+                <div class="p-3 border-t border-slate-100 bg-white flex justify-between items-center text-xs text-slate-500 flex-none z-10">
+                    <span id="pageInfo">Page 1 of 1</span>
+                    <div class="flex gap-2">
+                        <button onclick="changePage(-1)" id="prevPageBtn" class="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">Prev</button>
+                        <button onclick="changePage(1)" id="nextPageBtn" class="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+                    </div>
+                </div>
             </div>
         </div>
 
     </main>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden m-6">
+            <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 class="text-lg font-bold text-slate-800">Settings</h3>
+                <button onclick="closeSettings()" class="text-slate-400 hover:text-slate-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Database Connection String</label>
+                    <input type="password" id="modalDbUrl" class="w-full text-sm p-2 rounded border border-slate-200 focus:ring-2 focus:ring-primary outline-none font-mono" placeholder="postgresql://user:pass@localhost:5432/db">
+                    <p class="text-xs text-slate-400 mt-1">Leave empty to use environment variables.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Max Local Items (Offline Cache)</label>
+                    <input type="number" id="modalMaxItems" class="w-full text-sm p-2 rounded border border-slate-200 focus:ring-2 focus:ring-primary outline-none" placeholder="100">
+                    <p class="text-xs text-slate-400 mt-1">Oldest items will be removed when limit is reached.</p>
+                </div>
+                <div class="flex items-center gap-2 text-sm">
+                    <span id="testStatus" class="text-slate-500">Status: Unknown</span>
+                    <button onclick="testConnection()" class="text-primary hover:underline text-xs">Test Connection</button>
+                </div>
+            </div>
+            <div class="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
+                <button onclick="closeSettings()" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm hover:bg-white transition-colors">Cancel</button>
+                <button onclick="saveSettings()" class="px-4 py-2 rounded-lg bg-primary text-white text-sm hover:bg-blue-600 transition-colors shadow-sm">Save Configuration</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Conflict Modal -->
     <div id="conflictModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
@@ -182,266 +255,40 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
-    <script>
-        const API_BASE = '/api';
-        let currentYamlData = null;
-
-        // --- Drag & Resize Logic ---
-        const resizer = document.getElementById('dragHandle');
-        const leftPanel = document.getElementById('leftPanel');
-        const mainContainer = document.getElementById('mainContainer');
-        let isResizing = false;
-
-        resizer.addEventListener('mousedown', (e) => {
-            isResizing = true;
-            resizer.classList.add('active');
-            document.body.style.cursor = 'col-resize';
-            document.body.style.userSelect = 'none';
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-            const containerRect = mainContainer.getBoundingClientRect();
-            const pointerRelativeX = e.clientX - containerRect.left;
-            
-            // Convert to percentage
-            let newWidthPercent = (pointerRelativeX / containerRect.width) * 100;
-            
-            // Constrain (e.g., 20% to 80%)
-            if(newWidthPercent < 20) newWidthPercent = 20;
-            if(newWidthPercent > 80) newWidthPercent = 80;
-            
-            leftPanel.style.width = `${newWidthPercent}%`;
-        });
-
-        document.addEventListener('mouseup', () => {
-            if(isResizing) {
-                isResizing = false;
-                resizer.classList.remove('active');
-                document.body.style.cursor = '';
-                document.body.style.userSelect = '';
-            }
-        });
-
-        // --- App Logic ---
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const savedUrl = localStorage.getItem('db_url');
-            if(savedUrl) document.getElementById('dbUrl').value = savedUrl;
-            checkConnection();
-            loadRecords();
-        });
-
-        document.getElementById('dbUrl').addEventListener('change', (e) => {
-            localStorage.setItem('db_url', e.target.value);
-            checkConnection();
-        });
-
-        async function checkConnection() {
-            const statusEl = document.getElementById('dbStatus');
-            const dbUrl = document.getElementById('dbUrl').value;
-            
-            try {
-                const res = await fetch(`${API_BASE}/health`, {
-                    headers: { 'x-db-url': dbUrl }
-                });
-                if(res.ok) {
-                    statusEl.innerHTML = '<span class="w-2 h-2 inline-block rounded-full bg-green-500 mr-2"></span>Connected';
-                } else {
-                    throw new Error('Failed');
-                }
-            } catch (e) {
-                statusEl.innerHTML = '<span class="w-2 h-2 inline-block rounded-full bg-red-500 mr-2"></span>Disconnected';
-            }
-        }
-
-        function refreshRecords() {
-            document.getElementById('searchInput').value = ''; // Clear search
-            loadRecords(); // Load all
-        }
-
-        async function checkWord() {
-            const word = document.getElementById('searchInput').value;
-            if(!word) return;
-            const dbUrl = document.getElementById('dbUrl').value;
-
-            try {
-                const res = await fetch(`${API_BASE}/check?word=${encodeURIComponent(word)}`, {
-                    headers: { 'x-db-url': dbUrl }
-                });
-                const data = await res.json();
-                
-                if(data.found) {
-                    // 1. Auto-fill YAML
-                    loadIntoEditor(data.data.original_yaml);
-                    
-                    // 2. Filter List to show ONLY this record
-                    const list = document.getElementById('recordsList');
-                    list.innerHTML = renderCard(data.data);
-                } else {
-                    alert(`Word "${data.lemma}" not found. You can add it now.`);
-                    // Optionally clear list or show empty state
-                    document.getElementById('recordsList').innerHTML = 
-                        `<div class="text-center text-slate-400 py-10">Word "${data.lemma}" not found.</div>`;
-                }
-            } catch (e) {
-                console.error(e);
-                alert('Search failed');
-            }
-        }
-
-        async function saveData(force = false) {
-            const btn = document.getElementById('saveBtn');
-            const yamlStr = document.getElementById('yamlInput').value;
-            const dbUrl = document.getElementById('dbUrl').value;
-
-            if(!yamlStr.trim()) return alert('Please enter YAML content');
-
-            try {
-                btn.disabled = true;
-                btn.innerHTML = 'Processing...';
-                
-                const res = await fetch(`${API_BASE}/words`, {
-                    method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'x-db-url': dbUrl
-                    },
-                    body: JSON.stringify({ yaml: yamlStr, forceUpdate: force })
-                });
-
-                const data = await res.json();
-                
-                if(data.status === 'conflict') {
-                    showConflictModal(data);
-                    currentYamlData = yamlStr; 
-                } else if(!res.ok) {
-                    throw new Error(data.error || 'Save failed');
-                } else {
-                    alert(`Saved successfully! (${data.status})`);
-                    document.getElementById('yamlInput').value = '';
-                    refreshRecords(); // Reload all after save
-                }
-
-            } catch (e) {
-                alert('Error: ' + e.message);
-            } finally {
-                btn.disabled = false;
-                btn.innerHTML = `Save to Database`;
-            }
-        }
-
-        async function loadRecords() {
-            const list = document.getElementById('recordsList');
-            const dbUrl = document.getElementById('dbUrl').value;
-
-            try {
-                const res = await fetch(`${API_BASE}/words`, {
-                    headers: { 'x-db-url': dbUrl }
-                });
-                const words = await res.json();
-
-                if(words.length === 0) {
-                    list.innerHTML = '<div class="text-center text-slate-400 py-10">No records found. Add some data!</div>';
-                    return;
-                }
-
-                list.innerHTML = words.map(w => renderCard(w)).join('');
-
-            } catch (e) {
-                console.error(e);
-                list.innerHTML = '<div class="text-center text-red-400 py-10">Failed to load records. Check connection.</div>';
-            }
-        }
-
-        function renderCard(w) {
-            return `
-                <div class="bg-white p-4 rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative">
-                    <div class="flex justify-between items-start">
-                        <div onclick="loadIntoEditor(${JSON.stringify(w.original_yaml).replace(/"/g, '&quot;')})" class="cursor-pointer">
-                            <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
-                                ${w.lemma}
-                                <span class="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200">v${w.revision_count || 1}</span>
-                            </h3>
-                            <p class="text-xs text-slate-500 font-mono mt-1">${w.part_of_speech} • ${w.syllabification}</p>
-                        </div>
-                        <button onclick="deleteWord('${w.id}')" class="text-slate-300 hover:text-red-500 transition-colors p-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                        </button>
-                    </div>
-                    <div class="mt-3 text-sm text-slate-600 line-clamp-2">
-                        ${w.contextual_meaning_en || 'No definition'}
-                    </div>
+    <!-- Batch Conflict Modal -->
+    <div id="batchConflictModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 items-center justify-center">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col m-4">
+            <div class="p-6 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <span class="text-orange-500">⚠️</span> Batch Sync Conflicts
+                    </h3>
+                    <p class="text-sm text-slate-500 mt-1" id="batchSummaryText">Found X conflicts among Y items</p>
                 </div>
-            `;
-        }
-
-        async function deleteWord(id) {
-            if(!confirm('Delete this word and all its history?')) return;
-            const dbUrl = document.getElementById('dbUrl').value;
-            await fetch(`${API_BASE}/words/${id}`, { method: 'DELETE', headers: { 'x-db-url': dbUrl } });
-            refreshRecords();
-        }
-
-        function loadIntoEditor(yamlObj) {
-            const yamlStr = jsyaml.dump(yamlObj);
-            document.getElementById('yamlInput').value = yamlStr;
-            // No scroll needed as input is in view
-        }
-
-        function clearInput() {
-            document.getElementById('yamlInput').value = '';
-        }
-
-        function showConflictModal(data) {
-            const modal = document.getElementById('conflictModal');
-            const diffOld = document.getElementById('diffOld');
-            const diffNew = document.getElementById('diffNew');
-            const diffSummary = document.getElementById('diffSummary');
+                <button onclick="closeBatchModal()" class="text-slate-400 hover:text-slate-600">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
             
-            // Render version
-            document.getElementById('oldVer').textContent = 'unknown'; 
+            <div class="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+                <div class="flex gap-4 mb-4">
+                    <button onclick="batchSetAction('overwrite')" class="px-3 py-1.5 text-xs font-medium bg-red-100 text-red-700 rounded hover:bg-red-200">Set All to Overwrite</button>
+                    <button onclick="batchSetAction('skip')" class="px-3 py-1.5 text-xs font-medium bg-slate-200 text-slate-700 rounded hover:bg-slate-300">Set All to Skip</button>
+                </div>
 
-            diffOld.textContent = JSON.stringify(data.oldData, null, 2);
-            diffNew.textContent = JSON.stringify(data.newData, null, 2);
-            
-            // Render Diff Summary
-            if (data.diff && Array.isArray(data.diff)) {
-                diffSummary.innerHTML = data.diff.map(d => {
-                    // deep-diff format: kind, path, lhs, rhs
-                    // We just want to show the path
-                    const path = d.path ? d.path.join('.') : 'root';
-                    let kindLabel = '';
-                    let colorClass = 'bg-yellow-100 text-yellow-700 border-yellow-200';
-                    
-                    if (d.kind === 'N') { kindLabel = '(New)'; colorClass = 'bg-green-100 text-green-700 border-green-200'; }
-                    if (d.kind === 'D') { kindLabel = '(Del)'; colorClass = 'bg-red-100 text-red-700 border-red-200'; }
-                    if (d.kind === 'E') { kindLabel = '(Edit)'; }
-                    if (d.kind === 'A') { kindLabel = '(Array)'; }
+                <div id="batchList" class="space-y-3">
+                    <!-- Dynamic Items -->
+                </div>
+            </div>
 
-                    return `<span class="px-2 py-1 rounded border ${colorClass}">${path} ${kindLabel}</span>`;
-                }).join('');
-            } else {
-                diffSummary.innerHTML = '<span class="text-slate-400">No specific field info available.</span>';
-            }
+            <div class="p-6 border-t bg-white rounded-b-xl flex justify-end gap-3">
+                <button onclick="closeBatchModal()" class="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium transition-colors">Cancel</button>
+                <button onclick="executeBatchSync()" class="px-6 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg font-medium shadow-sm transition-colors">Confirm & Sync</button>
+            </div>
+        </div>
+    </div>
 
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-        }
-
-        function closeModal() {
-            document.getElementById('conflictModal').classList.add('hidden');
-            document.getElementById('conflictModal').classList.remove('flex');
-        }
-
-        function resolveConflict(overwrite) {
-            closeModal();
-            saveData(overwrite);
-        }
-
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
