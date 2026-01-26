@@ -39,17 +39,17 @@ export function initResizer(resizerId, leftPanelId, containerId) {
     });
 }
 
-// Navigation Active State
+// Navigation Active State (Dark Sidebar Version)
 export function updateNavState() {
     const path = window.location.pathname;
     const navLinks = document.querySelectorAll('nav a');
     navLinks.forEach(link => {
         if (link.getAttribute('href') === path || (path === '/' && link.getAttribute('href') === '/words')) {
-            link.classList.add('bg-white', 'shadow-sm', 'text-primary');
-            link.classList.remove('text-slate-500', 'hover:text-slate-700', 'hover:bg-white/50');
+            link.classList.add('bg-slate-800', 'text-white');
+            link.classList.remove('text-slate-400', 'hover:text-white');
         } else {
-            link.classList.remove('bg-white', 'shadow-sm', 'text-primary');
-            link.classList.add('text-slate-500', 'hover:text-slate-700', 'hover:bg-white/50');
+            link.classList.remove('bg-slate-800', 'text-white');
+            link.classList.add('text-slate-400', 'hover:text-white', 'hover:bg-slate-800');
         }
     });
 }

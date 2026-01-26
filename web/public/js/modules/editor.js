@@ -28,11 +28,13 @@ export function loadIntoEditor(yamlObj, localId = null) {
         sortKeys: false 
     });
     document.getElementById('yamlInput').value = yamlStr;
+    validateYaml(yamlStr);
 }
 
 export function clearInput() {
     document.getElementById('yamlInput').value = '';
     updateState('currentEditingId', null);
+    validateYaml('');
 }
 
 export function togglePreview() {
@@ -107,6 +109,7 @@ export async function saveData(force = false) {
             if (data.status !== 'logged') {
                 document.getElementById('yamlInput').value = ''; 
                 updateState('currentEditingId', null);
+                validateYaml('');
             }
             refreshRecords();
         }
@@ -125,5 +128,31 @@ export function updateSaveBtn() {
         btn.textContent = 'Save to Database';
     } else {
         btn.textContent = 'Save Locally (Offline)';
+    }
+}
+
+// Validation Logic
+export function initEditorValidation() {
+    const input = document.getElementById('yamlInput');
+    if (!input) return;
+    input.addEventListener('input', (e) => validateYaml(e.target.value));
+}
+
+function validateYaml(val) {
+    const statusEl = document.getElementById('yamlStatus');
+    if (!statusEl) return;
+
+    if (!val.trim()) {
+        statusEl.innerHTML = '';
+        return;
+    }
+
+    try {
+        const data = jsyaml.load(val);
+        if (!data || !data.yield) throw new Error("Missing 'yield'");
+        
+        statusEl.innerHTML = '<span class="text-green-600 text-xs font-bold uppercase tracking-wider flex items-center gap-1"><i class="fa-solid fa-check"></i> Valid</span>';
+    } catch (e) {
+        statusEl.innerHTML = '<span class="text-red-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation"></i> Error</span>';
     }
 }

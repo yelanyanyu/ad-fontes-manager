@@ -5,8 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/svg+xml" href="logo.svg">
     <title>Etymos Manager</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400&family=Noto+Serif+SC:wght@400;700&family=Noto+Sans+SC:wght@300;400;500;700&family=Lora:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown.min.css">
     <link rel="stylesheet" href="css/style.css">
     <script>
         tailwind.config = {
@@ -15,6 +21,7 @@
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
                         mono: ['JetBrains Mono', 'monospace'],
+                        serif: ['Noto Serif SC', 'serif'],
                     },
                     colors: {
                         primary: '#2563eb',
@@ -27,141 +34,188 @@
         }
     </script>
 </head>
-<body class="h-screen flex flex-col overflow-hidden bg-slate-50">
+<body class="h-screen flex overflow-hidden bg-slate-50 text-slate-800">
 
-    <!-- Header -->
-    <header class="glass sticky top-0 z-50 px-6 py-4 flex justify-between items-center shadow-sm flex-none">
-        <div class="flex items-center gap-6">
-            <div class="flex items-center gap-3">
-                <img src="logo.svg" alt="Logo" class="w-8 h-8 rounded-lg shadow-sm">
-                <h1 class="font-semibold text-lg tracking-tight">Etymos Manager</h1>
-            </div>
-            
-            <!-- Navigation -->
-            <nav class="flex items-center gap-1 bg-slate-100/50 p-1 rounded-lg">
-                <a href="/words" class="px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-white shadow-sm text-primary">Words</a>
-                <a href="/phrase" class="px-3 py-1.5 rounded-md text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-white/50 transition-colors">Phrase</a>
-            </nav>
-        </div>
-        
-        <!-- Search Bar -->
-        <div class="flex-1 max-w-md mx-8 relative">
-            <input type="text" id="searchInput" placeholder="Search word..." 
-                class="w-full bg-slate-100 border border-slate-200 rounded-lg py-2 px-4 pl-10 text-sm focus:ring-2 focus:ring-primary focus:bg-white transition-all outline-none"
-                oninput="filterAndSortRecords()">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 absolute left-3 top-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-        </div>
-
-        <div class="flex items-center gap-4">
-            <button onclick="openSettings()" class="text-secondary hover:text-primary transition-colors relative p-2 rounded-full hover:bg-slate-100">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span id="connStatusDot" class="absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white"></span>
+    <!-- Sidebar -->
+    <aside id="sidebar" class="w-64 bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 flex-none h-full z-20">
+        <!-- Sidebar Toggle -->
+        <div class="p-4 flex items-center justify-center h-16 border-b border-slate-800">
+            <button onclick="toggleSidebar()" class="text-slate-500 hover:text-white transition-colors p-1">
+                <i class="fa-solid fa-bars"></i>
             </button>
         </div>
-    </header>
-
-    <!-- Main Content (Resizable Split) -->
-    <main class="flex-1 w-full mx-auto p-4 flex gap-0 h-full overflow-hidden" id="mainContainer">
         
-        <!-- Left: Input Area -->
-        <div id="leftPanel" class="flex flex-col gap-4 h-full min-w-[300px]" style="width: 50%;">
-            <div class="bg-surface rounded-xl shadow-sm p-4 border border-slate-200 flex-1 flex flex-col min-h-0 relative group">
-                <!-- Editor View -->
-                <div id="editorView" class="flex flex-col h-full">
-                    <div class="flex justify-between items-center mb-2 flex-none">
-                        <h2 class="text-sm font-medium text-slate-500 uppercase tracking-wider">YAML Input</h2>
-                        <div class="flex gap-2">
-                            <button onclick="togglePreview()" class="text-xs text-slate-500 hover:text-primary px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                                Preview
-                            </button>
-                            <button onclick="clearInput()" class="text-xs text-slate-400 hover:text-red-500 px-2 py-1">Clear</button>
-                        </div>
-                    </div>
-                    <textarea id="yamlInput" class="flex-1 w-full font-mono text-sm bg-slate-50 p-4 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary focus:border-transparent resize-none outline-none transition-all" placeholder="Paste your YAML here..." spellcheck="false"></textarea>
-                </div>
+        <!-- Navigation -->
+        <nav class="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
+            <a href="/words" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors group">
+                <i class="fa-solid fa-book w-5 text-center transition-colors group-hover:text-white"></i>
+                <span class="sidebar-text font-medium whitespace-nowrap">Words</span>
+            </a>
+            <a href="/phrase" class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors group">
+                <i class="fa-solid fa-quote-left w-5 text-center transition-colors group-hover:text-white"></i>
+                <span class="sidebar-text font-medium whitespace-nowrap">Phrases</span>
+            </a>
+        </nav>
 
-                <!-- Preview View (Hidden by default) -->
-                <div id="previewView" class="hidden flex-col h-full bg-white rounded-lg overflow-hidden">
-                    <div class="flex justify-between items-center mb-2 flex-none border-b border-slate-100 pb-2">
-                        <h2 class="text-sm font-medium text-primary uppercase tracking-wider">Preview</h2>
-                        <button onclick="togglePreview()" class="text-xs text-slate-500 hover:text-primary px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                            </svg>
-                            Edit
-                        </button>
-                    </div>
-                    <div id="previewContent" class="flex-1 overflow-y-auto p-4 bg-slate-50/50 rounded-lg border border-slate-100"></div>
+        <!-- Footer / Settings -->
+        <div class="p-4 border-t border-slate-800">
+            <button onclick="openSettings()" class="sidebar-item flex items-center gap-3 px-3 py-2.5 w-full rounded-lg hover:bg-slate-800 transition-colors text-left group">
+                <div class="relative flex-none">
+                    <i class="fa-solid fa-gear w-5 text-center group-hover:text-white transition-colors"></i>
+                    <span id="connStatusDot" class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 border-2 border-slate-900"></span>
                 </div>
-
-                <div class="mt-4 flex justify-end flex-none gap-2">
-                    <button onclick="saveData()" id="saveBtn" class="bg-primary hover:bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium transition-colors shadow-sm flex items-center gap-2 w-full justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                        </svg>
-                        <span id="saveBtnText">Save</span>
-                    </button>
-                </div>
-            </div>
+                <span class="sidebar-text font-medium whitespace-nowrap">Settings</span>
+            </button>
         </div>
+    </aside>
 
-        <!-- Resizer Handle -->
-        <div id="dragHandle" class="resizer"></div>
+    <!-- Main Content Wrapper -->
+    <div class="flex-1 flex flex-col min-w-0 h-full relative">
+        
+        <!-- Top Bar -->
+        <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 flex-none z-10">
+            <!-- Logo & Title -->
+            <div class="flex items-center gap-3">
+                <img src="logo.svg" alt="Logo" class="w-8 h-8 rounded-lg flex-none bg-slate-100">
+                <h1 class="font-bold text-slate-800 tracking-tight text-lg">Etymos</h1>
+            </div>
+            
+            <!-- Actions -->
+            <div class="flex items-center gap-4 ml-4">
+                <!-- Add New Button Placeholder -->
+            </div>
+        </header>
 
-        <!-- Right: Data List -->
-        <div id="rightPanel" class="flex-1 flex flex-col h-full min-w-[300px] min-h-0">
-            <div class="bg-surface rounded-xl shadow-sm border border-slate-200 flex flex-col h-full overflow-hidden">
-                <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-white rounded-t-xl sticky top-0 flex-none z-10">
-                    <div class="flex items-center gap-3">
-                        <h2 class="text-sm font-medium text-slate-500 uppercase tracking-wider">Records</h2>
-                        <select id="sortSelect" onchange="filterAndSortRecords()" class="text-xs border border-slate-200 rounded px-2 py-1 bg-slate-50 text-slate-600 outline-none focus:ring-1 focus:ring-primary">
-                            <option value="az">A-Z</option>
-                            <option value="za">Z-A</option>
-                            <option value="newest">Newest</option>
-                            <option value="oldest">Oldest</option>
-                        </select>
-                        <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded px-2 py-1">
-                            <span class="text-[10px] text-slate-400 uppercase font-bold">Size</span>
-                            <input type="number" id="pageSizeInput" value="20" min="1" max="500" class="w-10 text-xs bg-transparent outline-none text-center" onchange="updatePageSize()">
+        <!-- View Container -->
+        <div class="flex-1 relative overflow-hidden">
+            
+            <!-- 1. Split View (Default) -->
+            <main id="mainContainer" class="absolute inset-0 flex flex-row p-4 gap-0 h-full">
+                <!-- Left: Editor -->
+                <div id="leftPanel" class="flex flex-col h-full min-w-[300px]" style="width: 45%;">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0 overflow-hidden relative">
+                        <!-- Editor Header -->
+                        <div class="flex justify-between items-center px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex-none">
+                            <div class="flex items-center gap-3">
+                                <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider">YAML Editor</h2>
+                                <span id="yamlStatus"></span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button onclick="togglePreview()" class="text-xs text-slate-500 hover:text-primary px-2 py-1 rounded hover:bg-slate-100 flex items-center gap-1 transition-colors">
+                                    <i class="fa-regular fa-eye"></i> Preview
+                                </button>
+                                <button onclick="clearInput()" class="text-xs text-slate-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-50 transition-colors">
+                                    Clear
+                                </button>
+                            </div>
                         </div>
-                        <button onclick="syncAll()" id="syncAllBtn" class="hidden text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded hover:bg-yellow-200 transition-colors flex items-center gap-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                            Sync All
-                        </button>
+                        
+                        <!-- Editor Body -->
+                        <div class="flex-1 relative group min-h-0">
+                            <!-- Textarea -->
+                            <div id="editorView" class="absolute inset-0 flex flex-col">
+                                <textarea id="yamlInput" class="flex-1 w-full h-full font-mono text-sm bg-white p-4 resize-none outline-none focus:bg-slate-50 transition-colors" placeholder="Paste your YAML here..." spellcheck="false"></textarea>
+                            </div>
+                            <!-- Simple Preview Overlay -->
+                            <div id="previewView" class="hidden absolute inset-0 flex-col bg-white z-10">
+                                <div id="previewContent" class="flex-1 overflow-y-auto p-4 bg-slate-50"></div>
+                            </div>
+                        </div>
+
+                        <!-- Editor Footer -->
+                        <div class="p-3 border-t border-slate-100 bg-white flex justify-end flex-none">
+                            <button onclick="saveData()" id="saveBtn" class="bg-primary hover:bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2">
+                                <i class="fa-regular fa-floppy-disk"></i>
+                                <span id="saveBtnText">Save</span>
+                            </button>
+                        </div>
                     </div>
-                    <button onclick="refreshRecords()" class="text-secondary hover:text-primary transition-colors" title="Reload All">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                    </button>
                 </div>
-                <div id="recordsList" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
-                    <div class="text-center text-slate-400 py-10">Loading records...</div>
+
+                <!-- Resizer -->
+                <div id="dragHandle" class="resizer z-20"></div>
+
+                <!-- Right: List -->
+                <div id="rightPanel" class="flex-1 flex flex-col h-full min-w-[350px] min-h-0">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-col flex h-full overflow-hidden ml-1">
+                        <!-- List Toolbar -->
+                        <div class="px-4 py-3 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50 flex-none">
+                            <!-- Search Row -->
+                            <div class="relative w-full">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
+                                <input type="text" id="searchInput" placeholder="Search..." 
+                                    class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400"
+                                    oninput="filterAndSortRecords()">
+                            </div>
+
+                            <!-- Controls Row -->
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-2">
+                                    <select id="sortSelect" onchange="filterAndSortRecords()" class="text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-600 outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer">
+                                        <option value="az">A-Z</option>
+                                        <option value="za">Z-A</option>
+                                        <option value="newest">Newest</option>
+                                        <option value="oldest">Oldest</option>
+                                    </select>
+                                    <div class="flex items-center gap-2 bg-white border border-slate-200 rounded px-2 py-1 shadow-sm">
+                                        <span class="text-[10px] text-slate-400 uppercase font-bold">Size</span>
+                                        <input type="number" id="pageSizeInput" value="20" min="1" max="500" class="w-10 text-xs bg-transparent outline-none text-center font-medium text-slate-700" onchange="updatePageSize()">
+                                    </div>
+                                    <button onclick="syncAll()" id="syncAllBtn" class="hidden text-xs bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-full hover:bg-yellow-200 transition-colors flex items-center gap-1 font-medium">
+                                        <i class="fa-solid fa-rotate"></i> Sync All
+                                    </button>
+                                </div>
+                                <button onclick="refreshRecords()" class="text-slate-400 hover:text-primary transition-colors p-1" title="Reload All">
+                                    <i class="fa-solid fa-arrows-rotate"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- List Content -->
+                        <div id="recordsList" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+                            <div class="text-center text-slate-400 py-10 flex flex-col items-center gap-2">
+                                <i class="fa-solid fa-spinner fa-spin text-2xl"></i>
+                                <span>Loading records...</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Pagination -->
+                        <div class="p-3 border-t border-slate-100 bg-white flex justify-between items-center text-xs text-slate-500 flex-none">
+                            <span id="pageInfo" class="font-medium">Page 1 of 1</span>
+                            <div class="flex gap-2">
+                                <button onclick="changePage(-1)" id="prevPageBtn" class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">Prev</button>
+                                <button onclick="changePage(1)" id="nextPageBtn" class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">Next</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- 2. Preview View (Full Screen Overlay) -->
+            <div id="previewContainer" class="hidden absolute inset-0 bg-slate-100 overflow-y-auto flex flex-col z-30">
+                <!-- Preview Header -->
+                <div class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm">
+                     <button onclick="closePreviewPage()" class="text-slate-500 hover:text-slate-800 flex items-center gap-2 font-bold text-sm transition-colors group">
+                        <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-slate-200 transition-colors">
+                            <i class="fa-solid fa-arrow-left"></i>
+                        </div>
+                        <span>Back to List</span>
+                     </button>
+                     
+                     <!-- View Toggle -->
+                     <div class="flex bg-slate-100 p-1 rounded-lg">
+                        <button onclick="togglePreviewStyle('card')" class="px-4 py-1.5 text-xs rounded-md shadow-sm bg-white text-slate-700 font-bold transition-all hover:bg-gray-50">Card</button>
+                        <button onclick="togglePreviewStyle('markdown')" class="px-4 py-1.5 text-xs rounded-md text-slate-500 hover:text-slate-700 font-medium transition-all hover:bg-slate-200/50">Markdown</button>
+                     </div>
                 </div>
                 
-                <!-- Pagination Footer -->
-                <div class="p-3 border-t border-slate-100 bg-white flex justify-between items-center text-xs text-slate-500 flex-none z-10">
-                    <span id="pageInfo">Page 1 of 1</span>
-                    <div class="flex gap-2">
-                        <button onclick="changePage(-1)" id="prevPageBtn" class="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">Prev</button>
-                        <button onclick="changePage(1)" id="nextPageBtn" class="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
-                    </div>
+                <div id="previewContentWrapper" class="p-8 w-full max-w-5xl mx-auto flex-1">
+                    <!-- Dynamic Content -->
                 </div>
             </div>
-        </div>
 
-    </main>
+        </div>
+    </div>
 
     <!-- Settings Modal -->
     <div id="settingsModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
@@ -169,9 +223,7 @@
             <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                 <h3 class="text-lg font-bold text-slate-800">Settings</h3>
                 <button onclick="closeSettings()" class="text-slate-400 hover:text-slate-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <i class="fa-solid fa-xmark text-xl"></i>
                 </button>
             </div>
             <div class="p-6 space-y-4">
@@ -207,9 +259,7 @@
                     <p class="text-sm text-slate-500">The word exists but content differs. Choose an action.</p>
                 </div>
                 <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
+                    <i class="fa-solid fa-xmark text-xl"></i>
                 </button>
             </div>
 
@@ -221,7 +271,7 @@
                 </div>
             </div>
             
-            <!-- Diff Area (Independent Scrolling Fix) -->
+            <!-- Diff Area -->
             <div class="flex-1 grid grid-cols-2 divide-x divide-slate-200 overflow-hidden min-h-0">
                 <!-- Old Data -->
                 <div class="flex flex-col bg-slate-50/30 h-full min-h-0 overflow-hidden">
@@ -246,9 +296,7 @@
                     Use Existing (Log Only)
                 </button>
                 <button onclick="resolveConflict(true)" class="px-6 py-2 rounded-lg bg-red-500 text-white font-medium hover:bg-red-600 transition-colors shadow-sm flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
+                    <i class="fa-solid fa-triangle-exclamation"></i>
                     Overwrite & Update
                 </button>
             </div>
@@ -261,12 +309,12 @@
             <div class="p-6 border-b flex justify-between items-center bg-slate-50 rounded-t-xl">
                 <div>
                     <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-                        <span class="text-orange-500">⚠️</span> Batch Sync Conflicts
+                        <span class="text-orange-500"><i class="fa-solid fa-triangle-exclamation"></i></span> Batch Sync Conflicts
                     </h3>
                     <p class="text-sm text-slate-500 mt-1" id="batchSummaryText">Found X conflicts among Y items</p>
                 </div>
                 <button onclick="closeBatchModal()" class="text-slate-400 hover:text-slate-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    <i class="fa-solid fa-xmark text-xl"></i>
                 </button>
             </div>
             
@@ -288,7 +336,9 @@
         </div>
     </div>
 
+    <!-- JS Deps -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script type="module" src="js/main.js"></script>
 </body>
 </html>
