@@ -14,7 +14,7 @@ app.use('/api', require('./routes/sync')); // Mounts /local and /sync
 app.use('/api/words', require('./routes/words'));
 
 // Frontend Routes (SPA-like or separate pages)
-app.get(['/', '/words', '/phrase'], (req, res) => {
+app.get(['/', '/words', '/phrase', '/words/*/preview'], (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
