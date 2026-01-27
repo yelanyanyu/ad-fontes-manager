@@ -1,6 +1,21 @@
-# Etymos Manager (YAML to PostgreSQL 工具)
+# Etymos Manager (Ad Fontes Manager)
 
-这是一个全栈 Web 应用程序，专为管理、可视化和存储从 YAML 解析出的词源数据而设计。它是 Ad Fontes Prompts 生态系统中的“管理器 (Manager)”组件。
+**Etymos Manager** 是 **Ad Fontes** 英语学习生态系统中的核心管理组件。该生态致力于通过“回到源头”的方式（词源、动作还原）帮助学习者建立对语言的深度体感。
+
+## 📚 Ad Fontes 系列项目
+
+本工具是 Ad Fontes 三部曲中的 **"The Manager"**，请配合以下项目使用以获得完整体验：
+
+1.  **[Ad Fontes Prompts](https://github.com/yelanyanyu/ad-fontes-prompts)** (The Soul)
+    *   **核心提示词库**：提供用于 ChatGPT/Claude 的核心 Prompt，将单词还原为动作和画面。
+2.  **[Ad Fontes Browser Extension](https://github.com/yelanyanyu/ad-fontes-browser-extension)** (The Helper)
+    *   **浏览器插件**：辅助生成结构化单词卡，支持一键提取词根、释义并格式化为 YAML。
+3.  **[Ad Fontes Manager](https://github.com/yelanyanyu/ad-fontes-manager)** (The Manager - 本项目)
+    *   **数据管理器**：全栈 Web 应用，用于管理、可视化、存储和复习你的词源数据。支持离线优先、冲突同步和精美卡片预览。
+
+---
+
+这是一个全栈 Web 应用程序，专为管理、可视化和存储从 YAML 解析出的词源数据而设计。
 
 ## 快速开始（Windows）
 - 启动（开发模式，推荐）：双击 [start_tool_yml2pg.bat](file:///d:/myCode/formal-projects/ad-fontes-manager/start_tool_yml2pg.bat)（会自动安装依赖并启动 API+前端）
@@ -149,3 +164,86 @@ erDiagram
 
 3.  **安全性**：
     *   **行级安全性 (RLS)**：在所有表上启用。目前配置为默认的“公开读取”策略，但已为未来的多租户隔离（例如 `auth.uid() = user_id`）做好准备。
+
+```
+ad-fontes-manager
+├─ CHANGELOG.md
+├─ DEVELOPMENT.md
+├─ init_db.js
+├─ migration_v2.sql
+├─ node
+│  ├─ init_db.js
+│  ├─ loader.js
+│  ├─ migrate_v2.js
+│  ├─ package-lock.json
+│  └─ package.json
+├─ README.md
+├─ schema.sql
+└─ web
+   ├─ .dockerignore
+   ├─ client
+   │  ├─ index.html
+   │  ├─ package-lock.json
+   │  ├─ package.json
+   │  ├─ postcss.config.js
+   │  ├─ public
+   │  │  ├─ logo.svg
+   │  │  └─ vite.svg
+   │  ├─ README.md
+   │  ├─ src
+   │  │  ├─ App.vue
+   │  │  ├─ assets
+   │  │  │  └─ main.css
+   │  │  ├─ components
+   │  │  │  ├─ Layout
+   │  │  │  │  ├─ Header.vue
+   │  │  │  │  └─ Sidebar.vue
+   │  │  │  ├─ ui
+   │  │  │  │  ├─ ConflictModal.vue
+   │  │  │  │  └─ ToastContainer.vue
+   │  │  │  ├─ WordEditor
+   │  │  │  │  └─ WordEditor.vue
+   │  │  │  ├─ WordList
+   │  │  │  │  └─ WordList.vue
+   │  │  │  └─ WordPreview
+   │  │  │     └─ WordPreview.vue
+   │  │  ├─ main.js
+   │  │  ├─ router
+   │  │  │  └─ index.js
+   │  │  ├─ stores
+   │  │  │  ├─ appStore.js
+   │  │  │  └─ wordStore.js
+   │  │  ├─ style.css
+   │  │  ├─ utils
+   │  │  │  ├─ conflict.js
+   │  │  │  ├─ generator.js
+   │  │  │  ├─ request.js
+   │  │  │  └─ template.js
+   │  │  └─ views
+   │  │     ├─ EditorView.vue
+   │  │     ├─ HomeView.vue
+   │  │     └─ SettingsView.vue
+   │  ├─ tailwind.config.js
+   │  └─ vite.config.js
+   ├─ controllers
+   │  └─ wordController.js
+   ├─ data
+   ├─ db
+   │  └─ index.js
+   ├─ Dockerfile
+   ├─ localStore.js
+   ├─ package-lock.json
+   ├─ package.json
+   ├─ routes
+   │  ├─ core.js
+   │  ├─ sync.js
+   │  └─ words.js
+   ├─ scripts
+   │  ├─ test-api-sorting.mjs
+   │  └─ test-list-sort.mjs
+   ├─ server.js
+   └─ services
+      ├─ conflictService.js
+      └─ wordService.js
+
+```

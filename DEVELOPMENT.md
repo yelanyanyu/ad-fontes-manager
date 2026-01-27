@@ -4,32 +4,44 @@
 
 ## 1. 目录结构介绍
 
-项目位于 `tool/yaml2pg/` 目录下，采用前后端分离（但在同一 Express 服务中托管）的架构。
+项目已迁移至根目录，采用现代化的前后端分离架构（Vue 3 前端 + Express 后端）。
 
 ```text
-tool/yaml2pg/
-├── node/                   # 后端维护脚本 (初始化、迁移)
-│   ├── init_db.js          # 数据库初始化脚本
-│   └── migrate_v2.js       # 数据库迁移脚本 (v1 -> v2)
-├── python/                 # Python 辅助工具 (旧版数据加载器)
-├── web/                    # Web 应用主目录 (核心)
-│   ├── controllers/        # 控制器层 (处理业务逻辑)
-│   ├── data/               # 本地存储数据 (local_words.json)
-│   ├── db/                 # 数据库连接池管理
-│   ├── public/             # 静态资源 (前端代码)
-│   │   ├── css/            # 样式表 (Tailwind + Custom)
-│   │   ├── js/             # 前端逻辑
-│   │   │   ├── modules/    # 功能模块 (编辑器、列表、预览、同步)
-│   │   │   ├── api.js      # API 请求封装
-│   │   │   ├── main.js     # 入口文件
-│   │   │   └── state.js    # 全局状态管理
-│   │   └── index.html      # 单页应用入口
-│   ├── routes/             # Express 路由定义
-│   ├── services/           # 服务层 (核心业务逻辑)
-│   ├── localStore.js       # 本地 JSON 存储引擎
-│   └── server.js           # 应用入口 (Express Server)
-├── schema.sql              # 数据库结构定义
-└── migration_v2.sql        # V2 版本迁移 SQL
+ad-fontes-manager
+├── CHANGELOG.md                # 变更日志
+├── DEVELOPMENT.md              # 开发文档 (本文档)
+├── init_db.js                  # 数据库初始化入口
+├── migration_v2.sql            # V2 数据库迁移 SQL
+├── node/                       # Node.js 维护脚本
+│   ├── init_db.js              # 数据库初始化逻辑
+│   ├── loader.js               # 数据加载工具
+│   ├── migrate_v2.js           # 迁移执行脚本
+│   └── package.json            # 脚本依赖配置
+├── README.md                   # 项目说明文档
+├── schema.sql                  # 数据库 Schema 定义
+└── web/                        # Web 应用主目录
+    ├── client/                 # 前端 Vue 应用 (Vite + Vue 3)
+    │   ├── index.html          # Vue 入口 HTML
+    │   ├── public/             # 静态资源
+    │   ├── src/                # Vue 源代码
+    │   │   ├── components/     # UI 组件
+    │   │   │   ├── Layout/     # 布局组件 (Header, Sidebar)
+    │   │   │   ├── WordEditor/ # 编辑器组件
+    │   │   │   ├── WordList/   # 列表组件
+    │   │   │   └── WordPreview/# 预览卡片组件
+    │   │   ├── stores/         # Pinia 状态管理 (app, word)
+    │   │   ├── utils/          # 工具函数 (冲突处理, 生成器)
+    │   │   └── views/          # 页面视图 (Home, Editor, Settings)
+    │   ├── package.json        # 前端依赖
+    │   └── vite.config.js      # Vite 配置
+    ├── controllers/            # 后端控制器
+    ├── data/                   # 本地数据存储 (local_words.json)
+    ├── db/                     # 数据库连接池
+    ├── routes/                 # Express 路由 (API)
+    ├── scripts/                # 测试与维护脚本
+    ├── services/               # 业务逻辑服务层 (核心)
+    ├── localStore.js           # 本地 JSON 存储引擎 (离线模式)
+    └── server.js               # 后端应用入口 (Express)
 ```
 
 ## 2. Tool 介绍
