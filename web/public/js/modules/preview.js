@@ -1,4 +1,7 @@
 import { store } from '../state.js';
+import { get } from '../api.js';
+import { notify } from './toast.js';
+import { renderTemplate } from './template-engine.js';
 
 // --- Generators (Ported from yml2html.html) ---
 
@@ -155,10 +158,11 @@ export function generateMarkdown(data) {
 
 export function showPreviewPage(wordId) {
     // 1. Find Data
-    let record = store.allRecords.find(r => r.id === wordId);
-    if (!record) return alert('Record not found');
-
-    const data = record.original_yaml;
+    let record = [...store.localRecords, ...store.dbRecords].find(r => r.id === wordId);
+    if (!record) {
+        notify.error('Record not found');
+        return;
+    }
     
     // 2. Update URL
     const url = `/words/${encodeURIComponent(record.lemma)}/preview`;
@@ -174,14 +178,54 @@ export function showPreviewPage(wordId) {
 
     // Render Logic
     let currentStyle = 'card';
+    let data = record.original_yaml || null;
     
+    const applyToggleStyles = () => {
+        const cardBtn = document.getElementById('previewToggleCardBtn');
+        const mdBtn = document.getElementById('previewToggleMarkdownBtn');
+        if (!cardBtn || !mdBtn) return;
+
+        const active = ['bg-white', 'text-slate-700', 'font-bold', 'shadow-sm'];
+        const inactive = ['text-slate-500', 'font-medium'];
+
+        if (currentStyle === 'card') {
+            cardBtn.classList.add(...active);
+            cardBtn.classList.remove(...inactive);
+            mdBtn.classList.remove(...active);
+            mdBtn.classList.add(...inactive);
+        } else {
+            mdBtn.classList.add(...active);
+            mdBtn.classList.remove(...inactive);
+            cardBtn.classList.remove(...active);
+            cardBtn.classList.add(...inactive);
+        }
+    };
+
     const render = () => {
         previewContent.innerHTML = '';
         
+        if (!data) {
+            previewContent.innerHTML = `
+                <div class="w-full max-w-4xl mx-auto">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex items-center gap-3 text-slate-600">
+                        <i class="fa-solid fa-spinner fa-spin"></i>
+                        <span class="font-medium">Loading…</span>
+                    </div>
+                </div>
+            `;
+            applyToggleStyles();
+            return;
+        }
+
         if (currentStyle === 'card') {
-            const html = generateCardHTML(data);
+            const mode = localStorage.getItem('etymos.wordCardTemplateMode') || 'default';
+            const customTemplate = localStorage.getItem('etymos.wordCardTemplateHtml') || '';
+            const html = (mode === 'custom' && customTemplate.trim())
+                ? renderTemplate(customTemplate, data)
+                : generateCardHTML(data);
             const container = document.createElement('div');
             container.innerHTML = html;
+            window.currentPreviewHtml = html;
             
             // Action Bar (Copy)
             const actionBar = document.createElement('div');
@@ -221,6 +265,8 @@ export function showPreviewPage(wordId) {
             `;
             previewContent.appendChild(wrapper);
         }
+
+        applyToggleStyles();
     };
 
     render();
@@ -233,6 +279,19 @@ export function showPreviewPage(wordId) {
     
     // Expose Data for copy helpers
     window.currentPreviewData = data;
+
+    if (!data && !record.isLocal) {
+        get(`/words/${encodeURIComponent(wordId)}`)
+            .then((full) => {
+                data = full.original_yaml;
+                record.original_yaml = full.original_yaml;
+                window.currentPreviewData = data;
+                render();
+            })
+            .catch((e) => {
+                notify.error(e.message || 'Failed to load word');
+            });
+    }
 }
 
 export function closePreviewPage() {
@@ -245,19 +304,23 @@ export function closePreviewPage() {
 window.copyPreviewContent = async (type) => {
     const data = window.currentPreviewData;
     let content = '';
-    if (type === 'html') content = generateCardHTML(data);
+    if (type === 'html') content = window.currentPreviewHtml || generateCardHTML(data);
     if (type === 'md') content = generateMarkdown(data);
     
     try {
         await navigator.clipboard.writeText(content);
-        alert('Copied to clipboard!');
+        notify.success('Copied');
     } catch(e) {
-        alert('Copy failed');
+        notify.error('Copy failed');
     }
 };
 
 window.copyRichText = () => {
     const node = document.getElementById('md-render-target');
+    if (!node) {
+        notify.error('Nothing to copy');
+        return;
+    }
     const range = document.createRange();
     range.selectNode(node);
     const selection = window.getSelection();
@@ -265,5 +328,5 @@ window.copyRichText = () => {
     selection.addRange(range);
     document.execCommand('copy');
     selection.removeAllRanges();
-    alert('Rich text copied!');
+    notify.success('Rich text copied');
 };

@@ -4,6 +4,7 @@ import { refreshRecords, loadRecords } from './list.js';
 import { saveData, loadIntoEditor } from './editor.js';
 import { updateSaveBtn } from './editor.js';
 import { renderDiffSummary } from './ui-render.js';
+import { notify } from './toast.js';
 
 // Connection Status
 export async function checkConnection() {
@@ -75,7 +76,7 @@ export async function syncOne(id) {
         await executeSyncOne(item, false);
 
     } catch (e) {
-        alert('Sync Error: ' + e.message);
+        notify.error(e.message ? `Sync Error: ${e.message}` : 'Sync Error');
         if(btn) btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5.5 13a3.5 3.5 0 01-.369-6.98 4 4 0 117.753-1.977A4.5 4.5 0 1113.5 13H11V9.413l1.293 1.293a1 1 0 001.414-1.414l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13H5.5z" /><path d="M9 13h2v5a1 1 0 11-2 0v-5z" /></svg>';
     }
 }
@@ -94,7 +95,10 @@ export async function executeSyncOne(item, forceUpdate) {
 }
 
 export async function syncAll() {
-    if(!store.dbConnected) return alert('Database offline');
+    if (!store.dbConnected) {
+        notify.warning('Database offline');
+        return;
+    }
     if (store.localRecords.length === 0) return;
     
     const btn = document.getElementById('syncAllBtn');
@@ -117,7 +121,7 @@ export async function syncAll() {
         }
 
     } catch (e) {
-        alert('Sync Check Failed: ' + e.message);
+        notify.error(e.message ? `Sync Check Failed: ${e.message}` : 'Sync Check Failed');
     } finally {
         btn.textContent = originalText;
         btn.disabled = false;
@@ -178,7 +182,7 @@ export function resolveConflict(overwrite) {
             // User wants to KEEP DB version
             if (conflictOldData) {
                 loadIntoEditor(conflictOldData);
-                alert('Reverted editor to database version.');
+                notify.info('Reverted editor to database version');
             }
         }
     }
@@ -286,11 +290,11 @@ export async function executeBatchSync() {
             await post('/sync/execute', { items: forcedItems, forceUpdate: true });
         }
         
-        alert('Batch Sync Completed');
+        notify.success('Batch Sync Completed');
         refreshRecords();
 
     } catch (e) {
-        alert('Batch Sync Partial Error: ' + e.message);
+        notify.error(e.message ? `Batch Sync Error: ${e.message}` : 'Batch Sync Error');
     } finally {
         btn.textContent = `Sync All (${store.localRecords.length})`;
         btn.disabled = false;
@@ -301,9 +305,9 @@ export async function executeBatchSyncDirect(items) {
      const res = await post('/sync/execute', { items, forceUpdate: false });
      const data = res.data;
     if(data.success > 0 || data.failed === 0) {
-        alert(`Synced ${data.success} items successfully.`);
+        notify.success(`Synced ${data.success} items successfully`);
         refreshRecords();
     } else {
-        alert(`Sync failed. Success: ${data.success}, Failed: ${data.failed}`);
+        notify.error(`Sync failed. Success: ${data.success}, Failed: ${data.failed}`);
     }
 }

@@ -3,6 +3,7 @@ import { store, updateState } from '../state.js';
 import { renderPreview } from './ui-render.js';
 import { refreshRecords } from './list.js';
 import { showConflictModal } from './sync.js';
+import { notify } from './toast.js';
 
 export function loadIntoEditor(yamlObj, localId = null) {
     updateState('currentEditingId', localId);
@@ -50,7 +51,10 @@ export function togglePreview() {
     } else {
         // Show Preview
         const yamlStr = input.value;
-        if (!yamlStr.trim()) return alert('Nothing to preview');
+        if (!yamlStr.trim()) {
+            notify.info('Nothing to preview');
+            return;
+        }
         
         try {
             const data = jsyaml.load(yamlStr);
@@ -59,7 +63,7 @@ export function togglePreview() {
             preview.classList.remove('hidden');
             preview.classList.add('flex');
         } catch (e) {
-            alert('Invalid YAML for preview');
+            notify.error('Invalid YAML for preview');
         }
     }
 }
@@ -71,7 +75,10 @@ export async function saveData(force = false) {
     const btn = document.getElementById('saveBtn');
     const yamlStr = document.getElementById('yamlInput').value;
     
-    if(!yamlStr.trim()) return alert('Please enter YAML content');
+    if (!yamlStr.trim()) {
+        notify.warning('Please enter YAML content');
+        return;
+    }
 
     try {
         btn.disabled = true;
@@ -105,7 +112,8 @@ export async function saveData(force = false) {
             else if (data.status === 'created') msg = 'Created successfully!';
             else if (data.status === 'updated') msg = 'Updated successfully!';
             
-            alert(msg);
+            if (data.status === 'logged') notify.info(msg);
+            else notify.success(msg);
             if (data.status !== 'logged') {
                 document.getElementById('yamlInput').value = ''; 
                 updateState('currentEditingId', null);
@@ -115,7 +123,7 @@ export async function saveData(force = false) {
         }
 
     } catch (e) {
-        alert('Error: ' + e.message);
+        notify.error(e.message || 'Unknown error');
     } finally {
         btn.disabled = false;
         updateSaveBtn();
