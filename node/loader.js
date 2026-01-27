@@ -77,7 +77,7 @@ nuance:
 
 // DB Configuration (Best Practice: Use Pool)
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/ad_fontes',
+  connectionString: process.env.DATABASE_URL,
 });
 
 async function insertData(yamlStr) {
