@@ -2,6 +2,47 @@
 
 这是一个全栈 Web 应用程序，专为管理、可视化和存储从 YAML 解析出的词源数据而设计。它是 Ad Fontes Prompts 生态系统中的“管理器 (Manager)”组件。
 
+## 快速开始（Windows）
+- 启动（开发模式，推荐）：双击 [start_tool_yml2pg.bat](file:///d:/myCode/formal-projects/ad-fontes-prompts/start_tool_yml2pg.bat)（会自动安装依赖并启动 API+前端）
+  - 前端：http://localhost:5173
+  - API：http://localhost:3000/api
+- 启动（生产模式）：`start_tool_yml2pg.bat prod`
+  - 服务：http://localhost:3000
+- 停止：双击 [stop_tool_yml2pg.bat](file:///d:/myCode/formal-projects/ad-fontes-prompts/stop_tool_yml2pg.bat)（按端口精准停止，不会误杀其他 node 进程）
+
+## 手动启动（开发者）
+### 依赖
+- Node.js + npm
+- PostgreSQL（可选：离线模式只写本地缓存，不需要数据库）
+
+### 安装与运行（开发模式）
+```bash
+cd tool/yaml2pg/web
+npm install
+cd client
+npm install
+cd ..
+npm run dev
+```
+打开：http://localhost:5173
+
+### 构建与运行（生产模式）
+```bash
+cd tool/yaml2pg/web
+npm install
+cd client
+npm install
+cd ..
+npm run build
+set NODE_ENV=production
+node server.js
+```
+打开：http://localhost:3000
+
+## 配置与本地数据位置
+- 本地离线缓存：`tool/yaml2pg/web/data/local_words.json`（建议不提交到 git）
+- 本地配置：`tool/yaml2pg/web/config.json`（建议不提交到 git，可在 Settings 页面保存配置）
+
 ## 🌟 核心特性 (v1.2+)
 
 ### 1. 离线优先架构 (Offline-First)
