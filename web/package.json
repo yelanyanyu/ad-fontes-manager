@@ -4,15 +4,22 @@
   "description": "Minimalist Etymology Data Manager",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "NODE_ENV=production node server.js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "node server.js",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build"
   },
   "dependencies": {
     "compromise": "^14.14.5",
     "cors": "^2.8.5",
     "deep-diff": "^1.0.2",
-    "dotenv": "^16.3.1",
+    "dotenv": "^16.6.1",
     "express": "^4.18.2",
     "js-yaml": "^4.1.0",
     "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }
