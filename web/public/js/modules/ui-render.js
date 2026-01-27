@@ -10,7 +10,9 @@ export function renderCard(w, isSynced) {
         : `window.deleteLocal('${w.id}')`; // Delete from Local
 
     // Note: We use window.loadIntoEditor because it will be mounted globally
-    const editAction = `window.loadIntoEditor(${JSON.stringify(w.original_yaml || {}).replace(/"/g, '&quot;')}, ${w.isLocal ? `'${w.id}'` : 'null'})`;
+    const editAction = w.isLocal
+        ? `window.loadIntoEditor(${JSON.stringify(w.original_yaml || {}).replace(/"/g, '&quot;')}, '${w.id}')`
+        : `window.loadWordForEdit('${w.id}')`;
     const previewAction = `window.showPreviewPage('${w.id}')`;
 
     return `

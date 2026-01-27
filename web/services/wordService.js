@@ -5,6 +5,10 @@ const conflictService = require('./conflictService');
 
 class WordService {
     async listWords(req) {
+        if (req.query && (req.query.page || req.query.limit || req.query.search || req.query.sort)) {
+            return this.listWordsPaged(req);
+        }
+
         const pool = await getPool(req);
         const result = await pool.query(`
             SELECT id, lemma, part_of_speech, syllabification, contextual_meaning_en, created_at, revision_count, original_yaml
@@ -12,6 +16,73 @@ class WordService {
             ORDER BY created_at DESC
         `);
         return result.rows;
+    }
+
+    async listWordsPaged(req) {
+        const pool = await getPool(req);
+
+        const page = Math.max(1, parseInt(req.query.page || '1', 10) || 1);
+        const limitRaw = parseInt(req.query.limit || '20', 10) || 20;
+        const limit = Math.min(200, Math.max(1, limitRaw));
+        const offset = (page - 1) * limit;
+
+        const search = (req.query.search || '').trim();
+        const sort = (req.query.sort || 'newest').trim();
+
+        const where = [];
+        const params = [];
+
+        if (search) {
+            params.push(`%${search.toLowerCase()}%`);
+            where.push(`lower(lemma) LIKE $${params.length}`);
+        }
+
+        let orderBy = 'created_at DESC';
+        if (sort === 'az') orderBy = 'lemma ASC';
+        if (sort === 'za') orderBy = 'lemma DESC';
+        if (sort === 'newest') orderBy = 'created_at DESC';
+        if (sort === 'oldest') orderBy = 'created_at ASC';
+
+        const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+
+        const countRes = await pool.query(
+            `SELECT COUNT(*)::int AS total FROM words ${whereSql}`,
+            params
+        );
+        const total = countRes.rows[0]?.total || 0;
+        const totalPages = Math.max(1, Math.ceil(total / limit) || 1);
+
+        const dataParams = [...params, limit, offset];
+        const dataRes = await pool.query(
+            `
+            SELECT id, lemma, part_of_speech, syllabification, contextual_meaning_en, created_at, updated_at, revision_count
+            FROM words
+            ${whereSql}
+            ORDER BY ${orderBy}
+            LIMIT $${params.length + 1}
+            OFFSET $${params.length + 2}
+            `,
+            dataParams
+        );
+
+        return {
+            items: dataRes.rows,
+            page,
+            limit,
+            total,
+            totalPages
+        };
+    }
+
+    async getWordById(req, id) {
+        if (!id) throw new Error('Missing id');
+        const pool = await getPool(req);
+        const res = await pool.query(
+            'SELECT id, lemma, part_of_speech, syllabification, contextual_meaning_en, contextual_meaning_zh, other_common_meanings, image_differentiation_zh, created_at, updated_at, revision_count, original_yaml FROM words WHERE id = $1',
+            [id]
+        );
+        if (res.rows.length === 0) throw new Error('Not found');
+        return res.rows[0];
     }
 
     async checkWord(req, userWord) {

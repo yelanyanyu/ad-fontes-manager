@@ -10,6 +10,16 @@ class WordController {
         }
     }
 
+    async get(req, res) {
+        try {
+            const word = await wordService.getWordById(req, req.params.id);
+            res.json(word);
+        } catch (e) {
+            const status = e.message === 'Not found' ? 404 : 500;
+            res.status(status).json({ error: e.message });
+        }
+    }
+
     async check(req, res) {
         const userWord = req.query.word;
         if (!userWord) return res.status(400).json({ error: 'Word parameter required' });

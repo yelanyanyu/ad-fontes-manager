@@ -2,14 +2,22 @@
 export const store = {
     dbConnected: false,
     localRecords: [],
-    allRecords: [],
+    dbRecords: [],
+    dbListMeta: {
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 1,
+        search: '',
+        sort: 'newest'
+    },
     currentLocalId: null, // For single sync conflict resolution
     currentEditingId: null, // Track currently editing LOCAL record ID
     
     // Pagination State
     pagination: {
         currentPage: 1,
-        pageSize: 20
+        pageSize: 10
     }
 };
 

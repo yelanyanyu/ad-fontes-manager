@@ -161,13 +161,20 @@
                                         <span class="text-[10px] text-slate-400 uppercase font-bold">Size</span>
                                         <input type="number" id="pageSizeInput" value="20" min="1" max="500" class="w-10 text-xs bg-transparent outline-none text-center font-medium text-slate-700" onchange="updatePageSize()">
                                     </div>
+                                    <button onclick="resetListPrefs()" id="resetListPrefsBtn" class="text-xs border border-slate-200 bg-white text-slate-600 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1 font-bold" title="Reset list preferences">
+                                        <i class="fa-solid fa-rotate-left"></i>
+                                        Reset
+                                    </button>
                                     <button onclick="syncAll()" id="syncAllBtn" class="hidden text-xs bg-yellow-100 text-yellow-700 px-3 py-1.5 rounded-full hover:bg-yellow-200 transition-colors flex items-center gap-1 font-medium">
                                         <i class="fa-solid fa-rotate"></i> Sync All
                                     </button>
                                 </div>
-                                <button onclick="refreshRecords()" class="text-slate-400 hover:text-primary transition-colors p-1" title="Reload All">
-                                    <i class="fa-solid fa-arrows-rotate"></i>
-                                </button>
+                                <div class="flex items-center gap-3">
+                                    <span id="totalCountBadge" class="hidden text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"></span>
+                                    <button onclick="refreshRecords()" class="text-slate-400 hover:text-primary transition-colors p-1" title="Reload All">
+                                        <i class="fa-solid fa-arrows-rotate"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -182,8 +189,9 @@
                         <!-- Pagination -->
                         <div class="p-3 border-t border-slate-100 bg-white flex justify-between items-center text-xs text-slate-500 flex-none">
                             <span id="pageInfo" class="font-medium">Page 1 of 1</span>
-                            <div class="flex gap-2">
+                            <div class="flex items-center gap-2">
                                 <button onclick="changePage(-1)" id="prevPageBtn" class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">Prev</button>
+                                <div id="pageNumbers" class="flex items-center gap-1"></div>
                                 <button onclick="changePage(1)" id="nextPageBtn" class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">Next</button>
                             </div>
                         </div>
@@ -204,8 +212,8 @@
                      
                      <!-- View Toggle -->
                      <div class="flex bg-slate-100 p-1 rounded-lg">
-                        <button onclick="togglePreviewStyle('card')" class="px-4 py-1.5 text-xs rounded-md shadow-sm bg-white text-slate-700 font-bold transition-all hover:bg-gray-50">Card</button>
-                        <button onclick="togglePreviewStyle('markdown')" class="px-4 py-1.5 text-xs rounded-md text-slate-500 hover:text-slate-700 font-medium transition-all hover:bg-slate-200/50">Markdown</button>
+                        <button id="previewToggleCardBtn" onclick="togglePreviewStyle('card')" class="px-4 py-1.5 text-xs rounded-md shadow-sm bg-white text-slate-700 font-bold transition-colors hover:bg-gray-50">Card</button>
+                        <button id="previewToggleMarkdownBtn" onclick="togglePreviewStyle('markdown')" class="px-4 py-1.5 text-xs rounded-md text-slate-500 hover:text-slate-700 font-medium transition-colors hover:bg-slate-200/50">Markdown</button>
                      </div>
                 </div>
                 
@@ -236,6 +244,21 @@
                     <label class="block text-sm font-medium text-slate-700 mb-1">Max Local Items (Offline Cache)</label>
                     <input type="number" id="modalMaxItems" class="w-full text-sm p-2 rounded border border-slate-200 focus:ring-2 focus:ring-primary outline-none" placeholder="100">
                     <p class="text-xs text-slate-400 mt-1">Oldest items will be removed when limit is reached.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Word Card Template</label>
+                    <select id="modalWordCardTemplateMode" class="w-full text-sm p-2 rounded border border-slate-200 focus:ring-2 focus:ring-primary outline-none bg-white">
+                        <option value="default">Default (Current Card)</option>
+                        <option value="custom">Custom Template</option>
+                    </select>
+                    <p class="text-xs text-slate-400 mt-1">Custom template applies to Preview → Card mode (Words only).</p>
+                </div>
+                <div id="modalWordCardTemplateEditor" class="hidden">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Custom Template (HTML)</label>
+                    <textarea id="modalWordCardTemplate" rows="10" class="w-full text-xs p-3 rounded border border-slate-200 focus:ring-2 focus:ring-primary outline-none font-mono" placeholder="Use {{yield.lemma}} etc. Use {{#each application.selected_examples}}...{{/each}} for lists."></textarea>
+                    <div class="mt-2 flex justify-end">
+                        <button type="button" id="resetWordCardTemplateBtn" class="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">Reset to Default</button>
+                    </div>
                 </div>
                 <div class="flex items-center gap-2 text-sm">
                     <span id="testStatus" class="text-slate-500">Status: Unknown</span>
@@ -335,6 +358,8 @@
             </div>
         </div>
     </div>
+
+    <div id="toastRoot" class="fixed top-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none" aria-live="polite" aria-relevant="additions"></div>
 
     <!-- JS Deps -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
