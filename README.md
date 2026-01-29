@@ -19,10 +19,10 @@
 
 ## 快速开始（Windows）
 - 启动（开发模式，推荐）：双击 [start_tool_yml2pg.bat](file:///d:/myCode/formal-projects/ad-fontes-manager/start_tool_yml2pg.bat)（会自动安装依赖并启动 API+前端）
-  - 前端：http://localhost:5173
-  - API：http://localhost:3000/api
+  - 前端：`http://localhost:<CLIENT_DEV_PORT>`（默认见 [web/config.json](file:///d:/myCode/formal-projects/ad-fontes-manager/web/config.json)）
+  - API：`http://localhost:<API_PORT>/api`（默认见 [web/config.json](file:///d:/myCode/formal-projects/ad-fontes-manager/web/config.json)）
 - 启动（生产模式）：`start_tool_yml2pg.bat prod`
-  - 服务：http://localhost:3000
+  - 服务：`http://localhost:<API_PORT>`
 - 停止：双击 [stop_tool_yml2pg.bat](file:///d:/myCode/formal-projects/ad-fontes-manager/stop_tool_yml2pg.bat)（按端口精准停止，不会误杀其他 node 进程）
 
 ## 手动启动（开发者）
@@ -39,7 +39,7 @@ npm install
 cd ..
 npm run dev
 ```
-打开：http://localhost:5173
+打开：`http://localhost:<CLIENT_DEV_PORT>`
 
 ### 构建与运行（生产模式）
 ```bash
@@ -52,11 +52,14 @@ npm run build
 set NODE_ENV=production
 node server.js
 ```
-打开：http://localhost:3000
+打开：`http://localhost:<API_PORT>`
 
 ## 配置与本地数据位置
 - 本地离线缓存：`web/data/local_words.json`（建议不提交到 git）
 - 本地配置：`web/config.json`（建议不提交到 git，可在 Settings 页面保存配置）
+  - `API_PORT`：后端服务端口（默认写在配置文件）
+  - `CLIENT_DEV_PORT`：前端开发端口（默认写在配置文件）
+  - `DB_PORT`：数据库端口（仅在未设置 DATABASE_URL 时用于拼接连接串）
 
 ## 🌟 核心特性 (v1.2+)
 

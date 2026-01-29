@@ -1,6 +1,19 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const base = process.env.API_BASE || 'http://localhost:3000/api';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const configPath = path.resolve(__dirname, '../config.json');
+let config = {};
+try {
+    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+} catch (e) {
+    config = {};
+}
+const apiPort = config.API_PORT || process.env.API_PORT;
+const base = process.env.API_BASE || `http://localhost:${apiPort}/api`;
 
 async function fetchJson(url) {
     const res = await fetch(url);

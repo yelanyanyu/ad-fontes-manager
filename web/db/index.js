@@ -19,9 +19,11 @@ const getPool = async (req) => {
             const user = process.env.DB_USER || 'postgres';
             const pass = process.env.DB_PASS || 'postgres';
             const host = process.env.DB_HOST || 'localhost';
-            const port = process.env.DB_PORT || '5432';
+            const port = config.DB_PORT || process.env.DB_PORT;
             const db = process.env.DB_NAME || 'etymos';
-            targetUrl = `postgresql://${user}:${pass}@${host}:${port}/${db}`;
+            targetUrl = port
+                ? `postgresql://${user}:${pass}@${host}:${port}/${db}`
+                : `postgresql://${user}:${pass}@${host}/${db}`;
         }
     }
 
