@@ -7,6 +7,7 @@ import yaml from 'js-yaml'
 import { useAppStore } from '@/stores/appStore'
 import ConflictModal from '@/components/ui/ConflictModal.vue'
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict'
+import { normalizeSearchInput, isBlankSearch } from '@/utils/search'
 
 const wordStore = useWordStore()
 const appStore = useAppStore()
@@ -320,8 +321,22 @@ onMounted(() => {
 onActivated(() => {
     refresh()
 })
-const handleSearch = () => {
-    wordStore.fetchDbRecords({ search: search.value, page: 1 })
+const canSearch = computed(() => {
+    return !loading.value
+})
+
+const handleSearch = async () => {
+    if (!canSearch.value) return
+    const normalized = normalizeSearchInput(search.value)
+    const searchValue = isBlankSearch(normalized) ? '' : normalized
+    await wordStore.fetchDbRecords({ search: searchValue, page: 1 })
+}
+
+const handleSearchKeydown = (e) => {
+    if (e.keyCode === 13) {
+        e.preventDefault()
+        handleSearch()
+    }
 }
 
 
@@ -469,10 +484,16 @@ const refresh = async () => {
           @primary="overwriteSyncConflict"
         />
         <div class="px-4 py-3 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50 flex-none">
-            <div class="relative w-full">
-                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
-                <input type="text" v-model="search" @input="handleSearch" placeholder="Search..." 
-                    class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400">
+            <div class="flex items-center gap-2 w-full">
+                <div class="relative w-full">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"></i>
+                    <input type="text" v-model="search" @keydown="handleSearchKeydown" placeholder="Search..." 
+                        class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400">
+                </div>
+                <button @click="handleSearch" :disabled="!canSearch" class="min-w-[88px] text-xs bg-primary text-white rounded-lg px-3 py-1.5 hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                    <i v-if="loading" class="fa-solid fa-spinner fa-spin text-xs"></i>
+                    <span>{{ loading ? 'Searching' : 'Search' }}</span>
+                </button>
             </div>
 
             <div class="flex justify-between items-center">
