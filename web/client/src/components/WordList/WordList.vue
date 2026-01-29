@@ -7,7 +7,7 @@ import yaml from 'js-yaml'
 import { useAppStore } from '@/stores/appStore'
 import ConflictModal from '@/components/ui/ConflictModal.vue'
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict'
-import { normalizeSearchInput, isBlankSearch } from '@/utils/search'
+import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search'
 
 const wordStore = useWordStore()
 const appStore = useAppStore()
@@ -16,6 +16,9 @@ const { dbConnected, dbRecords, localRecords, dbListMeta, loading } = storeToRef
 const search = ref('')
 const sort = ref('newest')
 const pageSize = ref(20)
+const searchMode = ref('partial')
+const searchModeOpen = ref(false)
+const searchModeStorageKey = 'word_search_mode'
 
 // Sync meta from store to local refs if needed, or just use store actions
 watch(dbListMeta, (meta) => {
@@ -36,7 +39,8 @@ const displayedRecords = computed(() => {
         original_yaml: r.original_yaml || r.raw_yaml
     }))
 
-    return [...mappedLocal, ...(dbRecords.value || [])]
+    const merged = [...mappedLocal, ...(dbRecords.value || [])]
+    return filterRecordsBySearch(merged, search.value, searchMode.value)
 })
 
 const emit = defineEmits(['preview', 'edit'])
@@ -60,6 +64,7 @@ const syncConflict = ref(null)
 const getDiffBadges = (diffs) => deepDiffAdapter.getBadges(diffs)
 const getChangedModules = (diffs) => deepDiffAdapter.getModules(diffs)
 const syncConflictTitle = computed(() => syncConflict.value ? `Conflict: ${syncConflict.value.lemma || ''}` : 'Conflict')
+const searchModeLabel = computed(() => searchMode.value === 'exact' ? 'Exact Match' : 'Partial Match')
 
 const toggleMenu = (id) => {
     if (showMenuId.value === id) {
@@ -315,11 +320,18 @@ const loadIntoEditor = async (id) => {
 }
 
 onMounted(() => {
+    const storedMode = localStorage.getItem(searchModeStorageKey)
+    if (storedMode === 'exact' || storedMode === 'partial') {
+        searchMode.value = storedMode
+    }
     refresh()
 })
 
 onActivated(() => {
     refresh()
+})
+watch(searchMode, (value) => {
+    localStorage.setItem(searchModeStorageKey, value)
 })
 const canSearch = computed(() => {
     return !loading.value
@@ -337,6 +349,19 @@ const handleSearchKeydown = (e) => {
         e.preventDefault()
         handleSearch()
     }
+}
+
+const toggleSearchMode = () => {
+    searchModeOpen.value = !searchModeOpen.value
+}
+
+const closeSearchMode = () => {
+    searchModeOpen.value = false
+}
+
+const setSearchMode = (mode) => {
+    searchMode.value = mode
+    searchModeOpen.value = false
 }
 
 
@@ -390,6 +415,7 @@ const refresh = async () => {
 
 <template>
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-col flex h-full overflow-hidden ml-1">
+        <div v-if="searchModeOpen" class="fixed inset-0 z-30" @click="closeSearchMode"></div>
         <div v-if="showMenuId !== null" class="fixed inset-0 z-30 bg-black/30" @click="showMenuId = null"></div>
         <div v-if="showMenuId !== null" class="fixed inset-0 z-40 flex items-center justify-center p-4">
             <div class="w-full max-w-sm rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
@@ -490,10 +516,33 @@ const refresh = async () => {
                     <input type="text" v-model="search" @keydown="handleSearchKeydown" placeholder="Search..." 
                         class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400">
                 </div>
-                <button @click="handleSearch" :disabled="!canSearch" class="min-w-[88px] text-xs bg-primary text-white rounded-lg px-3 py-1.5 hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                    <i v-if="loading" class="fa-solid fa-spinner fa-spin text-xs"></i>
-                    <span>{{ loading ? 'Searching' : 'Search' }}</span>
-                </button>
+                <div class="relative flex items-stretch">
+                    <button @click="handleSearch" :disabled="!canSearch" class="min-w-[88px] text-xs bg-primary text-white rounded-l-lg px-3 py-1.5 hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                        <i v-if="loading" class="fa-solid fa-spinner fa-spin text-xs"></i>
+                        <span>{{ loading ? 'Searching' : 'Search' }}</span>
+                    </button>
+                    <button @click="toggleSearchMode" class="w-10 bg-primary text-white rounded-r-lg border-l border-blue-400/50 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1" :title="searchModeLabel">
+                        <i class="fa-solid fa-magnifying-glass text-[11px]"></i>
+                        <span class="text-[10px]">▼</span>
+                    </button>
+                    <Transition
+                        enter-active-class="transition duration-150 ease-out"
+                        enter-from-class="opacity-0 -translate-y-1 scale-95"
+                        enter-to-class="opacity-100 translate-y-0 scale-100"
+                        leave-active-class="transition duration-100 ease-in"
+                        leave-from-class="opacity-100 translate-y-0 scale-100"
+                        leave-to-class="opacity-0 -translate-y-1 scale-95"
+                    >
+                        <div v-if="searchModeOpen" class="absolute right-0 top-full mt-2 z-40 w-44 rounded-lg border border-slate-200 bg-white shadow-lg p-1">
+                            <button @click="setSearchMode('partial')" class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors" :class="searchMode === 'partial' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'">
+                                Partial Match
+                            </button>
+                            <button @click="setSearchMode('exact')" class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors" :class="searchMode === 'exact' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'">
+                                Exact Match
+                            </button>
+                        </div>
+                    </Transition>
+                </div>
             </div>
 
             <div class="flex justify-between items-center">
