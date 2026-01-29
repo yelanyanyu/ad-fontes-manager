@@ -89,7 +89,7 @@ ad-fontes-manager
 1.  **环境准备**: 确保 Node.js 环境已安装，PostgreSQL 数据库可选（支持纯本地模式）。
 2.  **依赖安装**: 在 `web/` 目录下运行 `npm install`。
 3.  **服务启动**: 运行 `npm start` (执行 `node server.js`)。
-    *   Express 服务器启动，监听端口 (默认 3000)。
+    *   Express 服务器启动，监听端口以 `web/config.json` 的 `API_PORT` 为准。
     *   初始化 `localStore`，加载 `data/local_words.json`。
     *   尝试连接数据库（如果配置存在）。
 
