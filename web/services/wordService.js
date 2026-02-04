@@ -147,19 +147,15 @@ class WordService {
             const existingRes = await client.query('SELECT * FROM words WHERE lower(lemma) = $1', [lemma]);
             const existing = existingRes.rows[0];
 
-            // Conflict Detection
-            if (existing && !forceUpdate) {
-                const analysis = conflictService.analyze(existing.original_yaml, data);
-
-                if (analysis.hasConflict) {
-                    await client.query('ROLLBACK');
-                    return { 
-                        status: 'conflict', 
-                        diff: analysis.diff, 
-                        oldData: existing.original_yaml, 
-                        newData: data 
-                    };
-                }
+            const analysis = existing ? conflictService.analyze(existing.original_yaml, data) : null;
+            if (existing && !forceUpdate && analysis?.hasConflict) {
+                await client.query('ROLLBACK');
+                return { 
+                    status: 'conflict', 
+                    diff: analysis.diff, 
+                    oldData: existing.original_yaml, 
+                    newData: data 
+                };
             }
 
             let wordId;
@@ -167,15 +163,8 @@ class WordService {
                 // Update
                 wordId = existing.id;
 
-                // Check diff again even for forceUpdate to determine status
-                const analysis = conflictService.analyze(existing.original_yaml, data);
-
-                if (!analysis.hasConflict) {
-                    // No content changes, just log request
-                    // We still log the user request at the end
-                    // Status should be 'logged'
-                } else {
-                    // Actual content update
+                const shouldUpdate = !!forceUpdate || !!analysis?.hasConflict;
+                if (shouldUpdate) {
                     const yieldData = data.yield || {};
                     const nuanceData = data.nuance || {};
                     
@@ -231,9 +220,8 @@ class WordService {
             // Determine return status
             let status = 'created';
             if (existing) {
-                const analysis = conflictService.analyze(existing.original_yaml, data);
-                if (!analysis.hasConflict) status = 'logged';
-                else status = 'updated';
+                if (forceUpdate || analysis?.hasConflict) status = 'updated';
+                else status = 'logged';
             }
 
             return { 

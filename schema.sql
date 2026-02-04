@@ -146,6 +146,26 @@ CREATE POLICY "Allow public read access" ON cognates FOR SELECT USING (true);
 CREATE POLICY "Allow public read access" ON examples FOR SELECT USING (true);
 CREATE POLICY "Allow public read access" ON synonyms FOR SELECT USING (true);
 
+CREATE POLICY "Allow public write access" ON words FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public write access" ON words FOR UPDATE USING (true);
+CREATE POLICY "Allow public write access" ON words FOR DELETE USING (true);
+
+CREATE POLICY "Allow public write access" ON etymologies FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public write access" ON etymologies FOR UPDATE USING (true);
+CREATE POLICY "Allow public write access" ON etymologies FOR DELETE USING (true);
+
+CREATE POLICY "Allow public write access" ON cognates FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public write access" ON cognates FOR UPDATE USING (true);
+CREATE POLICY "Allow public write access" ON cognates FOR DELETE USING (true);
+
+CREATE POLICY "Allow public write access" ON examples FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public write access" ON examples FOR UPDATE USING (true);
+CREATE POLICY "Allow public write access" ON examples FOR DELETE USING (true);
+
+CREATE POLICY "Allow public write access" ON synonyms FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public write access" ON synonyms FOR UPDATE USING (true);
+CREATE POLICY "Allow public write access" ON synonyms FOR DELETE USING (true);
+
 -- ==============================================================================
 -- 5. DOCUMENTATION (Comments)
 -- ==============================================================================
