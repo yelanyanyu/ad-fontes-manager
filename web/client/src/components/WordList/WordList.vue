@@ -254,9 +254,34 @@ const editLocalFromSyncConflict = () => {
     closeSyncConflict()
 }
 
+const loadDbRecordByLemma = async (lemma) => {
+    if (!lemma) return false
+    try {
+        const res = await request.get('/words', {
+            params: { search: String(lemma), page: 1, limit: 20, sort: 'newest' },
+            skipErrorToast: true
+        })
+        const items = Array.isArray(res?.items) ? res.items : (Array.isArray(res) ? res : [])
+        const target = String(lemma).toLowerCase()
+        const match = items.find(i => String(i.lemma || '').toLowerCase() === target)
+        if (match && match.id) {
+            const full = await request.get(`/words/${encodeURIComponent(match.id)}`, { skipErrorToast: true })
+            if (full && full.original_yaml) {
+                const obj = typeof full.original_yaml === 'string' ? yaml.load(full.original_yaml) : full.original_yaml
+                wordStore.setEditorYaml(formatYamlForEditor(obj))
+                wordStore.setEditingContext({ id: match.id, isLocal: false })
+                return true
+            }
+        }
+    } catch (e) {
+    }
+    return false
+}
+
 const overwriteSyncConflict = async () => {
     if (!syncConflict.value) return
-    const item = localSyncItems.value.find(i => i.id === syncConflict.value.id)
+    const conflict = syncConflict.value
+    const item = localSyncItems.value.find(i => i.id === conflict.id)
     if (!item) return
     syncAllLoading.value = true
     try {
@@ -264,6 +289,12 @@ const overwriteSyncConflict = async () => {
         if (res && res.success > 0) {
             appStore.addToast('Synced (overwrite)', 'success')
             await refresh()
+            const lemma = conflict.newData?.yield?.lemma
+            const loaded = await loadDbRecordByLemma(lemma)
+            if (!loaded && conflict.newData) {
+                wordStore.setEditorYaml(formatYamlForEditor(conflict.newData))
+                wordStore.setEditingContext({ id: null, isLocal: false })
+            }
         } else {
             appStore.addToast('Sync failed', 'error')
         }
@@ -289,6 +320,17 @@ const loadIntoEditor = async (id) => {
         }
         wordStore.setEditingContext({ id, isLocal: true })
         return
+    }
+
+    try {
+        const full = await request.get(`/words/${encodeURIComponent(id)}`, { skipErrorToast: true })
+        if (full && full.original_yaml) {
+            const obj = typeof full.original_yaml === 'string' ? yaml.load(full.original_yaml) : full.original_yaml
+            wordStore.setEditorYaml(formatYamlForEditor(obj))
+            wordStore.setEditingContext({ id, isLocal: false })
+            return
+        }
+    } catch (e) {
     }
 
     if (item.original_yaml) {
