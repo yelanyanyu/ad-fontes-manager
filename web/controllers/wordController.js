@@ -10,6 +10,22 @@ class WordController {
         }
     }
 
+    async getDetails(req, res) {
+        const word = (req.query.word || '').trim();
+        if (!word) {
+            return res.status(400).json({ code: 400, message: 'Word parameter required' });
+        }
+        try {
+            const includeRaw = (req.query.include || '').trim();
+            const include = includeRaw ? includeRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+            const data = await wordService.getWordDetails(req, word, include);
+            res.status(200).json({ code: 200, message: 'success', data });
+        } catch (e) {
+            const status = e.message === 'Not found' ? 404 : 500;
+            res.status(status).json({ code: status, message: e.message });
+        }
+    }
+
     async get(req, res) {
         try {
             const word = await wordService.getWordById(req, req.params.id);
