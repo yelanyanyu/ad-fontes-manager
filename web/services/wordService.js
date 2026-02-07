@@ -4,6 +4,172 @@ const { getPool } = require('../db');
 const conflictService = require('./conflictService');
 
 class WordService {
+    _isNonEmptyString(value) {
+        return typeof value === 'string' && value.trim().length > 0;
+    }
+
+    _isObject(value) {
+        return value && typeof value === 'object' && !Array.isArray(value);
+    }
+
+    _validateStrictYaml(data, wordLower) {
+        const errors = [];
+        if (!this._isObject(data)) {
+            return { valid: false, errors: ['root must be an object'] };
+        }
+
+        const yieldData = data.yield;
+        if (!this._isObject(yieldData)) errors.push('yield is required');
+        if (yieldData) {
+            if (!this._isNonEmptyString(yieldData.user_word)) errors.push('yield.user_word is required');
+            if (!this._isNonEmptyString(yieldData.lemma)) errors.push('yield.lemma is required');
+            if (this._isNonEmptyString(yieldData.lemma) && yieldData.lemma.trim().toLowerCase() !== wordLower) {
+                errors.push('yield.lemma must match word');
+            }
+            if (!this._isNonEmptyString(yieldData.syllabification)) errors.push('yield.syllabification is required');
+            if (!this._isNonEmptyString(yieldData.user_context_sentence)) errors.push('yield.user_context_sentence is required');
+            if (!this._isNonEmptyString(yieldData.part_of_speech)) errors.push('yield.part_of_speech is required');
+            if (!this._isObject(yieldData.contextual_meaning)) errors.push('yield.contextual_meaning is required');
+            if (this._isObject(yieldData.contextual_meaning)) {
+                if (!this._isNonEmptyString(yieldData.contextual_meaning.en)) errors.push('yield.contextual_meaning.en is required');
+                if (!this._isNonEmptyString(yieldData.contextual_meaning.zh)) errors.push('yield.contextual_meaning.zh is required');
+            }
+            if (!Array.isArray(yieldData.other_common_meanings) || yieldData.other_common_meanings.length === 0) {
+                errors.push('yield.other_common_meanings must be a non-empty array');
+            }
+        }
+
+        const etymology = data.etymology;
+        if (!this._isObject(etymology)) errors.push('etymology is required');
+        if (etymology) {
+            const roots = etymology.root_and_affixes;
+            if (!this._isObject(roots)) errors.push('etymology.root_and_affixes is required');
+            if (this._isObject(roots)) {
+                if (!this._isNonEmptyString(roots.prefix)) errors.push('etymology.root_and_affixes.prefix is required');
+                if (!this._isNonEmptyString(roots.root)) errors.push('etymology.root_and_affixes.root is required');
+                if (!this._isNonEmptyString(roots.suffix)) errors.push('etymology.root_and_affixes.suffix is required');
+                if (!this._isNonEmptyString(roots.structure_analysis)) errors.push('etymology.root_and_affixes.structure_analysis is required');
+            }
+            const origins = etymology.historical_origins;
+            if (!this._isObject(origins)) errors.push('etymology.historical_origins is required');
+            if (this._isObject(origins)) {
+                if (!this._isNonEmptyString(origins.history_myth)) errors.push('etymology.historical_origins.history_myth is required');
+                if (!this._isNonEmptyString(origins.source_word)) errors.push('etymology.historical_origins.source_word is required');
+                if (!this._isNonEmptyString(origins.pie_root)) errors.push('etymology.historical_origins.pie_root is required');
+            }
+            if (!this._isNonEmptyString(etymology.visual_imagery_zh)) errors.push('etymology.visual_imagery_zh is required');
+            if (!this._isNonEmptyString(etymology.meaning_evolution_zh)) errors.push('etymology.meaning_evolution_zh is required');
+        }
+
+        const cognateFamily = data.cognate_family;
+        if (!this._isObject(cognateFamily)) errors.push('cognate_family is required');
+        if (this._isObject(cognateFamily)) {
+            const cognates = cognateFamily.cognates;
+            if (!Array.isArray(cognates) || cognates.length === 0) {
+                errors.push('cognate_family.cognates must be a non-empty array');
+            } else {
+                const invalid = cognates.some(c => !this._isObject(c) || !this._isNonEmptyString(c.word) || !this._isNonEmptyString(c.logic));
+                if (invalid) errors.push('cognate_family.cognates items must have word and logic');
+            }
+        }
+
+        const application = data.application;
+        if (!this._isObject(application)) errors.push('application is required');
+        if (this._isObject(application)) {
+            const examples = application.selected_examples;
+            if (!Array.isArray(examples) || examples.length === 0) {
+                errors.push('application.selected_examples must be a non-empty array');
+            } else {
+                const invalid = examples.some(e => !this._isObject(e) || !this._isNonEmptyString(e.type) || !this._isNonEmptyString(e.sentence) || !this._isNonEmptyString(e.translation_zh));
+                if (invalid) errors.push('application.selected_examples items must have type, sentence, translation_zh');
+            }
+        }
+
+        const nuance = data.nuance;
+        if (!this._isObject(nuance)) errors.push('nuance is required');
+        if (this._isObject(nuance)) {
+            if (!this._isNonEmptyString(nuance.image_differentiation_zh)) errors.push('nuance.image_differentiation_zh is required');
+            const synonyms = nuance.synonyms;
+            if (!Array.isArray(synonyms) || synonyms.length === 0) {
+                errors.push('nuance.synonyms must be a non-empty array');
+            } else {
+                const invalid = synonyms.some(s => !this._isObject(s) || !this._isNonEmptyString(s.word) || !this._isNonEmptyString(s.meaning_zh));
+                if (invalid) errors.push('nuance.synonyms items must have word and meaning_zh');
+            }
+        }
+
+        return { valid: errors.length === 0, errors };
+    }
+
+    async addWord(req, wordText, yamlStr) {
+        const pool = await getPool(req);
+        const wordLower = String(wordText || '').trim().toLowerCase();
+        if (!wordLower) return { status: 'invalid', errors: ['word is required'] };
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+
+            const existingRes = await client.query('SELECT id, lemma FROM words WHERE lower(lemma) = $1', [wordLower]);
+            if (existingRes.rows.length > 0) {
+                await client.query('ROLLBACK');
+                return { status: 'duplicate', lemma: existingRes.rows[0].lemma, id: existingRes.rows[0].id };
+            }
+
+            let data;
+            try {
+                data = yaml.load(String(yamlStr || ''));
+            } catch (e) {
+                await client.query('ROLLBACK');
+                return { status: 'invalid', errors: ['yaml parse error'] };
+            }
+
+            const validation = this._validateStrictYaml(data, wordLower);
+            if (!validation.valid) {
+                await client.query('ROLLBACK');
+                return { status: 'invalid', errors: validation.errors };
+            }
+
+            const yieldData = data.yield || {};
+            const nuanceData = data.nuance || {};
+
+            const insertRes = await client.query(
+                `
+                INSERT INTO words (
+                    lemma, syllabification, part_of_speech, 
+                    contextual_meaning_en, contextual_meaning_zh,
+                    other_common_meanings, image_differentiation_zh, original_yaml
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id, lemma
+                `,
+                [
+                    wordLower,
+                    yieldData.syllabification,
+                    yieldData.part_of_speech,
+                    yieldData.contextual_meaning?.en,
+                    yieldData.contextual_meaning?.zh,
+                    yieldData.other_common_meanings || [],
+                    nuanceData.image_differentiation_zh,
+                    data
+                ]
+            );
+
+            const wordId = insertRes.rows[0].id;
+            await this._updateChildren(client, wordId, data);
+            await client.query('COMMIT');
+
+            return { status: 'created', id: wordId, lemma: insertRes.rows[0].lemma };
+        } catch (e) {
+            await client.query('ROLLBACK');
+            if (e && e.code === '23505') {
+                return { status: 'duplicate', lemma: wordLower };
+            }
+            throw e;
+        } finally {
+            client.release();
+        }
+    }
+
     async listWords(req) {
         if (req.query && (req.query.page || req.query.limit || req.query.search || req.query.sort)) {
             return this.listWordsPaged(req);

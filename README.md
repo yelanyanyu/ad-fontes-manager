@@ -42,77 +42,9 @@ npm run dev
 
 ---
 
-## 📡 API：查询单词详情（对外接口）
+## 📡 API 文档
 
-- Endpoint: `GET /api/words/details`
-- Method: `GET`
-- Description: 根据单词文本（lemma）查询基础信息，并通过 `include` 参数按需返回词源、同源词、例句、近义词及原始 YAML。
-
-### 请求参数
-- `word`（string，必填）：要查询的单词（大小写不敏感）
-- `include`（string，选填）：逗号分隔，可选值为 `etymology,cognates,examples,synonyms,rawyaml`
-
-### 返回结构（标准信封）
-成功：
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "lemma": "bolster",
-    "syllabification": "bol-ster",
-    "other_common_meanings": ["支撑", "加强"],
-    "image_differentiation_zh": "画面感辨析...",
-    "etymology": {
-      "prefix": "...",
-      "root": "...",
-      "suffix": "...",
-      "structure_analysis": "...",
-      "history_myth": "...",
-      "source_word": "...",
-      "pie_root": "*bhel-",
-      "visual_imagery_zh": "...",
-      "meaning_evolution_zh": "..."
-    },
-    "cognates": [
-      { "cognate_word": "ball", "logic": "同源圆形根" }
-    ],
-    "examples": [
-      { "example_type": "Current Context", "sentence": "We must bolster our defenses.", "translation_zh": "我们必须加强防御。" }
-    ],
-    "synonyms": [
-      { "synonym_word": "strengthen", "meaning_zh": "加强" }
-    ],
-    "original_yaml": { "yield": { "lemma": "bolster" } }
-  }
-}
-```
-
-失败：
-```json
-{ "code": 400, "message": "Word parameter required" }
-{ "code": 404, "message": "Not found" }
-{ "code": 500, "message": "Internal Server Error" }
-```
-
-### 示例
-- 仅基础信息：`GET /api/words/details?word=bolster`
-- 词源+例句：`GET /api/words/details?word=bolster&include=etymology,examples`
-- 全量：`GET /api/words/details?word=bolster&include=etymology,cognates,examples,synonyms,rawyaml`
-打开：`http://localhost:<CLIENT_DEV_PORT>`
-
-### 构建与运行（生产模式）
-```bash
-cd web
-npm install
-cd client
-npm install
-cd ..
-npm run build
-set NODE_ENV=production
-node server.js
-```
-打开：`http://localhost:<API_PORT>`
+API 接口文档已移至独立文件： [API.md](file:///d:/myCode/formal-projects/ad-fontes-manager/docs/API.md)
 
 ## 配置与本地数据位置
 - 本地离线缓存：`web/data/local_words.json`（建议不提交到 git）

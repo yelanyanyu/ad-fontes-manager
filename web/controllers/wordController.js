@@ -58,6 +58,26 @@ class WordController {
         }
     }
 
+    async addWord(req, res) {
+        const word = (req.body.word || '').trim();
+        const yamlStr = req.body.yaml || '';
+        if (!word || !yamlStr) {
+            return res.status(400).json({ code: 400, message: 'Missing parameters' });
+        }
+        try {
+            const result = await wordService.addWord(req, word, yamlStr);
+            if (result.status === 'duplicate') {
+                return res.status(409).json({ code: 409, message: 'Duplicate word', data: { lemma: result.lemma } });
+            }
+            if (result.status === 'invalid') {
+                return res.status(422).json({ code: 422, message: 'Invalid YAML', data: { errors: result.errors || [] } });
+            }
+            return res.status(201).json({ code: 201, message: 'created', data: { id: result.id, lemma: result.lemma } });
+        } catch (e) {
+            res.status(500).json({ code: 500, message: e.message });
+        }
+    }
+
     async delete(req, res) {
         try {
             await wordService.deleteWord(req, req.params.id);
