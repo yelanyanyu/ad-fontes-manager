@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 
 defineOptions({
   name: 'HomeView'
@@ -22,6 +22,9 @@ const closePreview = () => {
     previewId.value = null
 }
 
+let handleResizeMove = null
+let handleResizeUp = null
+
 onMounted(() => {
     const handle = dragHandle.value
     const left = leftPanel.value
@@ -42,7 +45,7 @@ onMounted(() => {
         e.preventDefault()
     })
 
-    document.addEventListener('mousemove', (e) => {
+    handleResizeMove = (e) => {
         if (!isResizing) return
         const dx = e.clientX - startX
         const newWidth = startWidth + dx
@@ -52,15 +55,23 @@ onMounted(() => {
         if (newWidth > parent.clientWidth - 350) return
 
         left.style.width = `${newWidth}px`
-    })
+    }
 
-    document.addEventListener('mouseup', () => {
+    handleResizeUp = () => {
         if (isResizing) {
             isResizing = false
             handle.classList.remove('active')
             document.body.style.cursor = ''
         }
-    })
+    }
+
+    document.addEventListener('mousemove', handleResizeMove)
+    document.addEventListener('mouseup', handleResizeUp)
+})
+
+onUnmounted(() => {
+    if (handleResizeMove) document.removeEventListener('mousemove', handleResizeMove)
+    if (handleResizeUp) document.removeEventListener('mouseup', handleResizeUp)
 })
 </script>
 
