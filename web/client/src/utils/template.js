@@ -72,7 +72,15 @@ function findMatchingEnd(template, fromIndex, type) {
 function renderSegments(template, ctx) {
     let out = '';
     let cursor = 0;
+    let loopCount = 0;
+    const MAX_LOOPS = 10000;
+
     while (true) {
+        if (++loopCount > MAX_LOOPS) {
+            console.warn('Template render infinite loop detected');
+            break;
+        }
+
         const section = findSection(template, cursor);
         if (!section) {
             out += template.slice(cursor);
