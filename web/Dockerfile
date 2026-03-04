@@ -31,13 +31,15 @@ COPY db ./db
 COPY routes ./routes
 COPY controllers ./controllers
 COPY services ./services
+COPY utils ./utils
+COPY middleware ./middleware
 
 # Copy built frontend assets
 COPY --from=builder /app/dist ./dist
 
 # Environment variables should be passed at runtime
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=8080
 
-EXPOSE 3000
+EXPOSE 8080
 CMD ["npm", "start"]
