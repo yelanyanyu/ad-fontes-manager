@@ -4,7 +4,9 @@ async function jsonFetch(url, options = {}) {
   const res = await fetch(url, options);
   const text = await res.text();
   let data = null;
-  try { data = JSON.parse(text); } catch {}
+  try {
+    data = JSON.parse(text);
+  } catch {}
   return { res, data, text };
 }
 
@@ -17,7 +19,7 @@ async function findWordId(lemma) {
   const q = new URLSearchParams({ search: lemma, page: '1', limit: '50', sort: 'newest' });
   const { res, data } = await jsonFetch(`${HOST}/api/words?${q.toString()}`);
   if (!res.ok) return null;
-  const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
+  const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
   const target = lemma.toLowerCase();
   const hit = items.find(i => String(i.lemma || '').toLowerCase() === target);
   return hit?.id || null;
@@ -152,7 +154,7 @@ async function addWord(word, yaml) {
   return jsonFetch(`${HOST}/api/words/add`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ word, yaml })
+    body: JSON.stringify({ word, yaml }),
   });
 }
 
@@ -187,7 +189,7 @@ async function main() {
   }
 }
 
-main().catch((e) => {
+main().catch(e => {
   console.error(e);
   process.exit(1);
 });

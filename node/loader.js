@@ -82,7 +82,7 @@ const pool = new Pool({
 
 async function insertData(yamlStr) {
   const client = await pool.connect();
-  
+
   try {
     const data = yaml.load(yamlStr);
     await client.query('BEGIN');
@@ -90,7 +90,7 @@ async function insertData(yamlStr) {
     // 1. Insert Word
     const yieldData = data.yield || {};
     const nuanceData = data.nuance || {};
-    
+
     const wordQuery = `
       INSERT INTO words (
         user_word, lemma, syllabification, part_of_speech, 
@@ -99,7 +99,7 @@ async function insertData(yamlStr) {
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id
     `;
-    
+
     const wordValues = [
       yieldData.user_word,
       yieldData.lemma,
@@ -110,7 +110,7 @@ async function insertData(yamlStr) {
       yieldData.contextual_meaning?.zh,
       yieldData.other_common_meanings || [],
       nuanceData.image_differentiation_zh,
-      data // Save full JSON
+      data, // Save full JSON
     ];
 
     const wordRes = await client.query(wordQuery, wordValues);
@@ -139,7 +139,7 @@ async function insertData(yamlStr) {
       origins.source_word,
       origins.pie_root,
       etymData.visual_imagery_zh,
-      etymData.meaning_evolution_zh
+      etymData.meaning_evolution_zh,
     ]);
 
     // 3. Insert Cognates
@@ -171,7 +171,6 @@ async function insertData(yamlStr) {
 
     await client.query('COMMIT');
     console.log(`Successfully inserted word: ${yieldData.lemma} (ID: ${wordId})`);
-
   } catch (e) {
     await client.query('ROLLBACK');
     console.error('Error occurred:', e);
@@ -183,9 +182,9 @@ async function insertData(yamlStr) {
 
 // Run logic
 (async () => {
-  console.log("Starting import...");
+  console.log('Starting import...');
   // Uncomment to run if DB is ready
   // await insertData(SAMPLE_YAML);
-  console.log("Import logic ready. Configure DATABASE_URL to run.");
+  console.log('Import logic ready. Configure DATABASE_URL to run.');
   await pool.end();
 })();

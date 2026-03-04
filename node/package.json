@@ -3,11 +3,24 @@
   "version": "1.0.0",
   "description": "YAML to PostgreSQL loader for Ad Fontes Prompts",
   "main": "loader.js",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write ."
+  },
   "dependencies": {
     "compromise": "^14.14.5",
     "deep-diff": "^1.0.2",
     "dotenv": "^16.3.1",
     "js-yaml": "^4.1.0",
     "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@typescript-eslint/parser": "^8.56.1",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "prettier": "^3.8.1"
   }
 }

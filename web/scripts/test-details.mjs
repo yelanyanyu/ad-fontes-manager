@@ -4,7 +4,9 @@ async function jsonFetch(url, options = {}) {
   const res = await fetch(url, options);
   const text = await res.text();
   let data = null;
-  try { data = JSON.parse(text); } catch {}
+  try {
+    data = JSON.parse(text);
+  } catch {}
   return { res, data, text };
 }
 
@@ -50,7 +52,7 @@ etymology:
   const { res, data, text } = await jsonFetch(`${HOST}/api/words`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ yaml, forceUpdate: true })
+    body: JSON.stringify({ yaml, forceUpdate: true }),
   });
   if (!res.ok) {
     throw new Error(`Seed failed: ${res.status} ${text}`);
@@ -86,7 +88,9 @@ async function main() {
   }
 
   {
-    const { res, data } = await jsonFetch(`${HOST}/api/words/details?word=bolster&include=etymology,cognates,examples,synonyms,rawyaml`);
+    const { res, data } = await jsonFetch(
+      `${HOST}/api/words/details?word=bolster&include=etymology,cognates,examples,synonyms,rawyaml`
+    );
     const d = data?.data || {};
     const pass =
       res.status === 200 &&
@@ -110,7 +114,7 @@ async function main() {
   }
 }
 
-main().catch((e) => {
+main().catch(e => {
   console.error('Unexpected error:', e);
   process.exit(1);
 });
