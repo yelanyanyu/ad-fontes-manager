@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { marked } from 'marked'
+import { toPng, toBlob } from 'html-to-image'
 import { useWordStore } from '@/stores/wordStore'
 import { useAppStore } from '@/stores/appStore'
 import { generateCardHTML, generateMarkdown } from '@/utils/generator'
@@ -88,6 +89,61 @@ onMounted(() => {
 
 const close = () => emit('close')
 
+const cardRef = ref(null)
+const generatingImage = ref(false)
+
+const generateCardImage = async () => {
+    if (!cardRef.value) return null
+    generatingImage.value = true
+    try {
+        const dataUrl = await toPng(cardRef.value, {
+            cacheBust: true,
+            pixelRatio: 2,
+            backgroundColor: '#fcfbf9'
+        })
+        return dataUrl
+    } catch (err) {
+        appStore.addToast('Failed to generate image', 'error')
+        return null
+    } finally {
+        generatingImage.value = false
+    }
+}
+
+const copyImageToClipboard = async () => {
+    if (!cardRef.value) return
+    generatingImage.value = true
+    try {
+        const blob = await toBlob(cardRef.value, {
+            cacheBust: true,
+            pixelRatio: 2,
+            backgroundColor: '#fcfbf9'
+        })
+        if (blob) {
+            await navigator.clipboard.write([
+                new ClipboardItem({ 'image/png': blob })
+            ])
+            appStore.addToast('Image copied to clipboard', 'success')
+        }
+    } catch (err) {
+        appStore.addToast('Failed to copy image', 'error')
+    } finally {
+        generatingImage.value = false
+    }
+}
+
+const downloadCardImage = async () => {
+    const dataUrl = await generateCardImage()
+    if (dataUrl) {
+        const link = document.createElement('a')
+        const wordName = rawData.value?.yield?.lemma || 'word-card'
+        link.download = `${wordName}.png`
+        link.href = dataUrl
+        link.click()
+        appStore.addToast('Image downloaded', 'success')
+    }
+}
+
 const copyContent = async (type) => {
     if (!rawData.value) return
     let text = ''
@@ -142,10 +198,18 @@ const copyRichText = () => {
              </div>
              
              <div v-else-if="mode === 'card'" class="flex flex-col items-center gap-6">
-                 <div v-html="content" class="w-full"></div>
-                 <button @click="copyContent('html')" class="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2">
-                    <i class="fa-solid fa-copy"></i> <span>Copy HTML Code (Anki)</span>
-                </button>
+                 <div ref="cardRef" v-html="content" class="w-full"></div>
+                 <div class="flex flex-wrap items-center justify-center gap-3">
+                     <button @click="copyContent('html')" class="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2">
+                        <i class="fa-solid fa-copy"></i> <span>Copy HTML Code (Anki)</span>
+                    </button>
+                    <button @click="copyImageToClipboard" :disabled="generatingImage" class="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2">
+                        <i class="fa-solid fa-image" :class="{ 'fa-spin': generatingImage }"></i> <span>{{ generatingImage ? 'Generating...' : 'Copy as Image' }}</span>
+                    </button>
+                    <button @click="downloadCardImage" :disabled="generatingImage" class="bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-400 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2">
+                        <i class="fa-solid fa-download" :class="{ 'fa-spin': generatingImage }"></i> <span>{{ generatingImage ? 'Generating...' : 'Download Image' }}</span>
+                    </button>
+                 </div>
              </div>
 
              <div v-else class="flex flex-col gap-8 w-full max-w-4xl mx-auto">
