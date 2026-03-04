@@ -137,10 +137,12 @@ class WordAssembler {
         isArray: true,
         getData: data => {
           const cognates = data.cognate_family?.cognates || [];
-          return cognates.map(c => ({
-            cognate_word: c.word,
-            logic: c.logic,
-          }));
+          return cognates
+            .filter(c => c.word)
+            .map(c => ({
+              word: c.word,
+              logic: c.logic,
+            }));
         },
       },
       {
@@ -153,11 +155,13 @@ class WordAssembler {
         isArray: true,
         getData: data => {
           const examples = data.application?.selected_examples || [];
-          return examples.map(e => ({
-            example_type: e.type,
-            sentence: e.sentence,
-            translation_zh: e.translation_zh,
-          }));
+          return examples
+            .filter(e => e.sentence)
+            .map(e => ({
+              example_type: e.type,
+              sentence: e.sentence,
+              translation_zh: e.translation_zh,
+            }));
         },
       },
       {
@@ -169,10 +173,12 @@ class WordAssembler {
         isArray: true,
         getData: data => {
           const synonyms = data.nuance?.synonyms || [];
-          return synonyms.map(s => ({
-            synonym_word: s.word,
-            meaning_zh: s.meaning_zh,
-          }));
+          return synonyms
+            .filter(s => s.word)
+            .map(s => ({
+              word: s.word,
+              meaning_zh: s.meaning_zh,
+            }));
         },
       },
     ];

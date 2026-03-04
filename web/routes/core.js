@@ -3,6 +3,7 @@ const router = express.Router();
 const localStore = require('../localStore');
 const { getPool, resetPool } = require('../db');
 const { asyncHandler, Unauthorized, ServiceUnavailable } = require('../utils/errors');
+const { loggers } = require('../utils/logger');
 
 // 管理员 Token 验证中间件
 const requireAdminAuth = (req, res, next) => {
@@ -13,50 +14,40 @@ const requireAdminAuth = (req, res, next) => {
   // 生产环境：必须设置 ADMIN_TOKEN 且验证通过
   if (isProduction) {
     if (!adminToken) {
-      console.error('[Security] ADMIN_TOKEN not configured in production');
+      loggers.auth.error('[Security] ADMIN_TOKEN not configured in production');
       throw ServiceUnavailable('Service unavailable: admin authentication not configured');
     }
 
     if (requestToken !== adminToken) {
-      console.warn(`[Security] Unauthorized config access attempt from ${req.ip}`);
+      loggers.auth.warn(`[Security] Unauthorized config access attempt from ${req.ip}`);
       throw Unauthorized('Unauthorized: invalid admin token');
     }
   }
   // 开发环境：可选验证，如果设置了 ADMIN_TOKEN 则验证
   else if (adminToken && requestToken !== adminToken) {
-    console.warn(`[Security] Unauthorized config access attempt from ${req.ip} (dev mode)`);
+    loggers.auth.warn(`[Security] Unauthorized config access attempt from ${req.ip} (dev mode)`);
     throw Unauthorized('Unauthorized: invalid admin token');
   }
 
   next();
 };
 
-// Config & Status
+// 数据库状态检查 - 后端直接检查，不依赖前端传递连接信息
 router.get(
   '/status',
   asyncHandler(async (req, res) => {
-    let pool;
-    let isTemp = false;
     try {
-      if (req.headers['x-db-url']) {
-        const { Pool } = require('pg');
-        pool = new Pool({ connectionString: req.headers['x-db-url'] });
-        isTemp = true;
-      } else {
-        pool = await getPool(req);
-      }
-
+      const pool = await getPool();
       await pool.query('SELECT 1');
       res.json({ connected: true });
     } catch (e) {
-      console.error('Status Check Failed:', e.message);
+      loggers.db.error('Database status check failed:', e.message);
       res.json({ connected: false, error: e.message });
-    } finally {
-      if (isTemp && pool) await pool.end();
     }
   })
 );
 
+// 更新配置 - 仅管理员可访问
 router.post(
   '/config',
   requireAdminAuth,
@@ -67,30 +58,40 @@ router.post(
       MAX_LOCAL_ITEMS: MAX_LOCAL_ITEMS,
     });
 
-    // Force reset pool on next request
+    // 强制重置连接池
     await resetPool();
+    loggers.system.info('Database configuration updated');
 
     res.json({ success: true });
   })
 );
 
+// 获取配置
 router.get(
   '/config',
   asyncHandler(async (req, res) => {
     const config = localStore.getConfig();
-    res.json(config);
+    // 不返回敏感信息如完整数据库连接字符串
+    const safeConfig = {
+      MAX_LOCAL_ITEMS: config.MAX_LOCAL_ITEMS,
+      API_PORT: config.API_PORT,
+      CLIENT_DEV_PORT: config.CLIENT_DEV_PORT,
+      // 只返回数据库连接状态，不返回连接字符串
+      hasDatabaseUrl: !!(config.DATABASE_URL || process.env.DATABASE_URL),
+    };
+    res.json(safeConfig);
   })
 );
 
-// Check Word (Public helper)
+// 检查单词
 const wordController = require('../controllers/wordController');
 router.get('/check', (req, res) => wordController.check(req, res));
 
-// Health (Legacy)
+// 健康检查
 router.get(
   '/health',
   asyncHandler(async (req, res) => {
-    const pool = await getPool(req);
+    const pool = await getPool();
     await pool.query('SELECT 1');
     res.json({ status: 'ok' });
   })

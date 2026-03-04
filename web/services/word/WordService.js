@@ -71,6 +71,7 @@ const conflictService = require('../conflictService');
 const validator = require('./WordValidator');
 const repository = require('./WordRepository');
 const assembler = require('./WordAssembler');
+const { createContextLogger } = require('../../utils/logger');
 
 class WordService {
   /**
@@ -92,51 +93,88 @@ class WordService {
    * 9. 提交事务
    */
   async addWord(req, wordText, yamlStr) {
+    const requestId = req.id || 'unknown';
+    const logger = createContextLogger({ requestId, operation: 'addWord', word: wordText });
+
     const wordLower = String(wordText || '')
       .trim()
       .toLowerCase();
-    if (!wordLower) return { status: 'invalid', errors: ['word is required'] };
+    if (!wordLower) {
+      logger.warn({ word: wordText }, 'Add word failed: word is required');
+      return { status: 'invalid', errors: ['word is required'] };
+    }
+
+    logger.debug({ word: wordText, wordLower }, 'Adding new word');
 
     let data;
     try {
       data = yaml.load(String(yamlStr || ''));
-    } catch {
+    } catch (err) {
+      logger.error({ error: err.message, yaml: yamlStr?.substring(0, 200) }, 'YAML parse error');
       return { status: 'invalid', errors: ['yaml parse error'] };
     }
 
     const validation = validator.validate(data, wordLower);
     if (!validation.valid) {
+      logger.warn({ errors: validation.errors }, 'Validation failed');
       return { status: 'invalid', errors: validation.errors };
     }
 
-    const pool = await getPool(req);
+    const pool = await getPool();
     const client = await pool.connect();
 
     try {
       await client.query('BEGIN');
+      logger.debug('Transaction started');
 
       const existing = await repository.findByLemma(req, wordLower, client);
       if (existing) {
         await client.query('ROLLBACK');
+        logger.warn({ lemma: existing.lemma, id: existing.id }, 'Word already exists');
         return { status: 'duplicate', lemma: existing.lemma, id: existing.id };
       }
 
       const wordData = assembler.extractWordData(data);
+      logger.debug({ wordData }, 'Extracted word data');
+
       const insertResult = await repository.create(req, wordData, client);
       const wordId = insertResult.id;
 
       await assembler.updateChildren(client, wordId, data);
       await client.query('COMMIT');
 
+      logger.info(
+        {
+          id: wordId,
+          lemma: insertResult.lemma,
+          word: wordText,
+        },
+        'Word created successfully'
+      );
+
       return { status: 'created', id: wordId, lemma: insertResult.lemma };
     } catch (e) {
-      await client.query('ROLLBACK');
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        logger.error({ error: rollbackErr.message }, 'Rollback failed');
+      }
+      logger.error(
+        {
+          error: e.message,
+          code: e.code,
+          stack: e.stack,
+        },
+        'Database error during addWord'
+      );
       if (e && e.code === '23505') {
         return { status: 'duplicate', lemma: wordLower };
       }
-      throw e;
+      // 返回错误而不是抛出，避免服务器崩溃
+      return { status: 'error', error: e.message };
     } finally {
       client.release();
+      logger.debug('Database connection released');
     }
   }
 
@@ -269,22 +307,59 @@ class WordService {
    * 8. 提交事务
    */
   async saveWord(req, yamlStr, forceUpdate) {
-    if (!yamlStr) throw new Error('No YAML content');
-    const data = yaml.load(yamlStr);
-    const lemma = data.yield?.lemma?.toLowerCase();
-    if (!lemma) throw new Error('YAML missing yield.lemma');
+    const requestId = req.id || 'unknown';
+    const logger = createContextLogger({ requestId, operation: 'saveWord', forceUpdate });
 
-    const pool = await getPool(req);
+    if (!yamlStr) {
+      logger.error('Save word failed: No YAML content');
+      return { success: false, error: 'No YAML content' };
+    }
+
+    let data;
+    try {
+      data = yaml.load(yamlStr);
+    } catch (err) {
+      logger.error(
+        {
+          error: err.message,
+          errorType: err.name,
+          yamlPreview: yamlStr?.substring(0, 500),
+          yamlLength: yamlStr?.length,
+        },
+        'YAML parse error'
+      );
+      return { success: false, error: `Invalid YAML format: ${err.message}` };
+    }
+
+    const lemma = data.yield?.lemma?.toLowerCase();
+    if (!lemma) {
+      logger.error('Save word failed: YAML missing yield.lemma');
+      return { success: false, error: 'YAML missing yield.lemma' };
+    }
+
+    logger.debug({ lemma, forceUpdate, contentLength: yamlStr.length }, 'Saving word');
+
+    const pool = await getPool();
     const client = await pool.connect();
 
     try {
       await client.query('BEGIN');
+      logger.debug('Transaction started');
 
       const existing = await repository.findByLemma(req, lemma, client);
       const analysis = existing ? conflictService.analyze(existing.original_yaml, data) : null;
 
       if (existing && !forceUpdate && analysis?.hasConflict) {
         await client.query('ROLLBACK');
+        logger.warn(
+          {
+            lemma,
+            diff: analysis.diff,
+            oldDataLength: existing.original_yaml?.length,
+            newDataLength: yamlStr?.length,
+          },
+          'Conflict detected'
+        );
         return {
           status: 'conflict',
           diff: analysis.diff,
@@ -301,14 +376,17 @@ class WordService {
         const shouldUpdate = !!forceUpdate || !!analysis?.hasConflict;
 
         if (shouldUpdate) {
+          logger.debug({ wordId, lemma, forceUpdate }, 'Updating existing word');
           const wordData = assembler.extractWordData(data);
           await repository.update(req, wordId, wordData, client);
           await assembler.updateChildren(client, wordId, data);
           status = 'updated';
         } else {
+          logger.debug({ wordId, lemma }, 'No changes detected, logging only');
           status = 'logged';
         }
       } else {
+        logger.debug({ lemma }, 'Creating new word');
         const wordData = assembler.extractWordData(data);
         const insertResult = await repository.create(req, wordData, client);
         wordId = insertResult.id;
@@ -326,12 +404,40 @@ class WordService {
 
       await client.query('COMMIT');
 
+      logger.info(
+        {
+          id: wordId,
+          lemma,
+          status,
+          isNew: !existing,
+        },
+        'Word saved successfully'
+      );
+
       return { success: true, id: wordId, lemma, status };
     } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackErr) {
+        logger.error({ error: rollbackErr.message }, 'Rollback failed');
+      }
+
+      logger.error({ yaml: yamlStr }, 'Yaml input');
+
+      logger.error(
+        {
+          error: e.message,
+          code: e.code,
+          stack: e.stack,
+          lemma,
+        },
+        'Database error during saveWord'
+      );
+      // 返回错误而不是抛出，避免服务器崩溃
+      return { success: false, error: e.message };
     } finally {
       client.release();
+      logger.debug('Database connection released');
     }
   }
 
@@ -342,8 +448,26 @@ class WordService {
    * @returns {Object} 操作结果
    */
   async deleteWord(req, id) {
-    await repository.delete(req, id);
-    return { success: true };
+    const requestId = req.id || 'unknown';
+    const logger = createContextLogger({ requestId, operation: 'deleteWord', wordId: id });
+
+    logger.debug({ wordId: id }, 'Deleting word');
+
+    try {
+      await repository.delete(req, id);
+      logger.info({ wordId: id }, 'Word deleted successfully');
+      return { success: true };
+    } catch (e) {
+      logger.error(
+        {
+          wordId: id,
+          error: e.message,
+          code: e.code,
+        },
+        'Delete word failed'
+      );
+      throw e;
+    }
   }
 }
 

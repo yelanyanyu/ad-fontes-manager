@@ -1,85 +1,56 @@
 const { Pool } = require('pg');
-const localStore = require('../localStore');
-require('dotenv').config();
+const config = require('../utils/config');
 
 // Global Pool Cache
 let globalPool = null;
 let currentDbUrl = null;
 
 // 连接池安全配置
-const POOL_CONFIG = {
-  max: 20, // 最大连接数
-  idleTimeoutMillis: 30000, // 空闲连接 30 秒超时
-  connectionTimeoutMillis: 5000, // 连接建立 5 秒超时
+const getPoolConfig = () => {
+  const poolSize = config.get('database.pool_size');
+  return {
+    max: poolSize || (config.get('core.env') === 'production' ? 20 : 10),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+  };
 };
 
-// 生产环境安全检查
-const isProduction = () => process.env.NODE_ENV === 'production';
-
-// Helper to get DB client (Runtime reload support with Caching)
-const getPool = async req => {
-  // 1. Determine Target URL
-  let targetUrl = null;
-  const requestDbUrl = req?.headers?.['x-db-url'];
-
-  // 生产环境：完全禁止 x-db-url 请求头
-  if (requestDbUrl) {
-    if (isProduction()) {
-      console.warn(`[Security] Blocked x-db-url header attempt from ${req.ip} in production`);
-      throw new Error('Dynamic database URL not allowed in production');
-    }
-    // 开发环境：允许但记录日志
-    console.log(`[Debug] Using x-db-url header from ${req.ip}`);
-    targetUrl = requestDbUrl;
-  }
+/**
+ * 获取数据库连接池
+ * 后端直接从统一配置读取数据库连接信息
+ */
+const getPool = async () => {
+  // 从统一配置获取数据库 URL
+  const targetUrl = config.get('database.url');
 
   if (!targetUrl) {
-    const config = localStore.getConfig();
-    targetUrl = config.DATABASE_URL || process.env.DATABASE_URL;
-
-    if (!targetUrl && process.env.DB_HOST) {
-      const user = process.env.DB_USER || 'postgres';
-      const pass = process.env.DB_PASS || 'postgres';
-      const host = process.env.DB_HOST || 'localhost';
-      const port = config.DB_PORT || process.env.DB_PORT;
-      const db = process.env.DB_NAME || 'etymos';
-      targetUrl = port
-        ? `postgresql://${user}:${pass}@${host}:${port}/${db}`
-        : `postgresql://${user}:${pass}@${host}/${db}`;
-    }
+    throw new Error(
+      'No database URL configured. Please set database.url in config.yml or AD_FONTES_DATABASE_URL environment variable.'
+    );
   }
 
-  if (!targetUrl) {
-    throw new Error('No database URL configured');
-  }
-
-  // 2. Check Cache
-  // 如果请求使用 x-db-url 头（仅开发环境），创建临时连接池（不缓存）
-  if (requestDbUrl && !isProduction()) {
-    return new Pool({
-      connectionString: targetUrl,
-      ...POOL_CONFIG,
-    });
-  }
-
-  // Main Pool Logic
+  // 检查缓存
   if (globalPool && currentDbUrl === targetUrl) {
     return globalPool;
   }
 
-  // Re-create Pool
+  // 重新创建连接池
   if (globalPool) {
-    await globalPool.end(); // Close old
+    await globalPool.end();
   }
 
   console.log('Initializing new DB Pool...');
+  const poolConfig = getPoolConfig();
+
   globalPool = new Pool({
     connectionString: targetUrl,
-    ...POOL_CONFIG,
+    ...poolConfig,
+    ssl: config.get('database.ssl') ? { rejectUnauthorized: false } : false,
   });
+
   currentDbUrl = targetUrl;
 
-  // Add error handler to prevent crash on idle client error
+  // 添加错误处理器
   globalPool.on('error', err => {
     console.error('Unexpected error on idle client', err);
   });
@@ -87,7 +58,9 @@ const getPool = async req => {
   return globalPool;
 };
 
-// Force reset logic (e.g., after config change)
+/**
+ * 强制重置连接池（配置变更后使用）
+ */
 const resetPool = async () => {
   if (globalPool) {
     await globalPool.end();

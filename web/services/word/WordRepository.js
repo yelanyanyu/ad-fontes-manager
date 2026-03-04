@@ -86,8 +86,8 @@ class WordRepository {
    *
    * 注意：使用 lower() 函数实现大小写不敏感查询
    */
-  async findByLemma(req, lemma, client = null) {
-    const dbClient = client || (await getPool(req));
+  async findByLemma(_req, lemma, client = null) {
+    const dbClient = client || (await getPool());
     const result = await dbClient.query('SELECT * FROM words WHERE lower(lemma) = $1', [
       lemma.toLowerCase(),
     ]);
@@ -105,8 +105,8 @@ class WordRepository {
    * - 包含词汇基本信息、统计字段(revision_count)、原始 YAML 数据
    * - 不包含关联表数据（etymologies/cognates 等）
    */
-  async findById(req, id, client = null) {
-    const dbClient = client || (await getPool(req));
+  async findById(_req, id, client = null) {
+    const dbClient = client || (await getPool());
     const result = await dbClient.query(
       'SELECT id, lemma, part_of_speech, syllabification, contextual_meaning_en, contextual_meaning_zh, other_common_meanings, image_differentiation_zh, created_at, updated_at, revision_count, original_yaml FROM words WHERE id = $1',
       [id]
@@ -220,8 +220,8 @@ class WordRepository {
    * - 数据库已配置外键级联删除，删除词汇会自动清理关联表数据
    * - 删除操作不可逆，调用前需确认业务逻辑
    */
-  async delete(req, id, client = null) {
-    const dbClient = client || (await getPool(req));
+  async delete(_req, id, client = null) {
+    const dbClient = client || (await getPool());
     await dbClient.query('DELETE FROM words WHERE id = $1', [id]);
   }
 
@@ -233,8 +233,8 @@ class WordRepository {
    * 适用场景：数据量较小(几百条以内)的管理后台列表页
    * 注意：数据量大时请使用 listPaged 分页查询
    */
-  async listAll(req) {
-    const pool = await getPool(req);
+  async listAll(_req) {
+    const pool = await getPool();
     const result = await pool.query(`
       SELECT id, lemma, part_of_speech, syllabification, contextual_meaning_en, created_at, revision_count, original_yaml
       FROM words 
@@ -262,8 +262,8 @@ class WordRepository {
    *   totalPages: 5      // 总页数
    * }
    */
-  async listPaged(req, options) {
-    const pool = await getPool(req);
+  async listPaged(_req, options) {
+    const pool = await getPool();
     const { page = 1, limit = 20, search = '', sort = 'newest' } = options;
 
     const validatedPage = Math.max(1, page);
@@ -333,8 +333,8 @@ class WordRepository {
    * - 使用 Promise.all 并行查询多个关联表
    * - 按需加载，只查询指定的关联数据
    */
-  async getDetails(req, wordText, include = []) {
-    const pool = await getPool(req);
+  async getDetails(_req, wordText, include = []) {
+    const pool = await getPool();
     const inc = new Set(include.map(s => String(s || '').toLowerCase()));
 
     const selectFields = [

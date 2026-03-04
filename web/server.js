@@ -2,9 +2,9 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
-require('dotenv').config();
-const localStore = require('./localStore');
+const config = require('./utils/config');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { httpLogger, loggers } = require('./utils/logger');
 
 const app = express();
 
@@ -30,6 +30,9 @@ app.use(
 app.use(express.json());
 app.use(cors());
 
+// HTTP 请求日志中间件（在基础中间件之后，路由之前）
+app.use(httpLogger);
+
 // Mount Routes
 app.use('/api', require('./routes/core'));
 app.use('/api', require('./routes/sync')); // Mounts /local and /sync
@@ -42,7 +45,7 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Static Serving (Production vs Dev)
-if (process.env.NODE_ENV === 'production') {
+if (config.get('core.env') === 'production') {
   // Serve built Vue files
   app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -52,8 +55,7 @@ if (process.env.NODE_ENV === 'production') {
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
   });
 } else {
-  const config = localStore.getConfig();
-  const clientPort = config.CLIENT_DEV_PORT || process.env.CLIENT_DEV_PORT;
+  const clientPort = config.get('client.dev_port');
   app.get(/.*/, (req, res) => {
     if (req.path.startsWith('/api')) return res.status(404).send('Not Found');
     res.redirect(`http://localhost:${clientPort}${req.originalUrl}`);
@@ -61,8 +63,14 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 // Start Server
-const config = localStore.getConfig();
-const apiPort = config.API_PORT || process.env.PORT || 8080;
-app.listen(apiPort, () => {
-  console.log(`Server running on http://localhost:${apiPort}`);
+const apiPort = config.get('server.port');
+const serverHost = config.get('server.host');
+app.listen(apiPort, serverHost, () => {
+  loggers.system.info({
+    msg: `Server running on http://${serverHost}:${apiPort}`,
+    port: apiPort,
+    host: serverHost,
+    env: config.get('core.env'),
+    logLevel: config.get('logging.level'),
+  });
 });

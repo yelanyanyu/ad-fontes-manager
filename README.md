@@ -105,9 +105,11 @@ ad-fontes-manager
 ## 文档
 
 - [API 文档](./docs/API.md) - REST API 接口说明
-- [开发文档](./DEVELOPMENT.md) - 架构说明和开发者指南
+- [数据库文档](./docs/DATABASE.md) - 数据库 Schema 和表结构
+- [开发文档](./docs/DEVELOPMENT.md) - 架构说明和开发者指南
+- [安全指南](./docs/SECURITY.md) - 安全配置和最佳实践
+- [日志系统](./docs/LOGGING.md) - 后端日志配置和使用
 - [配置规范](./config.schema.yml) - 所有可配置参数
-- [安全指南](./SECURITY.md) - 安全配置和最佳实践
 
 ## 数据库 Schema
 

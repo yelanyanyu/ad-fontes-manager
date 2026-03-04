@@ -1,0 +1,82 @@
+yield:
+  user_word: "dignity"
+  lemma: "dignity"
+  syllabification: "dig-ni-ty"
+  user_context_sentence: "He felt it was beneath his dignity to respond to such baseless accusations."
+  part_of_speech: "noun"
+  contextual_meaning:
+    en: "A sense of self-worth and honor that makes certain actions seem unworthy or degrading to one's character."
+    zh: "自尊；尊严感——因自我价值认同而认为某些行为有损人格、不屑为之的心理状态。"
+  other_common_meanings:
+    - "内在价值与品格: 值得尊敬的心灵或品格的高尚状态，真正的自我价值。"
+    - "仪态与庄重: 举止得体、庄重威严的外在表现形式。"
+    - "社会地位与身份: 高级职位、等级或社会地位，以及担任此类职位的人（显要人物）。"
+    - "基本原则: 被视为不证自明的基本公理或准则。"
+
+etymology:
+  root_and_affixes:
+    prefix: "N/A"
+    root: "-dign- [worthy, fitting, acceptable]"
+    suffix: "-ity [state/quality of]"
+    structure_analysis: "Simple derivation: Latin dignitas (worthiness) > Old French dignite > Middle English dignity. The root -dign- carries the core meaning of 'being worthy of acceptance/esteem'."
+  historical_origins:
+    history_myth: "In Ancient Rome, dignitas was a political and social concept tied to rank and office—Cicero wrote of it as the honor due to one's position in the Republic."
+    source_word: "Latin dignitas (worthiness, merit, honor) from dignus (worthy, proper, fitting)"
+    pie_root: "*dek- (to take, accept) — the underlying logic: 'worthy' = 'acceptable to be taken/received'"
+  
+  visual_imagery_zh: |
+    想象你站在一座古罗马元老院的 marble 台阶上。你手中握着一卷羊皮纸文书——这是你被赋予的公职与责任。
+    你正在挺直脊背，微微抬起下颌，目光平静而坚定地扫过人群。这个动作不是傲慢，而是一种内在的"值得被接纳"的姿态。
+    你感觉到胸腔中有一股沉稳的张力，仿佛有一道无形的界限环绕着你——任何低于这条界限的言语或行为都会触碰到这道边界，引发一种本能的退缩。
+    你的焦点不是向外攻击，而是向内守护：守护那份"可被接纳"的资格，守护那份无需证明、已然存在的价值感。
+
+  meaning_evolution_zh: |
+    从"被接纳的资格"到"尊严"的演变逻辑：
+    
+    第一层（PIE *dek-）：原始印欧语中表示"拿取、接纳"——某物"值得被拿取"即意味着它具有价值。
+    
+    第二层（Latin dignus）：拉丁语中发展为"值得的、适宜的"——从物品的价值延伸到人的价值，指一个人"值得被尊重、值得被赋予职位"。
+    
+    第三层（Latin dignitas）：名词化后表示"值得的状态"——在古罗马政治语境中，这具体化为"官职带来的荣誉与社会地位"。此时dignity是外在的、可获得的，也可随职位丧失而失去。
+    
+    第四层（中世纪-现代）：随着基督教人文主义的兴起，dignity逐渐内化为"人的内在价值"——不再依赖于职位，而是每个人作为理性存在者固有的属性。
+    
+    第五层（当代用法）：在"respond to such baseless accusations"的语境中，dignity体现为一种心理边界——因为认同自身的内在价值，所以拒绝将精力浪费在"不值得"的事情上。这种"不屑"不是冷漠，而是对自我价值的主动守护。
+
+cognate_family:
+  instruction: "请在本板块使用中文。选择 3-4 个同源词。"
+  cognates:
+    - word: "deign"
+      logic: "前缀'de-'表示向下 + '想象[根词动作]屈尊俯就' = 含义：降低身份去做某事（原义：认为某事值得自己做）"
+    - word: "disdain"
+      logic: "前缀'dis-'表示否定/相反 + '感受[根词动作]不值得接纳' = 含义：鄙视、蔑视（认为不值得尊重）"
+    - word: "decent"
+      logic: "前缀'de-'表示完全 + '视觉化物体被完全接纳' = 含义：得体的、体面的（符合被接纳的标准）"
+    - word: "indignant"
+      logic: "前缀'in-'表示否定 + '感受[根词动作]不被尊重' = 含义：愤慨的（因感到尊严受侵犯而愤怒）"
+
+application:
+  selected_examples:
+    - type: "Literal / Root Image"
+      sentence: "The ambassador conducted himself with the quiet dignity expected of his office."
+      translation_zh: "这位大使以与其职位相称的庄重仪态行事。"
+    - type: "Current Context"
+      sentence: "He felt it was beneath his dignity to respond to such baseless accusations."
+      translation_zh: "他认为回应这些毫无根据的指控有损自己的尊严。"
+    - type: "Abstract / Metaphorical"
+      sentence: "The dignity of the human person is inviolable and must be respected by all."
+      translation_zh: "人的尊严是不可侵犯的，必须受到所有人的尊重。"
+
+nuance:
+  synonyms:
+    - word: "honor"
+      meaning_zh: "荣誉——更侧重外部的认可与赞誉"
+    - word: "self-respect"
+      meaning_zh: "自尊——更强调个体对自我的评价与维护"
+  
+  image_differentiation_zh: |
+    不同于 honor 暗示着外部授予的勋章或社会认可（一种可以被颁发、也可以被剥夺的外在标签），dignity 更侧重于那种"无论外界如何，我内在依然值得被接纳"的稳固感。
+    
+    不同于 self-respect 强调个体对自我的主观评价（"我尊重自己"），dignity 带有一种存在论的色彩——它暗示这种价值不是后天建构的，而是某种"被给予"的、几乎带有神圣性的资格。
+    
+    在"beneath one's dignity"这个表达中，画面感尤为强烈：仿佛有一道无形的门槛横亘在那里，任何低于这道门槛的行为都会触发一种本能的拒绝——不是因为害怕失去什么，而是因为那行为本身与"我是谁"不相容。

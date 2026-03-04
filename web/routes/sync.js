@@ -90,7 +90,7 @@ router.post(
 
     const results = [];
     // Verify connection
-    const pool = await getPool(req);
+    const pool = await getPool();
     await pool.query('SELECT 1');
 
     for (const item of items) {
@@ -116,7 +116,7 @@ router.post(
 
     const results = { success: 0, failed: 0, errors: [] };
 
-    const pool = await getPool(req);
+    const pool = await getPool();
     await pool.query('SELECT 1');
 
     for (const item of items) {

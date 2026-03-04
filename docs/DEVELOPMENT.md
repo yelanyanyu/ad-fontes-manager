@@ -200,7 +200,7 @@ module.exports = exampleController;
 
 ## 数据库
 
-### Schema 变更
+### Schema 定义
 
 数据库 Schema 定义在 `schema.sql`：
 
