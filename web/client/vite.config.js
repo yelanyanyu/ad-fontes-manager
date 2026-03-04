@@ -19,7 +19,7 @@ export default defineConfig({
     } catch (e) {
       config = {};
     }
-    const apiPort = config.API_PORT || process.env.API_PORT;
+    const apiPort = config.API_PORT || process.env.API_PORT || 8080;
     const clientPort = config.CLIENT_DEV_PORT || process.env.CLIENT_DEV_PORT;
     return {
       port: clientPort ? Number(clientPort) : undefined,

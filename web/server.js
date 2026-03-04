@@ -55,7 +55,7 @@ if (process.env.NODE_ENV === 'production') {
 
 // Start Server
 const config = localStore.getConfig();
-const apiPort = config.API_PORT || process.env.PORT;
+const apiPort = config.API_PORT || process.env.PORT || 8080;
 app.listen(apiPort, () => {
   console.log(`Server running on http://localhost:${apiPort}`);
 });
