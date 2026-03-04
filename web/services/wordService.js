@@ -136,14 +136,14 @@ class WordService {
             const insertRes = await client.query(
                 `
                 INSERT INTO words (
-                    lemma, syllabification, part_of_speech, 
+                    lemma, syllabification, part_of_speech,
                     contextual_meaning_en, contextual_meaning_zh,
                     other_common_meanings, image_differentiation_zh, original_yaml
                 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 RETURNING id, lemma
                 `,
                 [
-                    wordLower,
+                    yieldData.lemma || wordLower,
                     yieldData.syllabification,
                     yieldData.part_of_speech,
                     yieldData.contextual_meaning?.en,

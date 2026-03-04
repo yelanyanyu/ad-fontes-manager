@@ -3,6 +3,45 @@ const router = express.Router();
 const localStore = require('../localStore');
 const { getPool, resetPool } = require('../db');
 
+// 管理员 Token 验证中间件
+const requireAdminAuth = (req, res, next) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const adminToken = process.env.ADMIN_TOKEN;
+    const requestToken = req.headers['x-admin-token'];
+
+    // 生产环境：必须设置 ADMIN_TOKEN 且验证通过
+    if (isProduction) {
+        if (!adminToken) {
+            console.error('[Security] ADMIN_TOKEN not configured in production');
+            return res.status(503).json({
+                success: false,
+                code: 503,
+                message: 'Service unavailable: admin authentication not configured'
+            });
+        }
+
+        if (requestToken !== adminToken) {
+            console.warn(`[Security] Unauthorized config access attempt from ${req.ip}`);
+            return res.status(401).json({
+                success: false,
+                code: 401,
+                message: 'Unauthorized: invalid admin token'
+            });
+        }
+    }
+    // 开发环境：可选验证，如果设置了 ADMIN_TOKEN 则验证
+    else if (adminToken && requestToken !== adminToken) {
+        console.warn(`[Security] Unauthorized config access attempt from ${req.ip} (dev mode)`);
+        return res.status(401).json({
+            success: false,
+            code: 401,
+            message: 'Unauthorized: invalid admin token'
+        });
+    }
+
+    next();
+};
+
 // Config & Status
 router.get('/status', async (req, res) => {
     let pool;
@@ -26,16 +65,16 @@ router.get('/status', async (req, res) => {
     }
 });
 
-router.post('/config', async (req, res) => {
+router.post('/config', requireAdminAuth, async (req, res) => {
     const { database_url, MAX_LOCAL_ITEMS } = req.body;
-    localStore.saveConfig({ 
+    localStore.saveConfig({
         DATABASE_URL: database_url,
-        MAX_LOCAL_ITEMS: MAX_LOCAL_ITEMS 
+        MAX_LOCAL_ITEMS: MAX_LOCAL_ITEMS
     });
-    
+
     // Force reset pool on next request
     await resetPool();
-    
+
     res.json({ success: true });
 });
 

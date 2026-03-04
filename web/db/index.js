@@ -6,11 +6,33 @@ require('dotenv').config();
 let globalPool = null;
 let currentDbUrl = null;
 
+// 连接池安全配置
+const POOL_CONFIG = {
+    max: 20,                    // 最大连接数
+    idleTimeoutMillis: 30000,   // 空闲连接 30 秒超时
+    connectionTimeoutMillis: 5000,  // 连接建立 5 秒超时
+};
+
+// 生产环境安全检查
+const isProduction = () => process.env.NODE_ENV === 'production';
+
 // Helper to get DB client (Runtime reload support with Caching)
 const getPool = async (req) => {
     // 1. Determine Target URL
-    let targetUrl = req?.headers?.['x-db-url'];
-    
+    let targetUrl = null;
+    const requestDbUrl = req?.headers?.['x-db-url'];
+
+    // 生产环境：完全禁止 x-db-url 请求头
+    if (requestDbUrl) {
+        if (isProduction()) {
+            console.warn(`[Security] Blocked x-db-url header attempt from ${req.ip} in production`);
+            throw new Error('Dynamic database URL not allowed in production');
+        }
+        // 开发环境：允许但记录日志
+        console.log(`[Debug] Using x-db-url header from ${req.ip}`);
+        targetUrl = requestDbUrl;
+    }
+
     if (!targetUrl) {
         const config = localStore.getConfig();
         targetUrl = config.DATABASE_URL || process.env.DATABASE_URL;
@@ -32,9 +54,12 @@ const getPool = async (req) => {
     }
 
     // 2. Check Cache
-    // If request has specific header, create a temporary pool (for testing connection)
-    if (req?.headers?.['x-db-url']) {
-        return new Pool({ connectionString: targetUrl });
+    // 如果请求使用 x-db-url 头（仅开发环境），创建临时连接池（不缓存）
+    if (requestDbUrl && !isProduction()) {
+        return new Pool({
+            connectionString: targetUrl,
+            ...POOL_CONFIG
+        });
     }
 
     // Main Pool Logic
@@ -48,9 +73,12 @@ const getPool = async (req) => {
     }
 
     console.log('Initializing new DB Pool...');
-    globalPool = new Pool({ connectionString: targetUrl });
+    globalPool = new Pool({
+        connectionString: targetUrl,
+        ...POOL_CONFIG
+    });
     currentDbUrl = targetUrl;
-    
+
     // Add error handler to prevent crash on idle client error
     globalPool.on('error', (err, client) => {
         console.error('Unexpected error on idle client', err);
