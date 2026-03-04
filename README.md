@@ -28,7 +28,10 @@ cd client && npm install && cd ..
 cp .env.example .env
 # 编辑 .env 文件设置数据库连接
 
-# 4. 启动开发服务器
+# 4. 初始化数据库（可选）
+node init_db.js
+
+# 5. 启动开发服务器
 npm run dev
 ```
 
@@ -47,7 +50,7 @@ npm run dev
 ### 数据管理
 - **YAML 编辑器**：实时预览和格式验证
 - **搜索排序**：模糊搜索 + 多种排序方式
-- **分页功能**：客户端分页，自定义每页数量
+- **分页功能**：服务端分页，自定义每页数量
 - **卡片预览**：精美单词卡片生成与下载
 
 ### 技术栈
@@ -61,6 +64,7 @@ npm run dev
 | 构建工具 | Vite | 7.x |
 | 状态管理 | Pinia | 3.x |
 | 样式 | Tailwind CSS | 3.4+ |
+| 日志 | Pino | 10.x |
 
 ## 配置
 
@@ -76,6 +80,7 @@ DATABASE_URL=postgresql://user:pass@host:5432/db
 API_PORT=8080
 CLIENT_DEV_PORT=5173
 MAX_LOCAL_ITEMS=100
+LOG_LEVEL=info
 ```
 
 ### 本地配置
@@ -95,10 +100,13 @@ ad-fontes-manager
 │   ├── controllers/     # Express 控制器
 │   ├── routes/          # API 路由
 │   ├── services/        # 业务逻辑
+│   ├── utils/           # 工具函数
+│   │   ├── logger.js    # Pino 日志系统
+│   │   └── config.js    # 配置管理
 │   └── server.js        # 后端入口
-├── docs/
-│   └── API.md           # API 文档
-├── config.schema.yml    # 配置规范
+├── docs/                # 文档目录
+├── init_db.js           # 数据库初始化脚本
+├── schema.sql           # 数据库 Schema
 └── README.md            # 本文件
 ```
 
@@ -109,24 +117,71 @@ ad-fontes-manager
 - [开发文档](./docs/DEVELOPMENT.md) - 架构说明和开发者指南
 - [安全指南](./docs/SECURITY.md) - 安全配置和最佳实践
 - [日志系统](./docs/LOGGING.md) - 后端日志配置和使用
-- [配置规范](./config.schema.yml) - 所有可配置参数
+- [配置说明](./docs/CONFIGURATION.md) - 统一配置系统说明
+- [TypeScript 迁移](./docs/TYPESCRIPT_MIGRATION.md) - TypeScript 迁移指南
+- [编辑器设置](./docs/EDITOR_SETUP.md) - 编辑器配置建议
 
 ## 数据库 Schema
 
 ```mermaid
 erDiagram
-    WORDS ||--|| ETYMOLOGIES : "词源信息"
-    WORDS ||--|{ COGNATES : "同源词"
-    WORDS ||--|{ EXAMPLES : "例句"
-    WORDS ||--|{ SYNONYMS : "近义词"
+    words ||--o| etymologies : has
+    words ||--o{ cognates : has
+    words ||--o{ examples : has
+    words ||--o{ synonyms : has
+    words ||--o{ user_requests : tracks
 
-    WORDS {
+    words {
         uuid id PK
-        text lemma "词元"
-        jsonb original_yaml "原始 YAML"
-        timestamp updated_at
+        text lemma UK
+        text syllabification
+        text part_of_speech
+        jsonb original_yaml
+        timestamptz created_at
+        timestamptz updated_at
+        int revision_count
+    }
+
+    etymologies {
+        uuid word_id PK,FK
+        text prefix
+        text root
+        text suffix
+        text pie_root
+        text visual_imagery_zh
+    }
+
+    cognates {
+        uuid id PK
+        uuid word_id FK
+        text cognate_word
+        text logic
+    }
+
+    examples {
+        uuid id PK
+        uuid word_id FK
+        text example_type
+        text sentence
+    }
+
+    synonyms {
+        uuid id PK
+        uuid word_id FK
+        text synonym_word
+    }
+
+    user_requests {
+        uuid id PK
+        uuid word_id FK
+        text user_input
+        text context_sentence
     }
 ```
+
+## 更新日志
+
+查看 [CHANGELOG.md](./CHANGELOG.md) 了解详细更新历史。
 
 ## Ad Fontes 生态
 
