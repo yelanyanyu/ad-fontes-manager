@@ -1,10 +1,31 @@
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
+const helmet = require('helmet');
 require('dotenv').config();
 const localStore = require('./localStore');
 
 const app = express();
+
+// Security headers middleware
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        imgSrc: ["'self'", 'data:', 'blob:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
 app.use(express.json());
 app.use(cors());
 
@@ -19,14 +40,14 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'dist')));
 
   // SPA Catch-all (excluding API)
-  app.get('*', (req, res) => {
+  app.get(/.*/, (req, res) => {
     if (req.path.startsWith('/api')) return res.status(404).send('Not Found');
     res.sendFile(path.join(__dirname, 'dist', 'index.html'));
   });
 } else {
   const config = localStore.getConfig();
   const clientPort = config.CLIENT_DEV_PORT || process.env.CLIENT_DEV_PORT;
-  app.get('*', (req, res) => {
+  app.get(/.*/, (req, res) => {
     if (req.path.startsWith('/api')) return res.status(404).send('Not Found');
     res.redirect(`http://localhost:${clientPort}${req.originalUrl}`);
   });
