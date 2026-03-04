@@ -80,7 +80,7 @@ const getPool = async req => {
   currentDbUrl = targetUrl;
 
   // Add error handler to prevent crash on idle client error
-  globalPool.on('error', (err, client) => {
+  globalPool.on('error', err => {
     console.error('Unexpected error on idle client', err);
   });
 
