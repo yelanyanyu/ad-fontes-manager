@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 require('dotenv').config();
 const localStore = require('./localStore');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 const app = express();
 
@@ -33,6 +34,12 @@ app.use(cors());
 app.use('/api', require('./routes/core'));
 app.use('/api', require('./routes/sync')); // Mounts /local and /sync
 app.use('/api/words', require('./routes/words'));
+
+// 404 handler - must be after all routes
+app.use(notFoundHandler);
+
+// Global error handler - must be last
+app.use(errorHandler);
 
 // Static Serving (Production vs Dev)
 if (process.env.NODE_ENV === 'production') {

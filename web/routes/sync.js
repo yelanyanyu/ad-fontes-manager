@@ -4,6 +4,8 @@ const localStore = require('../localStore');
 const yaml = require('js-yaml');
 const { getPool } = require('../db');
 const wordService = require('../services/wordService');
+const { asyncHandler, BadRequest } = require('../utils/errors');
+const { StatusCodes } = require('http-status-codes');
 
 router.get('/local', (req, res) => {
   res.json(localStore.getAll());
@@ -11,8 +13,9 @@ router.get('/local', (req, res) => {
 
 const conflictService = require('../services/conflictService');
 
-router.post('/local', (req, res) => {
-  try {
+router.post(
+  '/local',
+  asyncHandler(async (req, res) => {
     const { yaml: yamlStr, id, forceUpdate } = req.body;
     // Basic validation
     const data = yaml.load(yamlStr);
@@ -64,14 +67,12 @@ router.post('/local', (req, res) => {
     } catch (e) {
       // Check if it's a limit error
       if (e.message.includes('limit reached')) {
-        return res.status(400).json({ error: e.message, code: 'LIMIT_REACHED' });
+        throw BadRequest(e.message, { code: 'LIMIT_REACHED' });
       }
       throw e;
     }
-  } catch (e) {
-    res.status(400).json({ error: 'Save failed: ' + e.message });
-  }
-});
+  })
+);
 
 router.delete('/local/:id', (req, res) => {
   localStore.delete(req.params.id);
@@ -79,12 +80,15 @@ router.delete('/local/:id', (req, res) => {
 });
 
 // New Check Endpoint
-router.post('/sync/check', async (req, res) => {
-  const { items } = req.body; // Expects array of { id, raw_yaml }
-  if (!Array.isArray(items)) return res.status(400).json({ error: 'Items array required' });
+router.post(
+  '/sync/check',
+  asyncHandler(async (req, res) => {
+    const { items } = req.body; // Expects array of { id, raw_yaml }
+    if (!Array.isArray(items)) {
+      throw BadRequest('Items array required');
+    }
 
-  const results = [];
-  try {
+    const results = [];
     // Verify connection
     const pool = await getPool(req);
     await pool.query('SELECT 1');
@@ -98,19 +102,20 @@ router.post('/sync/check', async (req, res) => {
       }
     }
     res.json(results);
-  } catch (e) {
-    res.status(500).json({ error: 'Database check failed: ' + e.message });
-  }
-});
+  })
+);
 
 // Execute Sync (Single or Batch)
-router.post('/sync/execute', async (req, res) => {
-  const { items, forceUpdate } = req.body; // Array of { id, raw_yaml }
-  if (!Array.isArray(items)) return res.status(400).json({ error: 'Items array required' });
+router.post(
+  '/sync/execute',
+  asyncHandler(async (req, res) => {
+    const { items, forceUpdate } = req.body; // Array of { id, raw_yaml }
+    if (!Array.isArray(items)) {
+      throw BadRequest('Items array required');
+    }
 
-  const results = { success: 0, failed: 0, errors: [] };
+    const results = { success: 0, failed: 0, errors: [] };
 
-  try {
     const pool = await getPool(req);
     await pool.query('SELECT 1');
 
@@ -125,15 +130,13 @@ router.post('/sync/execute', async (req, res) => {
       }
     }
     res.json(results);
-  } catch (e) {
-    res.status(500).json({ error: 'Sync failed: ' + e.message });
-  }
-});
+  })
+);
 
 // Legacy Sync (Keep for compatibility if needed, but better to deprecate)
 // We'll replace it with a redirect or just remove it to force frontend update
-router.post('/sync', async (req, res) => {
-  res.status(410).json({ error: 'Deprecated. Use /sync/check and /sync/execute' });
+router.post('/sync', (req, res) => {
+  res.status(StatusCodes.GONE).json({ error: 'Deprecated. Use /sync/check and /sync/execute' });
 });
 
 module.exports = router;
