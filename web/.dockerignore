@@ -1,6 +1,57 @@
+# Dependencies
 node_modules
-client/node_modules
+**/node_modules
+
+# Build outputs
 dist
+**/dist
+build
+
+# Environment files
 .env
-.git
+.env.*
+!.env.example
+
+# IDE and editor
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS files
 .DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Tests
+**/*.test.js
+**/*.spec.js
+__tests__
+coverage
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Trae specs
+.trae
+
+# Misc
+*.tgz
+.npm
+.eslintcache

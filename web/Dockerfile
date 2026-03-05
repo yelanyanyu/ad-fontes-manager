@@ -7,25 +7,30 @@ COPY package*.json ./
 COPY client/package*.json ./client/
 
 # Install all dependencies
-RUN npm install
-RUN cd client && npm install
+RUN npm ci
+RUN cd client && npm ci
 
 # Copy source code
 COPY . .
 
-# Build Vue frontend (outputs to /app/dist)
+# Build Vue frontend (outputs to /app/client/dist)
 RUN npm run build
 
 # Stage 2: Production Runtime
 FROM node:22-alpine
-WORKDIR /app
 
 # Install curl for healthcheck
 RUN apk add --no-cache curl
 
+# Create non-root user for security
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -S appuser -u 1001 -G appgroup
+
+WORKDIR /app
+
 # Install only production dependencies for backend
 COPY package*.json ./
-RUN npm install --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy backend source code
 COPY server.js .
@@ -37,12 +42,23 @@ COPY services ./services
 COPY utils ./utils
 COPY middleware ./middleware
 
-# Copy built frontend assets
+# Copy built frontend assets from builder stage
 COPY --from=builder /app/dist ./dist
+
+# Set ownership to non-root user
+RUN chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
 
 # Environment variables should be passed at runtime
 ENV NODE_ENV=production
 ENV PORT=8080
 
 EXPOSE 8080
-CMD ["npm", "start"]
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:8080/api/core/health || exit 1
+
+CMD ["node", "server.js"]

@@ -116,6 +116,115 @@ docker-compose up -d
 
 更多配置说明请参考 [配置文档](./docs/CONFIGURATION.md)。
 
+## Docker 构建
+
+### 快速启动
+
+```powershell
+# 1. 确保 Docker Desktop 正在运行
+docker version
+
+# 2. 构建并启动（自动读取 .env.production）
+docker-compose up -d --build
+
+# 3. 查看日志
+docker-compose logs -f
+
+# 4. 检查健康状态
+curl http://localhost:8080/api/core/health
+```
+
+### 环境配置
+
+项目使用 `.env.production` 文件配置环境变量。docker-compose 会自动读取此文件。
+
+**本地开发配置示例** (`.env.production`):
+
+```env
+NODE_ENV=production
+ADMIN_TOKEN=your-secure-admin-token-min-32-characters-here
+DATABASE_URL=postgresql://postgres:password@host.docker.internal:5432/ad_fontes
+DATABASE_SSL=false
+SERVER_CORS_ORIGINS=["http://localhost:8080"]
+LOG_LEVEL=debug
+```
+
+**注意**: `host.docker.internal` 用于容器访问宿主机的 PostgreSQL。
+
+### Windows Docker Desktop
+
+**前置条件**:
+- 安装 [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop)
+- 确保 Docker Desktop 正在运行（系统托盘图标显示绿色）
+
+**构建步骤**:
+
+```powershell
+# 构建并启动
+docker-compose up -d --build
+
+# 查看日志
+docker-compose logs -f
+
+# 检查健康状态
+curl http://localhost:8080/api/core/health
+```
+
+### Linux/macOS
+
+```bash
+# 构建并启动
+docker-compose up -d --build
+
+# 查看日志
+docker-compose logs -f
+
+# 检查健康状态
+curl http://localhost:8080/api/core/health
+```
+
+### 常用命令
+
+```bash
+# 停止服务
+docker-compose down
+
+# 重启服务
+docker-compose restart
+
+# 查看容器状态
+docker-compose ps
+
+# 更新部署
+git pull origin main
+docker-compose up -d --build
+
+# 清理旧镜像
+docker image prune -f
+```
+
+### 环境变量说明
+
+| 变量 | 必需 | 说明 |
+|------|------|------|
+| `NODE_ENV` | ✅ | 设为 `production` |
+| `ADMIN_TOKEN` | ✅ | 管理员令牌，≥32 字符 |
+| `DATABASE_URL` | ✅ | PostgreSQL 连接字符串 |
+| `DATABASE_SSL` | ✅ | 生产环境必须 `true` |
+| `SERVER_CORS_ORIGINS` | ✅ | 允许的跨域来源 |
+| `SERVER_RATE_LIMIT` | ❌ | 速率限制，建议 100-300 |
+| `LOG_LEVEL` | ❌ | 日志级别，建议 `warn` |
+
+### Docker 安全特性
+
+生产镜像已包含以下安全优化：
+- **非 root 用户运行**: 容器以 `appuser` (UID 1001) 运行
+- **最小化镜像**: 使用 Alpine Linux 基础镜像
+- **健康检查**: 自动监控容器健康状态
+- **资源限制**: CPU 和内存使用限制
+
+详细部署指南请参考 [部署文档](./docs/DEPLOYMENT.md)。
+
 ## 项目结构
 
 ```

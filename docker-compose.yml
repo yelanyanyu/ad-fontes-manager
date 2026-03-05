@@ -8,7 +8,7 @@ services:
     container_name: ad-fontes-manager
     restart: unless-stopped
     env_file:
-      - .env.production  # 仅服务器本地存在，不提交 Git
+      - .env.production
     environment:
       - NODE_ENV=production
     ports:
@@ -16,11 +16,19 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/core/health"]
       interval: 30s
-      timeout: 3s
+      timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
     networks:
       - ad-fontes-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
 
 networks:
   ad-fontes-network:
