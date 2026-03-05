@@ -1,74 +1,72 @@
-/**
- * ============================================================================
- * WordStore - 词汇状态管理模块（Pinia Store）
- * ============================================================================
- *
- * 【功能简介】
- * 本模块是前端词汇管理系统的核心状态管理器，基于 Pinia 框架实现。
- * 负责管理词汇数据的完整生命周期，包括本地草稿、数据库记录、编辑器状态等。
- * 实现了离线优先的数据策略，确保用户在无网络环境下仍可正常使用核心功能。
- *
- * 【架构说明】
- * 前后端彻底分离后，前端不再直接管理数据库连接配置。
- * 后端直接从配置读取数据库连接信息，前端仅通过 API 与后端通信。
- * 前端保留连接状态检测，用于 UI 显示和离线模式切换。
- *
- * 【核心职责】
- * - 维护本地草稿和数据库记录的双向数据流
- * - 提供词汇的增删改查操作
- * - 实现智能保存策略（自动判断保存到本地或数据库）
- * - 支持数据同步检查与执行
- * - 检测后端数据库连接状态
- *
- * 【数据流说明】
- * 本地草稿流：fetchLocalRecords -> localRecords -> saveWord(local) -> 更新
- * 数据库流：fetchDbRecords -> dbRecords -> saveWord(db) -> 更新
- * 编辑器流：setEditingContext -> editorYaml -> saveWord -> 重置/更新
- * ============================================================================
- */
-
 import { defineStore } from 'pinia';
+import yaml from 'js-yaml';
 import request from '@/utils/request';
 import { useAppStore } from '@/stores/appStore';
 import { wordLogger, syncLogger, dbLogger } from '@/utils/logger';
+import type { DbListMeta, LocalSyncItem, SyncCheckItem, WordRecord } from '@/types/word-list';
+
+type ConnectionStatus = 'connected' | 'disconnected' | 'testing';
+type SaveTarget = 'local' | 'db' | 'auto';
+
+interface SaveConflictResult {
+  status: 'conflict';
+  source: 'local' | 'db';
+  id?: string | number;
+  lemma?: string;
+  oldData?: Record<string, unknown>;
+  newData?: Record<string, unknown>;
+  diff?: unknown[];
+  [key: string]: unknown;
+}
+
+interface SyncExecuteResult {
+  success?: number;
+  failed?: number;
+  status?: string;
+  [key: string]: unknown;
+}
+
+interface WordStoreState {
+  localRecords: WordRecord[];
+  dbRecords: WordRecord[];
+  dbListMeta: DbListMeta;
+  currentEditingId: string | number | null;
+  currentEditingIsLocal: boolean;
+  editorYaml: string;
+  dbConnected: boolean;
+  connectionStatus: ConnectionStatus;
+  loading: boolean;
+}
+
+interface HttpErrorLike {
+  response?: { status?: number };
+  message?: string;
+}
+
+const defaultDbListMeta = (): DbListMeta => ({
+  page: 1,
+  limit: 20,
+  total: 0,
+  totalPages: 1,
+  search: '',
+  sort: 'newest',
+});
 
 export const useWordStore = defineStore('word', {
-  state: () => ({
-    // 本地草稿记录（离线状态使用）
+  state: (): WordStoreState => ({
     localRecords: [],
-
-    // 数据库记录列表
     dbRecords: [],
-
-    // 分页和搜索状态
-    dbListMeta: {
-      page: 1,
-      limit: 20,
-      total: 0,
-      totalPages: 1,
-      search: '',
-      sort: 'newest',
-    },
-
-    // 编辑器状态
-    currentEditingId: null, // 当前编辑的词汇ID
-    currentEditingIsLocal: false, // 当前编辑的是否为本地草稿
-    editorYaml: '', // 编辑器中的YAML内容
-
-    // 数据库连接状态（用于UI显示）
-    dbConnected: false, // 是否连接到数据库
-    connectionStatus: 'disconnected', // 连接状态：'connected' | 'disconnected' | 'testing'
-
-    // 加载状态
+    dbListMeta: defaultDbListMeta(),
+    currentEditingId: null,
+    currentEditingIsLocal: false,
+    editorYaml: '',
+    dbConnected: false,
+    connectionStatus: 'disconnected',
     loading: false,
   }),
 
   actions: {
-    /**
-     * 检查数据库连接状态
-     * 通过调用后端 /status 接口检测连接
-     */
-    async checkConnection() {
+    async checkConnection(): Promise<void> {
       dbLogger.debug('Checking database connection...');
       try {
         this.connectionStatus = 'testing';
@@ -79,19 +77,16 @@ export const useWordStore = defineStore('word', {
       } catch (e) {
         this.dbConnected = false;
         this.connectionStatus = 'disconnected';
-        dbLogger.warn('Database connection check failed', { error: e?.message });
+        dbLogger.warn('Database connection check failed', { error: (e as HttpErrorLike)?.message });
       }
     },
 
-    /**
-     * 获取本地草稿记录
-     * 从后端本地存储获取草稿数据
-     */
-    async fetchLocalRecords() {
+    async fetchLocalRecords(): Promise<void> {
       wordLogger.debug('Fetching local records...');
       try {
         const res = await request.get('/local', { skipErrorToast: true });
-        this.localRecords = (res || []).map(r => ({
+        const rows = (Array.isArray(res) ? res : []) as WordRecord[];
+        this.localRecords = rows.map(r => ({
           ...r,
           isLocal: true,
           lemma: r.lemma || r.lemma_preview,
@@ -103,12 +98,7 @@ export const useWordStore = defineStore('word', {
       }
     },
 
-    /**
-     * 获取数据库记录列表
-     * 支持分页、搜索、排序
-     * @param {Object} params - 查询参数
-     */
-    async fetchDbRecords(params = {}) {
+    async fetchDbRecords(params: Partial<DbListMeta> = {}): Promise<void> {
       this.loading = true;
       wordLogger.debug('Fetching database records...', params);
       try {
@@ -123,39 +113,30 @@ export const useWordStore = defineStore('word', {
           skipErrorToast: true,
         });
 
-        if (res.items) {
-          // 服务端分页模式
-          this.dbRecords = res.items;
+        if (res?.items) {
+          this.dbRecords = res.items as WordRecord[];
           this.dbListMeta = {
-            page: res.page,
-            limit: res.limit,
-            total: res.total,
-            totalPages: res.totalPages,
-            search: p.search,
+            page: Number(res.page || 1),
+            limit: Number(res.limit || p.limit),
+            total: Number(res.total || 0),
+            totalPages: Number(res.totalPages || 1),
+            search: String(p.search || ''),
             sort: p.sort,
           };
           wordLogger.info(
-            `Loaded ${res.items.length} records from database (page ${res.page}/${res.totalPages})`
+            `Loaded ${this.dbRecords.length} records from database (page ${this.dbListMeta.page}/${this.dbListMeta.totalPages})`
           );
         } else {
-          // 客户端分页模式（兼容旧接口）
-          this.dbRecords = res;
-          this.dbListMeta.total = res.length;
-          wordLogger.info(`Loaded ${res.length} records from database`);
+          this.dbRecords = (Array.isArray(res) ? res : []) as WordRecord[];
+          this.dbListMeta.total = this.dbRecords.length;
+          wordLogger.info(`Loaded ${this.dbRecords.length} records from database`);
         }
-        // 获取成功说明数据库连接正常
+
         this.dbConnected = true;
         this.connectionStatus = 'connected';
       } catch (e) {
         this.dbRecords = [];
-        this.dbListMeta = {
-          page: 1,
-          limit: 20,
-          total: 0,
-          totalPages: 1,
-          search: '',
-          sort: 'newest',
-        };
+        this.dbListMeta = defaultDbListMeta();
         this.dbConnected = false;
         this.connectionStatus = 'disconnected';
         wordLogger.error('Failed to fetch database records', e);
@@ -164,40 +145,32 @@ export const useWordStore = defineStore('word', {
       }
     },
 
-    /**
-     * 保存词汇
-     * 智能判断保存目标（本地或数据库）
-     * @param {string} yamlContent - YAML 格式的词汇内容
-     * @param {boolean} force - 是否强制更新（忽略冲突）
-     * @param {string} target - 保存目标：'local' | 'db' | 'auto'
-     * @returns {Object|boolean} 保存结果
-     */
-    async saveWord(yamlContent, force = false, target = 'auto') {
+    async saveWord(
+      yamlContent: string,
+      force = false,
+      target: SaveTarget = 'auto'
+    ): Promise<boolean | SaveConflictResult> {
       const appStore = useAppStore();
 
-      // 解析 YAML 内容获取单词信息
       let lemma = 'unknown';
-      let parsedYaml = null;
+      let parsedYaml: Record<string, any> | null = null;
       try {
-        const yaml = await import('js-yaml');
-        parsedYaml = yaml.load(yamlContent);
+        parsedYaml = yaml.load(yamlContent) as Record<string, any> | null;
         lemma = parsedYaml?.yield?.lemma || 'unknown';
       } catch (err) {
-        // YAML 解析失败，显示错误并阻止保存
-        wordLogger.error('YAML parse error in saveWord', { error: err.message });
-        appStore.addToast(`Invalid YAML: ${err.message}`, 'error');
+        const message = err instanceof Error ? err.message : 'Invalid YAML';
+        wordLogger.error('YAML parse error in saveWord', { error: message });
+        appStore.addToast(`Invalid YAML: ${message}`, 'error');
         return false;
       }
 
-      // 验证必需的字段
       if (!parsedYaml?.yield?.lemma) {
         wordLogger.error('YAML missing yield.lemma');
         appStore.addToast('YAML missing yield.lemma', 'error');
         return false;
       }
 
-      // 确定保存目标
-      const resolvedTarget =
+      const resolvedTarget: Exclude<SaveTarget, 'auto'> =
         target === 'auto'
           ? this.currentEditingIsLocal
             ? 'local'
@@ -214,7 +187,6 @@ export const useWordStore = defineStore('word', {
         contentLength: yamlContent?.length || 0,
       });
 
-      // 保存到本地
       if (resolvedTarget === 'local') {
         try {
           const localId = this.currentEditingIsLocal ? this.currentEditingId : null;
@@ -235,7 +207,7 @@ export const useWordStore = defineStore('word', {
 
           if (localRes && localRes.status === 'conflict') {
             wordLogger.warn('Local save conflict detected', { localId, lemma });
-            return { ...localRes, source: 'local' };
+            return { ...(localRes as object), source: 'local' } as SaveConflictResult;
           }
 
           if (localRes && localRes.success) {
@@ -250,13 +222,12 @@ export const useWordStore = defineStore('word', {
           appStore.addToast('Local save failed', 'error');
           return false;
         } catch (e) {
-          wordLogger.error('Local save error', { lemma, error: e?.message });
+          wordLogger.error('Local save error', { lemma, error: (e as HttpErrorLike)?.message });
           appStore.addToast('Local save failed', 'error');
           return false;
         }
       }
 
-      // 保存到数据库
       try {
         wordLogger.debug('Saving to database...', {
           lemma,
@@ -270,7 +241,7 @@ export const useWordStore = defineStore('word', {
           { yaml: yamlContent, forceUpdate: !!force },
           { skipErrorToast: true }
         );
-        // 处理错误响应
+
         if (res && res.error) {
           wordLogger.error('Database save failed', { lemma, error: res.error });
           appStore.addToast(`Save failed: ${res.error}`, 'error');
@@ -281,7 +252,7 @@ export const useWordStore = defineStore('word', {
             lemma: res.lemma,
             diff: res.diff,
           });
-          return { ...res, source: 'db' };
+          return { ...(res as object), source: 'db' } as SaveConflictResult;
         }
         if (res && res.success) {
           wordLogger.success(`Word "${res.lemma}" saved to database`, {
@@ -298,44 +269,31 @@ export const useWordStore = defineStore('word', {
         wordLogger.error('Database save failed', { lemma, response: res });
         return false;
       } catch (e) {
-        // 服务器错误时降级到本地保存
-        if (e.response && e.response.status === 500) {
+        const err = e as HttpErrorLike;
+        if (err.response && err.response.status === 500) {
           wordLogger.warn('Database connection lost, falling back to local save', { lemma });
           this.dbConnected = false;
           this.connectionStatus = 'disconnected';
           const localRes = await this.saveWord(yamlContent, force, 'local');
-          if (localRes && localRes.status === 'conflict') return localRes;
+          if (localRes && typeof localRes === 'object' && localRes.status === 'conflict') return localRes;
           if (localRes === true) {
             this.dbRecords = [];
-            this.dbListMeta = {
-              page: 1,
-              limit: 20,
-              total: 0,
-              totalPages: 1,
-              search: '',
-              sort: 'newest',
-            };
+            this.dbListMeta = defaultDbListMeta();
             return true;
           }
           appStore.addToast('数据库未连接，本地保存失败', 'error');
           return false;
         }
-        wordLogger.error('Save error', { lemma, error: e?.message });
-        appStore.addToast(e.message || 'Save failed', 'error');
+        wordLogger.error('Save error', { lemma, error: err?.message });
+        appStore.addToast(err?.message || 'Save failed', 'error');
         return false;
       }
     },
 
-    /**
-     * 删除词汇
-     * @param {string|number} id - 词汇 ID
-     * @param {boolean} isLocal - 是否为本地草稿
-     */
-    async deleteWord(id, isLocal) {
+    async deleteWord(id: string | number, isLocal: boolean): Promise<void> {
       const appStore = useAppStore();
 
-      // 获取要删除的单词信息
-      let wordInfo = null;
+      let wordInfo: WordRecord | undefined;
       if (isLocal) {
         wordInfo = this.localRecords.find(r => r.id === id);
       } else {
@@ -356,24 +314,24 @@ export const useWordStore = defineStore('word', {
         if (isLocal) this.fetchLocalRecords();
         else this.fetchDbRecords();
       } catch (e) {
-        wordLogger.error('Delete word failed', { id, lemma, isLocal, error: e?.message });
+        wordLogger.error('Delete word failed', { id, lemma, isLocal, error: (e as HttpErrorLike)?.message });
         appStore.addToast('Delete failed', 'error');
       }
     },
 
-    /**
-     * 设置编辑器上下文
-     * @param {Object} context - 编辑器上下文
-     * @param {string|number} context.id - 词汇 ID
-     * @param {boolean} context.isLocal - 是否为本地草稿
-     * @param {string} [context.yaml] - YAML 内容（可选，不传则保持当前值）
-     */
-    setEditingContext({ id = null, isLocal = false, yaml = undefined } = {}) {
+    setEditingContext({
+      id = null,
+      isLocal = false,
+      yaml: yamlContent = undefined,
+    }: {
+      id?: string | number | null;
+      isLocal?: boolean;
+      yaml?: string;
+    } = {}): void {
       this.currentEditingId = id;
       this.currentEditingIsLocal = isLocal;
-      // 只有明确传入 yaml 时才更新，避免覆盖已有的编辑器内容
-      if (yaml !== undefined) {
-        this.editorYaml = yaml;
+      if (yamlContent !== undefined) {
+        this.editorYaml = yamlContent;
       }
       wordLogger.debug('Editing context set', {
         id,
@@ -383,42 +341,27 @@ export const useWordStore = defineStore('word', {
       });
     },
 
-    /**
-     * 设置编辑器 YAML 内容
-     * @param {string} yaml - YAML 内容字符串
-     */
-    setEditorYaml(yaml) {
-      this.editorYaml = yaml;
+    setEditorYaml(yamlContent: string): void {
+      this.editorYaml = yamlContent;
       wordLogger.debug('Editor YAML updated', {
-        yamlLength: yaml?.length,
-        yamlPreview: yaml?.substring(0, 50) + '...',
+        yamlLength: yamlContent?.length,
+        yamlPreview: yamlContent?.substring(0, 50) + '...',
       });
     },
 
-    /**
-     * 检查同步状态
-     * @param {Array} items - 需要检查的本地草稿列表
-     * @returns {Array} 同步检查结果
-     */
-    async syncCheck(items) {
+    async syncCheck(items: LocalSyncItem[]): Promise<SyncCheckItem[]> {
       syncLogger.debug('Checking sync status...', { itemCount: items?.length });
       try {
         const res = await request.post('/sync/check', { items }, { skipErrorToast: true });
         syncLogger.info('Sync check completed', { result: res?.status });
-        return res;
+        return (res || []) as SyncCheckItem[];
       } catch (e) {
         syncLogger.error('Sync check failed', e);
         throw e;
       }
     },
 
-    /**
-     * 执行同步
-     * @param {Array} items - 需要同步的本地草稿列表
-     * @param {boolean} forceUpdate - 是否强制更新
-     * @returns {Object} 同步结果
-     */
-    async syncExecute(items, forceUpdate) {
+    async syncExecute(items: LocalSyncItem[], forceUpdate: boolean): Promise<SyncExecuteResult> {
       syncLogger.debug('Executing sync...', { itemCount: items?.length, forceUpdate });
       try {
         const res = await request.post(
@@ -427,7 +370,7 @@ export const useWordStore = defineStore('word', {
           { skipErrorToast: true }
         );
         syncLogger.success('Sync executed successfully', { result: res?.status });
-        return res;
+        return (res || {}) as SyncExecuteResult;
       } catch (e) {
         syncLogger.error('Sync execution failed', e);
         throw e;

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * @file WordPreview.vue
  * @description 词条预览组件，提供卡片预览、Markdown 预览、图片导出功能
@@ -34,21 +34,35 @@ import { generateCardHTML, generateMarkdown } from '@/utils/generator';
 import { renderTemplate } from '@/utils/template';
 import request from '@/utils/request';
 import yaml from 'js-yaml';
+import type { PreviewMode, PreviewRecord, PreviewYamlData } from '@/types/word-preview';
 
 /**
  * 组件 Props 定义
  * @property {string} wordId - 要预览的词条 ID
  */
-const props = defineProps(['wordId']);
+const props = defineProps<{
+  wordId?: string | null;
+}>();
 
 /**
  * 组件事件定义
  * @emits close - 关闭预览事件
  */
-const emit = defineEmits(['close']);
+const emit = defineEmits<{
+  (e: 'close'): void;
+}>();
 
-const wordStore = useWordStore();
-const appStore = useAppStore();
+interface WordStoreLike {
+  localRecords: PreviewRecord[];
+  dbRecords: PreviewRecord[];
+}
+
+interface AppStoreLike {
+  addToast: (message: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
+}
+
+const wordStore = useWordStore() as unknown as WordStoreLike;
+const appStore = useAppStore() as unknown as AppStoreLike;
 
 /**
  * 预览模式
@@ -57,28 +71,28 @@ const appStore = useAppStore();
  * - 'card': 卡片预览模式，展示精美卡片
  * - 'markdown': Markdown 预览模式，展示 Markdown 格式内容
  */
-const mode = ref('card');
+const mode = ref<PreviewMode>('card');
 
 /**
  * 渲染后的内容
  * @type {import('vue').Ref<string>}
  * @description 根据当前模式渲染的 HTML 或 Markdown 内容
  */
-const content = ref('');
+const content = ref<string>('');
 
 /**
  * 加载状态
  * @type {import('vue').Ref<boolean>}
  * @description 是否正在加载词条数据
  */
-const loading = ref(false);
+const loading = ref<boolean>(false);
 
 /**
  * 原始词条数据
  * @type {import('vue').Ref<Object | null>}
  * @description 从 YAML 解析后的原始词条数据对象
  */
-const rawData = ref(null);
+const rawData = ref<PreviewYamlData | null>(null);
 
 /**
  * 规范化 YAML 数据
@@ -86,12 +100,13 @@ const rawData = ref(null);
  * @returns {Object | null} 解析后的数据对象，解析失败返回 null
  * @description 将 YAML 字符串解析为 JavaScript 对象，或返回已解析的对象
  */
-const normalizeYamlData = maybeYaml => {
+const normalizeYamlData = (maybeYaml: string | PreviewYamlData | null | undefined): PreviewYamlData | null => {
   if (!maybeYaml) return null;
   if (typeof maybeYaml === 'string') {
     try {
-      return yaml.load(maybeYaml);
-    } catch (e) {
+      const parsed = yaml.load(maybeYaml);
+      return parsed && typeof parsed === 'object' ? (parsed as PreviewYamlData) : null;
+    } catch {
       return null;
     }
   }
@@ -110,11 +125,11 @@ const normalizeYamlData = maybeYaml => {
  *
  * @throws {Error} 加载失败时会显示错误提示
  */
-const loadWord = async () => {
+const loadWord = async (): Promise<void> => {
   if (!props.wordId) return;
   loading.value = true;
   try {
-    const record = [...wordStore.localRecords, ...wordStore.dbRecords].find(
+    const record = [...(wordStore.localRecords || []), ...(wordStore.dbRecords || [])].find(
       r => r.id === props.wordId
     );
 
@@ -124,7 +139,7 @@ const loadWord = async () => {
       return;
     }
 
-    let data = record.original_yaml || record.raw_yaml;
+    let data: string | PreviewYamlData | undefined = record.original_yaml || record.raw_yaml;
 
     // Fetch full data if missing yaml (e.g. from DB list which might be partial)
     if (!data && !record.isLocal) {
@@ -137,7 +152,7 @@ const loadWord = async () => {
 
     rawData.value = normalizeYamlData(data);
     renderContent();
-  } catch (e) {
+  } catch {
     appStore.addToast('Failed to load word details', 'error');
   } finally {
     loading.value = false;
@@ -151,7 +166,7 @@ const loadWord = async () => {
  * - card 模式：使用自定义模板或默认模板生成卡片 HTML
  * - markdown 模式：生成 Markdown 并解析为 HTML
  */
-const renderContent = () => {
+const renderContent = (): void => {
   if (!rawData.value) return;
 
   if (mode.value === 'card') {
@@ -165,7 +180,8 @@ const renderContent = () => {
     }
   } else {
     const md = generateMarkdown(rawData.value);
-    content.value = marked.parse(md);
+    const parsed = marked.parse(md);
+    content.value = typeof parsed === 'string' ? parsed : '';
   }
 };
 
@@ -176,21 +192,21 @@ onMounted(() => {
   if (props.wordId) loadWord();
 });
 
-const close = () => emit('close');
+const close = (): void => emit('close');
 
 /**
  * 卡片 DOM 引用
  * @type {import('vue').Ref<HTMLElement | null>}
  * @description 用于图片生成的卡片元素引用
  */
-const cardRef = ref(null);
+const cardRef = ref<HTMLElement | null>(null);
 
 /**
  * 图片生成状态
  * @type {import('vue').Ref<boolean>}
  * @description 是否正在生成图片
  */
-const generatingImage = ref(false);
+const generatingImage = ref<boolean>(false);
 
 /**
  * 生成卡片图片
@@ -202,7 +218,7 @@ const generatingImage = ref(false);
  *
  * @throws {Error} 生成失败时会显示错误提示
  */
-const generateCardImage = async () => {
+const generateCardImage = async (): Promise<string | null> => {
   if (!cardRef.value) return null;
   generatingImage.value = true;
   try {
@@ -212,7 +228,7 @@ const generateCardImage = async () => {
       backgroundColor: '#fcfbf9',
     });
     return dataUrl;
-  } catch (err) {
+  } catch {
     appStore.addToast('Failed to generate image', 'error');
     return null;
   } finally {
@@ -231,7 +247,7 @@ const generateCardImage = async () => {
  * @requires navigator.clipboard.write - 需要 Clipboard API 支持
  * @throws {Error} 复制失败时会显示错误提示
  */
-const copyImageToClipboard = async () => {
+const copyImageToClipboard = async (): Promise<void> => {
   if (!cardRef.value) return;
   generatingImage.value = true;
   try {
@@ -244,7 +260,7 @@ const copyImageToClipboard = async () => {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
       appStore.addToast('Image copied to clipboard', 'success');
     }
-  } catch (err) {
+  } catch {
     appStore.addToast('Failed to copy image', 'error');
   } finally {
     generatingImage.value = false;
@@ -261,7 +277,7 @@ const copyImageToClipboard = async () => {
  *
  * @throws {Error} 生成失败时会显示错误提示
  */
-const downloadCardImage = async () => {
+const downloadCardImage = async (): Promise<void> => {
   const dataUrl = await generateCardImage();
   if (dataUrl) {
     const link = document.createElement('a');
@@ -273,7 +289,7 @@ const downloadCardImage = async () => {
   }
 };
 
-const copyContent = async type => {
+const copyContent = async (type: 'html' | 'md'): Promise<void> => {
   if (!rawData.value) return;
   let text = '';
   if (type === 'html') {
@@ -286,12 +302,13 @@ const copyContent = async type => {
   try {
     await navigator.clipboard.writeText(text);
     appStore.addToast('Copied to clipboard', 'success');
-  } catch (e) {
+  } catch {
     appStore.addToast('Copy failed', 'error');
   }
 };
 
-const copyRichText = () => {
+const copyRichText = (): void => {
+  if (!rawData.value) return;
   const html = mode.value === 'markdown' ? content.value : generateCardHTML(rawData.value);
   const item = new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) });
   navigator.clipboard.write([item]).then(
@@ -423,7 +440,7 @@ class="p-8 markdown-body" v-html="content"
             </button>
           </div>
           <div class="p-4 overflow-x-auto">
-            <pre class="text-sm whitespace-pre-wrap">{{ generateMarkdown(rawData) }}</pre>
+            <pre class="text-sm whitespace-pre-wrap">{{ generateMarkdown(rawData || {}) }}</pre>
           </div>
         </div>
       </div>
