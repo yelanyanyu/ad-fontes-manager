@@ -33,6 +33,7 @@ Desktop.ini
 *.njsproj
 *.sln
 *.sw?
+skills
 
 # Project Specific (from README)
 web/data/local_words.json

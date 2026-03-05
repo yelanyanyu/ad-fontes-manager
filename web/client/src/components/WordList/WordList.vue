@@ -28,13 +28,17 @@
 import {ref, computed, onMounted, watch, onActivated} from 'vue';
 import {useWordStore} from '@/stores/wordStore';
 import {storeToRefs} from 'pinia';
-import request from '@/utils/request';
-import yaml from 'js-yaml';
 import {useAppStore} from '@/stores/appStore';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
+import WordActionMenu from '@/components/WordList/WordActionMenu.vue';
+import DeleteConfirmModal from '@/components/WordList/DeleteConfirmModal.vue';
+import BatchSyncModal from '@/components/WordList/BatchSyncModal.vue';
+import WordListToolbar from '@/components/WordList/WordListToolbar.vue';
+import WordListPagination from '@/components/WordList/WordListPagination.vue';
 import {deepDiffAdapter, yamlFormatter} from '@/utils/conflict';
 import {normalizeSearchInput, isBlankSearch, filterRecordsBySearch} from '@/utils/search';
-import {wordLogger} from '@/utils/logger';
+import {useWordEditorLoader} from '@/composables/useWordEditorLoader';
+import {useWordSync} from '@/composables/useWordSync';
 
 const wordStore = useWordStore();
 const appStore = useAppStore();
@@ -126,17 +130,8 @@ const handleEdit = id => {
 
 const showMenuId = ref(null);
 const pendingDelete = ref(null);
-const syncAllOpen = ref(false);
-const syncAllLoading = ref(false);
-const syncChecks = ref([]);
-const syncActions = ref({});
-const syncConflict = ref(null);
 
 const getDiffBadges = diffs => deepDiffAdapter.getBadges(diffs);
-const getChangedModules = diffs => deepDiffAdapter.getModules(diffs);
-const syncConflictTitle = computed(() =>
-    syncConflict.value ? `Conflict: ${syncConflict.value.lemma || ''}` : 'Conflict'
-);
 const searchModeLabel = computed(() =>
     searchMode.value === 'exact' ? 'Exact Match' : 'Partial Match'
 );
@@ -174,390 +169,46 @@ const handleExport = () => {
   showMenuId.value = null;
 };
 
-const formatYamlForEditor = yamlObj => {
-  const orderedObj = {};
-  const keyOrder = ['yield', 'etymology', 'cognate_family', 'application', 'nuance'];
-  for (const k of keyOrder) {
-    if (yamlObj && yamlObj[k] !== undefined) orderedObj[k] = yamlObj[k];
-  }
-  if (yamlObj && typeof yamlObj === 'object') {
-    for (const k of Object.keys(yamlObj)) {
-      if (!keyOrder.includes(k)) orderedObj[k] = yamlObj[k];
-    }
-  }
-  return yaml.dump(orderedObj, {
-    lineWidth: -1,
-    noRefs: true,
-    quotingType: '"',
-    forceQuotes: false,
-    sortKeys: false,
-  });
-};
-
 const localSyncItems = computed(() => {
   return (localRecords.value || []).map(r => ({id: r.id, raw_yaml: r.raw_yaml}));
 });
 
-/**
- * @description 打开批量同步对话框
- * @async
- * @function openSyncAll
- * @returns {Promise<void>}
- * @remarks 执行批量同步前的检查和准备：
- * 1. 检查后端连接状态
- * 2. 执行同步预检查（syncCheck）
- * 3. 如果没有冲突，直接执行同步
- * 4. 如果有冲突，显示冲突解决对话框
- * @throws 当同步检查失败时显示错误提示
- */
-const openSyncAll = async () => {
-  if (!isBackendConnected.value) {
-    appStore.addToast('Backend disconnected', 'warning');
-    return;
-  }
-  if (!localSyncItems.value.length) return;
-
-  syncAllLoading.value = true;
-  try {
-    const checks = await wordStore.syncCheck(localSyncItems.value);
-    syncChecks.value = checks || [];
-
-    const nextActions = {};
-    for (const c of syncChecks.value) {
-      if (c.status === 'conflict') nextActions[c.id] = 'skip';
-    }
-    syncActions.value = nextActions;
-
-    const hasConflict = syncChecks.value.some(c => c.status === 'conflict');
-    if (!hasConflict) {
-      await runBatchSyncDirect();
-      return;
-    }
-    syncAllOpen.value = true;
-  } catch (e) {
-    await wordStore.checkConnection();
-    appStore.addToast('Sync check failed (database offline)', 'error');
-  } finally {
-    syncAllLoading.value = false;
-  }
+const refresh = async () => {
+  await Promise.all([wordStore.fetchLocalRecords(), wordStore.fetchDbRecords()]);
 };
 
-const closeSyncAll = () => {
-  syncAllOpen.value = false;
-  syncChecks.value = [];
-  syncActions.value = {};
-};
+const {formatYamlForEditor, loadDbRecordByLemma, loadIntoEditor} = useWordEditorLoader({
+  displayedRecords,
+  wordStore,
+});
 
-const setBatchAction = (id, action) => {
-  syncActions.value = {...syncActions.value, [id]: action};
-};
-
-const runBatchSyncDirect = async () => {
-  const res = await wordStore.syncExecute(localSyncItems.value, false);
-  if (res && (res.success > 0 || res.failed === 0)) {
-    appStore.addToast(`Synced ${res.success} items`, 'success');
-    await refresh();
-  } else {
-    appStore.addToast('Sync failed', 'error');
-  }
-};
-
-const executeBatchSync = async () => {
-  if (!syncChecks.value.length) {
-    closeSyncAll();
-    return;
-  }
-
-  const conflicts = syncChecks.value.filter(c => c.status === 'conflict');
-  const nonConflicts = syncChecks.value.filter(c => c.status !== 'conflict');
-
-  const normalItems = nonConflicts
-      .map(c => localSyncItems.value.find(i => i.id === c.id))
-      .filter(Boolean);
-
-  const forcedItems = conflicts
-      .filter(c => syncActions.value[c.id] === 'overwrite')
-      .map(c => localSyncItems.value.find(i => i.id === c.id))
-      .filter(Boolean);
-
-  syncAllLoading.value = true;
-  try {
-    if (normalItems.length) await wordStore.syncExecute(normalItems, false);
-    if (forcedItems.length) await wordStore.syncExecute(forcedItems, true);
-    appStore.addToast('Batch sync completed', 'success');
-    closeSyncAll();
-    await refresh();
-  } catch (e) {
-    await wordStore.checkConnection();
-    appStore.addToast('Batch sync failed (database offline)', 'error');
-  } finally {
-    syncAllLoading.value = false;
-  }
-};
-
-/**
- * @description 同步单个词条
- * @async
- * @function syncOne
- * @param {string} id - 要同步的词条ID
- * @returns {Promise<void>}
- * @remarks 执行单个词条的同步操作：
- * 1. 检查后端连接状态
- * 2. 执行同步预检查
- * 3. 如果检测到冲突，显示冲突解决弹窗
- * 4. 如果没有冲突，直接执行同步
- * @throws 当同步失败时显示错误提示
- */
-const syncOne = async id => {
-  if (!isBackendConnected.value) {
-    appStore.addToast('Backend disconnected', 'warning');
-    return;
-  }
-  const item = localSyncItems.value.find(i => i.id === id);
-  if (!item) return;
-
-  syncAllLoading.value = true;
-  try {
-    const checks = await wordStore.syncCheck([item]);
-    const check = Array.isArray(checks) ? checks[0] : null;
-    if (!check) return;
-    if (check.status === 'conflict') {
-      syncConflict.value = check;
-      return;
-    }
-    const res = await wordStore.syncExecute([item], false);
-    if (res && res.success > 0) {
-      appStore.addToast('Synced 1 item', 'success');
-      await refresh();
-    } else {
-      appStore.addToast('Sync failed', 'error');
-    }
-  } catch (e) {
-    await wordStore.checkConnection();
-    appStore.addToast('Sync failed (database offline)', 'error');
-  } finally {
-    syncAllLoading.value = false;
+const {
+  syncAllOpen,
+  syncAllLoading,
+  syncChecks,
+  syncActions,
+  syncConflict,
+  syncConflictTitle,
+  openSyncAll,
+  closeSyncAll,
+  setBatchAction,
+  executeBatchSync,
+  syncOne,
+  closeSyncConflict,
+  editLocalFromSyncConflict,
+  overwriteSyncConflict,
+} = useWordSync({
+  wordStore,
+  appStore,
+  isBackendConnected,
+  localSyncItems,
+  refresh,
+  closeMenu: () => {
     showMenuId.value = null;
-  }
-};
-
-const closeSyncConflict = () => {
-  syncConflict.value = null;
-};
-
-const editLocalFromSyncConflict = () => {
-  if (!syncConflict.value) return;
-  if (syncConflict.value.newData) {
-    wordStore.setEditorYaml(formatYamlForEditor(syncConflict.value.newData));
-    wordStore.setEditingContext({id: syncConflict.value.id, isLocal: true});
-  }
-  closeSyncConflict();
-};
-
-const loadDbRecordByLemma = async lemma => {
-  if (!lemma) return false;
-  try {
-    const res = await request.get('/words', {
-      params: {search: String(lemma), page: 1, limit: 20, sort: 'newest'},
-      skipErrorToast: true,
-    });
-    const items = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
-    const target = String(lemma).toLowerCase();
-    const match = items.find(i => String(i.lemma || '').toLowerCase() === target);
-    if (match && match.id) {
-      const full = await request.get(`/words/${encodeURIComponent(match.id)}`, {
-        skipErrorToast: true,
-      });
-      if (full && full.original_yaml) {
-        const obj =
-            typeof full.original_yaml === 'string'
-                ? yaml.load(full.original_yaml)
-                : full.original_yaml;
-        wordStore.setEditorYaml(formatYamlForEditor(obj));
-        wordStore.setEditingContext({id: match.id, isLocal: false});
-        return true;
-      }
-    }
-  } catch (e) {
-  }
-  return false;
-};
-
-const overwriteSyncConflict = async () => {
-  if (!syncConflict.value) return;
-  const conflict = syncConflict.value;
-  const item = localSyncItems.value.find(i => i.id === conflict.id);
-  if (!item) return;
-  syncAllLoading.value = true;
-  try {
-    const res = await wordStore.syncExecute([item], true);
-    if (res && res.success > 0) {
-      appStore.addToast('Synced (overwrite)', 'success');
-      await refresh();
-      const lemma = conflict.newData?.yield?.lemma;
-      const loaded = await loadDbRecordByLemma(lemma);
-      if (!loaded && conflict.newData) {
-        wordStore.setEditorYaml(formatYamlForEditor(conflict.newData));
-        wordStore.setEditingContext({id: null, isLocal: false});
-      }
-    } else {
-      appStore.addToast('Sync failed', 'error');
-    }
-    closeSyncConflict();
-  } catch (e) {
-    await wordStore.checkConnection();
-    appStore.addToast('Sync failed (database offline)', 'error');
-  } finally {
-    syncAllLoading.value = false;
-  }
-};
-
-/**
- * 将指定词条加载到编辑器中
- *
- * @description
- * 根据词条 ID 查找并加载词条数据到 YAML 编辑器。
- * 支持本地词条和数据库词条两种来源，会自动处理 YAML 解析和格式化。
- *
- * **调用关系：**
- * - **被调用：**
- *   - `handleEdit()` - 用户点击编辑按钮时调用
- *   - `overwriteSyncConflict()` - 同步冲突解决后加载数据库版本
- * - **调用：**
- *   - `wordStore.setEditorYaml()` - 设置编辑器内容
- *   - `wordStore.setEditingContext()` - 设置编辑上下文（ID 和来源）
- *   - `request.get()` - 从数据库获取完整词条数据
- *   - `yaml.load()` - 解析 YAML 字符串
- *   - `formatYamlForEditor()` - 格式化 YAML 用于编辑器显示
- *
- * **处理逻辑：**
- * 1. 如果是本地词条（item.isLocal = true）：
- *    - 直接从本地记录中解析 YAML
- *    - 设置编辑上下文为本地模式
- * 2. 如果是数据库词条：
- *    - 优先尝试从列表缓存中获取 YAML
- *    - 如果缓存不完整，发起 API 请求获取完整数据
- *    - 设置编辑上下文为数据库模式
- *
- * @async
- * @function loadIntoEditor
- * @param {string} id - 要加载的词条 ID
- * @returns {Promise<void>}
- *
- * @example
- * // 用户点击编辑按钮
- * handleEdit('word-123'); // 内部调用 loadIntoEditor('word-123')
- *
- * // 同步冲突解决后加载数据库版本
- * await loadIntoEditor(conflict.id);
- */
-const loadIntoEditor = async id => {
-  /*
-  获取 item:
-    {
-      id: string,           // 词条唯一标识
-      isLocal: true,        // 标记为本地记录
-      lemma: string,        // 词条词头（从 lemma 或 lemma_preview 获取）
-      original_yaml: string, // YAML 内容（从 original_yaml 或 raw_yaml 获取）
-      raw_yaml: string,     // 原始 YAML 内容
-      // ... 其他原始字段
-    }
-   */
-  const item = displayedRecords.value.find(r => r.id === id);
-  if (!item) {
-    wordLogger.warn(`[loadIntoEditor] 未找到 ID 为 ${id} 的词条`);
-    return;
-  }
-
-  wordLogger.debug(`[loadIntoEditor] 开始加载词条: ${item.lemma}, 来源: ${item.isLocal ? '本地' : '数据库'}`);
-
-  // 处理本地词条
-  if (item.isLocal) {
-    try {
-      const rawYaml = String(item.raw_yaml || item.original_yaml || '');
-      wordLogger.debug(`[loadIntoEditor] 本地词条 rawYaml 长度: ${rawYaml.length}`);
-      const obj = yaml.load(rawYaml);
-      wordLogger.debug(`[loadIntoEditor] 本地词条解析后 obj:`, obj);
-      const formatted = formatYamlForEditor(obj);
-      wordLogger.debug(`[loadIntoEditor] 本地词条格式化后长度: ${formatted.length}`);
-      wordStore.setEditorYaml(formatted);
-      wordLogger.debug(`[loadIntoEditor] 本地词条 YAML 解析成功: ${id}`);
-    } catch (e) {
-      wordLogger.warn(`[loadIntoEditor] 本地词条 YAML 解析失败，使用原始文本: ${id}`, e);
-      const rawYaml = String(item.raw_yaml || item.original_yaml || '');
-      wordStore.setEditorYaml(rawYaml);
-    }
-    wordStore.setEditingContext({id, isLocal: true});
-    wordLogger.debug(`[loadIntoEditor] 本地词条已加载到编辑器: ${id}`);
-    return;
-  }
-
-  // 处理数据库词条 - 尝试从列表缓存获取
-  try {
-    // full.lemma, full.original_yaml
-    const full = await request.get(`/words/${encodeURIComponent(id)}`, {skipErrorToast: true});
-    wordLogger.debug(`[loadIntoEditor] 成功从 API 获取 full: ${full?.lemma}, original_yaml 长度: ${full?.original_yaml?.length}`);
-    if (full && full.original_yaml) {
-      const obj =
-          typeof full.original_yaml === 'string' ? yaml.load(full.original_yaml) : full.original_yaml;
-      wordLogger.debug(`[loadIntoEditor] 数据库词条解析后 obj:`, obj);
-      const formatted = formatYamlForEditor(obj);
-      wordLogger.debug(`[loadIntoEditor] 数据库词条格式化后长度: ${formatted.length}`);
-      wordStore.setEditorYaml(formatted);
-      wordStore.setEditingContext({id, isLocal: false});
-      wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（从 API）: ${id}`);
-      return;
-    }
-  } catch (e) {
-    wordLogger.warn(`[loadIntoEditor] 从 API 获取词条失败: ${id}`, e);
-  }
-
-  // 尝试使用列表中的缓存数据
-  if (item.original_yaml) {
-    try {
-      const obj =
-          typeof item.original_yaml === 'string' ? yaml.load(item.original_yaml) : item.original_yaml;
-      wordStore.setEditorYaml(formatYamlForEditor(obj));
-      wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（从缓存）: ${id}`);
-    } catch (e) {
-      wordLogger.warn(`[loadIntoEditor] 缓存 YAML 解析失败: ${id}`, e);
-      const txt =
-          typeof item.original_yaml === 'string'
-              ? item.original_yaml
-              : yaml.dump(item.original_yaml, {lineWidth: -1, noRefs: true});
-      wordStore.setEditorYaml(txt);
-    }
-    wordStore.setEditingContext({id, isLocal: false});
-    return;
-  }
-
-  // 最后尝试：再次从 API 获取（带完整错误处理）
-  try {
-    const full = await request.get(`/words/${encodeURIComponent(id)}`, {skipErrorToast: true});
-    if (full && full.original_yaml) {
-      try {
-        const obj =
-            typeof full.original_yaml === 'string'
-                ? yaml.load(full.original_yaml)
-                : full.original_yaml;
-        wordStore.setEditorYaml(formatYamlForEditor(obj));
-        wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（二次 API 请求）: ${id}`);
-      } catch (e) {
-        wordLogger.warn(`[loadIntoEditor] YAML 解析失败，使用原始文本: ${id}`, e);
-        const txt =
-            typeof full.original_yaml === 'string'
-                ? full.original_yaml
-                : yaml.dump(full.original_yaml, {lineWidth: -1, noRefs: true});
-        wordStore.setEditorYaml(txt);
-      }
-      wordStore.setEditingContext({id, isLocal: false});
-    } else {
-      wordLogger.error(`[loadIntoEditor] 词条数据为空: ${id}`);
-    }
-  } catch (e) {
-    wordLogger.error(`[loadIntoEditor] 加载词条失败: ${id}`, e);
-  }
-};
+  },
+  formatYamlForEditor,
+  loadDbRecordByLemma,
+});
 
 onMounted(() => {
   const storedMode = localStorage.getItem(searchModeStorageKey);
@@ -603,6 +254,10 @@ const handleSearchKeydown = e => {
   }
 };
 
+const updateSearch = value => {
+  search.value = value;
+};
+
 const toggleSearchMode = () => {
   searchModeOpen.value = !searchModeOpen.value;
 };
@@ -614,6 +269,17 @@ const closeSearchMode = () => {
 const setSearchMode = mode => {
   searchMode.value = mode;
   searchModeOpen.value = false;
+};
+
+const updateSort = value => {
+  sort.value = value;
+  handleSort();
+};
+
+const updatePageSize = value => {
+  const next = Number(value);
+  pageSize.value = Number.isFinite(next) ? next : pageSize.value;
+  handlePageSize();
 };
 
 const handleSort = () => {
@@ -672,186 +338,33 @@ const paginationRange = computed(() => {
   return range;
 });
 
-const refresh = async () => {
-  await Promise.all([wordStore.fetchLocalRecords(), wordStore.fetchDbRecords()]);
-};
 </script>
 
 <template>
   <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-col flex h-full overflow-hidden ml-1">
-    <div
-        v-if="searchModeOpen"
-        class="fixed inset-0 z-30"
-        @click="closeSearchMode"
+    <WordActionMenu
+        :open="showMenuId !== null"
+        :item="selectedMenuItem"
+        @close="showMenuId = null"
+        @sync="syncOne"
+        @export="handleExport"
+        @delete="openDelete"
     />
-    <div
-        v-if="showMenuId !== null"
-        class="fixed inset-0 z-30 bg-black/30"
-        @click="showMenuId = null"
+    <DeleteConfirmModal
+        :open="!!pendingDelete"
+        @cancel="cancelDelete"
+        @confirm="confirmDelete"
     />
-    <div
-        v-if="showMenuId !== null"
-        class="fixed inset-0 z-40 flex items-center justify-center p-4"
-    >
-      <div class="w-full max-w-sm rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-slate-100 font-bold text-slate-800 flex items-center justify-between">
-          <span>More</span>
-          <button
-              class="text-slate-400 hover:text-slate-600 transition-colors"
-              @click="showMenuId = null"
-          >
-            <i class="fa-solid fa-xmark text-xl"/>
-          </button>
-        </div>
-        <div class="p-2">
-          <button
-              v-if="selectedMenuItem?.isLocal"
-              class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
-              @click="syncOne(selectedMenuItem.id)"
-          >
-            <i class="fa-solid fa-cloud-arrow-up w-5 text-center"/>
-            <span>Sync</span>
-          </button>
-          <button
-              class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
-              @click="handleExport"
-          >
-            <i class="fa-solid fa-download w-5 text-center"/>
-            <span>Export</span>
-          </button>
-          <button
-              class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50 rounded-lg flex items-center gap-2"
-              @click="openDelete(selectedMenuItem.id, selectedMenuItem.isLocal)"
-          >
-            <i class="fa-solid fa-trash w-5 text-center"/>
-            <span>Delete</span>
-          </button>
-        </div>
-      </div>
-    </div>
-    <div
-        v-if="pendingDelete"
-        class="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
-    >
-      <div class="w-full max-w-sm rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-slate-100 font-bold text-slate-800">
-          Delete Word
-        </div>
-        <div class="px-4 py-4 text-sm text-slate-600">
-          确认删除该词条？此操作不可撤销。
-        </div>
-        <div class="px-4 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
-          <button
-              class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
-              @click="cancelDelete"
-          >
-            Cancel
-          </button>
-          <button
-              class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500 transition-colors"
-              @click="confirmDelete"
-          >
-            Delete
-          </button>
-        </div>
-      </div>
-    </div>
-    <div
-        v-if="syncAllOpen"
-        class="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
-    >
-      <div class="w-full max-w-3xl rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
-        <div class="px-4 py-3 border-b border-slate-100 font-bold text-slate-800 flex items-center justify-between">
-          <span>Sync All</span>
-          <button
-              class="text-slate-400 hover:text-slate-600 transition-colors"
-              @click="closeSyncAll"
-          >
-            <i class="fa-solid fa-xmark text-xl"/>
-          </button>
-        </div>
-        <div class="px-4 py-3 text-sm text-slate-600 border-b border-slate-100">
-          Found {{ syncChecks.filter(c => c.status === 'conflict').length }} conflicts among {{ syncChecks.length }}
-          items
-        </div>
-        <div class="max-h-[60vh] overflow-y-auto p-4 space-y-2">
-          <div
-              v-for="c in syncChecks"
-              :key="c.id"
-              class="p-3 rounded-lg border flex items-center justify-between gap-3"
-              :class="c.status === 'conflict' ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-200'"
-          >
-            <div class="min-w-0">
-              <div class="font-bold text-slate-800 truncate">
-                {{ c.lemma || 'unknown' }}
-              </div>
-              <div class="text-xs text-slate-500">
-                {{ c.status }}
-              </div>
-              <div
-                  v-if="c.status === 'conflict'"
-                  class="mt-2 flex flex-wrap gap-1"
-              >
-                <span
-                    v-for="b in getDiffBadges(c.diff)"
-                    :key="b.path"
-                    class="px-2 py-0.5 rounded border text-[10px] font-bold"
-                    :class="b.cls"
-                >{{ b.path }}</span>
-              </div>
-            </div>
-            <div
-                v-if="c.status === 'conflict'"
-                class="flex items-center gap-3 flex-none"
-            >
-              <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
-                <input
-                    type="radio"
-                    :name="`action_${c.id}`"
-                    value="skip"
-                    class="text-primary"
-                    :checked="(syncActions[c.id] || 'skip') === 'skip'"
-                    @change="setBatchAction(c.id, 'skip')"
-                >
-                <span>Skip</span>
-              </label>
-              <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
-                <input
-                    type="radio"
-                    :name="`action_${c.id}`"
-                    value="overwrite"
-                    class="text-red-500 focus:ring-red-500"
-                    :checked="syncActions[c.id] === 'overwrite'"
-                    @change="setBatchAction(c.id, 'overwrite')"
-                >
-                <span>Overwrite</span>
-              </label>
-            </div>
-            <div
-                v-else
-                class="text-xs text-green-700 font-bold flex-none"
-            >
-              Will Sync
-            </div>
-          </div>
-        </div>
-        <div class="px-4 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
-          <button
-              class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
-              @click="closeSyncAll"
-          >
-            Cancel
-          </button>
-          <button
-              :disabled="syncAllLoading"
-              class="px-3 py-1.5 rounded-lg bg-primary text-white text-sm hover:bg-blue-600 transition-colors disabled:opacity-60"
-              @click="executeBatchSync"
-          >
-            Sync
-          </button>
-        </div>
-      </div>
-    </div>
+    <BatchSyncModal
+        :open="syncAllOpen"
+        :loading="syncAllLoading"
+        :checks="syncChecks"
+        :actions="syncActions"
+        :get-diff-badges="getDiffBadges"
+        @close="closeSyncAll"
+        @set-action="setBatchAction"
+        @sync="executeBatchSync"
+    />
     <ConflictModal
         :open="!!syncConflict"
         :title="syncConflictTitle"
@@ -870,127 +383,30 @@ const refresh = async () => {
         @tertiary="editLocalFromSyncConflict"
         @primary="overwriteSyncConflict"
     />
-    <div class="px-4 py-3 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50 flex-none">
-      <div class="flex items-center gap-2 w-full">
-        <div class="relative w-full">
-          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"/>
-          <input
-              v-model="search"
-              type="text"
-              placeholder="Search..."
-              class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400"
-              @keydown="handleSearchKeydown"
-          >
-        </div>
-        <div class="relative flex items-stretch">
-          <button
-              :disabled="!canSearch"
-              class="min-w-[88px] text-xs bg-primary text-white rounded-l-lg px-3 py-1.5 hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              @click="handleSearch"
-          >
-            <i
-                v-if="loading"
-                class="fa-solid fa-spinner fa-spin text-xs"
-            />
-            <span>{{ loading ? 'Searching' : 'Search' }}</span>
-          </button>
-          <button
-              class="w-10 bg-primary text-white rounded-r-lg border-l border-blue-400/50 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1"
-              :title="searchModeLabel"
-              @click="toggleSearchMode"
-          >
-            <i class="fa-solid fa-magnifying-glass text-[11px]"/>
-            <span class="text-[10px]">▼</span>
-          </button>
-          <Transition
-              enter-active-class="transition duration-150 ease-out"
-              enter-from-class="opacity-0 -translate-y-1 scale-95"
-              enter-to-class="opacity-100 translate-y-0 scale-100"
-              leave-active-class="transition duration-100 ease-in"
-              leave-from-class="opacity-100 translate-y-0 scale-100"
-              leave-to-class="opacity-0 -translate-y-1 scale-95"
-          >
-            <div
-                v-if="searchModeOpen"
-                class="absolute right-0 top-full mt-2 z-40 w-44 rounded-lg border border-slate-200 bg-white shadow-lg p-1"
-            >
-              <button
-                  class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
-                  :class="searchMode === 'partial' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
-                  @click="setSearchMode('partial')"
-              >
-                Partial Match
-              </button>
-              <button
-                  class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
-                  :class="searchMode === 'exact' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
-                  @click="setSearchMode('exact')"
-              >
-                Exact Match
-              </button>
-            </div>
-          </Transition>
-        </div>
-      </div>
-
-      <div class="flex justify-between items-center">
-        <div class="flex items-center gap-2">
-          <select
-              v-model="sort"
-              class="text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-600 outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
-              @change="handleSort"
-          >
-            <option value="az">
-              A-Z
-            </option>
-            <option value="za">
-              Z-A
-            </option>
-            <option value="newest">
-              Newest
-            </option>
-            <option value="oldest">
-              Oldest
-            </option>
-          </select>
-          <div class="flex items-center gap-2 bg-white border border-slate-200 rounded px-2 py-1 shadow-sm">
-            <span class="text-[10px] text-slate-400 uppercase font-bold">Size</span>
-            <input
-                v-model="pageSize"
-                type="number"
-                min="1"
-                max="500"
-                class="w-10 text-xs bg-transparent outline-none text-center font-medium text-slate-700"
-                @change="handlePageSize"
-            >
-          </div>
-          <button
-              v-if="isBackendConnected && localSyncItems.length"
-              :disabled="syncAllLoading"
-              class="text-xs bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-600 hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-60"
-              @click="openSyncAll"
-          >
-            <i class="fa-solid fa-cloud-arrow-up"/>
-            <span>Sync All ({{ localSyncItems.length }})</span>
-          </button>
-        </div>
-        <div class="flex items-center gap-3">
-          <span class="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">{{
-              totalCount
-            }} words</span>
-          <button
-              class="text-slate-400 hover:text-primary transition-colors p-1"
-              title="Reload All"
-              @click="refresh"
-          >
-            <i
-                class="fa-solid fa-arrows-rotate"
-                :class="{ 'fa-spin': loading }"
-            />
-          </button>
-        </div>
-      </div>
-    </div>
+    <WordListToolbar
+        :search="search"
+        :loading="loading"
+        :can-search="canSearch"
+        :search-mode="searchMode"
+        :search-mode-open="searchModeOpen"
+        :search-mode-label="searchModeLabel"
+        :sort="sort"
+        :page-size="pageSize"
+        :is-backend-connected="isBackendConnected"
+        :local-sync-count="localSyncItems.length"
+        :total-count="totalCount"
+        :sync-all-loading="syncAllLoading"
+        @update-search="updateSearch"
+        @search="handleSearch"
+        @search-keydown="handleSearchKeydown"
+        @toggle-search-mode="toggleSearchMode"
+        @close-search-mode="closeSearchMode"
+        @set-search-mode="setSearchMode"
+        @sort-change="updateSort"
+        @page-size-change="updatePageSize"
+        @open-sync-all="openSyncAll"
+        @refresh="refresh"
+    />
 
     <div class="flex-1 overflow-y-auto bg-slate-50">
       <div
@@ -1074,44 +490,13 @@ const refresh = async () => {
         </div>
       </div>
     </div>
-    <div
-        class="p-3 border-t border-slate-100 bg-white flex justify-between items-center text-xs text-slate-500 flex-none"
-    >
-      <span class="font-medium">Page {{ dbListMeta.page }} of {{ dbListMeta.totalPages }}</span>
-      <div class="flex items-center gap-2">
-        <button
-            :disabled="dbListMeta.page <= 1"
-            class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-            @click="changePage(-1)"
-        >
-          Prev
-        </button>
-        <div class="flex items-center gap-1">
-          <button
-              v-for="(p, index) in paginationRange"
-              :key="index"
-              :class="[
-              'px-2.5 py-1 text-xs rounded transition-colors',
-              p === dbListMeta.page
-                ? 'bg-primary text-white font-bold'
-                : typeof p === 'number'
-                  ? 'hover:bg-slate-100 text-slate-600'
-                  : 'text-slate-400 cursor-default'
-            ]"
-              :disabled="typeof p !== 'number'"
-              @click="typeof p === 'number' ? goToPage(p) : null"
-          >
-            {{ p }}
-          </button>
-        </div>
-        <button
-            :disabled="dbListMeta.page >= dbListMeta.totalPages"
-            class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-            @click="changePage(1)"
-        >
-          Next
-        </button>
-      </div>
-    </div>
+    <WordListPagination
+        :page="dbListMeta.page"
+        :total-pages="dbListMeta.totalPages"
+        :pagination-range="paginationRange"
+        @prev="changePage(-1)"
+        @next="changePage(1)"
+        @go-to="goToPage"
+    />
   </div>
 </template>
