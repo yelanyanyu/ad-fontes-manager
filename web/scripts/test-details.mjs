@@ -1,12 +1,14 @@
 const HOST = 'http://localhost:8080';
 
 async function jsonFetch(url, options = {}) {
-  const res = await fetch(url, options);
+  const res = await globalThis.fetch(url, options);
   const text = await res.text();
   let data = null;
   try {
     data = JSON.parse(text);
-  } catch {}
+  } catch {
+    // ignore parse errors
+  }
   return { res, data, text };
 }
 

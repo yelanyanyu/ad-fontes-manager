@@ -79,7 +79,9 @@ class LocalStore {
         // simple regex extract to avoid full parse
         const match = i.raw_yaml.match(/lemma:\s*"?([^"\n]+)"?/);
         if (match && match[1].trim().toLowerCase() === target) return true;
-      } catch (e) {}
+      } catch {
+        // ignore parse errors
+      }
       return false;
     });
   }
@@ -92,7 +94,9 @@ class LocalStore {
     try {
       const match = rawYaml.match(/lemma:\s*"?([^"\n]+)"?/);
       if (match) lemma = match[1].trim();
-    } catch (e) {}
+    } catch {
+      // ignore parse errors
+    }
 
     if (id) {
       // Update existing

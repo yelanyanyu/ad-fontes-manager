@@ -9,14 +9,14 @@ const configPath = path.resolve(__dirname, '../config.json');
 let config = {};
 try {
   config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-} catch (e) {
+} catch {
   config = {};
 }
 const apiPort = config.API_PORT || process.env.API_PORT;
 const base = process.env.API_BASE || `http://localhost:${apiPort}/api`;
 
 async function fetchJson(url) {
-  const res = await fetch(url);
+  const res = await globalThis.fetch(url);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }

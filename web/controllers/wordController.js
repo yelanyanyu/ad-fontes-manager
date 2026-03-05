@@ -1,5 +1,6 @@
 const wordService = require('../services/wordService');
 const { asyncHandler, BadRequest, Conflict, UnprocessableEntity } = require('../utils/errors');
+const {logger} = require("../utils/logger");
 
 class WordController {
   list = asyncHandler(async (req, res) => {
@@ -39,6 +40,10 @@ class WordController {
 
   save = asyncHandler(async (req, res) => {
     const { yaml: yamlStr, forceUpdate } = req.body;
+    logger.debug({
+      "forceUpdate": forceUpdate,
+      "yamlStr": yamlStr.toString().substring(0, 50)
+    }, "asyncHandler");
     const result = await wordService.saveWord(req, yamlStr, forceUpdate);
     res.json(result);
   });

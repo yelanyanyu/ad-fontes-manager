@@ -306,7 +306,7 @@ class WordService {
    * 7. 记录用户请求日志
    * 8. 提交事务
    */
-  async saveWord(req, yamlStr, forceUpdate) {
+  async saveWord(req, yamlStr, forceUpdate = false) {
     const requestId = req.id || 'unknown';
     const logger = createContextLogger({ requestId, operation: 'saveWord', forceUpdate });
 
@@ -346,15 +346,16 @@ class WordService {
       await client.query('BEGIN');
       logger.debug('Transaction started');
 
+      // 根据 lemma 从 db 中查询原始数据
       const existing = await repository.findByLemma(req, lemma, client);
-      const analysis = existing ? conflictService.analyze(existing.original_yaml, data) : null;
+      const analysisRes = existing ? conflictService.analyze(existing.original_yaml, data) : null;
 
-      if (existing && !forceUpdate && analysis?.hasConflict) {
+      if (existing && !forceUpdate && analysisRes?.hasConflict) {
         await client.query('ROLLBACK');
         logger.warn(
           {
             lemma,
-            diff: analysis.diff,
+            diff: analysisRes.diff,
             oldDataLength: existing.original_yaml?.length,
             newDataLength: yamlStr?.length,
           },
@@ -362,7 +363,7 @@ class WordService {
         );
         return {
           status: 'conflict',
-          diff: analysis.diff,
+          diff: analysisRes.diff,
           oldData: existing.original_yaml,
           newData: data,
         };
@@ -373,7 +374,7 @@ class WordService {
 
       if (existing) {
         wordId = existing.id;
-        const shouldUpdate = !!forceUpdate || !!analysis?.hasConflict;
+        const shouldUpdate = !!forceUpdate || !!analysisRes?.hasConflict;
 
         if (shouldUpdate) {
           logger.debug({ wordId, lemma, forceUpdate }, 'Updating existing word');

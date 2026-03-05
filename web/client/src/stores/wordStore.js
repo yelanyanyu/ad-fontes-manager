@@ -267,7 +267,7 @@ export const useWordStore = defineStore('word', {
         });
         const res = await request.post(
           '/words',
-          { yaml: yamlContent, force },
+          { yaml: yamlContent, forceUpdate: !!force },
           { skipErrorToast: true }
         );
         // 处理错误响应
@@ -375,11 +375,11 @@ export const useWordStore = defineStore('word', {
       if (yaml !== undefined) {
         this.editorYaml = yaml;
       }
-      wordLogger.debug('Editing context set', { 
-        id, 
-        isLocal, 
+      wordLogger.debug('Editing context set', {
+        id,
+        isLocal,
         yamlLength: this.editorYaml?.length,
-        yamlPreview: this.editorYaml?.substring(0, 50) + '...'
+        yamlPreview: this.editorYaml?.substring(0, 50) + '...',
       });
     },
 
@@ -389,9 +389,9 @@ export const useWordStore = defineStore('word', {
      */
     setEditorYaml(yaml) {
       this.editorYaml = yaml;
-      wordLogger.debug('Editor YAML updated', { 
+      wordLogger.debug('Editor YAML updated', {
         yamlLength: yaml?.length,
-        yamlPreview: yaml?.substring(0, 50) + '...'
+        yamlPreview: yaml?.substring(0, 50) + '...',
       });
     },
 
