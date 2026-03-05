@@ -90,15 +90,44 @@ const saveLabel = computed(() => {
 });
 
 /**
+ * @description 判断输入是否为空
+ * 检查 textarea 内容是否为空或仅包含空白字符
+ * @computed
+ * @returns {boolean} 为空时返回 true，否则返回 false
+ */
+const isEmpty = computed(() => {
+  return !input.value || input.value.trim().length === 0;
+});
+
+/**
  * @description 处理编辑器输入并验证 YAML 格式
  * 实时验证用户输入的 YAML 文本，更新验证状态
+ * 验证规则：
+ * 1. 必须是有效的 YAML 语法
+ * 2. 解析结果必须是对象类型（非字符串、数字、数组等）
+ * 3. 解析结果必须包含 yield 字段
  * @function handleInput
  * @returns {void}
  */
 const handleInput = () => {
+  // 空输入时清空状态
+  if (!input.value || input.value.trim().length === 0) {
+    status.value = '';
+    return;
+  }
   try {
-    yaml.load(input.value);
-    status.value = 'Valid YAML';
+    const result = yaml.load(input.value);
+    // 检查是否为对象类型（非 null、非数组、包含 yield 字段）
+    if (
+      result &&
+      typeof result === 'object' &&
+      !Array.isArray(result) &&
+      result.yield !== undefined
+    ) {
+      status.value = 'Valid YAML';
+    } else {
+      status.value = 'Invalid YAML';
+    }
   } catch (e) {
     status.value = 'Invalid YAML';
   }
@@ -253,7 +282,13 @@ const overwrite = async () => {
 
     <div class="p-3 border-t border-slate-100 bg-white flex justify-end flex-none">
       <button
-        class="bg-primary hover:bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
+        :class="[
+          'px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2',
+          isEmpty
+            ? 'bg-slate-300 text-white cursor-not-allowed'
+            : 'bg-primary hover:bg-blue-600 text-white',
+        ]"
+        :disabled="isEmpty"
         @click="save"
       >
         <i class="fa-regular fa-floppy-disk" />
