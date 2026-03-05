@@ -50,13 +50,13 @@ web/
 │   │   ├── stores/         # Pinia 状态管理
 │   │   ├── utils/          # 工具函数
 │   │   └── views/          # 页面视图
-│   └── vite.config.js
+│   └── vite.config.ts
 ├── controllers/            # Express 控制器
 ├── routes/                 # API 路由
 ├── services/               # 业务逻辑
 ├── db/                     # 数据库连接
 ├── data/                   # 本地数据存储
-└── server.js               # 后端入口
+└── server.ts               # 后端入口
 ```
 
 ### 技术栈
@@ -162,40 +162,46 @@ YAML 解析 (js-yaml)
 
 在 `web/routes/` 目录下创建或修改路由文件：
 
-```javascript
-// routes/example.js
-const express = require('express');
-const router = express.Router();
+```typescript
+// routes/example.ts
+import { Router, Request, Response } from 'express';
 
-router.get('/example', (req, res) => {
+const router = Router();
+
+router.get('/example', (req: Request, res: Response) => {
   res.json({ message: 'Hello World' });
 });
 
-module.exports = router;
+export default router;
 ```
 
-在 `server.js` 中注册路由：
+在 `server.ts` 中注册路由：
 
-```javascript
-app.use('/api/example', require('./routes/example'));
+```typescript
+import exampleRouter from './routes/example';
+app.use('/api/example', exampleRouter);
 ```
 
 ### 控制器模式
 
-```javascript
-// controllers/exampleController.js
-const exampleController = {
-  async list(req, res) {
+```typescript
+// controllers/exampleController.ts
+import { Request, Response } from 'express';
+import * as exampleService from '../services/exampleService';
+
+export const exampleController = {
+  async list(req: Request, res: Response) {
     try {
-      const data = await service.getList();
+      const data = await exampleService.getList();
       res.json({ success: true, data });
     } catch (e) {
-      res.status(500).json({ success: false, message: e.message });
+      const error = e as Error;
+      res.status(500).json({ success: false, message: error.message });
     }
   }
 };
 
-module.exports = exampleController;
+export default exampleController;
 ```
 
 ## 数据库
@@ -216,14 +222,18 @@ CREATE TABLE IF NOT EXISTS examples (
 
 ### 连接池配置
 
-```javascript
-// db/index.js
+```typescript
+// db/index.ts
+import { Pool } from 'pg';
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 20,                    // 最大连接数
   idleTimeoutMillis: 30000,   // 空闲超时
   connectionTimeoutMillis: 5000  // 连接超时
 });
+
+export default pool;
 ```
 
 ## 前端开发
@@ -239,12 +249,12 @@ const pool = new Pool({
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 
-const title = ref('Example');
+const title = ref<string>('Example');
 
-const handleClick = () => {
+const handleClick = (): void => {
   console.log('Clicked');
 };
 </script>
@@ -252,20 +262,25 @@ const handleClick = () => {
 
 ### Store 模式
 
-```javascript
-// stores/exampleStore.js
+```typescript
+// stores/exampleStore.ts
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 
+interface Item {
+  id: string;
+  name: string;
+}
+
 export const useExampleStore = defineStore('example', () => {
   // State
-  const items = ref([]);
+  const items = ref<Item[]>([]);
   
   // Getters
   const itemCount = computed(() => items.value.length);
   
   // Actions
-  const addItem = (item) => {
+  const addItem = (item: Item): void => {
     items.value.push(item);
   };
   

@@ -1,17 +1,33 @@
 # TypeScript 迁移指南
 
-本文档介绍如何将项目从 JavaScript 迁移到 TypeScript。当前配置已为 TypeScript 迁移预留了平滑过渡路径。
+本文档记录项目从 JavaScript 迁移到 TypeScript 的过程。**迁移已完成**。
 
-## 当前配置状态
+## 当前状态：已完成 ✅
 
-项目已配置以下 TypeScript 支持：
+项目已全面迁移至 TypeScript：
 
-1. **ESLint 9 Flat Config** 格式 - 支持 TypeScript 的现代配置方式
-2. **@typescript-eslint/parser** - 已安装，用于解析 TypeScript 语法
-3. **文件匹配** - ESLint 配置已包含 `.ts`, `.mts`, `.cts` 文件扩展名
-4. **无类型检查** - 当前未启用类型检查，仅解析语法
+1. **前端 (Vue 3)** - 所有组件使用 `<script setup lang="ts">`
+2. **后端 (Express)** - 所有服务、路由、控制器使用 `.ts` 文件
+3. **Node 工具脚本** - 全部迁移至 TypeScript
+4. **类型检查** - 分层配置，支持独立检查
 
-## 迁移步骤
+## 类型检查命令
+
+```bash
+# 前端（Vue SFC + TS）
+cd web/client
+npm run type-check
+
+# Web 服务端
+cd ../
+npm run type-check
+
+# Node 工具脚本
+cd ../../node
+npm run type-check
+```
+
+## 迁移历史
 
 ### 第一步：创建 tsconfig.json
 

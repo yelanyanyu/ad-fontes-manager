@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-03-06
+
+### ✨ New Features
+
+- **TypeScript 全面迁移**: 将整个项目从 JavaScript 迁移到 TypeScript
+  - 前端 Vue 组件全面支持 TypeScript，增强类型安全
+  - 后端 Express 服务迁移至 TypeScript
+  - Node 工具脚本迁移至 TypeScript
+  - 添加分层类型检查命令（`npm run type-check`）
+- **ESLint TypeScript 增强**: 添加 Promise 相关规则和配置
+- **数据库类型定义**: 添加完整的数据库类型定义和初始化脚本
+- **连接池优化**: 添加数据库连接池、错误处理和服务器基础配置
+- **单词服务模块**: 实现完整的单词服务模块及相关功能
+
+### 🔧 Improvements
+
+- **WordList 组件重构**: 拆分大型组件为多个独立组件和组合式函数，提升可维护性
+- **WordEditor 组件增强**: 迁移至 TypeScript 并增强类型安全
+- **代码清理**: 清理废弃代码和文件，优化项目结构
+
+### 🏗️ Infrastructure
+
+- **Docker 配置优化**: 更新 Dockerfile 支持 TypeScript 构建
+- **构建流程优化**: 更新构建脚本以支持 TypeScript 编译
+
+---
+
 ## [1.4.0] - 2026-03-05
 
 ### ✨ New Features
