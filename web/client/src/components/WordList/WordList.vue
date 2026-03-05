@@ -1003,7 +1003,6 @@ const refresh = async () => {
 
       <div
           v-else
-      <div
           class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-visible m-4"
       >
         <div class="overflow-x-auto">
@@ -1075,7 +1074,6 @@ const refresh = async () => {
         </div>
       </div>
     </div>
-    <div
     <div
         class="p-3 border-t border-slate-100 bg-white flex justify-between items-center text-xs text-slate-500 flex-none"
     >
