@@ -7,7 +7,9 @@ interface TableConfig {
   table: string;
   fields: FieldMap[];
   isArray: boolean;
-  getData: (data: Record<string, any>) => Record<string, unknown> | Array<Record<string, unknown>> | null;
+  getData: (
+    data: Record<string, any>
+  ) => Record<string, unknown> | Array<Record<string, unknown>> | null;
 }
 
 interface DbClientLike {
@@ -123,7 +125,11 @@ class WordAssembler {
     ];
   }
 
-  async updateChildren(client: DbClientLike, wordId: string | number, data: Record<string, any>): Promise<void> {
+  async updateChildren(
+    client: DbClientLike,
+    wordId: string | number,
+    data: Record<string, any>
+  ): Promise<void> {
     await this._clearChildren(client, wordId);
     await this._insertChildren(client, wordId, data);
   }
@@ -152,7 +158,9 @@ class WordAssembler {
           insertPromises.push(this._insertSingle(client, wordId, config, item));
         }
       } else {
-        insertPromises.push(this._insertSingle(client, wordId, config, items as Record<string, unknown>));
+        insertPromises.push(
+          this._insertSingle(client, wordId, config, items as Record<string, unknown>)
+        );
       }
     }
 

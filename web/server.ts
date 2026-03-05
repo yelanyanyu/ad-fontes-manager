@@ -5,16 +5,16 @@ const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 
-const config = require('./utils/config') as {
+const config = require('./utils/config.ts') as {
   get: <T = unknown>(path: string) => T;
 };
 
-const { errorHandler, notFoundHandler } = require('./middleware/errorHandler') as {
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler.ts') as {
   errorHandler: (err: unknown, req: Request, res: Response, next: NextFunction) => void;
   notFoundHandler: (req: Request, res: Response) => void;
 };
 
-const { httpLogger, loggers } = require('./utils/logger') as {
+const { httpLogger, loggers } = require('./utils/logger.ts') as {
   httpLogger: ReturnType<typeof express.json>;
   loggers: {
     system: {
@@ -47,9 +47,9 @@ app.use(express.json());
 app.use(cors());
 app.use(httpLogger);
 
-app.use('/api', require('./routes/core'));
-app.use('/api', require('./routes/sync'));
-app.use('/api/words', require('./routes/words'));
+app.use('/api', require('./routes/core.ts'));
+app.use('/api', require('./routes/sync.ts'));
+app.use('/api/words', require('./routes/words.ts'));
 
 if (config.get<string>('core.env') === 'production') {
   app.use(express.static(path.join(__dirname, 'dist')));

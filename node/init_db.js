@@ -24,7 +24,7 @@ const [_, user, password, host, port, dbName] = match;
 
 async function init() {
   console.log('🔧 Ad Fontes Manager - Database Initialization');
-  console.log('=' .repeat(50));
+  console.log('='.repeat(50));
   console.log(`📁 Database: ${dbName}`);
   console.log(`🌐 Host: ${host}:${port}`);
   console.log(`👤 User: ${user}`);
@@ -43,10 +43,9 @@ async function init() {
     await maintenanceClient.connect();
     console.log('✅ Connected to PostgreSQL maintenance database');
 
-    const res = await maintenanceClient.query(
-      `SELECT 1 FROM pg_database WHERE datname = $1`,
-      [dbName]
-    );
+    const res = await maintenanceClient.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [
+      dbName,
+    ]);
     if (res.rows.length === 0) {
       console.log(`🆕 Database '${dbName}' does not exist. Creating...`);
       await maintenanceClient.query(`CREATE DATABASE "${dbName}"`);
@@ -83,12 +82,12 @@ async function init() {
     }
 
     const schemaPath = path.join(__dirname, '../schema.sql');
-    
+
     if (!fs.existsSync(schemaPath)) {
       console.error(`❌ Schema file not found: ${schemaPath}`);
       process.exit(1);
     }
-    
+
     const schemaSql = fs.readFileSync(schemaPath, 'utf8');
 
     await client.query(schemaSql);
@@ -101,7 +100,7 @@ async function init() {
       WHERE table_schema = 'public'
       ORDER BY table_name
     `);
-    
+
     const tables = tablesRes.rows.map(r => r.table_name);
     console.log('');
     console.log('📊 Tables in database:');
@@ -110,7 +109,7 @@ async function init() {
     });
 
     console.log('');
-    console.log('=' .repeat(50));
+    console.log('='.repeat(50));
     console.log('🎉 Database initialization completed!');
     console.log('');
     console.log('Next steps:');

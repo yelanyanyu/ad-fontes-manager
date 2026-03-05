@@ -33,7 +33,9 @@ async function migrate(): Promise<void> {
     const err = error as { message?: string; code?: string };
     console.error('Migration failed:', err.message);
     if (err.code === '23505') {
-      console.error('Error: Duplicate lemmas found. Please clean up database manually before migrating.');
+      console.error(
+        'Error: Duplicate lemmas found. Please clean up database manually before migrating.'
+      );
     }
   } finally {
     await client.end();

@@ -10,14 +10,15 @@ const wordService = require('../services/wordService') as {
   deleteWord: (req: Request, id: string) => Promise<unknown>;
 };
 
-const { asyncHandler, BadRequest, Conflict, UnprocessableEntity } = require('../utils/errors') as {
-  asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
-  BadRequest: (message: string, data?: unknown) => Error;
-  Conflict: (message: string, data?: unknown) => Error;
-  UnprocessableEntity: (message: string, data?: unknown) => Error;
-};
+const { asyncHandler, BadRequest, Conflict, UnprocessableEntity } =
+  require('../utils/errors.ts') as {
+    asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
+    BadRequest: (message: string, data?: unknown) => Error;
+    Conflict: (message: string, data?: unknown) => Error;
+    UnprocessableEntity: (message: string, data?: unknown) => Error;
+  };
 
-const { logger } = require('../utils/logger') as {
+const { logger } = require('../utils/logger.ts') as {
   logger: { debug: (obj: unknown, msg?: string) => void };
 };
 

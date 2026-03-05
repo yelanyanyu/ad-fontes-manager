@@ -8,7 +8,7 @@ function escapeHtml(value: unknown): string {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/\"/g, '&quot;')
+    .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
 
@@ -38,7 +38,7 @@ function getPath(obj: unknown, path: string): unknown {
 function stripDangerousHtml(html: unknown): string {
   return String(html ?? '')
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-    .replace(/\son[a-z]+\s*=\s*(['\"]).*?\1/gi, '');
+    .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '');
 }
 
 type SectionType = 'if' | 'each';
@@ -102,7 +102,7 @@ function renderSegments(template: string, ctx: Context): string {
   let cursor = 0;
   let loopCount = 0;
 
-  while (true) {
+  while (cursor <= template.length) {
     if (++loopCount > MAX_LOOPS) {
       console.warn('Template render infinite loop detected');
       break;

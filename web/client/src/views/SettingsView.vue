@@ -68,7 +68,8 @@ onMounted(loadConfig);
     >
       <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
         <h3 class="text-lg font-bold text-slate-800">Settings</h3>
-        <button class="text-slate-400 hover:text-slate-600 transition-colors" @click="close">
+        <button class="text-slate-400 hover:text-slate-600 transition-colors"
+@click="close">
           <i class="fa-solid fa-xmark text-xl" />
         </button>
       </div>
@@ -85,7 +86,8 @@ onMounted(loadConfig);
           >
             {{ statusText }}
           </span>
-          <button class="text-primary hover:underline text-xs ml-2" @click="testConnection">
+          <button class="text-primary hover:underline text-xs ml-2"
+@click="testConnection">
             Refresh
           </button>
         </div>

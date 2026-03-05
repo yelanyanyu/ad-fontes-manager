@@ -6,14 +6,17 @@ const nlp = require('compromise') as (text: string) => {
 };
 const { getPool } = require('../../db') as { getPool: () => Promise<DbPoolLike> };
 const conflictService = require('../conflictService') as {
-  analyze: (oldData: unknown, newData: unknown) => { hasConflict: boolean; diff: unknown[] | undefined };
+  analyze: (
+    oldData: unknown,
+    newData: unknown
+  ) => { hasConflict: boolean; diff: unknown[] | undefined };
 };
 const validator = require('./WordValidator') as {
   validate: (data: unknown, wordLower: string) => { valid: boolean; errors: string[] };
 };
 const repository = require('./WordRepository') as WordRepositoryLike;
 const assembler = require('./WordAssembler') as WordAssemblerLike;
-const { createContextLogger } = require('../../utils/logger') as {
+const { createContextLogger } = require('../../utils/logger.ts') as {
   createContextLogger: (context: Record<string, unknown>) => LoggerLike;
 };
 
@@ -81,16 +84,26 @@ interface WordRepositoryLike {
 
 interface WordAssemblerLike {
   extractWordData: (data: Record<string, any>) => Record<string, unknown>;
-  updateChildren: (client: DbClientLike, wordId: string | number, data: Record<string, any>) => Promise<void>;
+  updateChildren: (
+    client: DbClientLike,
+    wordId: string | number,
+    data: Record<string, any>
+  ) => Promise<void>;
   extractUserContext: (data: Record<string, any>) => { userWord?: string; userContext?: string };
 }
 
 class WordService {
-  async addWord(req: RequestLike, wordText: string, yamlStr: string): Promise<Record<string, unknown>> {
+  async addWord(
+    req: RequestLike,
+    wordText: string,
+    yamlStr: string
+  ): Promise<Record<string, unknown>> {
     const requestId = req.id || 'unknown';
     const logger = createContextLogger({ requestId, operation: 'addWord', word: wordText });
 
-    const wordLower = String(wordText || '').trim().toLowerCase();
+    const wordLower = String(wordText || '')
+      .trim()
+      .toLowerCase();
     if (!wordLower) {
       logger.warn({ word: wordText }, 'Add word failed: word is required');
       return { status: 'invalid', errors: ['word is required'] };
@@ -201,7 +214,11 @@ class WordService {
     return word;
   }
 
-  async getWordDetails(req: RequestLike, wordText: string, include: string[] = []): Promise<Record<string, unknown>> {
+  async getWordDetails(
+    req: RequestLike,
+    wordText: string,
+    include: string[] = []
+  ): Promise<Record<string, unknown>> {
     const details = await repository.getDetails(req, wordText, include);
     if (!details) throw new Error('Not found');
     return details;
@@ -245,7 +262,11 @@ class WordService {
     return { status: 'ok', lemma };
   }
 
-  async saveWord(req: RequestLike, yamlStr: string, forceUpdate = false): Promise<Record<string, unknown>> {
+  async saveWord(
+    req: RequestLike,
+    yamlStr: string,
+    forceUpdate = false
+  ): Promise<Record<string, unknown>> {
     const requestId = req.id || 'unknown';
     const logger = createContextLogger({ requestId, operation: 'saveWord', forceUpdate });
 
@@ -335,7 +356,12 @@ class WordService {
       }
 
       const userContext = assembler.extractUserContext(data);
-      await repository.logUserRequest(client, wordId, userContext.userWord, userContext.userContext);
+      await repository.logUserRequest(
+        client,
+        wordId,
+        userContext.userWord,
+        userContext.userContext
+      );
 
       await client.query('COMMIT');
 

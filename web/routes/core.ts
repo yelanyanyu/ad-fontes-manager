@@ -13,13 +13,13 @@ const { getPool, resetPool } = require('../db') as {
   resetPool: () => Promise<void>;
 };
 
-const { asyncHandler, Unauthorized, ServiceUnavailable } = require('../utils/errors') as {
+const { asyncHandler, Unauthorized, ServiceUnavailable } = require('../utils/errors.ts') as {
   asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
   Unauthorized: (message: string) => Error;
   ServiceUnavailable: (message: string) => Error;
 };
 
-const { loggers } = require('../utils/logger') as {
+const { loggers } = require('../utils/logger.ts') as {
   loggers: {
     auth: { error: (msg: string) => void; warn: (msg: string) => void };
     db: { error: (msg: string, error?: unknown) => void };

@@ -18,7 +18,8 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
   const formatYamlForEditor = (yamlObj: unknown): string => {
     const orderedObj: Record<string, unknown> = {};
     const keyOrder = ['yield', 'etymology', 'cognate_family', 'application', 'nuance'];
-    const source = yamlObj && typeof yamlObj === 'object' ? (yamlObj as Record<string, unknown>) : {};
+    const source =
+      yamlObj && typeof yamlObj === 'object' ? (yamlObj as Record<string, unknown>) : {};
 
     for (const k of keyOrder) {
       if (source[k] !== undefined) orderedObj[k] = source[k];
@@ -43,7 +44,9 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
         params: { search: String(lemma), page: 1, limit: 20, sort: 'newest' },
         skipErrorToast: true,
       });
-      const items: Array<{ id?: string; lemma?: string; original_yaml?: unknown }> = Array.isArray(res?.items)
+      const items: Array<{ id?: string; lemma?: string; original_yaml?: unknown }> = Array.isArray(
+        res?.items
+      )
         ? res.items
         : Array.isArray(res)
           ? res

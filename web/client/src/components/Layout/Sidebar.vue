@@ -70,7 +70,8 @@ const toggle = () => {
   >
     <!-- Sidebar Toggle -->
     <div class="p-4 flex items-center justify-center h-16 border-b border-slate-800">
-      <button class="text-slate-500 hover:text-white transition-colors p-1" @click="toggle">
+      <button class="text-slate-500 hover:text-white transition-colors p-1"
+@click="toggle">
         <i class="fa-solid fa-bars" />
       </button>
     </div>
@@ -84,7 +85,9 @@ const toggle = () => {
         :class="{ 'justify-center': !sidebarOpen }"
       >
         <i class="fa-solid fa-book w-5 text-center transition-colors group-hover:text-white" />
-        <span class="sidebar-text font-medium whitespace-nowrap" :class="{ hidden: !sidebarOpen }">Words</span>
+        <span
+class="sidebar-text font-medium whitespace-nowrap" :class="{ hidden: !sidebarOpen }"
+        >Words</span>
       </RouterLink>
       <!-- Phrases 导航链接 -->
       <RouterLink
@@ -92,8 +95,12 @@ const toggle = () => {
         class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors group"
         :class="{ 'justify-center': !sidebarOpen }"
       >
-        <i class="fa-solid fa-quote-left w-5 text-center transition-colors group-hover:text-white" />
-        <span class="sidebar-text font-medium whitespace-nowrap" :class="{ hidden: !sidebarOpen }">Phrases</span>
+        <i
+          class="fa-solid fa-quote-left w-5 text-center transition-colors group-hover:text-white"
+        />
+        <span
+class="sidebar-text font-medium whitespace-nowrap" :class="{ hidden: !sidebarOpen }"
+        >Phrases</span>
       </RouterLink>
     </nav>
 
@@ -117,7 +124,9 @@ const toggle = () => {
             }"
           />
         </div>
-        <span class="sidebar-text font-medium whitespace-nowrap" :class="{ hidden: !sidebarOpen }">Settings</span>
+        <span
+class="sidebar-text font-medium whitespace-nowrap" :class="{ hidden: !sidebarOpen }"
+        >Settings</span>
       </RouterLink>
     </div>
   </aside>

@@ -13,8 +13,12 @@ const { StatusCodes, ReasonPhrases } = require('http-status-codes') as {
   };
 };
 
-const { AppError } = require('../utils/errors') as {
-  AppError: new (statusCode: number, message: string, data?: unknown) => {
+const { AppError } = require('../utils/errors.ts') as {
+  AppError: new (
+    statusCode: number,
+    message: string,
+    data?: unknown
+  ) => {
     statusCode: number;
     message: string;
     data?: unknown;

@@ -1,20 +1,9 @@
-/**
- * @file ConflictModal.vue
- * @description 冲突对比弹窗组件，用于显示数据冲突并提供解决方案
- *
- * @component ConflictModal
- *
- * @usage
- * 该组件用于在数据同步、导入或更新时检测到冲突时，向用户展示冲突详情并提供解决选项。
- * 典型使用场景包括：
- * - 文件导入时发现与现有数据冲突
- * - 多用户协作编辑时的版本冲突
- * - 数据同步时的合并冲突
- *
- * @dependencies
- * - vue: Vue 3 Composition API
- * - @/utils/conflict: 冲突处理工具函数（deepDiffAdapter, yamlFormatter）
- */
+/** * @file ConflictModal.vue * @description 冲突对比弹窗组件，用于显示数据冲突并提供解决方案 * *
+@component ConflictModal * * @usage *
+该组件用于在数据同步、导入或更新时检测到冲突时，向用户展示冲突详情并提供解决选项。 *
+典型使用场景包括： * - 文件导入时发现与现有数据冲突 * - 多用户协作编辑时的版本冲突 * -
+数据同步时的合并冲突 * * @dependencies * - vue: Vue 3 Composition API * - @/utils/conflict:
+冲突处理工具函数（deepDiffAdapter, yamlFormatter） */
 
 <script setup>
 import { computed } from 'vue';
@@ -136,8 +125,9 @@ const format = val => {
         </button>
       </div>
 
-      <div v-if="subtitle"
-class="px-4 py-2 text-sm text-slate-600 border-b border-slate-100">
+      <div
+v-if="subtitle" class="px-4 py-2 text-sm text-slate-600 border-b border-slate-100"
+>
         {{ subtitle }}
       </div>
 
@@ -152,8 +142,9 @@ class="px-4 py-2 text-sm text-slate-600 border-b border-slate-100">
             :key="m"
             class="px-2 py-0.5 rounded border bg-slate-50 text-slate-700 border-slate-200 text-xs font-bold"
           >{{ m }}</span>
-          <span v-if="!modules.length"
-class="text-slate-400 text-xs">No module detail</span>
+          <span
+v-if="!modules.length" class="text-slate-400 text-xs"
+>No module detail</span>
         </div>
         <div class="mt-2 flex flex-wrap gap-1">
           <span

@@ -275,7 +275,8 @@ export const useWordStore = defineStore('word', {
           this.dbConnected = false;
           this.connectionStatus = 'disconnected';
           const localRes = await this.saveWord(yamlContent, force, 'local');
-          if (localRes && typeof localRes === 'object' && localRes.status === 'conflict') return localRes;
+          if (localRes && typeof localRes === 'object' && localRes.status === 'conflict')
+            return localRes;
           if (localRes === true) {
             this.dbRecords = [];
             this.dbListMeta = defaultDbListMeta();
@@ -314,7 +315,12 @@ export const useWordStore = defineStore('word', {
         if (isLocal) this.fetchLocalRecords();
         else this.fetchDbRecords();
       } catch (e) {
-        wordLogger.error('Delete word failed', { id, lemma, isLocal, error: (e as HttpErrorLike)?.message });
+        wordLogger.error('Delete word failed', {
+          id,
+          lemma,
+          isLocal,
+          error: (e as HttpErrorLike)?.message,
+        });
         appStore.addToast('Delete failed', 'error');
       }
     },

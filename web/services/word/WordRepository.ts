@@ -54,13 +54,23 @@ interface PagedWordsResult {
 }
 
 class WordRepository {
-  async findByLemma(_req: RequestLike, lemma: string, client: DbClientLike | null = null): Promise<WordRecord | null> {
+  async findByLemma(
+    _req: RequestLike,
+    lemma: string,
+    client: DbClientLike | null = null
+  ): Promise<WordRecord | null> {
     const dbClient = client || (await getPool());
-    const result = await dbClient.query('SELECT * FROM words WHERE lower(lemma) = $1', [lemma.toLowerCase()]);
+    const result = await dbClient.query('SELECT * FROM words WHERE lower(lemma) = $1', [
+      lemma.toLowerCase(),
+    ]);
     return (result.rows[0] as WordRecord | undefined) || null;
   }
 
-  async findById(_req: RequestLike, id: string | number, client: DbClientLike | null = null): Promise<Record<string, unknown> | null> {
+  async findById(
+    _req: RequestLike,
+    id: string | number,
+    client: DbClientLike | null = null
+  ): Promise<Record<string, unknown> | null> {
     const dbClient = client || (await getPool());
     const result = await dbClient.query(
       'SELECT id, lemma, part_of_speech, syllabification, contextual_meaning_en, contextual_meaning_zh, other_common_meanings, image_differentiation_zh, created_at, updated_at, revision_count, original_yaml FROM words WHERE id = $1',
@@ -69,7 +79,11 @@ class WordRepository {
     return result.rows[0] || null;
   }
 
-  async create(req: RequestLike, wordData: CreateWordData, client: DbClientLike): Promise<WordRecord> {
+  async create(
+    req: RequestLike,
+    wordData: CreateWordData,
+    client: DbClientLike
+  ): Promise<WordRecord> {
     const {
       lemma,
       syllabification,
@@ -105,7 +119,12 @@ class WordRepository {
     return result.rows[0] as WordRecord;
   }
 
-  async update(req: RequestLike, wordId: string | number, wordData: CreateWordData, client: DbClientLike): Promise<void> {
+  async update(
+    req: RequestLike,
+    wordId: string | number,
+    wordData: CreateWordData,
+    client: DbClientLike
+  ): Promise<void> {
     const {
       partOfSpeech,
       syllabification,
@@ -137,7 +156,11 @@ class WordRepository {
     );
   }
 
-  async delete(_req: RequestLike, id: string | number, client: DbClientLike | null = null): Promise<void> {
+  async delete(
+    _req: RequestLike,
+    id: string | number,
+    client: DbClientLike | null = null
+  ): Promise<void> {
     const dbClient = client || (await getPool());
     await dbClient.query('DELETE FROM words WHERE id = $1', [id]);
   }
@@ -176,7 +199,10 @@ class WordRepository {
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
-    const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM words ${whereSql}`, params);
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM words ${whereSql}`,
+      params
+    );
     const totalRow = (countRes.rows[0] || {}) as { total?: number };
     const total = Number(totalRow.total || 0);
     const totalPages = Math.max(1, Math.ceil(total / validatedLimit) || 1);
@@ -203,7 +229,11 @@ class WordRepository {
     };
   }
 
-  async getDetails(_req: RequestLike, wordText: string, include: string[] = []): Promise<Record<string, unknown> | null> {
+  async getDetails(
+    _req: RequestLike,
+    wordText: string,
+    include: string[] = []
+  ): Promise<Record<string, unknown> | null> {
     const pool = await getPool();
     const inc = new Set(include.map(s => String(s || '').toLowerCase()));
 
@@ -241,17 +271,24 @@ class WordRepository {
       keys.push('etymology');
     }
     if (inc.has('cognates')) {
-      queries.push(pool.query(`SELECT cognate_word, logic FROM cognates WHERE word_id = $1`, [base.id]));
+      queries.push(
+        pool.query(`SELECT cognate_word, logic FROM cognates WHERE word_id = $1`, [base.id])
+      );
       keys.push('cognates');
     }
     if (inc.has('examples')) {
       queries.push(
-        pool.query(`SELECT example_type, sentence, translation_zh FROM examples WHERE word_id = $1`, [base.id])
+        pool.query(
+          `SELECT example_type, sentence, translation_zh FROM examples WHERE word_id = $1`,
+          [base.id]
+        )
       );
       keys.push('examples');
     }
     if (inc.has('synonyms')) {
-      queries.push(pool.query(`SELECT synonym_word, meaning_zh FROM synonyms WHERE word_id = $1`, [base.id]));
+      queries.push(
+        pool.query(`SELECT synonym_word, meaning_zh FROM synonyms WHERE word_id = $1`, [base.id])
+      );
       keys.push('synonyms');
     }
 

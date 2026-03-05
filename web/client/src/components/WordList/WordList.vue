@@ -59,7 +59,10 @@ interface WordStoreLike {
   fetchDbRecords: (params?: Partial<DbListMeta>) => Promise<void>;
   deleteWord: (id: string, isLocal: boolean) => Promise<void>;
   syncCheck: (items: LocalSyncItem[]) => Promise<any[]>;
-  syncExecute: (items: LocalSyncItem[], forceUpdate: boolean) => Promise<{ success?: number; failed?: number }>;
+  syncExecute: (
+    items: LocalSyncItem[],
+    forceUpdate: boolean
+  ) => Promise<{ success?: number; failed?: number }>;
   checkConnection: () => Promise<void>;
   setEditorYaml: (yaml: string) => void;
   setEditingContext: (context: { id: string | null; isLocal: boolean }) => void;
@@ -288,7 +291,7 @@ const handleSearch = async () => {
   if (!canSearch.value) return;
   const normalized = normalizeSearchInput(search.value);
   const searchValue = isBlankSearch(normalized) ? '' : normalized;
-  await wordStore.fetchDbRecords({search: searchValue, page: 1});
+  await wordStore.fetchDbRecords({ search: searchValue, page: 1 });
 };
 
 const handleSearchKeydown = (e: KeyboardEvent): void => {
@@ -329,11 +332,11 @@ const updatePageSize = (value: string): void => {
 };
 
 const handleSort = () => {
-  wordStore.fetchDbRecords({sort: sort.value, page: 1});
+  wordStore.fetchDbRecords({ sort: sort.value, page: 1 });
 };
 
 const handlePageSize = () => {
-  wordStore.fetchDbRecords({limit: pageSize.value, page: 1});
+  wordStore.fetchDbRecords({ limit: pageSize.value, page: 1 });
 };
 
 /**
@@ -365,7 +368,7 @@ const goToPage = (page: number): void => {
   }
 };
 
-const paginationRange = computed<Array<number | '...'> >(() => {
+const paginationRange = computed<Array<number | '...'>>(() => {
   const current = dbListMeta.value.page;
   const total = dbListMeta.value.totalPages;
   const delta = 2;
@@ -383,166 +386,163 @@ const paginationRange = computed<Array<number | '...'> >(() => {
 
   return range;
 });
-
 </script>
 
 <template>
-  <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-col flex h-full overflow-hidden ml-1">
+  <div
+    class="bg-white rounded-xl shadow-sm border border-slate-200 flex-col flex h-full overflow-hidden ml-1"
+  >
     <WordActionMenu
-        :open="showMenuId !== null"
-        :item="selectedMenuItem"
-        @close="showMenuId = null"
-        @sync="syncOne"
-        @export="handleExport"
-        @delete="openDelete"
+      :open="showMenuId !== null"
+      :item="selectedMenuItem"
+      @close="showMenuId = null"
+      @sync="syncOne"
+      @export="handleExport"
+      @delete="openDelete"
     />
-    <DeleteConfirmModal
-        :open="!!pendingDelete"
-        @cancel="cancelDelete"
-        @confirm="confirmDelete"
-    />
+    <DeleteConfirmModal :open="!!pendingDelete" @cancel="cancelDelete" @confirm="confirmDelete" />
     <BatchSyncModal
-        :open="syncAllOpen"
-        :loading="syncAllLoading"
-        :checks="syncChecks"
-        :actions="syncActions"
-        :get-diff-badges="getDiffBadges"
-        @close="closeSyncAll"
-        @set-action="setBatchAction"
-        @sync="executeBatchSync"
+      :open="syncAllOpen"
+      :loading="syncAllLoading"
+      :checks="syncChecks"
+      :actions="syncActions"
+      :get-diff-badges="getDiffBadges"
+      @close="closeSyncAll"
+      @set-action="setBatchAction"
+      @sync="executeBatchSync"
     />
     <ConflictModal
-        :open="!!syncConflict"
-        :title="syncConflictTitle"
-        :diff="syncConflict?.diff || []"
-        :left-data="syncConflict?.oldData || {}"
-        :right-data="syncConflict?.newData || {}"
-        left-label="DB"
-        right-label="LOCAL"
-        primary-label="Overwrite"
-        secondary-label="Cancel"
-        tertiary-label="Edit Local"
-        :formatter="yamlFormatter"
-        :diff-adapter="deepDiffAdapter"
-        @close="closeSyncConflict"
-        @secondary="closeSyncConflict"
-        @tertiary="editLocalFromSyncConflict"
-        @primary="overwriteSyncConflict"
+      :open="!!syncConflict"
+      :title="syncConflictTitle"
+      :diff="syncConflict?.diff || []"
+      :left-data="syncConflict?.oldData || {}"
+      :right-data="syncConflict?.newData || {}"
+      left-label="DB"
+      right-label="LOCAL"
+      primary-label="Overwrite"
+      secondary-label="Cancel"
+      tertiary-label="Edit Local"
+      :formatter="yamlFormatter"
+      :diff-adapter="deepDiffAdapter"
+      @close="closeSyncConflict"
+      @secondary="closeSyncConflict"
+      @tertiary="editLocalFromSyncConflict"
+      @primary="overwriteSyncConflict"
     />
     <WordListToolbar
-        :search="search"
-        :loading="loading"
-        :can-search="canSearch"
-        :search-mode="searchMode"
-        :search-mode-open="searchModeOpen"
-        :search-mode-label="searchModeLabel"
-        :sort="sort"
-        :page-size="pageSize"
-        :is-backend-connected="isBackendConnected"
-        :local-sync-count="localSyncItems.length"
-        :total-count="totalCount"
-        :sync-all-loading="syncAllLoading"
-        @update-search="updateSearch"
-        @search="handleSearch"
-        @search-keydown="handleSearchKeydown"
-        @toggle-search-mode="toggleSearchMode"
-        @close-search-mode="closeSearchMode"
-        @set-search-mode="setSearchMode"
-        @sort-change="updateSort"
-        @page-size-change="updatePageSize"
-        @open-sync-all="openSyncAll"
-        @refresh="refresh"
+      :search="search"
+      :loading="loading"
+      :can-search="canSearch"
+      :search-mode="searchMode"
+      :search-mode-open="searchModeOpen"
+      :search-mode-label="searchModeLabel"
+      :sort="sort"
+      :page-size="pageSize"
+      :is-backend-connected="isBackendConnected"
+      :local-sync-count="localSyncItems.length"
+      :total-count="totalCount"
+      :sync-all-loading="syncAllLoading"
+      @update-search="updateSearch"
+      @search="handleSearch"
+      @search-keydown="handleSearchKeydown"
+      @toggle-search-mode="toggleSearchMode"
+      @close-search-mode="closeSearchMode"
+      @set-search-mode="setSearchMode"
+      @sort-change="updateSort"
+      @page-size-change="updatePageSize"
+      @open-sync-all="openSyncAll"
+      @refresh="refresh"
     />
 
     <div class="flex-1 overflow-y-auto bg-slate-50">
       <div
-          v-if="loading && !displayedRecords.length"
-          class="text-center text-slate-400 py-10 flex flex-col items-center gap-2"
+        v-if="loading && !displayedRecords.length"
+        class="text-center text-slate-400 py-10 flex flex-col items-center gap-2"
       >
-        <i class="fa-solid fa-spinner fa-spin text-2xl"/>
+        <i class="fa-solid fa-spinner fa-spin text-2xl" />
         <span>Loading records...</span>
       </div>
 
       <div
-          v-else
-          class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-visible m-4"
+        v-else
+        class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-visible m-4"
       >
         <div class="overflow-x-auto">
           <table class="min-w-full">
             <thead class="bg-slate-50">
-            <tr>
-              <th
+              <tr>
+                <th
                   scope="col"
                   class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left w-24"
-              >
-                Src
-              </th>
-              <th
+                >
+                  Src
+                </th>
+                <th
                   scope="col"
                   class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left min-w-[220px]"
-              >
-                Lemma
-              </th>
-              <th
+                >
+                  Lemma
+                </th>
+                <th
                   scope="col"
                   class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right w-[160px]"
-              />
-            </tr>
+                />
+              </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-            <tr
-                v-for="item in displayedRecords"
-                :key="item.id"
-                class="hover:bg-slate-50/60"
-            >
-              <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
+              <tr
+v-for="item in displayedRecords" :key="item.id"
+class="hover:bg-slate-50/60"
+>
+                <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
                   <span
-                      v-if="item.isLocal"
-                      class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-bold"
-                  ><i class="fa-solid fa-laptop"/>Local</span>
-                <span
+                    v-if="item.isLocal"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-bold"
+                  ><i class="fa-solid fa-laptop" />Local</span>
+                  <span
                     v-else
                     class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold"
-                ><i class="fa-solid fa-cloud"/>DB</span>
-              </td>
-              <td class="px-4 py-3 text-sm text-slate-700 font-bold text-slate-900">
-                {{ item.lemma || item.yield?.lemma }}
-              </td>
-              <td class="px-4 py-3 text-sm text-slate-700 text-right">
-                <div class="flex items-center justify-end gap-2 w-[140px]">
-                  <button
+                    ><i class="fa-solid fa-cloud" />DB</span
+                  >
+                </td>
+                <td class="px-4 py-3 text-sm text-slate-700 font-bold text-slate-900">
+                  {{ item.lemma || item.yield?.lemma }}
+                </td>
+                <td class="px-4 py-3 text-sm text-slate-700 text-right">
+                  <div class="flex items-center justify-end gap-2 w-[140px]">
+                    <button
                       class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
                       @click="handlePreview(item.id)"
-                  >
-                    <i class="fa-solid fa-eye"/>
-                  </button>
-                  <button
+                    >
+                      <i class="fa-solid fa-eye" />
+                    </button>
+                    <button
                       class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
                       @click="handleEdit(item.id)"
-                  >
-                    <i class="fa-solid fa-pen"/>
-                  </button>
-                  <button
+                    >
+                      <i class="fa-solid fa-pen" />
+                    </button>
+                    <button
                       class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
                       @click="toggleMenu(item.id)"
-                  >
-                    <i class="fa-solid fa-ellipsis"/>
-                  </button>
-                </div>
-              </td>
-            </tr>
+                    >
+                      <i class="fa-solid fa-ellipsis" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
     <WordListPagination
-        :page="dbListMeta.page"
-        :total-pages="dbListMeta.totalPages"
-        :pagination-range="paginationRange"
-        @prev="changePage(-1)"
-        @next="changePage(1)"
-        @go-to="goToPage"
+      :page="dbListMeta.page"
+      :total-pages="dbListMeta.totalPages"
+      :pagination-range="paginationRange"
+      @prev="changePage(-1)"
+      @next="changePage(1)"
+      @go-to="goToPage"
     />
   </div>
 </template>

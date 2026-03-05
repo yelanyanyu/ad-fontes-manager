@@ -32,7 +32,8 @@ class WordValidator {
   constructor() {
     this._validators = {
       isNonEmptyString: (value: unknown) => typeof value === 'string' && value.trim().length > 0,
-      isObject: (value: unknown) => Boolean(value) && typeof value === 'object' && !Array.isArray(value),
+      isObject: (value: unknown) =>
+        Boolean(value) && typeof value === 'object' && !Array.isArray(value),
       isNonEmptyArray: (value: unknown) => Array.isArray(value) && value.length > 0,
     };
 
@@ -82,7 +83,8 @@ class WordValidator {
           },
           contextual_meaning: {
             required: true,
-            validate: (data: unknown) => (isObject(data) ? null : 'yield.contextual_meaning is required'),
+            validate: (data: unknown) =>
+              isObject(data) ? null : 'yield.contextual_meaning is required',
             fields: {
               en: {
                 required: true,
@@ -99,7 +101,9 @@ class WordValidator {
           other_common_meanings: {
             required: true,
             validate: (data: unknown) =>
-              isNonEmptyArray(data) ? null : 'yield.other_common_meanings must be a non-empty array',
+              isNonEmptyArray(data)
+                ? null
+                : 'yield.other_common_meanings must be a non-empty array',
           },
         },
       },
@@ -109,7 +113,8 @@ class WordValidator {
         fields: {
           root_and_affixes: {
             required: true,
-            validate: (data: unknown) => (isObject(data) ? null : 'etymology.root_and_affixes is required'),
+            validate: (data: unknown) =>
+              isObject(data) ? null : 'etymology.root_and_affixes is required',
             fields: {
               prefix: {
                 required: true,
@@ -135,7 +140,8 @@ class WordValidator {
           },
           historical_origins: {
             required: true,
-            validate: (data: unknown) => (isObject(data) ? null : 'etymology.historical_origins is required'),
+            validate: (data: unknown) =>
+              isObject(data) ? null : 'etymology.historical_origins is required',
             fields: {
               history_myth: {
                 required: true,
@@ -173,7 +179,8 @@ class WordValidator {
           cognates: {
             required: true,
             validate: (data: unknown) => {
-              if (!isNonEmptyArray(data)) return 'cognate_family.cognates must be a non-empty array';
+              if (!isNonEmptyArray(data))
+                return 'cognate_family.cognates must be a non-empty array';
               const rows = data as Array<Record<string, unknown>>;
               const invalid = rows.some(
                 c => !isObject(c) || !isNonEmptyString(c.word) || !isNonEmptyString(c.logic)
@@ -191,7 +198,8 @@ class WordValidator {
           selected_examples: {
             required: true,
             validate: (data: unknown) => {
-              if (!isNonEmptyArray(data)) return 'application.selected_examples must be a non-empty array';
+              if (!isNonEmptyArray(data))
+                return 'application.selected_examples must be a non-empty array';
               const rows = data as Array<Record<string, unknown>>;
               const invalid = rows.some(
                 e =>
@@ -295,7 +303,13 @@ class WordValidator {
       }
 
       if (config.fields && this._validators.isObject(value)) {
-        this._validateSection(value as Record<string, unknown>, config.fields, currentPath, errors, context);
+        this._validateSection(
+          value as Record<string, unknown>,
+          config.fields,
+          currentPath,
+          errors,
+          context
+        );
       }
     }
   }

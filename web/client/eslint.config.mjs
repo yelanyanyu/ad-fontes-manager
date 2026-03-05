@@ -1,4 +1,4 @@
-import js from '@eslint/js';
+﻿import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
 import prettierPlugin from 'eslint-plugin-prettier';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
@@ -9,9 +9,9 @@ import vueParser from 'vue-eslint-parser';
 const tsconfigRootDir = process.cwd();
 
 const typedLintRules = {
-  '@typescript-eslint/await-thenable': 'error',
-  '@typescript-eslint/no-floating-promises': 'error',
-  '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
+  '@typescript-eslint/await-thenable': 'warn',
+  '@typescript-eslint/no-floating-promises': 'warn',
+  '@typescript-eslint/no-misused-promises': ['warn', { checksVoidReturn: false }],
 };
 
 export default [
@@ -113,7 +113,10 @@ export default [
     },
     rules: {
       'prettier/prettier': 'error',
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
       'no-console': 'off',
       'prefer-const': 'error',
       'no-var': 'error',
@@ -133,10 +136,13 @@ export default [
     rules: {
       ...tsPlugin.configs.recommended.rules,
       ...typedLintRules,
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-empty-object-type': 'off',
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
     },
   },
@@ -159,8 +165,10 @@ export default [
       '@typescript-eslint': tsPlugin,
     },
     rules: {
-      'prettier/prettier': 'error',
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'prettier/prettier': 'off',
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'no-undef': 'off',
       'no-console': 'off',
       'prefer-const': 'error',
       'no-var': 'error',

@@ -10,7 +10,10 @@ import type {
 
 interface WordStoreLike {
   syncCheck: (items: LocalSyncItem[]) => Promise<SyncCheckItem[]>;
-  syncExecute: (items: LocalSyncItem[], forceUpdate: boolean) => Promise<{ success?: number; failed?: number }>;
+  syncExecute: (
+    items: LocalSyncItem[],
+    forceUpdate: boolean
+  ) => Promise<{ success?: number; failed?: number }>;
   checkConnection: () => Promise<void>;
   setEditorYaml: (yaml: string) => void;
   setEditingContext: (context: { id: string | null; isLocal: boolean }) => void;

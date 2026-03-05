@@ -16,7 +16,7 @@ export default defineConfig({
     let config = {};
     try {
       config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (e) {
+    } catch (_error) {
       config = {};
     }
     const apiPort = config.API_PORT || process.env.API_PORT || 8080;

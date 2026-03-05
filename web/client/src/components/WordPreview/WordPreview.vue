@@ -100,7 +100,9 @@ const rawData = ref<PreviewYamlData | null>(null);
  * @returns {Object | null} 解析后的数据对象，解析失败返回 null
  * @description 将 YAML 字符串解析为 JavaScript 对象，或返回已解析的对象
  */
-const normalizeYamlData = (maybeYaml: string | PreviewYamlData | null | undefined): PreviewYamlData | null => {
+const normalizeYamlData = (
+  maybeYaml: string | PreviewYamlData | null | undefined
+): PreviewYamlData | null => {
   if (!maybeYaml) return null;
   if (typeof maybeYaml === 'string') {
     try {

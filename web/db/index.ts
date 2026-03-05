@@ -6,7 +6,7 @@
   };
 };
 
-const config = require('../utils/config') as {
+const config = require('../utils/config.ts') as {
   get: <T = unknown>(path: string, defaultValue?: T) => T;
 };
 

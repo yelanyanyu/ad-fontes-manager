@@ -73,7 +73,10 @@ async function insertData(yamlStr: string): Promise<void> {
 
   try {
     const parsed = yaml.load(yamlStr);
-    const data = parsed && typeof parsed === 'object' ? (parsed as WordYamlDocument) : ({} as WordYamlDocument);
+    const data =
+      parsed && typeof parsed === 'object'
+        ? (parsed as WordYamlDocument)
+        : ({} as WordYamlDocument);
     await client.query('BEGIN');
 
     const yieldData = data.yield || {};

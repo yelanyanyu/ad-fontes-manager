@@ -60,7 +60,9 @@ async function init(): Promise<void> {
     await maintenanceClient.connect();
     console.log('Connected to PostgreSQL maintenance database');
 
-    const res = await maintenanceClient.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [dbName]);
+    const res = await maintenanceClient.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [
+      dbName,
+    ]);
     if (res.rows.length === 0) {
       console.log(`Database '${dbName}' does not exist. Creating...`);
       await maintenanceClient.query(`CREATE DATABASE "${dbName}"`);

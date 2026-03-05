@@ -21,7 +21,7 @@ const wordService = require('../services/wordService') as {
   saveWord: (req: Request, yamlStr: string, forceUpdate?: boolean) => Promise<unknown>;
 };
 
-const { asyncHandler, BadRequest } = require('../utils/errors') as {
+const { asyncHandler, BadRequest } = require('../utils/errors.ts') as {
   asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
   BadRequest: (message: string, data?: unknown) => Error;
 };
@@ -140,7 +140,11 @@ router.post(
       throw BadRequest('Items array required');
     }
 
-    const results: { success: number; failed: number; errors: Array<{ id: string; error?: string }> } = {
+    const results: {
+      success: number;
+      failed: number;
+      errors: Array<{ id: string; error?: string }>;
+    } = {
       success: 0,
       failed: 0,
       errors: [],

@@ -2,11 +2,11 @@
   "name": "etymos-manager",
   "version": "1.0.0",
   "description": "Minimalist Etymology Data Manager",
-  "main": "server.js",
+  "main": "server.ts",
   "scripts": {
-    "start": "NODE_ENV=production node server.js",
+    "start": "NODE_ENV=production tsx server.ts",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "node server.js",
+    "dev:server": "tsx server.ts",
     "dev:client": "cd client && npm run dev",
     "build": "cd client && npm run build",
     "type-check": "tsc --noEmit -p tsconfig.json",
@@ -45,6 +45,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.5",
     "prettier": "^3.8.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   }
 }
