@@ -224,7 +224,7 @@ POST /sync/execute
 ### 获取配置
 
 ```http
-GET /config
+GET /api/core/config
 ```
 
 **响应:**
@@ -233,14 +233,17 @@ GET /config
 {
   "API_PORT": 8080,
   "CLIENT_DEV_PORT": 5173,
-  "MAX_LOCAL_ITEMS": 100
+  "MAX_LOCAL_ITEMS": 100,
+  "hasDatabaseUrl": true
 }
 ```
+
+**注意**: 出于安全考虑，此接口不返回完整的数据库连接字符串，仅返回是否已配置数据库连接。
 
 ### 更新配置
 
 ```http
-POST /config
+POST /api/core/config
 ```
 
 **请求头:**
@@ -248,6 +251,10 @@ POST /config
 ```
 X-Admin-Token: <your-admin-token>
 ```
+
+**说明**: 
+- 生产环境必须提供有效的 `X-Admin-Token`
+- 开发环境如果设置了 `ADMIN_TOKEN` 环境变量，也需要验证
 
 **请求体:**
 

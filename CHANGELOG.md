@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-03-05
+
+### ✨ New Features
+
+- **12-Factor 配置系统**: 重构项目配置系统，完全遵循 12-Factor App 原则
+  - 移除 `config.yml` 支持，统一使用环境变量配置
+  - 生产环境禁止 `.env` 文件，强制使用系统环境变量
+  - 添加配置验证和友好的错误提示信息
+
+### 🔧 Improvements
+
+- **日志系统优化**: 替换 console.log 为 wordLogger，统一前端日志输出
+- **错误处理改进**: 统一使用 globalThis.fetch 并改进错误处理逻辑
+- **编辑器优化**: 优化编辑上下文设置逻辑，添加单独设置 YAML 方法
+
+### 🐛 Bug Fixes
+
+- **YAML 验证修复**: 修复 YAML 验证逻辑并添加空输入检查
+- **渲染错误修复**: 修复重复的 div 标签导致渲染错误，兼容 Firefox 与 Chrome 浏览器
+- **覆盖单词修复**: 修复覆盖单词功能失效的问题
+
+### 🏗️ Infrastructure
+
+- **Dockerfile 更新**: 更新 Dockerfile 配置以支持新的 12-Factor 配置系统
+
+---
+
 ## [1.3.0] - 2026-03-05
 
 ### ✨ New Features
