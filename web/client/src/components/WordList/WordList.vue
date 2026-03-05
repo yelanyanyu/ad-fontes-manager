@@ -25,19 +25,19 @@
  * - ConflictModal (冲突解决弹窗组件)
  */
 
-import { ref, computed, onMounted, watch, onActivated } from 'vue';
-import { useWordStore } from '@/stores/wordStore';
-import { storeToRefs } from 'pinia';
+import {ref, computed, onMounted, watch, onActivated} from 'vue';
+import {useWordStore} from '@/stores/wordStore';
+import {storeToRefs} from 'pinia';
 import request from '@/utils/request';
 import yaml from 'js-yaml';
-import { useAppStore } from '@/stores/appStore';
+import {useAppStore} from '@/stores/appStore';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
-import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
-import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search';
+import {deepDiffAdapter, yamlFormatter} from '@/utils/conflict';
+import {normalizeSearchInput, isBlankSearch, filterRecordsBySearch} from '@/utils/search';
 
 const wordStore = useWordStore();
 const appStore = useAppStore();
-const { connectionStatus, dbRecords, localRecords, dbListMeta, loading } = storeToRefs(wordStore);
+const {connectionStatus, dbRecords, localRecords, dbListMeta, loading} = storeToRefs(wordStore);
 
 // 计算属性：后端是否连通
 const isBackendConnected = computed(() => connectionStatus.value === 'connected');
@@ -134,10 +134,10 @@ const syncConflict = ref(null);
 const getDiffBadges = diffs => deepDiffAdapter.getBadges(diffs);
 const getChangedModules = diffs => deepDiffAdapter.getModules(diffs);
 const syncConflictTitle = computed(() =>
-  syncConflict.value ? `Conflict: ${syncConflict.value.lemma || ''}` : 'Conflict'
+    syncConflict.value ? `Conflict: ${syncConflict.value.lemma || ''}` : 'Conflict'
 );
 const searchModeLabel = computed(() =>
-  searchMode.value === 'exact' ? 'Exact Match' : 'Partial Match'
+    searchMode.value === 'exact' ? 'Exact Match' : 'Partial Match'
 );
 
 const toggleMenu = id => {
@@ -154,7 +154,7 @@ const selectedMenuItem = computed(() => {
 });
 
 const openDelete = (id, isLocal) => {
-  pendingDelete.value = { id, isLocal };
+  pendingDelete.value = {id, isLocal};
   showMenuId.value = null;
 };
 
@@ -194,7 +194,7 @@ const formatYamlForEditor = yamlObj => {
 };
 
 const localSyncItems = computed(() => {
-  return (localRecords.value || []).map(r => ({ id: r.id, raw_yaml: r.raw_yaml }));
+  return (localRecords.value || []).map(r => ({id: r.id, raw_yaml: r.raw_yaml}));
 });
 
 /**
@@ -248,7 +248,7 @@ const closeSyncAll = () => {
 };
 
 const setBatchAction = (id, action) => {
-  syncActions.value = { ...syncActions.value, [id]: action };
+  syncActions.value = {...syncActions.value, [id]: action};
 };
 
 const runBatchSyncDirect = async () => {
@@ -271,13 +271,13 @@ const executeBatchSync = async () => {
   const nonConflicts = syncChecks.value.filter(c => c.status !== 'conflict');
 
   const normalItems = nonConflicts
-    .map(c => localSyncItems.value.find(i => i.id === c.id))
-    .filter(Boolean);
+      .map(c => localSyncItems.value.find(i => i.id === c.id))
+      .filter(Boolean);
 
   const forcedItems = conflicts
-    .filter(c => syncActions.value[c.id] === 'overwrite')
-    .map(c => localSyncItems.value.find(i => i.id === c.id))
-    .filter(Boolean);
+      .filter(c => syncActions.value[c.id] === 'overwrite')
+      .map(c => localSyncItems.value.find(i => i.id === c.id))
+      .filter(Boolean);
 
   syncAllLoading.value = true;
   try {
@@ -348,7 +348,7 @@ const editLocalFromSyncConflict = () => {
   if (!syncConflict.value) return;
   if (syncConflict.value.newData) {
     wordStore.setEditorYaml(formatYamlForEditor(syncConflict.value.newData));
-    wordStore.setEditingContext({ id: syncConflict.value.id, isLocal: true });
+    wordStore.setEditingContext({id: syncConflict.value.id, isLocal: true});
   }
   closeSyncConflict();
 };
@@ -357,7 +357,7 @@ const loadDbRecordByLemma = async lemma => {
   if (!lemma) return false;
   try {
     const res = await request.get('/words', {
-      params: { search: String(lemma), page: 1, limit: 20, sort: 'newest' },
+      params: {search: String(lemma), page: 1, limit: 20, sort: 'newest'},
       skipErrorToast: true,
     });
     const items = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
@@ -369,15 +369,16 @@ const loadDbRecordByLemma = async lemma => {
       });
       if (full && full.original_yaml) {
         const obj =
-          typeof full.original_yaml === 'string'
-            ? yaml.load(full.original_yaml)
-            : full.original_yaml;
+            typeof full.original_yaml === 'string'
+                ? yaml.load(full.original_yaml)
+                : full.original_yaml;
         wordStore.setEditorYaml(formatYamlForEditor(obj));
-        wordStore.setEditingContext({ id: match.id, isLocal: false });
+        wordStore.setEditingContext({id: match.id, isLocal: false});
         return true;
       }
     }
-  } catch (e) {}
+  } catch (e) {
+  }
   return false;
 };
 
@@ -396,7 +397,7 @@ const overwriteSyncConflict = async () => {
       const loaded = await loadDbRecordByLemma(lemma);
       if (!loaded && conflict.newData) {
         wordStore.setEditorYaml(formatYamlForEditor(conflict.newData));
-        wordStore.setEditingContext({ id: null, isLocal: false });
+        wordStore.setEditingContext({id: null, isLocal: false});
       }
     } else {
       appStore.addToast('Sync failed', 'error');
@@ -450,38 +451,59 @@ const overwriteSyncConflict = async () => {
  * await loadIntoEditor(conflict.id);
  */
 const loadIntoEditor = async id => {
+  /*
+  获取 item:
+    {
+      id: string,           // 词条唯一标识
+      isLocal: true,        // 标记为本地记录
+      lemma: string,        // 词条词头（从 lemma 或 lemma_preview 获取）
+      original_yaml: string, // YAML 内容（从 original_yaml 或 raw_yaml 获取）
+      raw_yaml: string,     // 原始 YAML 内容
+      // ... 其他原始字段
+    }
+   */
   const item = displayedRecords.value.find(r => r.id === id);
   if (!item) {
     console.warn(`[loadIntoEditor] 未找到 ID 为 ${id} 的词条`);
     return;
   }
 
-  console.log(`[loadIntoEditor] 开始加载词条: ${id}, 来源: ${item.isLocal ? '本地' : '数据库'}`);
+  console.log(`[loadIntoEditor] 开始加载词条: ${item.lemma}, 来源: ${item.isLocal ? '本地' : '数据库'}`);
 
   // 处理本地词条
   if (item.isLocal) {
     try {
       const rawYaml = String(item.raw_yaml || item.original_yaml || '');
+      console.log(`[loadIntoEditor] 本地词条 rawYaml 长度: ${rawYaml.length}`);
       const obj = yaml.load(rawYaml);
-      wordStore.setEditorYaml(formatYamlForEditor(obj));
+      console.log(`[loadIntoEditor] 本地词条解析后 obj:`, obj);
+      const formatted = formatYamlForEditor(obj);
+      console.log(`[loadIntoEditor] 本地词条格式化后长度: ${formatted.length}`);
+      wordStore.setEditorYaml(formatted);
       console.log(`[loadIntoEditor] 本地词条 YAML 解析成功: ${id}`);
     } catch (e) {
       console.warn(`[loadIntoEditor] 本地词条 YAML 解析失败，使用原始文本: ${id}`, e);
-      wordStore.setEditorYaml(String(item.raw_yaml || item.original_yaml || ''));
+      const rawYaml = String(item.raw_yaml || item.original_yaml || '');
+      wordStore.setEditorYaml(rawYaml);
     }
-    wordStore.setEditingContext({ id, isLocal: true });
+    wordStore.setEditingContext({id, isLocal: true});
     console.log(`[loadIntoEditor] 本地词条已加载到编辑器: ${id}`);
     return;
   }
 
   // 处理数据库词条 - 尝试从列表缓存获取
   try {
-    const full = await request.get(`/words/${encodeURIComponent(id)}`, { skipErrorToast: true });
+    // full.lemma, full.original_yaml
+    const full = await request.get(`/words/${encodeURIComponent(id)}`, {skipErrorToast: true});
+    console.log(`[loadIntoEditor] 成功从 API 获取 full: ${full?.lemma}, original_yaml 长度: ${full?.original_yaml?.length}`);
     if (full && full.original_yaml) {
       const obj =
-        typeof full.original_yaml === 'string' ? yaml.load(full.original_yaml) : full.original_yaml;
-      wordStore.setEditorYaml(formatYamlForEditor(obj));
-      wordStore.setEditingContext({ id, isLocal: false });
+          typeof full.original_yaml === 'string' ? yaml.load(full.original_yaml) : full.original_yaml;
+      console.log(`[loadIntoEditor] 数据库词条解析后 obj:`, obj);
+      const formatted = formatYamlForEditor(obj);
+      console.log(`[loadIntoEditor] 数据库词条格式化后长度: ${formatted.length}`);
+      wordStore.setEditorYaml(formatted);
+      wordStore.setEditingContext({id, isLocal: false});
       console.log(`[loadIntoEditor] 数据库词条已加载（从 API）: ${id}`);
       return;
     }
@@ -493,41 +515,41 @@ const loadIntoEditor = async id => {
   if (item.original_yaml) {
     try {
       const obj =
-        typeof item.original_yaml === 'string' ? yaml.load(item.original_yaml) : item.original_yaml;
+          typeof item.original_yaml === 'string' ? yaml.load(item.original_yaml) : item.original_yaml;
       wordStore.setEditorYaml(formatYamlForEditor(obj));
       console.log(`[loadIntoEditor] 数据库词条已加载（从缓存）: ${id}`);
     } catch (e) {
       console.warn(`[loadIntoEditor] 缓存 YAML 解析失败: ${id}`, e);
       const txt =
-        typeof item.original_yaml === 'string'
-          ? item.original_yaml
-          : yaml.dump(item.original_yaml, { lineWidth: -1, noRefs: true });
+          typeof item.original_yaml === 'string'
+              ? item.original_yaml
+              : yaml.dump(item.original_yaml, {lineWidth: -1, noRefs: true});
       wordStore.setEditorYaml(txt);
     }
-    wordStore.setEditingContext({ id, isLocal: false });
+    wordStore.setEditingContext({id, isLocal: false});
     return;
   }
 
   // 最后尝试：再次从 API 获取（带完整错误处理）
   try {
-    const full = await request.get(`/words/${encodeURIComponent(id)}`, { skipErrorToast: true });
+    const full = await request.get(`/words/${encodeURIComponent(id)}`, {skipErrorToast: true});
     if (full && full.original_yaml) {
       try {
         const obj =
-          typeof full.original_yaml === 'string'
-            ? yaml.load(full.original_yaml)
-            : full.original_yaml;
+            typeof full.original_yaml === 'string'
+                ? yaml.load(full.original_yaml)
+                : full.original_yaml;
         wordStore.setEditorYaml(formatYamlForEditor(obj));
         console.log(`[loadIntoEditor] 数据库词条已加载（二次 API 请求）: ${id}`);
       } catch (e) {
         console.warn(`[loadIntoEditor] YAML 解析失败，使用原始文本: ${id}`, e);
         const txt =
-          typeof full.original_yaml === 'string'
-            ? full.original_yaml
-            : yaml.dump(full.original_yaml, { lineWidth: -1, noRefs: true });
+            typeof full.original_yaml === 'string'
+                ? full.original_yaml
+                : yaml.dump(full.original_yaml, {lineWidth: -1, noRefs: true});
         wordStore.setEditorYaml(txt);
       }
-      wordStore.setEditingContext({ id, isLocal: false });
+      wordStore.setEditingContext({id, isLocal: false});
     } else {
       console.error(`[loadIntoEditor] 词条数据为空: ${id}`);
     }
@@ -570,7 +592,7 @@ const handleSearch = async () => {
   if (!canSearch.value) return;
   const normalized = normalizeSearchInput(search.value);
   const searchValue = isBlankSearch(normalized) ? '' : normalized;
-  await wordStore.fetchDbRecords({ search: searchValue, page: 1 });
+  await wordStore.fetchDbRecords({search: searchValue, page: 1});
 };
 
 const handleSearchKeydown = e => {
@@ -594,11 +616,11 @@ const setSearchMode = mode => {
 };
 
 const handleSort = () => {
-  wordStore.fetchDbRecords({ sort: sort.value, page: 1 });
+  wordStore.fetchDbRecords({sort: sort.value, page: 1});
 };
 
 const handlePageSize = () => {
-  wordStore.fetchDbRecords({ limit: pageSize.value, page: 1 });
+  wordStore.fetchDbRecords({limit: pageSize.value, page: 1});
 };
 
 /**
@@ -612,7 +634,7 @@ const handlePageSize = () => {
 const changePage = delta => {
   const newPage = dbListMeta.value.page + delta;
   if (newPage >= 1 && newPage <= dbListMeta.value.totalPages) {
-    wordStore.fetchDbRecords({ page: newPage });
+    wordStore.fetchDbRecords({page: newPage});
   }
 };
 
@@ -626,7 +648,7 @@ const changePage = delta => {
  */
 const goToPage = page => {
   if (page >= 1 && page <= dbListMeta.value.totalPages) {
-    wordStore.fetchDbRecords({ page });
+    wordStore.fetchDbRecords({page});
   }
 };
 
@@ -657,58 +679,58 @@ const refresh = async () => {
 <template>
   <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex-col flex h-full overflow-hidden ml-1">
     <div
-      v-if="searchModeOpen"
-      class="fixed inset-0 z-30"
-      @click="closeSearchMode"
+        v-if="searchModeOpen"
+        class="fixed inset-0 z-30"
+        @click="closeSearchMode"
     />
     <div
-      v-if="showMenuId !== null"
-      class="fixed inset-0 z-30 bg-black/30"
-      @click="showMenuId = null"
+        v-if="showMenuId !== null"
+        class="fixed inset-0 z-30 bg-black/30"
+        @click="showMenuId = null"
     />
     <div
-      v-if="showMenuId !== null"
-      class="fixed inset-0 z-40 flex items-center justify-center p-4"
+        v-if="showMenuId !== null"
+        class="fixed inset-0 z-40 flex items-center justify-center p-4"
     >
       <div class="w-full max-w-sm rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
         <div class="px-4 py-3 border-b border-slate-100 font-bold text-slate-800 flex items-center justify-between">
           <span>More</span>
           <button
-            class="text-slate-400 hover:text-slate-600 transition-colors"
-            @click="showMenuId = null"
+              class="text-slate-400 hover:text-slate-600 transition-colors"
+              @click="showMenuId = null"
           >
-            <i class="fa-solid fa-xmark text-xl" />
+            <i class="fa-solid fa-xmark text-xl"/>
           </button>
         </div>
         <div class="p-2">
           <button
-            v-if="selectedMenuItem?.isLocal"
-            class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
-            @click="syncOne(selectedMenuItem.id)"
+              v-if="selectedMenuItem?.isLocal"
+              class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+              @click="syncOne(selectedMenuItem.id)"
           >
-            <i class="fa-solid fa-cloud-arrow-up w-5 text-center" />
+            <i class="fa-solid fa-cloud-arrow-up w-5 text-center"/>
             <span>Sync</span>
           </button>
           <button
-            class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
-            @click="handleExport"
+              class="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 rounded-lg flex items-center gap-2"
+              @click="handleExport"
           >
-            <i class="fa-solid fa-download w-5 text-center" />
+            <i class="fa-solid fa-download w-5 text-center"/>
             <span>Export</span>
           </button>
           <button
-            class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50 rounded-lg flex items-center gap-2"
-            @click="openDelete(selectedMenuItem.id, selectedMenuItem.isLocal)"
+              class="w-full text-left px-3 py-2 text-sm text-red-700 hover:bg-red-50 rounded-lg flex items-center gap-2"
+              @click="openDelete(selectedMenuItem.id, selectedMenuItem.isLocal)"
           >
-            <i class="fa-solid fa-trash w-5 text-center" />
+            <i class="fa-solid fa-trash w-5 text-center"/>
             <span>Delete</span>
           </button>
         </div>
       </div>
     </div>
     <div
-      v-if="pendingDelete"
-      class="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
+        v-if="pendingDelete"
+        class="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
     >
       <div class="w-full max-w-sm rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
         <div class="px-4 py-3 border-b border-slate-100 font-bold text-slate-800">
@@ -719,14 +741,14 @@ const refresh = async () => {
         </div>
         <div class="px-4 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
           <button
-            class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
-            @click="cancelDelete"
+              class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
+              @click="cancelDelete"
           >
             Cancel
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500 transition-colors"
-            @click="confirmDelete"
+              class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500 transition-colors"
+              @click="confirmDelete"
           >
             Delete
           </button>
@@ -734,28 +756,29 @@ const refresh = async () => {
       </div>
     </div>
     <div
-      v-if="syncAllOpen"
-      class="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
+        v-if="syncAllOpen"
+        class="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4"
     >
       <div class="w-full max-w-3xl rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden">
         <div class="px-4 py-3 border-b border-slate-100 font-bold text-slate-800 flex items-center justify-between">
           <span>Sync All</span>
           <button
-            class="text-slate-400 hover:text-slate-600 transition-colors"
-            @click="closeSyncAll"
+              class="text-slate-400 hover:text-slate-600 transition-colors"
+              @click="closeSyncAll"
           >
-            <i class="fa-solid fa-xmark text-xl" />
+            <i class="fa-solid fa-xmark text-xl"/>
           </button>
         </div>
         <div class="px-4 py-3 text-sm text-slate-600 border-b border-slate-100">
-          Found {{ syncChecks.filter(c => c.status === 'conflict').length }} conflicts among {{ syncChecks.length }} items
+          Found {{ syncChecks.filter(c => c.status === 'conflict').length }} conflicts among {{ syncChecks.length }}
+          items
         </div>
         <div class="max-h-[60vh] overflow-y-auto p-4 space-y-2">
           <div
-            v-for="c in syncChecks"
-            :key="c.id"
-            class="p-3 rounded-lg border flex items-center justify-between gap-3"
-            :class="c.status === 'conflict' ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-200'"
+              v-for="c in syncChecks"
+              :key="c.id"
+              class="p-3 rounded-lg border flex items-center justify-between gap-3"
+              :class="c.status === 'conflict' ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-200'"
           >
             <div class="min-w-0">
               <div class="font-bold text-slate-800 truncate">
@@ -765,47 +788,47 @@ const refresh = async () => {
                 {{ c.status }}
               </div>
               <div
-                v-if="c.status === 'conflict'"
-                class="mt-2 flex flex-wrap gap-1"
+                  v-if="c.status === 'conflict'"
+                  class="mt-2 flex flex-wrap gap-1"
               >
                 <span
-                  v-for="b in getDiffBadges(c.diff)"
-                  :key="b.path"
-                  class="px-2 py-0.5 rounded border text-[10px] font-bold"
-                  :class="b.cls"
+                    v-for="b in getDiffBadges(c.diff)"
+                    :key="b.path"
+                    class="px-2 py-0.5 rounded border text-[10px] font-bold"
+                    :class="b.cls"
                 >{{ b.path }}</span>
               </div>
             </div>
             <div
-              v-if="c.status === 'conflict'"
-              class="flex items-center gap-3 flex-none"
+                v-if="c.status === 'conflict'"
+                class="flex items-center gap-3 flex-none"
             >
               <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
                 <input
-                  type="radio"
-                  :name="`action_${c.id}`"
-                  value="skip"
-                  class="text-primary"
-                  :checked="(syncActions[c.id] || 'skip') === 'skip'"
-                  @change="setBatchAction(c.id, 'skip')"
+                    type="radio"
+                    :name="`action_${c.id}`"
+                    value="skip"
+                    class="text-primary"
+                    :checked="(syncActions[c.id] || 'skip') === 'skip'"
+                    @change="setBatchAction(c.id, 'skip')"
                 >
                 <span>Skip</span>
               </label>
               <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
                 <input
-                  type="radio"
-                  :name="`action_${c.id}`"
-                  value="overwrite"
-                  class="text-red-500 focus:ring-red-500"
-                  :checked="syncActions[c.id] === 'overwrite'"
-                  @change="setBatchAction(c.id, 'overwrite')"
+                    type="radio"
+                    :name="`action_${c.id}`"
+                    value="overwrite"
+                    class="text-red-500 focus:ring-red-500"
+                    :checked="syncActions[c.id] === 'overwrite'"
+                    @change="setBatchAction(c.id, 'overwrite')"
                 >
                 <span>Overwrite</span>
               </label>
             </div>
             <div
-              v-else
-              class="text-xs text-green-700 font-bold flex-none"
+                v-else
+                class="text-xs text-green-700 font-bold flex-none"
             >
               Will Sync
             </div>
@@ -813,15 +836,15 @@ const refresh = async () => {
         </div>
         <div class="px-4 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
           <button
-            class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
-            @click="closeSyncAll"
+              class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
+              @click="closeSyncAll"
           >
             Cancel
           </button>
           <button
-            :disabled="syncAllLoading"
-            class="px-3 py-1.5 rounded-lg bg-primary text-white text-sm hover:bg-blue-600 transition-colors disabled:opacity-60"
-            @click="executeBatchSync"
+              :disabled="syncAllLoading"
+              class="px-3 py-1.5 rounded-lg bg-primary text-white text-sm hover:bg-blue-600 transition-colors disabled:opacity-60"
+              @click="executeBatchSync"
           >
             Sync
           </button>
@@ -829,78 +852,78 @@ const refresh = async () => {
       </div>
     </div>
     <ConflictModal
-      :open="!!syncConflict"
-      :title="syncConflictTitle"
-      :diff="syncConflict?.diff || []"
-      :left-data="syncConflict?.oldData || {}"
-      :right-data="syncConflict?.newData || {}"
-      left-label="DB"
-      right-label="LOCAL"
-      primary-label="Overwrite"
-      secondary-label="Cancel"
-      tertiary-label="Edit Local"
-      :formatter="yamlFormatter"
-      :diff-adapter="deepDiffAdapter"
-      @close="closeSyncConflict"
-      @secondary="closeSyncConflict"
-      @tertiary="editLocalFromSyncConflict"
-      @primary="overwriteSyncConflict"
+        :open="!!syncConflict"
+        :title="syncConflictTitle"
+        :diff="syncConflict?.diff || []"
+        :left-data="syncConflict?.oldData || {}"
+        :right-data="syncConflict?.newData || {}"
+        left-label="DB"
+        right-label="LOCAL"
+        primary-label="Overwrite"
+        secondary-label="Cancel"
+        tertiary-label="Edit Local"
+        :formatter="yamlFormatter"
+        :diff-adapter="deepDiffAdapter"
+        @close="closeSyncConflict"
+        @secondary="closeSyncConflict"
+        @tertiary="editLocalFromSyncConflict"
+        @primary="overwriteSyncConflict"
     />
     <div class="px-4 py-3 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50 flex-none">
       <div class="flex items-center gap-2 w-full">
         <div class="relative w-full">
-          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs" />
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"/>
           <input
-            v-model="search"
-            type="text"
-            placeholder="Search..."
-            class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400" 
-            @keydown="handleSearchKeydown"
+              v-model="search"
+              type="text"
+              placeholder="Search..."
+              class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400"
+              @keydown="handleSearchKeydown"
           >
         </div>
         <div class="relative flex items-stretch">
           <button
-            :disabled="!canSearch"
-            class="min-w-[88px] text-xs bg-primary text-white rounded-l-lg px-3 py-1.5 hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            @click="handleSearch"
+              :disabled="!canSearch"
+              class="min-w-[88px] text-xs bg-primary text-white rounded-l-lg px-3 py-1.5 hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              @click="handleSearch"
           >
             <i
-              v-if="loading"
-              class="fa-solid fa-spinner fa-spin text-xs"
+                v-if="loading"
+                class="fa-solid fa-spinner fa-spin text-xs"
             />
             <span>{{ loading ? 'Searching' : 'Search' }}</span>
           </button>
           <button
-            class="w-10 bg-primary text-white rounded-r-lg border-l border-blue-400/50 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1"
-            :title="searchModeLabel"
-            @click="toggleSearchMode"
+              class="w-10 bg-primary text-white rounded-r-lg border-l border-blue-400/50 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1"
+              :title="searchModeLabel"
+              @click="toggleSearchMode"
           >
-            <i class="fa-solid fa-magnifying-glass text-[11px]" />
+            <i class="fa-solid fa-magnifying-glass text-[11px]"/>
             <span class="text-[10px]">▼</span>
           </button>
           <Transition
-            enter-active-class="transition duration-150 ease-out"
-            enter-from-class="opacity-0 -translate-y-1 scale-95"
-            enter-to-class="opacity-100 translate-y-0 scale-100"
-            leave-active-class="transition duration-100 ease-in"
-            leave-from-class="opacity-100 translate-y-0 scale-100"
-            leave-to-class="opacity-0 -translate-y-1 scale-95"
+              enter-active-class="transition duration-150 ease-out"
+              enter-from-class="opacity-0 -translate-y-1 scale-95"
+              enter-to-class="opacity-100 translate-y-0 scale-100"
+              leave-active-class="transition duration-100 ease-in"
+              leave-from-class="opacity-100 translate-y-0 scale-100"
+              leave-to-class="opacity-0 -translate-y-1 scale-95"
           >
             <div
-              v-if="searchModeOpen"
-              class="absolute right-0 top-full mt-2 z-40 w-44 rounded-lg border border-slate-200 bg-white shadow-lg p-1"
+                v-if="searchModeOpen"
+                class="absolute right-0 top-full mt-2 z-40 w-44 rounded-lg border border-slate-200 bg-white shadow-lg p-1"
             >
               <button
-                class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
-                :class="searchMode === 'partial' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
-                @click="setSearchMode('partial')"
+                  class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
+                  :class="searchMode === 'partial' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
+                  @click="setSearchMode('partial')"
               >
                 Partial Match
               </button>
               <button
-                class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
-                :class="searchMode === 'exact' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
-                @click="setSearchMode('exact')"
+                  class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
+                  :class="searchMode === 'exact' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
+                  @click="setSearchMode('exact')"
               >
                 Exact Match
               </button>
@@ -912,9 +935,9 @@ const refresh = async () => {
       <div class="flex justify-between items-center">
         <div class="flex items-center gap-2">
           <select
-            v-model="sort"
-            class="text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-600 outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
-            @change="handleSort"
+              v-model="sort"
+              class="text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-600 outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
+              @change="handleSort"
           >
             <option value="az">
               A-Z
@@ -932,34 +955,36 @@ const refresh = async () => {
           <div class="flex items-center gap-2 bg-white border border-slate-200 rounded px-2 py-1 shadow-sm">
             <span class="text-[10px] text-slate-400 uppercase font-bold">Size</span>
             <input
-              v-model="pageSize"
-              type="number"
-              min="1"
-              max="500"
-              class="w-10 text-xs bg-transparent outline-none text-center font-medium text-slate-700"
-              @change="handlePageSize"
+                v-model="pageSize"
+                type="number"
+                min="1"
+                max="500"
+                class="w-10 text-xs bg-transparent outline-none text-center font-medium text-slate-700"
+                @change="handlePageSize"
             >
           </div>
           <button
-            v-if="isBackendConnected && localSyncItems.length"
-            :disabled="syncAllLoading"
-            class="text-xs bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-600 hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-60"
-            @click="openSyncAll"
+              v-if="isBackendConnected && localSyncItems.length"
+              :disabled="syncAllLoading"
+              class="text-xs bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-600 hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-60"
+              @click="openSyncAll"
           >
-            <i class="fa-solid fa-cloud-arrow-up" />
+            <i class="fa-solid fa-cloud-arrow-up"/>
             <span>Sync All ({{ localSyncItems.length }})</span>
           </button>
         </div>
         <div class="flex items-center gap-3">
-          <span class="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">{{ totalCount }} words</span>
+          <span class="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">{{
+              totalCount
+            }} words</span>
           <button
-            class="text-slate-400 hover:text-primary transition-colors p-1"
-            title="Reload All"
-            @click="refresh"
+              class="text-slate-400 hover:text-primary transition-colors p-1"
+              title="Reload All"
+              @click="refresh"
           >
             <i
-              class="fa-solid fa-arrows-rotate"
-              :class="{ 'fa-spin': loading }"
+                class="fa-solid fa-arrows-rotate"
+                :class="{ 'fa-spin': loading }"
             />
           </button>
         </div>
@@ -968,122 +993,122 @@ const refresh = async () => {
 
     <div class="flex-1 overflow-y-auto bg-slate-50">
       <div
-        v-if="loading && !displayedRecords.length"
-        class="text-center text-slate-400 py-10 flex flex-col items-center gap-2"
+          v-if="loading && !displayedRecords.length"
+          class="text-center text-slate-400 py-10 flex flex-col items-center gap-2"
       >
-        <i class="fa-solid fa-spinner fa-spin text-2xl" />
+        <i class="fa-solid fa-spinner fa-spin text-2xl"/>
         <span>Loading records...</span>
       </div>
 
       <div
-        v-else
-        <div
-        class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-visible m-4"
+          v-else
+      <div
+          class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-visible m-4"
       >
         <div class="overflow-x-auto">
           <table class="min-w-full">
             <thead class="bg-slate-50">
-              <tr>
-                <th
+            <tr>
+              <th
                   scope="col"
                   class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left w-24"
-                >
-                  Src
-                </th>
-                <th
+              >
+                Src
+              </th>
+              <th
                   scope="col"
                   class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left min-w-[220px]"
-                >
-                  Lemma
-                </th>
-                <th
+              >
+                Lemma
+              </th>
+              <th
                   scope="col"
                   class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right w-[160px]"
-                />
-              </tr>
+              />
+            </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr
+            <tr
                 v-for="item in displayedRecords"
                 :key="item.id"
                 class="hover:bg-slate-50/60"
-              >
-                <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
+            >
+              <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
                   <span
-                    v-if="item.isLocal"
-                    class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-bold"
-                  ><i class="fa-solid fa-laptop" />Local</span>
-                  <span
+                      v-if="item.isLocal"
+                      class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-bold"
+                  ><i class="fa-solid fa-laptop"/>Local</span>
+                <span
                     v-else
                     class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold"
-                  ><i class="fa-solid fa-cloud" />DB</span>
-                </td>
-                <td class="px-4 py-3 text-sm text-slate-700 font-bold text-slate-900">
-                  {{ item.lemma || item.yield?.lemma }}
-                </td>
-                <td class="px-4 py-3 text-sm text-slate-700 text-right">
-                  <div class="flex items-center justify-end gap-2 w-[140px]">
-                    <button
+                ><i class="fa-solid fa-cloud"/>DB</span>
+              </td>
+              <td class="px-4 py-3 text-sm text-slate-700 font-bold text-slate-900">
+                {{ item.lemma || item.yield?.lemma }}
+              </td>
+              <td class="px-4 py-3 text-sm text-slate-700 text-right">
+                <div class="flex items-center justify-end gap-2 w-[140px]">
+                  <button
                       class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
                       @click="handlePreview(item.id)"
-                    >
-                      <i class="fa-solid fa-eye" />
-                    </button>
-                    <button
+                  >
+                    <i class="fa-solid fa-eye"/>
+                  </button>
+                  <button
                       class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
                       @click="handleEdit(item.id)"
-                    >
-                      <i class="fa-solid fa-pen" />
-                    </button>
-                    <button
+                  >
+                    <i class="fa-solid fa-pen"/>
+                  </button>
+                  <button
                       class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
                       @click="toggleMenu(item.id)"
-                    >
-                      <i class="fa-solid fa-ellipsis" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                  >
+                    <i class="fa-solid fa-ellipsis"/>
+                  </button>
+                </div>
+              </td>
+            </tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
     <div
-      <div
-      class="p-3 border-t border-slate-100 bg-white flex justify-between items-center text-xs text-slate-500 flex-none"
+    <div
+        class="p-3 border-t border-slate-100 bg-white flex justify-between items-center text-xs text-slate-500 flex-none"
     >
       <span class="font-medium">Page {{ dbListMeta.page }} of {{ dbListMeta.totalPages }}</span>
       <div class="flex items-center gap-2">
         <button
-          :disabled="dbListMeta.page <= 1"
-          class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-          @click="changePage(-1)"
+            :disabled="dbListMeta.page <= 1"
+            class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+            @click="changePage(-1)"
         >
           Prev
         </button>
         <div class="flex items-center gap-1">
           <button
-            v-for="(p, index) in paginationRange"
-            :key="index"
-            :class="[
+              v-for="(p, index) in paginationRange"
+              :key="index"
+              :class="[
               'px-2.5 py-1 text-xs rounded transition-colors',
-              p === dbListMeta.page 
-                ? 'bg-primary text-white font-bold' 
-                : typeof p === 'number' 
-                  ? 'hover:bg-slate-100 text-slate-600' 
+              p === dbListMeta.page
+                ? 'bg-primary text-white font-bold'
+                : typeof p === 'number'
+                  ? 'hover:bg-slate-100 text-slate-600'
                   : 'text-slate-400 cursor-default'
             ]"
-            :disabled="typeof p !== 'number'"
-            @click="typeof p === 'number' ? goToPage(p) : null"
+              :disabled="typeof p !== 'number'"
+              @click="typeof p === 'number' ? goToPage(p) : null"
           >
             {{ p }}
           </button>
         </div>
         <button
-          :disabled="dbListMeta.page >= dbListMeta.totalPages"
-          class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-          @click="changePage(1)"
+            :disabled="dbListMeta.page >= dbListMeta.totalPages"
+            class="px-3 py-1.5 rounded border border-slate-200 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+            @click="changePage(1)"
         >
           Next
         </button>

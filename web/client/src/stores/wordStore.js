@@ -366,13 +366,33 @@ export const useWordStore = defineStore('word', {
      * @param {Object} context - 编辑器上下文
      * @param {string|number} context.id - 词汇 ID
      * @param {boolean} context.isLocal - 是否为本地草稿
-     * @param {string} context.yaml - YAML 内容
+     * @param {string} [context.yaml] - YAML 内容（可选，不传则保持当前值）
      */
-    setEditingContext({ id = null, isLocal = false, yaml = '' } = {}) {
+    setEditingContext({ id = null, isLocal = false, yaml = undefined } = {}) {
       this.currentEditingId = id;
       this.currentEditingIsLocal = isLocal;
+      // 只有明确传入 yaml 时才更新，避免覆盖已有的编辑器内容
+      if (yaml !== undefined) {
+        this.editorYaml = yaml;
+      }
+      wordLogger.debug('Editing context set', { 
+        id, 
+        isLocal, 
+        yamlLength: this.editorYaml?.length,
+        yamlPreview: this.editorYaml?.substring(0, 50) + '...'
+      });
+    },
+
+    /**
+     * 设置编辑器 YAML 内容
+     * @param {string} yaml - YAML 内容字符串
+     */
+    setEditorYaml(yaml) {
       this.editorYaml = yaml;
-      wordLogger.debug('Editing context set', { id, isLocal, yamlLength: yaml?.length });
+      wordLogger.debug('Editor YAML updated', { 
+        yamlLength: yaml?.length,
+        yamlPreview: yaml?.substring(0, 50) + '...'
+      });
     },
 
     /**
