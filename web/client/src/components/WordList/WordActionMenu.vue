@@ -1,10 +1,17 @@
-<script setup>
-const props = defineProps({
-  open: { type: Boolean, default: false },
-  item: { type: Object, default: null },
-});
+<script setup lang="ts">
+import type { WordRecord } from '@/types/word-list';
 
-const emit = defineEmits(['close', 'sync', 'export', 'delete']);
+const props = defineProps<{
+  open: boolean;
+  item: WordRecord | null;
+}>();
+
+const emit = defineEmits<{
+  (e: 'close'): void;
+  (e: 'sync', id: string): void;
+  (e: 'export'): void;
+  (e: 'delete', id: string, isLocal: boolean): void;
+}>();
 
 const emitSync = () => {
   if (!props.item?.id) return;

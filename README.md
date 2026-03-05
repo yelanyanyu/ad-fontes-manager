@@ -258,6 +258,24 @@ ad-fontes-manager
 - [TypeScript 迁移](./docs/TYPESCRIPT_MIGRATION.md) - TypeScript 迁移指南
 - [编辑器设置](./docs/EDITOR_SETUP.md) - 编辑器配置建议
 
+## TypeScript 检查
+
+项目支持分层 TypeScript 类型检查：
+
+```bash
+# 前端（Vue SFC + TS）
+cd web/client
+npm run type-check
+
+# Web 服务端
+cd ../
+npm run type-check
+
+# Node 工具脚本
+cd ../../node
+npm run type-check
+```
+
 ## 数据库 Schema
 
 ```mermaid

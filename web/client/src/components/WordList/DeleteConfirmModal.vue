@@ -1,9 +1,12 @@
-<script setup>
-defineProps({
-  open: { type: Boolean, default: false },
-});
+<script setup lang="ts">
+defineProps<{
+  open: boolean;
+}>();
 
-const emit = defineEmits(['cancel', 'confirm']);
+const emit = defineEmits<{
+  (e: 'cancel'): void;
+  (e: 'confirm'): void;
+}>();
 </script>
 
 <template>

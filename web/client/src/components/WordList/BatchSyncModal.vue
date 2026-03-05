@@ -1,13 +1,19 @@
-<script setup>
-defineProps({
-  open: { type: Boolean, default: false },
-  loading: { type: Boolean, default: false },
-  checks: { type: Array, default: () => [] },
-  actions: { type: Object, default: () => ({}) },
-  getDiffBadges: { type: Function, required: true },
-});
+<script setup lang="ts">
+import type { DiffBadge, SyncActionMap, SyncCheckItem } from '@/types/word-list';
 
-const emit = defineEmits(['close', 'set-action', 'sync']);
+defineProps<{
+  open: boolean;
+  loading: boolean;
+  checks: SyncCheckItem[];
+  actions: SyncActionMap;
+  getDiffBadges: (diff: unknown[] | undefined) => DiffBadge[];
+}>();
+
+const emit = defineEmits<{
+  (e: 'close'): void;
+  (e: 'set-action', id: string, action: 'skip' | 'overwrite'): void;
+  (e: 'sync'): void;
+}>();
 </script>
 
 <template>

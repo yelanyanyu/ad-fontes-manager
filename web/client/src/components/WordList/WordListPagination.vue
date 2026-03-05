@@ -1,11 +1,15 @@
-<script setup>
-defineProps({
-  page: { type: Number, required: true },
-  totalPages: { type: Number, required: true },
-  paginationRange: { type: Array, default: () => [] },
-});
+<script setup lang="ts">
+defineProps<{
+  page: number;
+  totalPages: number;
+  paginationRange: Array<number | '...'>;
+}>();
 
-const emit = defineEmits(['prev', 'next', 'go-to']);
+const emit = defineEmits<{
+  (e: 'prev'): void;
+  (e: 'next'): void;
+  (e: 'go-to', page: number): void;
+}>();
 </script>
 
 <template>

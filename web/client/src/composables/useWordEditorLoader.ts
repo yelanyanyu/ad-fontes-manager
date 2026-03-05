@@ -1,25 +1,32 @@
+import type { ComputedRef } from 'vue';
 import request from '@/utils/request';
 import yaml from 'js-yaml';
 import { wordLogger } from '@/utils/logger';
+import type { WordRecord } from '@/types/word-list';
 
-/**
- * WordList 编辑器加载逻辑（为 TS 迁移拆出稳定边界）
- * @param {Object} params
- * @param {import('vue').ComputedRef<Array>} params.displayedRecords
- * @param {Object} params.wordStore
- */
-export const useWordEditorLoader = ({ displayedRecords, wordStore }) => {
-  const formatYamlForEditor = yamlObj => {
-    const orderedObj = {};
+interface WordStoreLike {
+  setEditorYaml: (yaml: string) => void;
+  setEditingContext: (context: { id: string | null; isLocal: boolean }) => void;
+}
+
+interface UseWordEditorLoaderParams {
+  displayedRecords: ComputedRef<WordRecord[]>;
+  wordStore: WordStoreLike;
+}
+
+export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEditorLoaderParams) => {
+  const formatYamlForEditor = (yamlObj: unknown): string => {
+    const orderedObj: Record<string, unknown> = {};
     const keyOrder = ['yield', 'etymology', 'cognate_family', 'application', 'nuance'];
+    const source = yamlObj && typeof yamlObj === 'object' ? (yamlObj as Record<string, unknown>) : {};
+
     for (const k of keyOrder) {
-      if (yamlObj && yamlObj[k] !== undefined) orderedObj[k] = yamlObj[k];
+      if (source[k] !== undefined) orderedObj[k] = source[k];
     }
-    if (yamlObj && typeof yamlObj === 'object') {
-      for (const k of Object.keys(yamlObj)) {
-        if (!keyOrder.includes(k)) orderedObj[k] = yamlObj[k];
-      }
+    for (const k of Object.keys(source)) {
+      if (!keyOrder.includes(k)) orderedObj[k] = source[k];
     }
+
     return yaml.dump(orderedObj, {
       lineWidth: -1,
       noRefs: true,
@@ -29,14 +36,18 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }) => {
     });
   };
 
-  const loadDbRecordByLemma = async lemma => {
+  const loadDbRecordByLemma = async (lemma: string | undefined): Promise<boolean> => {
     if (!lemma) return false;
     try {
       const res = await request.get('/words', {
         params: { search: String(lemma), page: 1, limit: 20, sort: 'newest' },
         skipErrorToast: true,
       });
-      const items = Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : [];
+      const items: Array<{ id?: string; lemma?: string; original_yaml?: unknown }> = Array.isArray(res?.items)
+        ? res.items
+        : Array.isArray(res)
+          ? res
+          : [];
       const target = String(lemma).toLowerCase();
       const match = items.find(i => String(i.lemma || '').toLowerCase() === target);
       if (match && match.id) {
@@ -46,8 +57,8 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }) => {
         if (full && full.original_yaml) {
           const obj =
             typeof full.original_yaml === 'string'
-              ? yaml.load(full.original_yaml)
-              : full.original_yaml;
+              ? (yaml.load(full.original_yaml) as unknown)
+              : (full.original_yaml as unknown);
           wordStore.setEditorYaml(formatYamlForEditor(obj));
           wordStore.setEditingContext({ id: match.id, isLocal: false });
           return true;
@@ -59,7 +70,7 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }) => {
     return false;
   };
 
-  const loadIntoEditor = async id => {
+  const loadIntoEditor = async (id: string): Promise<void> => {
     const item = displayedRecords.value.find(r => r.id === id);
     if (!item) {
       wordLogger.warn(`[loadIntoEditor] 未找到 ID 为 ${id} 的词条`);
@@ -98,8 +109,8 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }) => {
       if (full && full.original_yaml) {
         const obj =
           typeof full.original_yaml === 'string'
-            ? yaml.load(full.original_yaml)
-            : full.original_yaml;
+            ? (yaml.load(full.original_yaml) as unknown)
+            : (full.original_yaml as unknown);
         wordLogger.debug('[loadIntoEditor] 数据库词条解析后 obj:', obj);
         const formatted = formatYamlForEditor(obj);
         wordLogger.debug(`[loadIntoEditor] 数据库词条格式化后长度: ${formatted.length}`);
@@ -116,8 +127,8 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }) => {
       try {
         const obj =
           typeof item.original_yaml === 'string'
-            ? yaml.load(item.original_yaml)
-            : item.original_yaml;
+            ? (yaml.load(item.original_yaml) as unknown)
+            : (item.original_yaml as unknown);
         wordStore.setEditorYaml(formatYamlForEditor(obj));
         wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（从缓存）: ${id}`);
       } catch (e) {
@@ -138,8 +149,8 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }) => {
         try {
           const obj =
             typeof full.original_yaml === 'string'
-              ? yaml.load(full.original_yaml)
-              : full.original_yaml;
+              ? (yaml.load(full.original_yaml) as unknown)
+              : (full.original_yaml as unknown);
           wordStore.setEditorYaml(formatYamlForEditor(obj));
           wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（二次 API 请求）: ${id}`);
         } catch (e) {

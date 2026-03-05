@@ -1,17 +1,53 @@
 import { computed, ref } from 'vue';
+import type { ComputedRef, Ref } from 'vue';
+import type {
+  LocalSyncItem,
+  SyncAction,
+  SyncActionMap,
+  SyncCheckItem,
+  SyncConflict,
+} from '@/types/word-list';
 
-/**
- * WordList 同步逻辑（为 TS 迁移拆出稳定边界）
- * @param {Object} params
- * @param {Object} params.wordStore
- * @param {Object} params.appStore
- * @param {import('vue').ComputedRef<boolean>} params.isBackendConnected
- * @param {import('vue').ComputedRef<Array<{id:string,raw_yaml:string}>>} params.localSyncItems
- * @param {() => Promise<void>} params.refresh
- * @param {() => void} params.closeMenu
- * @param {(yamlObj: Object) => string} params.formatYamlForEditor
- * @param {(lemma: string) => Promise<boolean>} params.loadDbRecordByLemma
- */
+interface WordStoreLike {
+  syncCheck: (items: LocalSyncItem[]) => Promise<SyncCheckItem[]>;
+  syncExecute: (items: LocalSyncItem[], forceUpdate: boolean) => Promise<{ success?: number; failed?: number }>;
+  checkConnection: () => Promise<void>;
+  setEditorYaml: (yaml: string) => void;
+  setEditingContext: (context: { id: string | null; isLocal: boolean }) => void;
+}
+
+interface AppStoreLike {
+  addToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
+}
+
+interface UseWordSyncParams {
+  wordStore: WordStoreLike;
+  appStore: AppStoreLike;
+  isBackendConnected: ComputedRef<boolean>;
+  localSyncItems: ComputedRef<LocalSyncItem[]>;
+  refresh: () => Promise<void>;
+  closeMenu: () => void;
+  formatYamlForEditor: (yamlObj: unknown) => string;
+  loadDbRecordByLemma: (lemma: string | undefined) => Promise<boolean>;
+}
+
+interface UseWordSyncResult {
+  syncAllOpen: Ref<boolean>;
+  syncAllLoading: Ref<boolean>;
+  syncChecks: Ref<SyncCheckItem[]>;
+  syncActions: Ref<SyncActionMap>;
+  syncConflict: Ref<SyncConflict | null>;
+  syncConflictTitle: ComputedRef<string>;
+  openSyncAll: () => Promise<void>;
+  closeSyncAll: () => void;
+  setBatchAction: (id: string, action: SyncAction) => void;
+  executeBatchSync: () => Promise<void>;
+  syncOne: (id: string) => Promise<void>;
+  closeSyncConflict: () => void;
+  editLocalFromSyncConflict: () => void;
+  overwriteSyncConflict: () => Promise<void>;
+}
+
 export const useWordSync = ({
   wordStore,
   appStore,
@@ -21,12 +57,12 @@ export const useWordSync = ({
   closeMenu,
   formatYamlForEditor,
   loadDbRecordByLemma,
-}) => {
+}: UseWordSyncParams): UseWordSyncResult => {
   const syncAllOpen = ref(false);
   const syncAllLoading = ref(false);
-  const syncChecks = ref([]);
-  const syncActions = ref({});
-  const syncConflict = ref(null);
+  const syncChecks = ref<SyncCheckItem[]>([]);
+  const syncActions = ref<SyncActionMap>({});
+  const syncConflict = ref<SyncConflict | null>(null);
 
   const syncConflictTitle = computed(() =>
     syncConflict.value ? `Conflict: ${syncConflict.value.lemma || ''}` : 'Conflict'
@@ -42,14 +78,14 @@ export const useWordSync = ({
     syncActions.value = {};
   };
 
-  const setBatchAction = (id, action) => {
+  const setBatchAction = (id: string, action: SyncAction) => {
     syncActions.value = { ...syncActions.value, [id]: action };
   };
 
   const runBatchSyncDirect = async () => {
     const res = await wordStore.syncExecute(localSyncItems.value, false);
-    if (res && (res.success > 0 || res.failed === 0)) {
-      appStore.addToast(`Synced ${res.success} items`, 'success');
+    if (res && (Number(res.success || 0) > 0 || Number(res.failed || 0) === 0)) {
+      appStore.addToast(`Synced ${res.success || 0} items`, 'success');
       await refresh();
     } else {
       appStore.addToast('Sync failed', 'error');
@@ -68,7 +104,7 @@ export const useWordSync = ({
       const checks = await wordStore.syncCheck(localSyncItems.value);
       syncChecks.value = checks || [];
 
-      const nextActions = {};
+      const nextActions: SyncActionMap = {};
       for (const c of syncChecks.value) {
         if (c.status === 'conflict') nextActions[c.id] = 'skip';
       }
@@ -99,12 +135,12 @@ export const useWordSync = ({
 
     const normalItems = nonConflicts
       .map(c => localSyncItems.value.find(i => i.id === c.id))
-      .filter(Boolean);
+      .filter((i): i is LocalSyncItem => !!i);
 
     const forcedItems = conflicts
       .filter(c => syncActions.value[c.id] === 'overwrite')
       .map(c => localSyncItems.value.find(i => i.id === c.id))
-      .filter(Boolean);
+      .filter((i): i is LocalSyncItem => !!i);
 
     syncAllLoading.value = true;
     try {
@@ -121,7 +157,7 @@ export const useWordSync = ({
     }
   };
 
-  const syncOne = async id => {
+  const syncOne = async (id: string) => {
     if (!isBackendConnected.value) {
       appStore.addToast('Backend disconnected', 'warning');
       return;
@@ -135,11 +171,11 @@ export const useWordSync = ({
       const check = Array.isArray(checks) ? checks[0] : null;
       if (!check) return;
       if (check.status === 'conflict') {
-        syncConflict.value = check;
+        syncConflict.value = check as SyncConflict;
         return;
       }
       const res = await wordStore.syncExecute([item], false);
-      if (res && res.success > 0) {
+      if (res && Number(res.success || 0) > 0) {
         appStore.addToast('Synced 1 item', 'success');
         await refresh();
       } else {
@@ -172,10 +208,10 @@ export const useWordSync = ({
     syncAllLoading.value = true;
     try {
       const res = await wordStore.syncExecute([item], true);
-      if (res && res.success > 0) {
+      if (res && Number(res.success || 0) > 0) {
         appStore.addToast('Synced (overwrite)', 'success');
         await refresh();
-        const lemma = conflict.newData?.yield?.lemma;
+        const lemma = (conflict.newData?.yield as { lemma?: string } | undefined)?.lemma;
         const loaded = await loadDbRecordByLemma(lemma);
         if (!loaded && conflict.newData) {
           wordStore.setEditorYaml(formatYamlForEditor(conflict.newData));

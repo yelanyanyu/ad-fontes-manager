@@ -1,31 +1,48 @@
-<script setup>
-defineProps({
-  search: { type: String, default: '' },
-  loading: { type: Boolean, default: false },
-  canSearch: { type: Boolean, default: true },
-  searchMode: { type: String, default: 'partial' },
-  searchModeOpen: { type: Boolean, default: false },
-  searchModeLabel: { type: String, default: 'Partial Match' },
-  sort: { type: String, default: 'newest' },
-  pageSize: { type: Number, default: 20 },
-  isBackendConnected: { type: Boolean, default: false },
-  localSyncCount: { type: Number, default: 0 },
-  totalCount: { type: Number, default: 0 },
-  syncAllLoading: { type: Boolean, default: false },
-});
+<script setup lang="ts">
+import type { SearchMode, SortMode } from '@/types/word-list';
 
-const emit = defineEmits([
-  'update-search',
-  'search',
-  'search-keydown',
-  'toggle-search-mode',
-  'close-search-mode',
-  'set-search-mode',
-  'sort-change',
-  'page-size-change',
-  'open-sync-all',
-  'refresh',
-]);
+defineProps<{
+  search: string;
+  loading: boolean;
+  canSearch: boolean;
+  searchMode: SearchMode;
+  searchModeOpen: boolean;
+  searchModeLabel: string;
+  sort: SortMode;
+  pageSize: number;
+  isBackendConnected: boolean;
+  localSyncCount: number;
+  totalCount: number;
+  syncAllLoading: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: 'update-search', value: string): void;
+  (e: 'search'): void;
+  (e: 'search-keydown', event: KeyboardEvent): void;
+  (e: 'toggle-search-mode'): void;
+  (e: 'close-search-mode'): void;
+  (e: 'set-search-mode', mode: SearchMode): void;
+  (e: 'sort-change', value: string): void;
+  (e: 'page-size-change', value: string): void;
+  (e: 'open-sync-all'): void;
+  (e: 'refresh'): void;
+}>();
+
+const onSearchInput = (event: Event) => {
+  const target = event.target as HTMLInputElement | null;
+  emit('update-search', target?.value ?? '');
+};
+
+const onSortChange = (event: Event) => {
+  const target = event.target as HTMLSelectElement | null;
+  emit('sort-change', target?.value ?? 'newest');
+};
+
+const onPageSizeChange = (event: Event) => {
+  const target = event.target as HTMLInputElement | null;
+  emit('page-size-change', target?.value ?? '');
+};
 </script>
 
 <template>
@@ -44,7 +61,7 @@ const emit = defineEmits([
             type="text"
             placeholder="Search..."
             class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400"
-            @input="emit('update-search', $event.target.value)"
+            @input="onSearchInput"
             @keydown="emit('search-keydown', $event)"
         >
       </div>
@@ -104,7 +121,7 @@ const emit = defineEmits([
         <select
             :value="sort"
             class="text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-600 outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
-            @change="emit('sort-change', $event.target.value)"
+            @change="onSortChange"
         >
           <option value="az">
             A-Z
@@ -127,7 +144,7 @@ const emit = defineEmits([
               min="1"
               max="500"
               class="w-10 text-xs bg-transparent outline-none text-center font-medium text-slate-700"
-              @change="emit('page-size-change', $event.target.value)"
+              @change="onPageSizeChange"
           >
         </div>
         <button

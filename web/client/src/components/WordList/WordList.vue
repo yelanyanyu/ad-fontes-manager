@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * @file WordList.vue
  * @description 词条列表组件
@@ -25,24 +25,61 @@
  * - ConflictModal (冲突解决弹窗组件)
  */
 
-import {ref, computed, onMounted, watch, onActivated} from 'vue';
-import {useWordStore} from '@/stores/wordStore';
-import {storeToRefs} from 'pinia';
-import {useAppStore} from '@/stores/appStore';
+import { ref, computed, onMounted, watch, onActivated } from 'vue';
+import type { Ref } from 'vue';
+import { useWordStore } from '@/stores/wordStore';
+import { storeToRefs } from 'pinia';
+import { useAppStore } from '@/stores/appStore';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
 import WordActionMenu from '@/components/WordList/WordActionMenu.vue';
 import DeleteConfirmModal from '@/components/WordList/DeleteConfirmModal.vue';
 import BatchSyncModal from '@/components/WordList/BatchSyncModal.vue';
 import WordListToolbar from '@/components/WordList/WordListToolbar.vue';
 import WordListPagination from '@/components/WordList/WordListPagination.vue';
-import {deepDiffAdapter, yamlFormatter} from '@/utils/conflict';
-import {normalizeSearchInput, isBlankSearch, filterRecordsBySearch} from '@/utils/search';
-import {useWordEditorLoader} from '@/composables/useWordEditorLoader';
-import {useWordSync} from '@/composables/useWordSync';
+import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
+import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search';
+import { useWordEditorLoader } from '@/composables/useWordEditorLoader';
+import { useWordSync } from '@/composables/useWordSync';
+import type {
+  DbListMeta,
+  DiffBadge,
+  LocalSyncItem,
+  SearchMode,
+  SortMode,
+  WordRecord,
+} from '@/types/word-list';
 
-const wordStore = useWordStore();
-const appStore = useAppStore();
-const {connectionStatus, dbRecords, localRecords, dbListMeta, loading} = storeToRefs(wordStore);
+interface WordStoreLike {
+  connectionStatus: string;
+  dbRecords: WordRecord[];
+  localRecords: WordRecord[];
+  dbListMeta: DbListMeta;
+  loading: boolean;
+  fetchLocalRecords: () => Promise<void>;
+  fetchDbRecords: (params?: Partial<DbListMeta>) => Promise<void>;
+  deleteWord: (id: string, isLocal: boolean) => Promise<void>;
+  syncCheck: (items: LocalSyncItem[]) => Promise<any[]>;
+  syncExecute: (items: LocalSyncItem[], forceUpdate: boolean) => Promise<{ success?: number; failed?: number }>;
+  checkConnection: () => Promise<void>;
+  setEditorYaml: (yaml: string) => void;
+  setEditingContext: (context: { id: string | null; isLocal: boolean }) => void;
+}
+
+interface AppStoreLike {
+  addToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
+}
+
+const wordStore = useWordStore() as unknown as WordStoreLike;
+const appStore = useAppStore() as unknown as AppStoreLike;
+const { connectionStatus, dbRecords, localRecords, dbListMeta, loading } = storeToRefs(
+  wordStore as any
+) as {
+  connectionStatus: Ref<string>;
+  dbRecords: Ref<WordRecord[]>;
+  localRecords: Ref<WordRecord[]>;
+  dbListMeta: Ref<DbListMeta>;
+  loading: Ref<boolean>;
+};
 
 // 计算属性：后端是否连通
 const isBackendConnected = computed(() => connectionStatus.value === 'connected');
@@ -53,7 +90,7 @@ const isBackendConnected = computed(() => connectionStatus.value === 'connected'
  * @default ''
  * @remarks 用户输入的搜索关键词，用于过滤词条列表
  */
-const search = ref('');
+const search = ref<string>('');
 
 /**
  * @description 排序方式
@@ -65,7 +102,7 @@ const search = ref('');
  * - 'newest': 按创建时间降序排列（最新的在前）
  * - 'oldest': 按创建时间升序排列（最旧的在前）
  */
-const sort = ref('newest');
+const sort = ref<SortMode>('newest');
 
 /**
  * @description 每页显示数量
@@ -73,14 +110,14 @@ const sort = ref('newest');
  * @default 20
  * @remarks 控制每页显示的词条数量，范围 1-500
  */
-const pageSize = ref(20);
+const pageSize = ref<number>(20);
 
-const searchMode = ref('partial');
-const searchModeOpen = ref(false);
+const searchMode = ref<SearchMode>('partial');
+const searchModeOpen = ref<boolean>(false);
 const searchModeStorageKey = 'word_search_mode';
 
 // Sync meta from store to local refs if needed, or just use store actions
-watch(dbListMeta, meta => {
+watch(dbListMeta, (meta: DbListMeta) => {
   if (meta.search !== search.value) search.value = meta.search;
   if (meta.sort !== sort.value) sort.value = meta.sort;
   if (meta.limit !== pageSize.value) pageSize.value = meta.limit;
@@ -106,7 +143,7 @@ const totalCount = computed(() => {
  * - 本地记录会标记 isLocal: true
  * - 使用 filterRecordsBySearch 函数根据搜索模式和关键词过滤
  */
-const displayedRecords = computed(() => {
+const displayedRecords = computed<WordRecord[]>(() => {
   const mappedLocal = (localRecords.value || []).map(r => ({
     ...r,
     isLocal: true,
@@ -118,25 +155,29 @@ const displayedRecords = computed(() => {
   return filterRecordsBySearch(merged, search.value, searchMode.value);
 });
 
-const emit = defineEmits(['preview', 'edit']);
+const emit = defineEmits<{
+  (e: 'preview', id: string): void;
+  (e: 'edit', id: string): void;
+}>();
 
-const handlePreview = id => {
+const handlePreview = (id: string): void => {
   emit('preview', id);
 };
 
-const handleEdit = id => {
+const handleEdit = (id: string): void => {
   loadIntoEditor(id);
 };
 
-const showMenuId = ref(null);
-const pendingDelete = ref(null);
+const showMenuId = ref<string | null>(null);
+const pendingDelete = ref<{ id: string; isLocal: boolean } | null>(null);
 
-const getDiffBadges = diffs => deepDiffAdapter.getBadges(diffs);
+const getDiffBadges = (diffs: unknown[] | undefined): DiffBadge[] =>
+  deepDiffAdapter.getBadges(diffs as any) as DiffBadge[];
 const searchModeLabel = computed(() =>
-    searchMode.value === 'exact' ? 'Exact Match' : 'Partial Match'
+  searchMode.value === 'exact' ? 'Exact Match' : 'Partial Match'
 );
 
-const toggleMenu = id => {
+const toggleMenu = (id: string): void => {
   if (showMenuId.value === id) {
     showMenuId.value = null;
   } else {
@@ -144,17 +185,17 @@ const toggleMenu = id => {
   }
 };
 
-const selectedMenuItem = computed(() => {
+const selectedMenuItem = computed<WordRecord | null>(() => {
   if (!showMenuId.value) return null;
   return displayedRecords.value.find(r => r.id === showMenuId.value) || null;
 });
 
-const openDelete = (id, isLocal) => {
-  pendingDelete.value = {id, isLocal};
+const openDelete = (id: string, isLocal: boolean): void => {
+  pendingDelete.value = { id, isLocal };
   showMenuId.value = null;
 };
 
-const cancelDelete = () => {
+const cancelDelete = (): void => {
   pendingDelete.value = null;
 };
 
@@ -164,20 +205,23 @@ const confirmDelete = async () => {
   pendingDelete.value = null;
 };
 
-const handleExport = () => {
+const handleExport = (): void => {
   appStore.addToast('Export feature is not implemented yet.', 'info');
   showMenuId.value = null;
 };
 
-const localSyncItems = computed(() => {
-  return (localRecords.value || []).map(r => ({id: r.id, raw_yaml: r.raw_yaml}));
+const localSyncItems = computed<LocalSyncItem[]>(() => {
+  return (localRecords.value || []).map(r => ({
+    id: String(r.id),
+    raw_yaml: String(r.raw_yaml || ''),
+  }));
 });
 
 const refresh = async () => {
   await Promise.all([wordStore.fetchLocalRecords(), wordStore.fetchDbRecords()]);
 };
 
-const {formatYamlForEditor, loadDbRecordByLemma, loadIntoEditor} = useWordEditorLoader({
+const { formatYamlForEditor, loadDbRecordByLemma, loadIntoEditor } = useWordEditorLoader({
   displayedRecords,
   wordStore,
 });
@@ -247,14 +291,14 @@ const handleSearch = async () => {
   await wordStore.fetchDbRecords({search: searchValue, page: 1});
 };
 
-const handleSearchKeydown = e => {
-  if (e.keyCode === 13) {
+const handleSearchKeydown = (e: KeyboardEvent): void => {
+  if (e.key === 'Enter') {
     e.preventDefault();
     handleSearch();
   }
 };
 
-const updateSearch = value => {
+const updateSearch = (value: string): void => {
   search.value = value;
 };
 
@@ -266,17 +310,19 @@ const closeSearchMode = () => {
   searchModeOpen.value = false;
 };
 
-const setSearchMode = mode => {
+const setSearchMode = (mode: SearchMode): void => {
   searchMode.value = mode;
   searchModeOpen.value = false;
 };
 
-const updateSort = value => {
-  sort.value = value;
+const updateSort = (value: string): void => {
+  if (value === 'az' || value === 'za' || value === 'newest' || value === 'oldest') {
+    sort.value = value;
+  }
   handleSort();
 };
 
-const updatePageSize = value => {
+const updatePageSize = (value: string): void => {
   const next = Number(value);
   pageSize.value = Number.isFinite(next) ? next : pageSize.value;
   handlePageSize();
@@ -298,10 +344,10 @@ const handlePageSize = () => {
  * - 检查新页码是否在有效范围内（1 到 totalPages）
  * - 调用 fetchDbRecords 获取新页面的数据
  */
-const changePage = delta => {
+const changePage = (delta: number): void => {
   const newPage = dbListMeta.value.page + delta;
   if (newPage >= 1 && newPage <= dbListMeta.value.totalPages) {
-    wordStore.fetchDbRecords({page: newPage});
+    wordStore.fetchDbRecords({ page: newPage });
   }
 };
 
@@ -313,17 +359,17 @@ const changePage = delta => {
  * - 检查页码是否在有效范围内
  * - 调用 fetchDbRecords 获取目标页面的数据
  */
-const goToPage = page => {
+const goToPage = (page: number): void => {
   if (page >= 1 && page <= dbListMeta.value.totalPages) {
-    wordStore.fetchDbRecords({page});
+    wordStore.fetchDbRecords({ page });
   }
 };
 
-const paginationRange = computed(() => {
+const paginationRange = computed<Array<number | '...'> >(() => {
   const current = dbListMeta.value.page;
   const total = dbListMeta.value.totalPages;
   const delta = 2;
-  const range = [];
+  const range: Array<number | '...'> = [];
 
   for (let i = Math.max(2, current - delta); i <= Math.min(total - 1, current + delta); i++) {
     range.push(i);
