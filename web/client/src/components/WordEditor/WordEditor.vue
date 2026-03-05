@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * @file WordEditor.vue
  * @description 词条编辑组件，提供 YAML 编辑、验证、保存和冲突处理功能
@@ -24,18 +24,33 @@
  */
 
 import { ref, watch, computed } from 'vue';
+import type { Ref } from 'vue';
 import yaml from 'js-yaml';
 import { useWordStore } from '@/stores/wordStore';
 import { useAppStore } from '@/stores/appStore';
 import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
+import type { ConflictData, EditorStatus, SaveTarget } from '@/types/word-editor';
 
-/** @type {import('@/stores/wordStore').WordStore} 词条状态管理 store */
-const wordStore = useWordStore();
+interface WordStoreLike {
+  editorYaml: string;
+  connectionStatus: string;
+  currentEditingIsLocal: boolean;
+  saveWord: (
+    yamlContent: string,
+    force?: boolean,
+    target?: 'local' | 'db' | 'auto'
+  ) => Promise<boolean | ConflictData>;
+  setEditingContext: (context: { id: string | null; isLocal: boolean }) => void;
+}
 
-/** @type {import('@/stores/appStore').AppStore} 应用状态管理 store */
-const appStore = useAppStore();
+interface AppStoreLike {
+  addToast: (message: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
+}
+
+const wordStore = useWordStore() as unknown as WordStoreLike;
+const appStore = useAppStore() as unknown as AppStoreLike;
 
 /**
  * @description 从 wordStore 解构的响应式引用
@@ -43,14 +58,18 @@ const appStore = useAppStore();
  * @property {Ref<string>} connectionStatus - 连接状态（'connected' | 'disconnected'）
  * @property {Ref<boolean>} currentEditingIsLocal - 当前编辑的是否为本地词条
  */
-const { editorYaml, connectionStatus, currentEditingIsLocal } = storeToRefs(wordStore);
+const { editorYaml, connectionStatus, currentEditingIsLocal } = storeToRefs(wordStore as any) as {
+  editorYaml: Ref<string>;
+  connectionStatus: Ref<string>;
+  currentEditingIsLocal: Ref<boolean>;
+};
 
 /**
  * @description 编辑器中的 YAML 文本内容
  * @type {Ref<string>}
  * @default ''
  */
-const input = ref('');
+const input = ref<string>('');
 
 /**
  * @description YAML 验证状态
@@ -59,7 +78,7 @@ const input = ref('');
  * @value 'Valid YAML' - YAML 格式有效
  * @value 'Invalid YAML' - YAML 格式无效
  */
-const status = ref('');
+const status = ref<EditorStatus>('');
 
 /**
  * @description 冲突数据，用于显示冲突弹窗
@@ -72,7 +91,7 @@ const status = ref('');
  * @property {string} id - 冲突词条的 ID
  * @default null
  */
-const conflictData = ref(null);
+const conflictData = ref<ConflictData | null>(null);
 
 /**
  * @description 保存按钮标签计算属性
@@ -116,7 +135,7 @@ const handleInput = () => {
     return;
   }
   try {
-    const result = yaml.load(input.value);
+    const result = yaml.load(input.value) as Record<string, unknown> | null;
     // 检查是否为对象类型（非 null、非数组、包含 yield 字段）
     if (
       result &&
@@ -128,7 +147,7 @@ const handleInput = () => {
     } else {
       status.value = 'Invalid YAML';
     }
-  } catch (e) {
+  } catch {
     status.value = 'Invalid YAML';
   }
 };
@@ -174,8 +193,8 @@ const save = async () => {
     return;
   }
   const res = await wordStore.saveWord(input.value);
-  if (res && res.status === 'conflict') {
-    conflictData.value = res;
+  if (res && typeof res === 'object' && 'status' in res && res.status === 'conflict') {
+    conflictData.value = res as ConflictData;
   }
 };
 
@@ -197,8 +216,8 @@ const closeConflict = () => {
 const useExisting = () => {
   if (!conflictData.value || !conflictData.value.oldData) return;
   try {
-    input.value = yamlFormatter.format(conflictData.value.oldData);
-  } catch (e) {
+    input.value = yamlFormatter.format(conflictData.value.oldData || {});
+  } catch {
     input.value = yaml.dump(conflictData.value.oldData || {}, { lineWidth: -1, noRefs: true });
   }
   if (conflictData.value.source === 'local' && conflictData.value.id) {
@@ -216,7 +235,7 @@ const useExisting = () => {
  * @returns {Promise<void>}
  */
 const overwrite = async () => {
-  const target =
+  const target: SaveTarget | 'auto' =
     conflictData.value?.source === 'local'
       ? 'local'
       : conflictData.value?.source === 'db'
