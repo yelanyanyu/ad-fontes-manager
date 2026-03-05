@@ -34,6 +34,7 @@ import {useAppStore} from '@/stores/appStore';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
 import {deepDiffAdapter, yamlFormatter} from '@/utils/conflict';
 import {normalizeSearchInput, isBlankSearch, filterRecordsBySearch} from '@/utils/search';
+import {wordLogger} from '@/utils/logger';
 
 const wordStore = useWordStore();
 const appStore = useAppStore();
@@ -464,30 +465,30 @@ const loadIntoEditor = async id => {
    */
   const item = displayedRecords.value.find(r => r.id === id);
   if (!item) {
-    console.warn(`[loadIntoEditor] 未找到 ID 为 ${id} 的词条`);
+    wordLogger.warn(`[loadIntoEditor] 未找到 ID 为 ${id} 的词条`);
     return;
   }
 
-  console.log(`[loadIntoEditor] 开始加载词条: ${item.lemma}, 来源: ${item.isLocal ? '本地' : '数据库'}`);
+  wordLogger.debug(`[loadIntoEditor] 开始加载词条: ${item.lemma}, 来源: ${item.isLocal ? '本地' : '数据库'}`);
 
   // 处理本地词条
   if (item.isLocal) {
     try {
       const rawYaml = String(item.raw_yaml || item.original_yaml || '');
-      console.log(`[loadIntoEditor] 本地词条 rawYaml 长度: ${rawYaml.length}`);
+      wordLogger.debug(`[loadIntoEditor] 本地词条 rawYaml 长度: ${rawYaml.length}`);
       const obj = yaml.load(rawYaml);
-      console.log(`[loadIntoEditor] 本地词条解析后 obj:`, obj);
+      wordLogger.debug(`[loadIntoEditor] 本地词条解析后 obj:`, obj);
       const formatted = formatYamlForEditor(obj);
-      console.log(`[loadIntoEditor] 本地词条格式化后长度: ${formatted.length}`);
+      wordLogger.debug(`[loadIntoEditor] 本地词条格式化后长度: ${formatted.length}`);
       wordStore.setEditorYaml(formatted);
-      console.log(`[loadIntoEditor] 本地词条 YAML 解析成功: ${id}`);
+      wordLogger.debug(`[loadIntoEditor] 本地词条 YAML 解析成功: ${id}`);
     } catch (e) {
-      console.warn(`[loadIntoEditor] 本地词条 YAML 解析失败，使用原始文本: ${id}`, e);
+      wordLogger.warn(`[loadIntoEditor] 本地词条 YAML 解析失败，使用原始文本: ${id}`, e);
       const rawYaml = String(item.raw_yaml || item.original_yaml || '');
       wordStore.setEditorYaml(rawYaml);
     }
     wordStore.setEditingContext({id, isLocal: true});
-    console.log(`[loadIntoEditor] 本地词条已加载到编辑器: ${id}`);
+    wordLogger.debug(`[loadIntoEditor] 本地词条已加载到编辑器: ${id}`);
     return;
   }
 
@@ -495,20 +496,20 @@ const loadIntoEditor = async id => {
   try {
     // full.lemma, full.original_yaml
     const full = await request.get(`/words/${encodeURIComponent(id)}`, {skipErrorToast: true});
-    console.log(`[loadIntoEditor] 成功从 API 获取 full: ${full?.lemma}, original_yaml 长度: ${full?.original_yaml?.length}`);
+    wordLogger.debug(`[loadIntoEditor] 成功从 API 获取 full: ${full?.lemma}, original_yaml 长度: ${full?.original_yaml?.length}`);
     if (full && full.original_yaml) {
       const obj =
           typeof full.original_yaml === 'string' ? yaml.load(full.original_yaml) : full.original_yaml;
-      console.log(`[loadIntoEditor] 数据库词条解析后 obj:`, obj);
+      wordLogger.debug(`[loadIntoEditor] 数据库词条解析后 obj:`, obj);
       const formatted = formatYamlForEditor(obj);
-      console.log(`[loadIntoEditor] 数据库词条格式化后长度: ${formatted.length}`);
+      wordLogger.debug(`[loadIntoEditor] 数据库词条格式化后长度: ${formatted.length}`);
       wordStore.setEditorYaml(formatted);
       wordStore.setEditingContext({id, isLocal: false});
-      console.log(`[loadIntoEditor] 数据库词条已加载（从 API）: ${id}`);
+      wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（从 API）: ${id}`);
       return;
     }
   } catch (e) {
-    console.warn(`[loadIntoEditor] 从 API 获取词条失败: ${id}`, e);
+    wordLogger.warn(`[loadIntoEditor] 从 API 获取词条失败: ${id}`, e);
   }
 
   // 尝试使用列表中的缓存数据
@@ -517,9 +518,9 @@ const loadIntoEditor = async id => {
       const obj =
           typeof item.original_yaml === 'string' ? yaml.load(item.original_yaml) : item.original_yaml;
       wordStore.setEditorYaml(formatYamlForEditor(obj));
-      console.log(`[loadIntoEditor] 数据库词条已加载（从缓存）: ${id}`);
+      wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（从缓存）: ${id}`);
     } catch (e) {
-      console.warn(`[loadIntoEditor] 缓存 YAML 解析失败: ${id}`, e);
+      wordLogger.warn(`[loadIntoEditor] 缓存 YAML 解析失败: ${id}`, e);
       const txt =
           typeof item.original_yaml === 'string'
               ? item.original_yaml
@@ -540,9 +541,9 @@ const loadIntoEditor = async id => {
                 ? yaml.load(full.original_yaml)
                 : full.original_yaml;
         wordStore.setEditorYaml(formatYamlForEditor(obj));
-        console.log(`[loadIntoEditor] 数据库词条已加载（二次 API 请求）: ${id}`);
+        wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（二次 API 请求）: ${id}`);
       } catch (e) {
-        console.warn(`[loadIntoEditor] YAML 解析失败，使用原始文本: ${id}`, e);
+        wordLogger.warn(`[loadIntoEditor] YAML 解析失败，使用原始文本: ${id}`, e);
         const txt =
             typeof full.original_yaml === 'string'
                 ? full.original_yaml
@@ -551,10 +552,10 @@ const loadIntoEditor = async id => {
       }
       wordStore.setEditingContext({id, isLocal: false});
     } else {
-      console.error(`[loadIntoEditor] 词条数据为空: ${id}`);
+      wordLogger.error(`[loadIntoEditor] 词条数据为空: ${id}`);
     }
   } catch (e) {
-    console.error(`[loadIntoEditor] 加载词条失败: ${id}`, e);
+    wordLogger.error(`[loadIntoEditor] 加载词条失败: ${id}`, e);
   }
 };
 
