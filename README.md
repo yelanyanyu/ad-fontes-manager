@@ -31,7 +31,7 @@ cp .env.example .env
 # 编辑 .env 文件设置数据库连接
 
 # 4. 初始化数据库（可选）
-cd node && node init_db.js && cd ..
+cd node && npm run init-db && cd ..
 
 # 5. 启动开发服务器
 npm run dev
@@ -235,14 +235,14 @@ ad-fontes-manager
 │   ├── routes/          # API 路由
 │   ├── services/        # 业务逻辑
 │   ├── utils/           # 工具函数
-│   │   ├── logger.js    # Pino 日志系统
-│   │   └── config.js    # 配置管理
-│   └── server.js        # 后端入口
+│   │   ├── logger.ts    # Pino 日志系统
+│   │   └── config.ts    # 配置管理
+│   └── server.ts        # 后端入口
 ├── docs/                # 文档目录
 ├── node/                # Node.js 工具脚本
-│   ├── init_db.js       # 数据库初始化
-│   ├── loader.js        # YAML 数据导入
-│   └── migrate_v2.js    # 数据库迁移
+│   ├── init_db.ts       # 数据库初始化
+│   ├── loader.ts        # YAML 数据导入
+│   └── migrate_v2.ts    # 数据库迁移
 ├── schema.sql           # 数据库 Schema
 └── README.md            # 本文件
 ```

@@ -191,7 +191,7 @@ watch(() => props.wordId, loadWord);
 watch(mode, renderContent);
 
 onMounted(() => {
-  if (props.wordId) loadWord();
+  if (props.wordId) void loadWord();
 });
 
 const close = (): void => emit('close');
@@ -367,16 +367,14 @@ const copyRichText = (): void => {
 
     <div class="p-8 w-full max-w-5xl mx-auto flex-1">
       <!-- Dynamic Content -->
-      <div
-v-if="loading" class="text-center py-10 flex flex-col items-center gap-2 text-slate-500">
+      <div v-if="loading" class="text-center py-10 flex flex-col items-center gap-2 text-slate-500">
         <i class="fa-solid fa-spinner fa-spin text-2xl" />
         <span>Loading...</span>
       </div>
 
-      <div
-v-else-if="mode === 'card'" class="flex flex-col items-center gap-6">
-        <div
-ref="cardRef" v-html="content" class="w-full" />
+      <div v-else-if="mode === 'card'" class="flex flex-col items-center gap-6">
+        <!-- eslint-disable-next-line vue/no-v-html -->
+        <div ref="cardRef" v-html="content" class="w-full" />
         <div class="flex flex-wrap items-center justify-center gap-3">
           <button
             class="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2"
@@ -389,8 +387,7 @@ ref="cardRef" v-html="content" class="w-full" />
             class="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2"
             @click="copyImageToClipboard"
           >
-            <i
-class="fa-solid fa-image" :class="{ 'fa-spin': generatingImage }" />
+            <i class="fa-solid fa-image" :class="{ 'fa-spin': generatingImage }" />
             <span>{{ generatingImage ? 'Generating...' : 'Copy as Image' }}</span>
           </button>
           <button
@@ -398,15 +395,13 @@ class="fa-solid fa-image" :class="{ 'fa-spin': generatingImage }" />
             class="bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-400 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2"
             @click="downloadCardImage"
           >
-            <i
-class="fa-solid fa-download" :class="{ 'fa-spin': generatingImage }" />
+            <i class="fa-solid fa-download" :class="{ 'fa-spin': generatingImage }" />
             <span>{{ generatingImage ? 'Generating...' : 'Download Image' }}</span>
           </button>
         </div>
       </div>
 
-      <div
-v-else class="flex flex-col gap-8 w-full max-w-4xl mx-auto">
+      <div v-else class="flex flex-col gap-8 w-full max-w-4xl mx-auto">
         <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div
             class="bg-gray-50 border-b border-gray-200 px-4 py-2 flex justify-between items-center"
@@ -421,9 +416,8 @@ v-else class="flex flex-col gap-8 w-full max-w-4xl mx-auto">
               Copy Rich Text
             </button>
           </div>
-          <div id="md-render-target"
-class="p-8 markdown-body" v-html="content"
-/>
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <div id="md-render-target" class="p-8 markdown-body" v-html="content" />
         </div>
         <div
           class="bg-slate-800 rounded-lg shadow-sm border border-slate-700 overflow-hidden text-slate-300"

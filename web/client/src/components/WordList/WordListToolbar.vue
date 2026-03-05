@@ -46,11 +46,7 @@ const onPageSizeChange = (event: Event) => {
 </script>
 
 <template>
-  <div
-    v-if="searchModeOpen"
-    class="fixed inset-0 z-30"
-    @click="emit('close-search-mode')"
-  />
+  <div v-if="searchModeOpen" class="fixed inset-0 z-30" @click="emit('close-search-mode')" />
 
   <div class="px-4 py-3 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50 flex-none">
     <div class="flex items-center gap-2 w-full">
@@ -65,7 +61,7 @@ const onPageSizeChange = (event: Event) => {
           class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400"
           @input="onSearchInput"
           @keydown="emit('search-keydown', $event)"
-        >
+        />
       </div>
       <div class="relative flex items-stretch">
         <button
@@ -73,10 +69,7 @@ const onPageSizeChange = (event: Event) => {
           class="min-w-[88px] text-xs bg-primary text-white rounded-l-lg px-3 py-1.5 hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           @click="emit('search')"
         >
-          <i
-            v-if="loading"
-            class="fa-solid fa-spinner fa-spin text-xs"
-          />
+          <i v-if="loading" class="fa-solid fa-spinner fa-spin text-xs" />
           <span>{{ loading ? 'Searching' : 'Search' }}</span>
         </button>
         <button
@@ -101,14 +94,22 @@ const onPageSizeChange = (event: Event) => {
           >
             <button
               class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
-              :class="searchMode === 'partial' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
+              :class="
+                searchMode === 'partial'
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-50'
+              "
               @click="emit('set-search-mode', 'partial')"
             >
               Partial Match
             </button>
             <button
               class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
-              :class="searchMode === 'exact' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
+              :class="
+                searchMode === 'exact'
+                  ? 'bg-blue-50 text-blue-700'
+                  : 'text-slate-600 hover:bg-slate-50'
+              "
               @click="emit('set-search-mode', 'exact')"
             >
               Exact Match
@@ -125,18 +126,10 @@ const onPageSizeChange = (event: Event) => {
           class="text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-600 outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
           @change="onSortChange"
         >
-          <option value="az">
-            A-Z
-          </option>
-          <option value="za">
-            Z-A
-          </option>
-          <option value="newest">
-            Newest
-          </option>
-          <option value="oldest">
-            Oldest
-          </option>
+          <option value="az">A-Z</option>
+          <option value="za">Z-A</option>
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
         </select>
         <div
           class="flex items-center gap-2 bg-white border border-slate-200 rounded px-2 py-1 shadow-sm"
@@ -149,7 +142,7 @@ const onPageSizeChange = (event: Event) => {
             max="500"
             class="w-10 text-xs bg-transparent outline-none text-center font-medium text-slate-700"
             @change="onPageSizeChange"
-          >
+          />
         </div>
         <button
           v-if="isBackendConnected && localSyncCount"
@@ -172,10 +165,7 @@ const onPageSizeChange = (event: Event) => {
           title="Reload All"
           @click="emit('refresh')"
         >
-          <i
-            class="fa-solid fa-arrows-rotate"
-            :class="{ 'fa-spin': loading }"
-          />
+          <i class="fa-solid fa-arrows-rotate" :class="{ 'fa-spin': loading }" />
         </button>
       </div>
     </div>

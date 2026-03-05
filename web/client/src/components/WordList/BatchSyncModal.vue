@@ -59,7 +59,8 @@ const emit = defineEmits<{
                 :key="b.path"
                 class="px-2 py-0.5 rounded border text-[10px] font-bold"
                 :class="b.cls"
-              >{{ b.path }}</span>
+                >{{ b.path }}</span
+              >
             </div>
           </div>
           <div v-if="c.status === 'conflict'" class="flex items-center gap-3 flex-none">
@@ -71,7 +72,7 @@ const emit = defineEmits<{
                 class="text-primary"
                 :checked="(actions[c.id] || 'skip') === 'skip'"
                 @change="emit('set-action', c.id, 'skip')"
-              >
+              />
               <span>Skip</span>
             </label>
             <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
@@ -82,15 +83,11 @@ const emit = defineEmits<{
                 class="text-red-500 focus:ring-red-500"
                 :checked="actions[c.id] === 'overwrite'"
                 @change="emit('set-action', c.id, 'overwrite')"
-              >
+              />
               <span>Overwrite</span>
             </label>
           </div>
-          <div v-else
-class="text-xs text-green-700 font-bold flex-none"
->
-Will Sync
-</div>
+          <div v-else class="text-xs text-green-700 font-bold flex-none">Will Sync</div>
         </div>
       </div>
       <div class="px-4 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">

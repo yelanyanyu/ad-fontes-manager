@@ -78,14 +78,6 @@ export default [
     },
   },
   {
-    ignores: [
-      'node_modules/**',
-      'dist/**',
-      'build/**',
-      'coverage/**',
-      'loader.js',
-      'init_db.js',
-      'migrate_v2.js',
-    ],
+    ignores: ['node_modules/**', 'dist/**', 'build/**', 'coverage/**'],
   },
 ];

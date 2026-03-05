@@ -125,9 +125,7 @@ const format = val => {
         </button>
       </div>
 
-      <div
-v-if="subtitle" class="px-4 py-2 text-sm text-slate-600 border-b border-slate-100"
->
+      <div v-if="subtitle" class="px-4 py-2 text-sm text-slate-600 border-b border-slate-100">
         {{ subtitle }}
       </div>
 
@@ -141,10 +139,9 @@ v-if="subtitle" class="px-4 py-2 text-sm text-slate-600 border-b border-slate-10
             v-for="m in modules"
             :key="m"
             class="px-2 py-0.5 rounded border bg-slate-50 text-slate-700 border-slate-200 text-xs font-bold"
-          >{{ m }}</span>
-          <span
-v-if="!modules.length" class="text-slate-400 text-xs"
->No module detail</span>
+            >{{ m }}</span
+          >
+          <span v-if="!modules.length" class="text-slate-400 text-xs">No module detail</span>
         </div>
         <div class="mt-2 flex flex-wrap gap-1">
           <span
@@ -152,7 +149,8 @@ v-if="!modules.length" class="text-slate-400 text-xs"
             :key="b.path"
             class="px-2 py-0.5 rounded border text-[10px] font-bold"
             :class="b.cls"
-          >{{ b.path }}</span>
+            >{{ b.path }}</span
+          >
         </div>
       </div>
 

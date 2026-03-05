@@ -76,17 +76,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main
-ref="container" class="absolute inset-0 flex flex-row p-4 gap-0 h-full">
+  <main ref="container" class="absolute inset-0 flex flex-row p-4 gap-0 h-full">
     <!-- Left: Editor -->
-    <div
-ref="leftPanel" class="flex flex-col h-full min-w-[300px]" style="width: 45%">
+    <div ref="leftPanel" class="flex flex-col h-full min-w-[300px]" style="width: 45%">
       <WordEditor />
     </div>
 
     <!-- Resizer -->
-    <div
-ref="dragHandle" class="resizer z-20" />
+    <div ref="dragHandle" class="resizer z-20" />
 
     <!-- Right: List -->
     <div class="flex-1 flex flex-col h-full min-w-[350px] min-h-0">
@@ -94,7 +91,6 @@ ref="dragHandle" class="resizer z-20" />
     </div>
 
     <!-- Preview Overlay -->
-    <WordPreview
-v-if="previewId" :word-id="previewId" @close="closePreview" />
+    <WordPreview v-if="previewId" :word-id="previewId" @close="closePreview" />
   </main>
 </template>

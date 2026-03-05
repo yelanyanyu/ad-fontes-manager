@@ -72,24 +72,24 @@ web/client/
 │   │   └── ui/          # 通用 UI 组件 (Modal, Toast)
 │   ├── router/          # 路由配置
 │   ├── stores/          # Pinia 状态管理
-│   │   ├── appStore.js  # 应用级状态 (Sidebar, Toasts)
-│   │   └── wordStore.js # 核心业务状态 (数据加载, 同步)
+│   │   ├── appStore.ts  # 应用级状态 (Sidebar, Toasts)
+│   │   └── wordStore.ts # 核心业务状态 (数据加载, 同步)
 │   ├── utils/           # 工具函数
-│   │   ├── request.js   # Axios 封装 (拦截器, 错误处理)
-│   │   ├── generator.js # Markdown/HTML 生成器
-│   │   └── conflict.js  # 数据冲突检测算法
+│   │   ├── request.ts   # Axios 封装 (拦截器, 错误处理)
+│   │   ├── generator.ts # Markdown/HTML 生成器
+│   │   └── conflict.ts  # 数据冲突检测算法
 │   ├── views/           # 页面视图 (Home, Editor, Settings)
 │   ├── App.vue          # 根组件
-│   └── main.js          # 应用入口
-├── vite.config.js       # Vite 配置 (代理, 别名)
-└── tailwind.config.js   # Tailwind 主题配置
+│   └── main.ts          # 应用入口
+├── vite.config.ts       # Vite 配置 (代理, 别名)
+└── tailwind.config.ts   # Tailwind 主题配置
 ```
 
 ## 💻 核心开发工作流
 
 ### 1. 添加新页面/组件
 *   在 `src/views` 创建页面组件。
-*   在 `src/router/index.js` 注册路由。
+*   在 `src/router/index.ts` 注册路由。
 *   通用 UI 组件放在 `src/components/ui`。
 
 ### 2. 调用 API
@@ -106,7 +106,7 @@ await request.post('/words', { yaml: content })
 ```
 
 ### 3. 状态管理 (Pinia)
-业务逻辑主要集中在 `stores/wordStore.js`。
+业务逻辑主要集中在 `stores/wordStore.ts`。
 
 ```javascript
 import { useWordStore } from '@/stores/wordStore'
@@ -121,7 +121,7 @@ console.log(store.dbRecords)
 
 ## ⚙️ 配置说明
 
-### 代理配置 (`vite.config.js`)
+### 代理配置 (`vite.config.ts`)
 开发环境下的 API 代理配置位于 `server.proxy`。它会自动尝试读取父目录的 `web/config.json` 或环境变量来确定后端端口。
 
 ```javascript
@@ -130,7 +130,7 @@ const apiPort = config.API_PORT || process.env.API_PORT || 3000
 // 代理 /api -> http://localhost:3000
 ```
 
-### 样式配置 (`tailwind.config.js`)
+### 样式配置 (`tailwind.config.ts`)
 可以在此文件中扩展 Tailwind 的主题颜色、字体等。
 
 ## ❓ 故障排除
@@ -145,7 +145,7 @@ const apiPort = config.API_PORT || process.env.API_PORT || 3000
 
 **Q: 样式未生效？**
 *   确保 `npm run dev` 正在运行，Tailwind 需要实时编译。
-*   检查组件是否包含在 `tailwind.config.js` 的 `content` 配置中。
+*   检查组件是否包含在 `tailwind.config.ts` 的 `content` 配置中。
 
 ## 📚 后续步骤
 

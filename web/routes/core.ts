@@ -3,7 +3,7 @@
 const express = require('express') as typeof import('express');
 const router = express.Router();
 
-const localStore = require('../localStore') as {
+const localStore = require('../localStore.ts') as {
   saveConfig: (config: Record<string, unknown>) => void;
   getConfig: () => Record<string, unknown>;
 };

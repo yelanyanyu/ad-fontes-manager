@@ -261,8 +261,8 @@ export const useWordStore = defineStore('word', {
             status: res.status,
           });
           appStore.addToast(`Word "${res.lemma}" saved!`, 'success');
-          this.fetchLocalRecords();
-          this.fetchDbRecords();
+          void this.fetchLocalRecords();
+          void this.fetchDbRecords();
           this.setEditingContext({ id: null, isLocal: false });
           return true;
         }
@@ -312,8 +312,8 @@ export const useWordStore = defineStore('word', {
           lemma,
         });
         appStore.addToast('Deleted successfully', 'success');
-        if (isLocal) this.fetchLocalRecords();
-        else this.fetchDbRecords();
+        if (isLocal) void this.fetchLocalRecords();
+        else void this.fetchDbRecords();
       } catch (e) {
         wordLogger.error('Delete word failed', {
           id,

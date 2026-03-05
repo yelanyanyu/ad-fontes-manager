@@ -73,8 +73,7 @@ const remove = id => {
         }"
       >
         <div class="flex-shrink-0 pt-0.5">
-          <i
-v-if="toast.type === 'success'" class="fa-solid fa-check-circle text-green-500" />
+          <i v-if="toast.type === 'success'" class="fa-solid fa-check-circle text-green-500" />
           <i
             v-else-if="toast.type === 'error'"
             class="fa-solid fa-circle-exclamation text-red-500"
@@ -83,8 +82,7 @@ v-if="toast.type === 'success'" class="fa-solid fa-check-circle text-green-500" 
             v-else-if="toast.type === 'warning'"
             class="fa-solid fa-triangle-exclamation text-yellow-500"
           />
-          <i
-v-else class="fa-solid fa-circle-info text-blue-500" />
+          <i v-else class="fa-solid fa-circle-info text-blue-500" />
         </div>
         <div class="flex-1 text-sm text-slate-700 font-medium break-words">
           {{ toast.message }}

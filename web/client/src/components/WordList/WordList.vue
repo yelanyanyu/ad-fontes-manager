@@ -168,7 +168,7 @@ const handlePreview = (id: string): void => {
 };
 
 const handleEdit = (id: string): void => {
-  loadIntoEditor(id);
+  void loadIntoEditor(id);
 };
 
 const showMenuId = ref<string | null>(null);
@@ -262,11 +262,11 @@ onMounted(() => {
   if (storedMode === 'exact' || storedMode === 'partial') {
     searchMode.value = storedMode;
   }
-  refresh();
+  void refresh();
 });
 
 onActivated(() => {
-  refresh();
+  void refresh();
 });
 watch(searchMode, value => {
   localStorage.setItem(searchModeStorageKey, value);
@@ -297,7 +297,7 @@ const handleSearch = async () => {
 const handleSearchKeydown = (e: KeyboardEvent): void => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    handleSearch();
+    void handleSearch();
   }
 };
 
@@ -332,11 +332,11 @@ const updatePageSize = (value: string): void => {
 };
 
 const handleSort = () => {
-  wordStore.fetchDbRecords({ sort: sort.value, page: 1 });
+  void wordStore.fetchDbRecords({ sort: sort.value, page: 1 });
 };
 
 const handlePageSize = () => {
-  wordStore.fetchDbRecords({ limit: pageSize.value, page: 1 });
+  void wordStore.fetchDbRecords({ limit: pageSize.value, page: 1 });
 };
 
 /**
@@ -350,7 +350,7 @@ const handlePageSize = () => {
 const changePage = (delta: number): void => {
   const newPage = dbListMeta.value.page + delta;
   if (newPage >= 1 && newPage <= dbListMeta.value.totalPages) {
-    wordStore.fetchDbRecords({ page: newPage });
+    void wordStore.fetchDbRecords({ page: newPage });
   }
 };
 
@@ -364,7 +364,7 @@ const changePage = (delta: number): void => {
  */
 const goToPage = (page: number): void => {
   if (page >= 1 && page <= dbListMeta.value.totalPages) {
-    wordStore.fetchDbRecords({ page });
+    void wordStore.fetchDbRecords({ page });
   }
 };
 
@@ -490,15 +490,13 @@ const paginationRange = computed<Array<number | '...'>>(() => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr
-v-for="item in displayedRecords" :key="item.id"
-class="hover:bg-slate-50/60"
->
+              <tr v-for="item in displayedRecords" :key="item.id" class="hover:bg-slate-50/60">
                 <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
                   <span
                     v-if="item.isLocal"
                     class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-bold"
-                  ><i class="fa-solid fa-laptop" />Local</span>
+                    ><i class="fa-solid fa-laptop" />Local</span
+                  >
                   <span
                     v-else
                     class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold"

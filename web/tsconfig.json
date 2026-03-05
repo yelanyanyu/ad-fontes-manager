@@ -10,11 +10,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "allowJs": true,
-    "checkJs": false,
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["**/*.ts", "**/*.js"],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules", "dist", "client"]
 }

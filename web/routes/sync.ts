@@ -3,7 +3,7 @@
 const express = require('express') as typeof import('express');
 const router = express.Router();
 
-const localStore = require('../localStore') as {
+const localStore = require('../localStore.ts') as {
   getAll: () => Array<Record<string, any>>;
   findByLemma: (lemma: string) => Record<string, any> | null;
   save: (yaml: string, id?: string) => string;

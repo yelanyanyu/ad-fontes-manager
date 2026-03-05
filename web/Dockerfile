@@ -28,13 +28,13 @@ RUN addgroup -g 1001 -S appgroup && \
 
 WORKDIR /app
 
-# Install only production dependencies for backend
+# Install backend production dependencies
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copy backend source code
-COPY server.js .
-COPY localStore.js .
+COPY server.ts .
+COPY localStore.ts .
 COPY db ./db
 COPY routes ./routes
 COPY controllers ./controllers
@@ -61,4 +61,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:8080/api/core/health || exit 1
 
-CMD ["node", "server.js"]
+CMD ["npm", "run", "start"]
