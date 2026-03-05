@@ -2,7 +2,9 @@
 
 > 词源数据管理器 - Ad Fontes 英语学习生态系统的核心数据管理组件
 
-Ad Fontes Manager 是一个全栈 Web 应用，专为管理、可视化和存储词源数据而设计。支持离线优先、冲突同步和精美卡片预览。
+Ad Fontes Manager 是一个全栈 Web 应用，专为管理、可视化和存储词源数据而设计。支持离线优先、冲突同步和精美卡片预览。卡片预览如下所示：
+<img width="1920" height="5354" alt="fdea07d995293bbd82b7c7a158213ae4" src="https://github.com/user-attachments/assets/b9212257-b347-4cbf-8e7a-248640883e02" />
+
 
 ## 快速开始
 
