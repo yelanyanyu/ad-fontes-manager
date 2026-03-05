@@ -4,6 +4,14 @@ import prettierPlugin from 'eslint-plugin-prettier';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 
+const tsconfigRootDir = process.cwd();
+
+const typedLintRules = {
+  '@typescript-eslint/await-thenable': 'error',
+  '@typescript-eslint/no-floating-promises': 'error',
+  '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: false }],
+};
+
 export default [
   js.configs.recommended,
   prettier,
@@ -44,11 +52,18 @@ export default [
   },
   {
     files: ['**/*.ts', '**/*.mts', '**/*.cts'],
+    languageOptions: {
+      parserOptions: {
+        project: ['./tsconfig.json'],
+        tsconfigRootDir,
+      },
+    },
     plugins: {
       '@typescript-eslint': tsPlugin,
     },
     rules: {
       ...tsPlugin.configs.recommended.rules,
+      ...typedLintRules,
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
         'error',
