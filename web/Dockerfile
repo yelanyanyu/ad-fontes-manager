@@ -20,6 +20,9 @@ RUN npm run build
 FROM node:22-alpine
 WORKDIR /app
 
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
 # Install only production dependencies for backend
 COPY package*.json ./
 RUN npm install --omit=dev

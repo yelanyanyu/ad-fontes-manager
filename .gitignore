@@ -38,6 +38,11 @@ Desktop.ini
 web/data/local_words.json
 web/config.json
 
+# Configuration files (contain sensitive data)
+config.yml
+config.yml.template
+.env.production
+
 # Temporary files
 *.tmp
 *.temp

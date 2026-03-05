@@ -1,4 +1,30 @@
 <script setup>
+/**
+ * @file WordList.vue
+ * @description 词条列表组件
+ *
+ * @component WordList
+ * @description 提供词条列表展示、搜索、排序、分页和同步功能的综合组件
+ *
+ * @author Ad Fontes Team
+ *
+ * @features
+ * - 列表展示：支持本地和数据库词条的统一展示
+ * - 搜索功能：支持部分匹配和精确匹配两种搜索模式
+ * - 排序功能：支持按字母顺序(A-Z/Z-A)和时间顺序(最新/最旧)排序
+ * - 分页功能：支持自定义每页显示数量和页码跳转
+ * - 同步功能：支持单个词条同步和批量同步，包含冲突检测和解决机制
+ *
+ * @dependencies
+ * - Vue 3 (ref, computed, onMounted, watch, onActivated)
+ * - Pinia (useWordStore, useAppStore, storeToRefs)
+ * - js-yaml (YAML 解析和格式化)
+ * - @/utils/request (HTTP 请求工具)
+ * - @/utils/conflict (冲突检测和格式化工具)
+ * - @/utils/search (搜索工具函数)
+ * - ConflictModal (冲突解决弹窗组件)
+ */
+
 import { ref, computed, onMounted, watch, onActivated } from 'vue';
 import { useWordStore } from '@/stores/wordStore';
 import { storeToRefs } from 'pinia';
@@ -16,9 +42,34 @@ const { connectionStatus, dbRecords, localRecords, dbListMeta, loading } = store
 // 计算属性：后端是否连通
 const isBackendConnected = computed(() => connectionStatus.value === 'connected');
 
+/**
+ * @description 搜索关键词
+ * @type {Ref<string>}
+ * @default ''
+ * @remarks 用户输入的搜索关键词，用于过滤词条列表
+ */
 const search = ref('');
+
+/**
+ * @description 排序方式
+ * @type {Ref<'az' | 'za' | 'newest' | 'oldest'>}
+ * @default 'newest'
+ * @remarks 控制词条列表的排序方式：
+ * - 'az': 按词条字母升序排列
+ * - 'za': 按词条字母降序排列
+ * - 'newest': 按创建时间降序排列（最新的在前）
+ * - 'oldest': 按创建时间升序排列（最旧的在前）
+ */
 const sort = ref('newest');
+
+/**
+ * @description 每页显示数量
+ * @type {Ref<number>}
+ * @default 20
+ * @remarks 控制每页显示的词条数量，范围 1-500
+ */
 const pageSize = ref(20);
+
 const searchMode = ref('partial');
 const searchModeOpen = ref(false);
 const searchModeStorageKey = 'word_search_mode';
@@ -30,10 +81,26 @@ watch(dbListMeta, meta => {
   if (meta.limit !== pageSize.value) pageSize.value = meta.limit;
 });
 
+/**
+ * @description 总记录数
+ * @type {ComputedRef<number>}
+ * @returns {number} 词条总数量
+ * @remarks 根据连接状态返回不同来源的总数：
+ * - 后端连接正常时：返回数据库中的总记录数
+ * - 后端断开时：返回本地记录数量
+ */
 const totalCount = computed(() => {
   return isBackendConnected.value ? dbListMeta.value.total || 0 : localRecords.value.length;
 });
 
+/**
+ * @description 过滤后的显示记录
+ * @type {ComputedRef<Array>}
+ * @returns {Array} 经过搜索过滤后的词条列表
+ * @remarks 合并本地记录和数据库记录，并根据搜索关键词进行过滤：
+ * - 本地记录会标记 isLocal: true
+ * - 使用 filterRecordsBySearch 函数根据搜索模式和关键词过滤
+ */
 const displayedRecords = computed(() => {
   const mappedLocal = (localRecords.value || []).map(r => ({
     ...r,
@@ -130,6 +197,18 @@ const localSyncItems = computed(() => {
   return (localRecords.value || []).map(r => ({ id: r.id, raw_yaml: r.raw_yaml }));
 });
 
+/**
+ * @description 打开批量同步对话框
+ * @async
+ * @function openSyncAll
+ * @returns {Promise<void>}
+ * @remarks 执行批量同步前的检查和准备：
+ * 1. 检查后端连接状态
+ * 2. 执行同步预检查（syncCheck）
+ * 3. 如果没有冲突，直接执行同步
+ * 4. 如果有冲突，显示冲突解决对话框
+ * @throws 当同步检查失败时显示错误提示
+ */
 const openSyncAll = async () => {
   if (!isBackendConnected.value) {
     appStore.addToast('Backend disconnected', 'warning');
@@ -215,6 +294,19 @@ const executeBatchSync = async () => {
   }
 };
 
+/**
+ * @description 同步单个词条
+ * @async
+ * @function syncOne
+ * @param {string} id - 要同步的词条ID
+ * @returns {Promise<void>}
+ * @remarks 执行单个词条的同步操作：
+ * 1. 检查后端连接状态
+ * 2. 执行同步预检查
+ * 3. 如果检测到冲突，显示冲突解决弹窗
+ * 4. 如果没有冲突，直接执行同步
+ * @throws 当同步失败时显示错误提示
+ */
 const syncOne = async id => {
   if (!isBackendConnected.value) {
     appStore.addToast('Backend disconnected', 'warning');
@@ -318,21 +410,71 @@ const overwriteSyncConflict = async () => {
   }
 };
 
+/**
+ * 将指定词条加载到编辑器中
+ *
+ * @description
+ * 根据词条 ID 查找并加载词条数据到 YAML 编辑器。
+ * 支持本地词条和数据库词条两种来源，会自动处理 YAML 解析和格式化。
+ *
+ * **调用关系：**
+ * - **被调用：**
+ *   - `handleEdit()` - 用户点击编辑按钮时调用
+ *   - `overwriteSyncConflict()` - 同步冲突解决后加载数据库版本
+ * - **调用：**
+ *   - `wordStore.setEditorYaml()` - 设置编辑器内容
+ *   - `wordStore.setEditingContext()` - 设置编辑上下文（ID 和来源）
+ *   - `request.get()` - 从数据库获取完整词条数据
+ *   - `yaml.load()` - 解析 YAML 字符串
+ *   - `formatYamlForEditor()` - 格式化 YAML 用于编辑器显示
+ *
+ * **处理逻辑：**
+ * 1. 如果是本地词条（item.isLocal = true）：
+ *    - 直接从本地记录中解析 YAML
+ *    - 设置编辑上下文为本地模式
+ * 2. 如果是数据库词条：
+ *    - 优先尝试从列表缓存中获取 YAML
+ *    - 如果缓存不完整，发起 API 请求获取完整数据
+ *    - 设置编辑上下文为数据库模式
+ *
+ * @async
+ * @function loadIntoEditor
+ * @param {string} id - 要加载的词条 ID
+ * @returns {Promise<void>}
+ *
+ * @example
+ * // 用户点击编辑按钮
+ * handleEdit('word-123'); // 内部调用 loadIntoEditor('word-123')
+ *
+ * // 同步冲突解决后加载数据库版本
+ * await loadIntoEditor(conflict.id);
+ */
 const loadIntoEditor = async id => {
   const item = displayedRecords.value.find(r => r.id === id);
-  if (!item) return;
-
-  if (item.isLocal) {
-    try {
-      const obj = yaml.load(String(item.raw_yaml || item.original_yaml || ''));
-      wordStore.setEditorYaml(formatYamlForEditor(obj));
-    } catch (e) {
-      wordStore.setEditorYaml(String(item.raw_yaml || item.original_yaml || ''));
-    }
-    wordStore.setEditingContext({ id, isLocal: true });
+  if (!item) {
+    console.warn(`[loadIntoEditor] 未找到 ID 为 ${id} 的词条`);
     return;
   }
 
+  console.log(`[loadIntoEditor] 开始加载词条: ${id}, 来源: ${item.isLocal ? '本地' : '数据库'}`);
+
+  // 处理本地词条
+  if (item.isLocal) {
+    try {
+      const rawYaml = String(item.raw_yaml || item.original_yaml || '');
+      const obj = yaml.load(rawYaml);
+      wordStore.setEditorYaml(formatYamlForEditor(obj));
+      console.log(`[loadIntoEditor] 本地词条 YAML 解析成功: ${id}`);
+    } catch (e) {
+      console.warn(`[loadIntoEditor] 本地词条 YAML 解析失败，使用原始文本: ${id}`, e);
+      wordStore.setEditorYaml(String(item.raw_yaml || item.original_yaml || ''));
+    }
+    wordStore.setEditingContext({ id, isLocal: true });
+    console.log(`[loadIntoEditor] 本地词条已加载到编辑器: ${id}`);
+    return;
+  }
+
+  // 处理数据库词条 - 尝试从列表缓存获取
   try {
     const full = await request.get(`/words/${encodeURIComponent(id)}`, { skipErrorToast: true });
     if (full && full.original_yaml) {
@@ -340,16 +482,22 @@ const loadIntoEditor = async id => {
         typeof full.original_yaml === 'string' ? yaml.load(full.original_yaml) : full.original_yaml;
       wordStore.setEditorYaml(formatYamlForEditor(obj));
       wordStore.setEditingContext({ id, isLocal: false });
+      console.log(`[loadIntoEditor] 数据库词条已加载（从 API）: ${id}`);
       return;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn(`[loadIntoEditor] 从 API 获取词条失败: ${id}`, e);
+  }
 
+  // 尝试使用列表中的缓存数据
   if (item.original_yaml) {
     try {
       const obj =
         typeof item.original_yaml === 'string' ? yaml.load(item.original_yaml) : item.original_yaml;
       wordStore.setEditorYaml(formatYamlForEditor(obj));
+      console.log(`[loadIntoEditor] 数据库词条已加载（从缓存）: ${id}`);
     } catch (e) {
+      console.warn(`[loadIntoEditor] 缓存 YAML 解析失败: ${id}`, e);
       const txt =
         typeof item.original_yaml === 'string'
           ? item.original_yaml
@@ -360,6 +508,7 @@ const loadIntoEditor = async id => {
     return;
   }
 
+  // 最后尝试：再次从 API 获取（带完整错误处理）
   try {
     const full = await request.get(`/words/${encodeURIComponent(id)}`, { skipErrorToast: true });
     if (full && full.original_yaml) {
@@ -369,7 +518,9 @@ const loadIntoEditor = async id => {
             ? yaml.load(full.original_yaml)
             : full.original_yaml;
         wordStore.setEditorYaml(formatYamlForEditor(obj));
+        console.log(`[loadIntoEditor] 数据库词条已加载（二次 API 请求）: ${id}`);
       } catch (e) {
+        console.warn(`[loadIntoEditor] YAML 解析失败，使用原始文本: ${id}`, e);
         const txt =
           typeof full.original_yaml === 'string'
             ? full.original_yaml
@@ -377,8 +528,12 @@ const loadIntoEditor = async id => {
         wordStore.setEditorYaml(txt);
       }
       wordStore.setEditingContext({ id, isLocal: false });
+    } else {
+      console.error(`[loadIntoEditor] 词条数据为空: ${id}`);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error(`[loadIntoEditor] 加载词条失败: ${id}`, e);
+  }
 };
 
 onMounted(() => {
@@ -399,6 +554,18 @@ const canSearch = computed(() => {
   return !loading.value;
 });
 
+/**
+ * @description 执行搜索
+ * @async
+ * @function handleSearch
+ * @returns {Promise<void>}
+ * @remarks 处理搜索操作：
+ * 1. 检查是否可以执行搜索（非加载状态）
+ * 2. 规范化搜索输入
+ * 3. 调用 wordStore.fetchDbRecords 获取搜索结果
+ * @see {@link normalizeSearchInput} 搜索输入规范化函数
+ * @see {@link isBlankSearch} 空白搜索检测函数
+ */
 const handleSearch = async () => {
   if (!canSearch.value) return;
   const normalized = normalizeSearchInput(search.value);
@@ -434,6 +601,14 @@ const handlePageSize = () => {
   wordStore.fetchDbRecords({ limit: pageSize.value, page: 1 });
 };
 
+/**
+ * @description 翻页
+ * @function changePage
+ * @param {number} delta - 页码变化量（正数为下一页，负数为上一页）
+ * @remarks 根据变化量切换页面：
+ * - 检查新页码是否在有效范围内（1 到 totalPages）
+ * - 调用 fetchDbRecords 获取新页面的数据
+ */
 const changePage = delta => {
   const newPage = dbListMeta.value.page + delta;
   if (newPage >= 1 && newPage <= dbListMeta.value.totalPages) {
@@ -441,6 +616,14 @@ const changePage = delta => {
   }
 };
 
+/**
+ * @description 跳转到指定页
+ * @function goToPage
+ * @param {number} page - 目标页码
+ * @remarks 直接跳转到指定页码：
+ * - 检查页码是否在有效范围内
+ * - 调用 fetchDbRecords 获取目标页面的数据
+ */
 const goToPage = page => {
   if (page >= 1 && page <= dbListMeta.value.totalPages) {
     wordStore.fetchDbRecords({ page });

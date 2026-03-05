@@ -1,40 +1,74 @@
 /**
  * ============================================================================
- * Config - 统一配置管理模块
+ * Config - 12-Factor 配置管理模块
  * ============================================================================
  *
  * 【功能简介】
- * 本模块提供统一的配置管理功能，支持从 YAML 配置文件和环境变量加载配置。
- * 实现配置加载优先级：环境变量 > config.yml > 代码默认值
+ * 本模块遵循 12-Factor App 原则，仅通过环境变量管理配置。
+ * 开发环境自动加载 .env 文件，生产环境禁止 .env 文件。
+ *
+ * 【配置加载优先级】
+ * 1. 系统环境变量 (最高优先级)
+ * 2. .env 文件 (仅开发环境)
+ * 3. 代码默认值 (最低优先级)
+ *
+ * 【必需配置项】
+ * - DATABASE_URL: PostgreSQL 连接字符串
+ * - ADMIN_TOKEN: 管理员 API 令牌
+ * - NODE_ENV: 运行环境 (development/production/test)
  *
  * 【使用方式】
  * const config = require('./utils/config');
  *
  * // 获取配置值
  * const dbUrl = config.get('database.url');
- * const port = config.get('server.port');
+ * const port = config.get('server.port', 8080);
  *
- * // 获取带默认值的配置
- * const timeout = config.get('server.timeout_ms', 10000);
- *
- * 【配置加载优先级】
- * 1. 环境变量 (AD_FONTES_DATABASE_URL)
- * 2. config.yml 文件
- * 3. 代码中的安全默认值
- *
- * 【环境变量映射】
- * AD_FONTES_CORE_ENV -> core.env
- * AD_FONTES_DATABASE_URL -> database.url
- * AD_FONTES_SERVER_PORT -> server.port
+ * // 获取完整配置
+ * const allConfig = config.getAll();
  * ============================================================================
  */
 
-const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
+const fs = require('fs');
 
-// 配置缓存
-let configCache = null;
+// 检测运行环境
+const isProduction = process.env.NODE_ENV === 'production';
+
+// 生产环境：禁止 .env 文件存在
+if (isProduction) {
+  const envPaths = [
+    path.join(process.cwd(), '.env'),
+    path.join(process.cwd(), '..', '.env'),
+    path.join(__dirname, '..', '..', '.env'),
+    path.join(__dirname, '..', '.env'),
+  ];
+
+  for (const envPath of envPaths) {
+    if (fs.existsSync(envPath)) {
+      console.error('❌ 生产环境禁止存在 .env 文件');
+      console.error(`   发现文件: ${envPath}`);
+      console.error('   请使用系统环境变量或 Docker env_file 注入配置');
+      process.exit(1);
+    }
+  }
+}
+
+// 开发环境：加载 .env 文件
+if (!isProduction) {
+  const envPaths = [
+    path.join(process.cwd(), '.env'),
+    path.join(process.cwd(), '..', '.env'),
+    path.join(__dirname, '..', '..', '.env'),
+  ];
+
+  for (const envPath of envPaths) {
+    if (fs.existsSync(envPath)) {
+      require('dotenv').config({ path: envPath });
+      break;
+    }
+  }
+}
 
 // 默认配置
 const defaultConfig = {
@@ -82,57 +116,43 @@ const defaultConfig = {
   },
 };
 
-/**
- * 环境变量映射表
- * 将环境变量名映射到配置路径
- */
+// 环境变量映射表
 const envMapping = {
   // 核心配置
-  AD_FONTES_CORE_ENV: 'core.env',
-  AD_FONTES_ADMIN_TOKEN: 'core.admin_token',
   NODE_ENV: 'core.env',
   ADMIN_TOKEN: 'core.admin_token',
 
   // 服务器配置
-  AD_FONTES_SERVER_PORT: 'server.port',
-  AD_FONTES_SERVER_HOST: 'server.host',
-  AD_FONTES_SERVER_CORS_ORIGINS: 'server.cors_origins',
-  AD_FONTES_SERVER_RATE_LIMIT: 'server.rate_limit',
-  AD_FONTES_SERVER_TIMEOUT_MS: 'server.timeout_ms',
   PORT: 'server.port',
   SERVER_PORT: 'server.port',
   SERVER_HOST: 'server.host',
+  SERVER_CORS_ORIGINS: 'server.cors_origins',
+  SERVER_RATE_LIMIT: 'server.rate_limit',
+  SERVER_TIMEOUT_MS: 'server.timeout_ms',
 
   // 数据库配置
-  AD_FONTES_DATABASE_URL: 'database.url',
-  AD_FONTES_DATABASE_SSL: 'database.ssl',
-  AD_FONTES_DATABASE_POOL_SIZE: 'database.pool_size',
   DATABASE_URL: 'database.url',
   DATABASE_SSL: 'database.ssl',
+  DATABASE_POOL_SIZE: 'database.pool_size',
 
   // 前端配置
-  AD_FONTES_CLIENT_DEV_PORT: 'client.dev_port',
   CLIENT_DEV_PORT: 'client.dev_port',
 
   // 存储配置
-  AD_FONTES_STORAGE_MAX_ITEMS: 'storage.max_items',
   MAX_LOCAL_ITEMS: 'storage.max_items',
 
   // 日志配置
-  AD_FONTES_LOG_LEVEL: 'logging.level',
-  AD_FONTES_LOG_DIR: 'logging.dir',
-  AD_FONTES_LOG_AUDIT: 'logging.audit',
   LOG_LEVEL: 'logging.level',
   LOG_DIR: 'logging.dir',
+  LOG_AUDIT: 'logging.audit',
 };
 
 /**
  * 解析环境变量值
  * @param {string} value - 环境变量值
- * @param {string} _path - 配置路径
  * @returns {*} 解析后的值
  */
-function parseEnvValue(value, _path) {
+function parseEnvValue(value) {
   if (value === undefined || value === null || value === '') {
     return undefined;
   }
@@ -178,36 +198,11 @@ function loadFromEnv() {
         current = current[keys[i]];
       }
 
-      current[keys[keys.length - 1]] = parseEnvValue(envValue, configPath);
+      current[keys[keys.length - 1]] = parseEnvValue(envValue);
     }
   }
 
   return envConfig;
-}
-
-/**
- * 从 YAML 文件加载配置
- * @returns {Object} YAML 配置
- */
-function loadFromYaml() {
-  const configPaths = [
-    path.join(process.cwd(), 'config.yml'),
-    path.join(process.cwd(), '..', 'config.yml'),
-    path.join(__dirname, '..', '..', 'config.yml'),
-  ];
-
-  for (const configPath of configPaths) {
-    if (fs.existsSync(configPath)) {
-      try {
-        const content = fs.readFileSync(configPath, 'utf8');
-        return yaml.load(content) || {};
-      } catch (e) {
-        console.warn(`Warning: Failed to load config from ${configPath}:`, e.message);
-      }
-    }
-  }
-
-  return {};
 }
 
 /**
@@ -231,7 +226,62 @@ function deepMerge(target, source) {
 }
 
 /**
- * 加载配置（带缓存）
+ * 验证必需配置项
+ * @param {Object} config - 配置对象
+ * @throws {Error} 如果缺少必需配置项
+ */
+function validateConfig(config) {
+  const required = [
+    { path: 'database.url', env: 'DATABASE_URL' },
+    { path: 'core.admin_token', env: 'ADMIN_TOKEN' },
+    { path: 'core.env', env: 'NODE_ENV' },
+  ];
+
+  const missing = [];
+
+  for (const item of required) {
+    const keys = item.path.split('.');
+    let current = config;
+    for (const key of keys) {
+      current = current?.[key];
+    }
+    if (!current) {
+      missing.push(item.env);
+    }
+  }
+
+  if (missing.length > 0) {
+    console.error('❌ 缺少必需的环境变量:');
+    missing.forEach(env => console.error(`   - ${env}`));
+    console.error('\n请通过以下方式设置:');
+    console.error('   1. 创建 .env 文件（开发环境）');
+    console.error('   2. 设置系统环境变量');
+    console.error('   3. 使用 Docker env_file（生产环境）');
+    process.exit(1);
+  }
+
+  // 生产环境额外验证
+  if (config.core.env === 'production') {
+    // ADMIN_TOKEN 长度验证
+    if (config.core.admin_token.length < 32) {
+      console.error('❌ 生产环境 ADMIN_TOKEN 必须至少 32 字符');
+      console.error(`   当前长度: ${config.core.admin_token.length}`);
+      console.error('   生成命令: openssl rand -hex 32');
+      process.exit(1);
+    }
+
+    // SSL 验证
+    if (!config.database.ssl) {
+      console.warn('⚠️  警告: 生产环境建议启用数据库 SSL (DATABASE_SSL=true)');
+    }
+  }
+}
+
+// 配置缓存
+let configCache = null;
+
+/**
+ * 加载配置（带缓存和验证）
  * @returns {Object} 完整配置对象
  */
 function loadConfig() {
@@ -239,11 +289,11 @@ function loadConfig() {
     return configCache;
   }
 
-  // 按优先级合并配置
-  const yamlConfig = loadFromYaml();
   const envConfig = loadFromEnv();
+  configCache = deepMerge(defaultConfig, envConfig);
 
-  configCache = deepMerge(deepMerge(defaultConfig, yamlConfig), envConfig);
+  // 验证配置
+  validateConfig(configCache);
 
   return configCache;
 }
@@ -292,6 +342,9 @@ function reload() {
   clearCache();
   return loadConfig();
 }
+
+// 立即加载并验证配置（应用启动时）
+loadConfig();
 
 module.exports = {
   get,

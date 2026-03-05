@@ -1,28 +1,111 @@
+/**
+ * @file ConflictModal.vue
+ * @description 冲突对比弹窗组件，用于显示数据冲突并提供解决方案
+ *
+ * @component ConflictModal
+ *
+ * @usage
+ * 该组件用于在数据同步、导入或更新时检测到冲突时，向用户展示冲突详情并提供解决选项。
+ * 典型使用场景包括：
+ * - 文件导入时发现与现有数据冲突
+ * - 多用户协作编辑时的版本冲突
+ * - 数据同步时的合并冲突
+ *
+ * @dependencies
+ * - vue: Vue 3 Composition API
+ * - @/utils/conflict: 冲突处理工具函数（deepDiffAdapter, yamlFormatter）
+ */
+
 <script setup>
 import { computed } from 'vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 
+/**
+ * 组件 Props 定义
+ * @typedef {Object} ConflictModalProps
+ */
 const props = defineProps({
+  /** 是否显示弹窗 */
   open: { type: Boolean, default: false },
+
+  /** 弹窗标题 */
   title: { type: String, default: 'Conflict Detected' },
+
+  /** 副标题，用于显示额外的冲突描述信息 */
   subtitle: { type: String, default: '' },
+
+  /**
+   * 差异数据，由 diffAdapter 解析生成
+   * @type {Array}
+   */
   diff: { type: Array, default: null },
+
+  /** 左侧面板标签，通常表示"现有数据" */
   leftLabel: { type: String, default: 'Existing' },
+
+  /** 右侧面板标签，通常表示"新数据" */
   rightLabel: { type: String, default: 'New' },
+
+  /**
+   * 左侧面板数据（现有数据）
+   * @type {Object | String}
+   */
   leftData: { type: [Object, String], default: null },
+
+  /**
+   * 右侧面板数据（新数据）
+   * @type {Object | String}
+   */
   rightData: { type: [Object, String], default: null },
+
+  /**
+   * 数据格式化器，用于将数据转换为可读的字符串格式
+   * @default yamlFormatter
+   */
   formatter: { type: Object, default: () => yamlFormatter },
+
+  /**
+   * 差异适配器，用于解析 diff 数据并提取模块和徽章信息
+   * @default deepDiffAdapter
+   */
   diffAdapter: { type: Object, default: () => deepDiffAdapter },
+
+  /** 主操作按钮标签（覆盖操作） */
   primaryLabel: { type: String, default: 'Overwrite' },
+
+  /** 次操作按钮标签（使用现有数据） */
   secondaryLabel: { type: String, default: 'Use Existing' },
+
+  /** 第三操作按钮标签（编辑本地数据），为空时不显示该按钮 */
   tertiaryLabel: { type: String, default: '' },
 });
 
+/**
+ * 组件事件定义
+ * @emits close - 关闭弹窗事件
+ * @emits primary - 主操作事件，通常表示"使用新数据覆盖"
+ * @emits secondary - 次操作事件，通常表示"保留现有数据"
+ * @emits tertiary - 第三操作事件，通常表示"编辑本地数据"
+ */
 const emit = defineEmits(['close', 'primary', 'secondary', 'tertiary']);
 
+/**
+ * 从 diff 数据中提取的模块列表
+ * @returns {Array<string>} 模块名称数组
+ */
 const modules = computed(() => props.diffAdapter?.getModules?.(props.diff) || []);
+
+/**
+ * 从 diff 数据中提取的变更徽章列表
+ * @returns {Array<{path: string, cls: string}>} 徽章对象数组，包含路径和样式类
+ */
 const badges = computed(() => props.diffAdapter?.getBadges?.(props.diff) || []);
 
+/**
+ * 格式化数据为可读的字符串格式
+ * @param {Object | String} val - 要格式化的数据
+ * @returns {string} 格式化后的字符串
+ */
 const format = val => {
   if (!val) return props.formatter.format({});
   if (typeof val === 'string') return val;

@@ -29,7 +29,7 @@ cp .env.example .env
 # 编辑 .env 文件设置数据库连接
 
 # 4. 初始化数据库（可选）
-node init_db.js
+cd node && node init_db.js && cd ..
 
 # 5. 启动开发服务器
 npm run dev
@@ -68,28 +68,51 @@ npm run dev
 
 ## 配置
 
-### 环境变量
+本项目遵循 [12-Factor App](https://12factor.net/) 原则，使用环境变量管理配置。
 
+### 快速配置
+
+**开发环境**:
 ```bash
-# 必需
-NODE_ENV=production
-ADMIN_TOKEN=<32位随机字符串>
-DATABASE_URL=postgresql://user:pass@host:5432/db
+# 1. 复制环境变量模板
+cp .env.example .env
 
-# 可选
-API_PORT=8080
-CLIENT_DEV_PORT=5173
-MAX_LOCAL_ITEMS=100
-LOG_LEVEL=info
+# 2. 编辑 .env，填入你的数据库密码
+# DATABASE_URL=postgresql://postgres:your_password@localhost:5432/ad_fontes
+
+# 3. 启动服务
+cd web && npm run dev
 ```
 
-### 本地配置
-
-复制模板文件并编辑：
-
+**生产环境**:
 ```bash
-cp web/config.json.template web/config.json
+# 使用 Docker Compose
+echo "NODE_ENV=production
+ADMIN_TOKEN=$(openssl rand -hex 32)
+DATABASE_URL=postgresql://user:pass@db:5432/db?sslmode=require" > .env.production
+
+docker-compose up -d
 ```
+
+### 必需配置项
+
+| 变量 | 说明 |
+|------|------|
+| `DATABASE_URL` | PostgreSQL 连接字符串 |
+| `ADMIN_TOKEN` | 管理员 API 令牌（生产环境 ≥32 字符） |
+| `NODE_ENV` | 运行环境: `development` / `production` / `test` |
+
+### 配置优先级
+
+```
+1. 系统环境变量 (最高优先级)
+2. .env 文件 (仅开发环境)
+3. 代码默认值 (最低优先级)
+```
+
+**注意**: 生产环境禁止 `.env` 文件，应用会立即退出并报错。
+
+更多配置说明请参考 [配置文档](./docs/CONFIGURATION.md)。
 
 ## 项目结构
 
@@ -105,7 +128,10 @@ ad-fontes-manager
 │   │   └── config.js    # 配置管理
 │   └── server.js        # 后端入口
 ├── docs/                # 文档目录
-├── init_db.js           # 数据库初始化脚本
+├── node/                # Node.js 工具脚本
+│   ├── init_db.js       # 数据库初始化
+│   ├── loader.js        # YAML 数据导入
+│   └── migrate_v2.js    # 数据库迁移
 ├── schema.sql           # 数据库 Schema
 └── README.md            # 本文件
 ```

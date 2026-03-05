@@ -1,4 +1,30 @@
 <script setup>
+/**
+ * @file WordPreview.vue
+ * @description 词条预览组件，提供卡片预览、Markdown 预览、图片导出功能
+ *
+ * @component WordPreview
+ * @example
+ * <WordPreview :wordId="wordId" @close="handleClose" />
+ *
+ * @features
+ * - 卡片预览模式：以精美卡片形式展示词条信息
+ * - Markdown 预览模式：以 Markdown 格式展示词条内容
+ * - 图片导出功能：支持将卡片导出为 PNG 图片
+ * - 剪贴板操作：支持复制 HTML 代码、图片到剪贴板
+ *
+ * @dependencies
+ * - vue: Vue 3 Composition API
+ * - marked: Markdown 解析器
+ * - html-to-image: 将 HTML 元素转换为图片
+ * - js-yaml: YAML 数据解析
+ * - @/stores/wordStore: 词条数据状态管理
+ * - @/stores/appStore: 应用状态管理（Toast 提示）
+ * - @/utils/generator: 卡片 HTML 和 Markdown 生成器
+ * - @/utils/template: 模板渲染工具
+ * - @/utils/request: HTTP 请求工具
+ */
+
 import { ref, onMounted, watch } from 'vue';
 import { marked } from 'marked';
 import { toPng, toBlob } from 'html-to-image';
@@ -9,16 +35,57 @@ import { renderTemplate } from '@/utils/template';
 import request from '@/utils/request';
 import yaml from 'js-yaml';
 
+/**
+ * 组件 Props 定义
+ * @property {string} wordId - 要预览的词条 ID
+ */
 const props = defineProps(['wordId']);
+
+/**
+ * 组件事件定义
+ * @emits close - 关闭预览事件
+ */
 const emit = defineEmits(['close']);
+
 const wordStore = useWordStore();
 const appStore = useAppStore();
 
-const mode = ref('card'); // card or markdown
+/**
+ * 预览模式
+ * @type {import('vue').Ref<'card' | 'markdown'>}
+ * @description 当前预览模式，可选值：
+ * - 'card': 卡片预览模式，展示精美卡片
+ * - 'markdown': Markdown 预览模式，展示 Markdown 格式内容
+ */
+const mode = ref('card');
+
+/**
+ * 渲染后的内容
+ * @type {import('vue').Ref<string>}
+ * @description 根据当前模式渲染的 HTML 或 Markdown 内容
+ */
 const content = ref('');
+
+/**
+ * 加载状态
+ * @type {import('vue').Ref<boolean>}
+ * @description 是否正在加载词条数据
+ */
 const loading = ref(false);
+
+/**
+ * 原始词条数据
+ * @type {import('vue').Ref<Object | null>}
+ * @description 从 YAML 解析后的原始词条数据对象
+ */
 const rawData = ref(null);
 
+/**
+ * 规范化 YAML 数据
+ * @param {string | Object | null} maybeYaml - 可能是 YAML 字符串或已解析的对象
+ * @returns {Object | null} 解析后的数据对象，解析失败返回 null
+ * @description 将 YAML 字符串解析为 JavaScript 对象，或返回已解析的对象
+ */
 const normalizeYamlData = maybeYaml => {
   if (!maybeYaml) return null;
   if (typeof maybeYaml === 'string') {
@@ -32,6 +99,17 @@ const normalizeYamlData = maybeYaml => {
   return null;
 };
 
+/**
+ * 加载词条数据
+ * @async
+ * @returns {Promise<void>}
+ * @description
+ * 根据 wordId 加载词条数据，优先从本地存储或数据库缓存中查找，
+ * 如果数据不完整（缺少 YAML），则从服务器获取完整数据。
+ * 加载完成后调用 renderContent 渲染内容。
+ *
+ * @throws {Error} 加载失败时会显示错误提示
+ */
 const loadWord = async () => {
   if (!props.wordId) return;
   loading.value = true;
@@ -66,6 +144,13 @@ const loadWord = async () => {
   }
 };
 
+/**
+ * 渲染内容
+ * @description
+ * 根据当前预览模式（mode）渲染对应的内容：
+ * - card 模式：使用自定义模板或默认模板生成卡片 HTML
+ * - markdown 模式：生成 Markdown 并解析为 HTML
+ */
 const renderContent = () => {
   if (!rawData.value) return;
 
@@ -93,9 +178,30 @@ onMounted(() => {
 
 const close = () => emit('close');
 
+/**
+ * 卡片 DOM 引用
+ * @type {import('vue').Ref<HTMLElement | null>}
+ * @description 用于图片生成的卡片元素引用
+ */
 const cardRef = ref(null);
+
+/**
+ * 图片生成状态
+ * @type {import('vue').Ref<boolean>}
+ * @description 是否正在生成图片
+ */
 const generatingImage = ref(false);
 
+/**
+ * 生成卡片图片
+ * @async
+ * @returns {Promise<string | null>} 图片的 Data URL，生成失败返回 null
+ * @description
+ * 将卡片元素转换为 PNG 图片，使用 html-to-image 库的 toPng 方法。
+ * 图片分辨率为 2x，背景色为 #fcfbf9。
+ *
+ * @throws {Error} 生成失败时会显示错误提示
+ */
 const generateCardImage = async () => {
   if (!cardRef.value) return null;
   generatingImage.value = true;
@@ -114,6 +220,17 @@ const generateCardImage = async () => {
   }
 };
 
+/**
+ * 复制图片到剪贴板
+ * @async
+ * @returns {Promise<void>}
+ * @description
+ * 将卡片元素转换为 PNG 图片并复制到系统剪贴板。
+ * 成功后会显示成功提示，失败显示错误提示。
+ *
+ * @requires navigator.clipboard.write - 需要 Clipboard API 支持
+ * @throws {Error} 复制失败时会显示错误提示
+ */
 const copyImageToClipboard = async () => {
   if (!cardRef.value) return;
   generatingImage.value = true;
@@ -134,6 +251,16 @@ const copyImageToClipboard = async () => {
   }
 };
 
+/**
+ * 下载卡片图片
+ * @async
+ * @returns {Promise<void>}
+ * @description
+ * 生成卡片图片并触发浏览器下载。
+ * 文件名使用词条的 lemma 字段，默认为 'word-card.png'。
+ *
+ * @throws {Error} 生成失败时会显示错误提示
+ */
 const downloadCardImage = async () => {
   const dataUrl = await generateCardImage();
   if (dataUrl) {

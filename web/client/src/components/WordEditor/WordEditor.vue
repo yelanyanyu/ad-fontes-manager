@@ -1,4 +1,28 @@
 <script setup>
+/**
+ * @file WordEditor.vue
+ * @description 词条编辑组件，提供 YAML 编辑、验证、保存和冲突处理功能
+ *
+ * @component WordEditor
+ * @category Components
+ * @subcategory WordEditor
+ *
+ * @features
+ * - YAML 文本编辑与实时验证
+ * - 词条保存（支持本地和数据库两种模式）
+ * - 冲突检测与处理（使用现有数据或覆盖）
+ * - 连接状态感知（根据连接状态自动选择保存目标）
+ *
+ * @dependencies
+ * - vue: Vue 3 Composition API
+ * - js-yaml: YAML 解析与格式化
+ * - pinia: 状态管理
+ * - @/stores/wordStore: 词条状态管理
+ * - @/stores/appStore: 应用状态管理（Toast 通知）
+ * - @/components/ui/ConflictModal.vue: 冲突弹窗组件
+ * - @/utils/conflict: 冲突处理工具（diff 适配器、YAML 格式化器）
+ */
+
 import { ref, watch, computed } from 'vue';
 import yaml from 'js-yaml';
 import { useWordStore } from '@/stores/wordStore';
@@ -7,14 +31,57 @@ import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 
+/** @type {import('@/stores/wordStore').WordStore} 词条状态管理 store */
 const wordStore = useWordStore();
+
+/** @type {import('@/stores/appStore').AppStore} 应用状态管理 store */
 const appStore = useAppStore();
+
+/**
+ * @description 从 wordStore 解构的响应式引用
+ * @property {Ref<string>} editorYaml - 编辑器中的 YAML 内容
+ * @property {Ref<string>} connectionStatus - 连接状态（'connected' | 'disconnected'）
+ * @property {Ref<boolean>} currentEditingIsLocal - 当前编辑的是否为本地词条
+ */
 const { editorYaml, connectionStatus, currentEditingIsLocal } = storeToRefs(wordStore);
 
+/**
+ * @description 编辑器中的 YAML 文本内容
+ * @type {Ref<string>}
+ * @default ''
+ */
 const input = ref('');
+
+/**
+ * @description YAML 验证状态
+ * @type {Ref<string>}
+ * @default ''
+ * @value 'Valid YAML' - YAML 格式有效
+ * @value 'Invalid YAML' - YAML 格式无效
+ */
 const status = ref('');
+
+/**
+ * @description 冲突数据，用于显示冲突弹窗
+ * @type {Ref<Object|null>}
+ * @property {string} status - 冲突状态，值为 'conflict' 时表示冲突
+ * @property {Object} oldData - 服务器/本地现有的数据
+ * @property {Object} newData - 用户尝试保存的新数据
+ * @property {Array} diff - 数据差异列表
+ * @property {string} source - 冲突来源（'local' | 'db'）
+ * @property {string} id - 冲突词条的 ID
+ * @default null
+ */
 const conflictData = ref(null);
 
+/**
+ * @description 保存按钮标签计算属性
+ * 根据当前编辑状态和连接状态动态生成保存按钮的显示文本
+ * @computed
+ * @returns {string} 保存按钮标签
+ * @returns {'Save Locally (Offline)'} 当编辑本地词条或连接断开时
+ * @returns {'Save to Database'} 当连接正常且编辑非本地词条时
+ */
 const saveLabel = computed(() => {
   // 根据编辑状态和连接状态决定保存标签
   if (currentEditingIsLocal.value) return 'Save Locally (Offline)';
@@ -22,6 +89,12 @@ const saveLabel = computed(() => {
   return 'Save Locally (Offline)';
 });
 
+/**
+ * @description 处理编辑器输入并验证 YAML 格式
+ * 实时验证用户输入的 YAML 文本，更新验证状态
+ * @function handleInput
+ * @returns {void}
+ */
 const handleInput = () => {
   try {
     yaml.load(input.value);
@@ -31,6 +104,10 @@ const handleInput = () => {
   }
 };
 
+/**
+ * @description 监听 editorYaml 变化，同步到编辑器
+ * 当外部更新 editorYaml 时，自动同步到 input 并触发验证
+ */
 watch(
   editorYaml,
   val => {
@@ -42,11 +119,24 @@ watch(
   { immediate: true }
 );
 
+/**
+ * @description 清空编辑器内容
+ * @function clear
+ * @returns {void}
+ */
 const clear = () => {
   input.value = '';
   status.value = '';
 };
 
+/**
+ * @description 保存词条
+ * 验证 YAML 格式后调用 store 保存，处理可能的冲突情况
+ * @async
+ * @function save
+ * @returns {Promise<void>}
+ * @emits appStore.addToast - 当 YAML 格式无效时发送错误提示
+ */
 const save = async () => {
   if (!input.value) return;
   // 保存前再次验证 YAML
@@ -60,10 +150,21 @@ const save = async () => {
   }
 };
 
+/**
+ * @description 关闭冲突弹窗
+ * @function closeConflict
+ * @returns {void}
+ */
 const closeConflict = () => {
   conflictData.value = null;
 };
 
+/**
+ * @description 冲突处理：使用现有数据
+ * 当检测到冲突时，选择放弃当前编辑内容，使用服务器/本地现有的数据
+ * @function useExisting
+ * @returns {void}
+ */
 const useExisting = () => {
   if (!conflictData.value || !conflictData.value.oldData) return;
   try {
@@ -78,6 +179,13 @@ const useExisting = () => {
   closeConflict();
 };
 
+/**
+ * @description 冲突处理：覆盖现有数据
+ * 当检测到冲突时，选择强制使用当前编辑内容覆盖服务器/本地现有的数据
+ * @async
+ * @function overwrite
+ * @returns {Promise<void>}
+ */
 const overwrite = async () => {
   const target =
     conflictData.value?.source === 'local'

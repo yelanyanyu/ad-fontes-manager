@@ -1,217 +1,209 @@
-# Ad Fontes Manager 配置说明文档
+# Ad Fontes Manager 配置系统文档
 
 ## 概述
 
-本文档说明 Ad Fontes Manager 的统一配置系统。所有配置集中管理在 `config.yml` 文件中，支持通过环境变量覆盖。
-
-## 配置文件位置
-
-项目根目录下的 `config.yml` 文件：
-
-```
-ad-fontes-manager/
-├── config.yml          # 主配置文件
-├── web/
-│   └── utils/
-│       └── config.js   # 配置加载模块
-└── docs/
-    └── CONFIGURATION.md # 本文档
-```
+Ad Fontes Manager 遵循 **12-Factor App** 原则，采用轻量级环境变量配置系统。所有配置通过环境变量管理，开发环境支持 `.env` 文件，生产环境禁止 `.env` 文件。
 
 ## 配置加载优先级
 
-配置按以下优先级加载（高优先级覆盖低优先级）：
+```
+1. 系统环境变量 (最高优先级)
+2. .env 文件 (仅开发环境)
+3. 代码默认值 (最低优先级)
+```
 
-1. **环境变量** (如 `AD_FONTES_DATABASE_URL`)
-2. **config.yml 文件**
-3. **代码中的安全默认值**
+**注意**: 生产环境 (`NODE_ENV=production`) 禁止存在 `.env` 文件，应用会立即退出并报错。
 
-## 配置结构
+## 必需配置项
 
-### 1. 核心配置 (core)
+应用启动时会强制验证以下配置项，缺少任何一项都会报错退出：
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `core.env` | string | `development` | 运行环境，可选值：`development` \| `production` \| `test` |
-| `core.admin_token` | string | `dev-token-not-for-production` | 管理员 API 访问令牌，生产环境必须修改 |
+| 配置项 | 环境变量 | 说明 |
+|--------|----------|------|
+| 数据库连接 | `DATABASE_URL` | PostgreSQL 连接字符串 |
+| 管理员令牌 | `ADMIN_TOKEN` | API 访问令牌，生产环境 ≥32 字符 |
+| 运行环境 | `NODE_ENV` | `development` / `production` / `test` |
 
-**环境变量映射：**
-- `AD_FONTES_CORE_ENV` → `core.env`
-- `AD_FONTES_ADMIN_TOKEN` → `core.admin_token`
-- `NODE_ENV` → `core.env`
-- `ADMIN_TOKEN` → `core.admin_token`
+## 配置文件
 
-### 2. 服务器配置 (server)
+### 1. `.env` 文件（开发环境专用）
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `server.port` | integer | `8080` | API 服务器端口，范围：1024-65535 |
-| `server.host` | string | `127.0.0.1` | 服务器绑定地址，`0.0.0.0` 监听所有接口 |
-| `server.cors_origins` | array | `["*"]` | 允许的跨域来源，生产环境必须限制 |
-| `server.rate_limit` | integer | `0` | 每分钟请求限制，0 表示禁用，生产环境建议 100-300 |
-| `server.timeout_ms` | integer | `10000` | 请求超时（毫秒），范围：5000-60000 |
+**位置**: 项目根目录  
+**用途**: 存储本地开发环境的敏感信息和个性化配置  
+**特点**: 
+- ❌ 不提交到 Git（已在 `.gitignore` 中配置）
+- ✅ 仅在开发环境加载
+- ✅ 优先级高于代码默认值
 
-**环境变量映射：**
-- `AD_FONTES_SERVER_PORT` / `PORT` / `SERVER_PORT` → `server.port`
-- `AD_FONTES_SERVER_HOST` / `SERVER_HOST` → `server.host`
-- `AD_FONTES_SERVER_CORS_ORIGINS` → `server.cors_origins`
-- `AD_FONTES_SERVER_RATE_LIMIT` → `server.rate_limit`
-- `AD_FONTES_SERVER_TIMEOUT_MS` → `server.timeout_ms`
+**创建方式**:
+```bash
+cp .env.example .env
+# 编辑 .env 填入你的本地配置
+```
 
-### 3. 数据库配置 (database)
+**示例内容**:
+```bash
+# 核心配置
+NODE_ENV=development
+ADMIN_TOKEN=dev-token-not-for-production
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `database.url` | string | `null` | **必需** PostgreSQL 连接字符串 |
-| `database.ssl` | boolean | `false` | 强制 SSL 连接，生产环境必须启用 |
-| `database.pool_size` | integer | `null` | 连接池大小，null 时自动计算（dev=10, prod=20） |
+# 数据库配置
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/ad_fontes
 
-**连接字符串格式：**
+# 可选配置
+LOG_LEVEL=debug
+PORT=8080
+```
+
+### 2. `.env.example` 文件
+
+**位置**: 项目根目录  
+**用途**: 作为 `.env` 的模板，展示所有可用的环境变量  
+**特点**: 
+- ✅ 提交到 Git
+- ✅ 使用占位符代替真实值
+- ✅ 供新开发者参考
+
+### 3. `.env.production` 文件（生产环境专用）
+
+**位置**: 服务器本地，项目根目录  
+**用途**: 生产环境配置，通过 Docker Compose 加载  
+**特点**: 
+- ❌ 不提交到 Git
+- ✅ 仅存在于服务器本地
+- ✅ 文件权限应设为 `600`（仅 root 可读）
+
+**创建方式**（在服务器上执行）:
+```bash
+echo "NODE_ENV=production
+ADMIN_TOKEN=$(openssl rand -hex 32)
+DATABASE_URL=postgresql://user:pass@host:5432/db?sslmode=require
+DATABASE_SSL=true
+SERVER_CORS_ORIGINS=[\"https://yourdomain.com\"]
+SERVER_RATE_LIMIT=100
+LOG_LEVEL=warn" > .env.production
+
+chmod 600 .env.production
+```
+
+## 配置项详细说明
+
+### 核心配置
+
+| 环境变量 | 必需 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `NODE_ENV` | ✅ | `development` | 运行环境: `development` \| `production` \| `test` |
+| `ADMIN_TOKEN` | ✅ | - | 管理员 API 令牌，生产环境必须 ≥32 字符 |
+
+### 服务器配置
+
+| 环境变量 | 必需 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `PORT` | ❌ | `8080` | API 服务器端口 |
+| `SERVER_PORT` | ❌ | `8080` | 同上（别名） |
+| `SERVER_HOST` | ❌ | `127.0.0.1` | 绑定地址，`0.0.0.0` 监听所有接口 |
+| `SERVER_CORS_ORIGINS` | ❌ | `["*"]` | 跨域来源，生产环境必须限制 |
+| `SERVER_RATE_LIMIT` | ❌ | `0` | 每分钟请求限制，0=禁用 |
+| `SERVER_TIMEOUT_MS` | ❌ | `10000` | 请求超时毫秒数 |
+
+### 数据库配置
+
+| 环境变量 | 必需 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `DATABASE_URL` | ✅ | - | PostgreSQL 连接字符串 |
+| `DATABASE_SSL` | ❌ | `false` | 强制 SSL，生产环境必须启用 |
+| `DATABASE_POOL_SIZE` | ❌ | `null` | 连接池大小，null=自动计算 |
+
+**连接字符串格式**:
 ```
 postgresql://USER:PASSWORD@HOST:PORT/DATABASE
 ```
 
-**生产环境 SSL 示例：**
+**生产环境 SSL 示例**:
 ```
 postgresql://user:pass@host:5432/db?sslmode=require
 ```
 
-**环境变量映射：**
-- `AD_FONTES_DATABASE_URL` / `DATABASE_URL` → `database.url`
-- `AD_FONTES_DATABASE_SSL` / `DATABASE_SSL` → `database.ssl`
-- `AD_FONTES_DATABASE_POOL_SIZE` → `database.pool_size`
+### 前端配置
 
-### 4. 前端配置 (client)
+| 环境变量 | 必需 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `CLIENT_DEV_PORT` | ❌ | `5173` | 前端开发服务器端口 |
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `client.dev_port` | integer | `5173` | 前端开发服务器端口 |
+### 存储配置
 
-**环境变量映射：**
-- `AD_FONTES_CLIENT_DEV_PORT` / `CLIENT_DEV_PORT` → `client.dev_port`
+| 环境变量 | 必需 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `MAX_LOCAL_ITEMS` | ❌ | `100` | LocalStorage 最大条目数 |
 
-### 5. 存储配置 (storage)
+### 日志配置
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `storage.max_items` | integer | `100` | 浏览器 LocalStorage 最大条目数，范围：10-500 |
+| 环境变量 | 必需 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `LOG_LEVEL` | ❌ | `info` | 日志级别: `debug` \| `info` \| `warn` \| `error` |
+| `LOG_DIR` | ❌ | `./logs` | 日志文件目录 |
+| `LOG_AUDIT` | ❌ | `true` | 启用安全审计日志 |
 
-**环境变量映射：**
-- `AD_FONTES_STORAGE_MAX_ITEMS` / `MAX_LOCAL_ITEMS` → `storage.max_items`
+## 使用场景
 
-### 6. 日志配置 (logging)
+### 场景 1: 本地开发（推荐）
 
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `logging.level` | string | `info` | 日志级别，可选值：`debug` \| `info` \| `warn` \| `error` |
-| `logging.dir` | string | `./logs` | 日志文件目录 |
-| `logging.rotation.interval` | string | `1d` | 日志轮转间隔 |
-| `logging.rotation.max_size` | string | `10M` | 单个日志文件最大大小 |
-| `logging.rotation.max_files` | integer | `30` | 保留日志文件数量 |
-| `logging.audit` | boolean | `true` | 是否启用安全审计日志 |
-
-**环境变量映射：**
-- `AD_FONTES_LOG_LEVEL` / `LOG_LEVEL` → `logging.level`
-- `AD_FONTES_LOG_DIR` / `LOG_DIR` → `logging.dir`
-- `AD_FONTES_LOG_AUDIT` → `logging.audit`
-
-### 7. 功能开关 (features)
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `features.local_draft` | boolean | `true` | 启用本地草稿功能 |
-| `features.sync` | boolean | `true` | 启用数据同步功能 |
-| `features.conflict_detection` | boolean | `true` | 启用冲突检测 |
-
-### 8. 安全配置 (security)
-
-| 配置项 | 类型 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `security.helmet` | boolean | `true` | 启用 Helmet 安全头 |
-| `security.hsts` | boolean | `true` | 启用 HSTS（仅生产环境生效） |
-| `security.min_password_length` | integer | `8` | 密码最小长度 |
-
-## 配置示例
-
-### 开发环境配置
-
-```yaml
-core:
-  env: development
-  admin_token: dev-token-not-for-production
-
-database:
-  url: postgresql://postgres:password@localhost:5432/ad_fontes_dev
-
-logging:
-  level: debug
-```
-
-### 生产环境配置
-
-```yaml
-core:
-  env: production
-  admin_token: <your-32-char-token-here>
-
-database:
-  url: postgresql://user:pass@host:5432/ad_fontes?sslmode=require
-  ssl: true
-
-server:
-  host: 0.0.0.0
-  cors_origins:
-    - "https://yourdomain.com"
-  rate_limit: 100
-
-logging:
-  level: warn
-```
-
-### 测试环境配置
-
-```yaml
-core:
-  env: test
-
-database:
-  url: postgresql://postgres:password@localhost:5432/ad_fontes_test
-
-logging:
-  level: error
-```
-
-## 环境变量使用
-
-### 基本用法
+使用 `.env` 文件管理本地配置：
 
 ```bash
-# 设置数据库连接
-export AD_FONTES_DATABASE_URL="postgresql://postgres:pass@localhost:5432/ad_fontes"
+# 1. 复制模板
+cp .env.example .env
 
-# 设置日志级别
-export AD_FONTES_LOG_LEVEL=debug
+# 2. 编辑 .env，填入你的本地数据库密码
+# DATABASE_URL=postgresql://postgres:your_password@localhost:5432/ad_fontes
 
-# 启动应用
-npm start
+# 3. 启动开发服务器
+cd web && npm run dev
 ```
 
-### Docker 环境
-
-```dockerfile
-ENV AD_FONTES_CORE_ENV=production
-ENV AD_FONTES_DATABASE_URL=postgresql://user:pass@db:5432/ad_fontes
-ENV AD_FONTES_SERVER_PORT=8080
-```
-
-### 使用 .env 文件
-
-项目仍支持 `.env` 文件，但建议使用统一的 `config.yml`：
+### 场景 2: 生产部署（Docker）
 
 ```bash
-# .env 文件示例
-AD_FONTES_DATABASE_URL=postgresql://postgres:pass@localhost:5432/ad_fontes
-AD_FONTES_LOG_LEVEL=info
+# 1. 在服务器创建 .env.production
+echo "NODE_ENV=production
+ADMIN_TOKEN=$(openssl rand -hex 32)
+DATABASE_URL=postgresql://user:pass@db:5432/ad_fontes?sslmode=require
+DATABASE_SSL=true
+SERVER_CORS_ORIGINS=[\"https://yourdomain.com\"]
+SERVER_RATE_LIMIT=100
+LOG_LEVEL=warn" > .env.production
+
+chmod 600 .env.production
+
+# 2. 启动服务
+docker-compose up -d --build
+```
+
+### 场景 3: 生产部署（系统环境变量）
+
+```bash
+# 设置环境变量
+export NODE_ENV=production
+export ADMIN_TOKEN="$(openssl rand -hex 32)"
+export DATABASE_URL="postgresql://user:pass@host:5432/db?sslmode=require"
+export DATABASE_SSL="true"
+export SERVER_CORS_ORIGINS='["https://yourdomain.com"]'
+export SERVER_RATE_LIMIT="100"
+
+# 启动服务
+cd web && npm start
+```
+
+### 场景 4: CI/CD 流水线
+
+```bash
+# 在 CI/CD 中设置环境变量
+export NODE_ENV=test
+export DATABASE_URL="postgresql://postgres:password@localhost:5432/ad_fontes_test"
+export ADMIN_TOKEN="test-token"
+
+# 运行测试
+npm test
 ```
 
 ## 在代码中使用配置
@@ -221,108 +213,91 @@ AD_FONTES_LOG_LEVEL=info
 ```javascript
 const config = require('./utils/config');
 
-// 获取单个配置值
+// 获取配置值
 const dbUrl = config.get('database.url');
-const port = config.get('server.port');
-
-// 获取带默认值的配置
-const timeout = config.get('server.timeout_ms', 10000);
+const port = config.get('server.port', 8080);
 
 // 获取完整配置对象
 const allConfig = config.getAll();
 ```
 
-### 配置热重载
+### 配置验证
 
-```javascript
-const config = require('./utils/config');
-
-// 清除缓存并重新加载
-config.reload();
-
-// 或仅清除缓存
-config.clearCache();
-```
-
-## 配置验证
-
-启动应用时，配置模块会自动检查必需的配置项。如果缺少必需配置，会抛出错误：
+应用启动时会自动验证配置：
 
 ```
-Error: No database URL configured. Please set database.url in config.yml or AD_FONTES_DATABASE_URL environment variable.
+# 缺少必需配置
+❌ 缺少必需的环境变量:
+   - DATABASE_URL
+   - ADMIN_TOKEN
+
+请通过以下方式设置:
+   1. 创建 .env 文件（开发环境）
+   2. 设置系统环境变量
+   3. 使用 Docker env_file（生产环境）
+
+# 生产环境 ADMIN_TOKEN 太短
+❌ 生产环境 ADMIN_TOKEN 必须至少 32 字符
+   当前长度: 12
+   生成命令: openssl rand -hex 32
+
+# 生产环境存在 .env 文件
+❌ 生产环境禁止存在 .env 文件
+   发现文件: /app/.env
+   请使用系统环境变量或 Docker env_file 注入配置
 ```
 
-## 迁移指南
+## 安全建议
 
-### 从旧版配置迁移
+### 1. 敏感信息处理
 
-1. **备份现有配置**
-   ```bash
-   cp web/config.json web/config.json.backup
-   cp .env .env.backup
-   ```
+- **永远不要**将 `.env` 或 `.env.production` 提交到 Git
+- **永远不要**在代码中硬编码密码或令牌
+- 使用占位符代替敏感信息
 
-2. **创建新的 config.yml**
-   参考上述配置示例，将旧配置迁移到 `config.yml`
+### 2. 生产环境必须
 
-3. **更新环境变量**（如使用）
-   将旧的环境变量名更新为新的前缀格式：`AD_FONTES_`
+- 修改默认的 `ADMIN_TOKEN`（使用 `openssl rand -hex 32` 生成）
+- 启用 `DATABASE_SSL=true`
+- 限制 `SERVER_CORS_ORIGINS` 为实际域名
+- 启用 `SERVER_RATE_LIMIT`（建议 100-300）
+- 设置 `LOG_LEVEL=warn` 或 `error`
+- 设置 `.env.production` 文件权限为 `600`
 
-4. **验证配置**
-   ```bash
-   npm start
-   ```
+### 3. 定期维护
 
-5. **删除旧配置**（验证无误后）
-   ```bash
-   rm web/config.json
-   # 保留 .env 用于敏感信息
-   ```
+- 定期轮换 `ADMIN_TOKEN`
+- 定期清理旧日志文件
+- 监控配置变更（启用 `LOG_AUDIT`）
 
 ## 故障排查
 
 ### 配置不生效
 
-1. 检查配置文件路径是否正确
-2. 检查 YAML 语法是否正确（使用在线 YAML 验证工具）
-3. 检查环境变量是否覆盖
-4. 查看启动日志中的配置加载信息
+1. 检查环境变量名是否正确（注意大小写）
+2. 检查 `.env` 文件是否在项目根目录
+3. 检查 `NODE_ENV` 设置
 
 ### 数据库连接失败
 
-1. 检查 `database.url` 格式是否正确
+1. 检查 `DATABASE_URL` 格式
 2. 检查数据库服务是否运行
-3. 检查网络连接和防火墙设置
-4. 检查 SSL 配置（生产环境）
+3. 检查网络连接和防火墙
+4. 检查 SSL 配置
 
-### 日志不输出
+### 生产环境启动失败
 
-1. 检查 `logging.level` 设置
-2. 检查日志目录权限
-3. 检查磁盘空间
-
-## 安全建议
-
-1. **生产环境必须：**
-   - 修改默认的 `admin_token`
-   - 启用 `database.ssl`
-   - 限制 `server.cors_origins`
-   - 启用 `server.rate_limit`
-
-2. **敏感信息处理：**
-   - 使用环境变量注入敏感信息
-   - 不要将包含密码的配置文件提交到版本控制
-   - 定期轮换 `admin_token`
-
-3. **日志安全：**
-   - 生产环境设置 `logging.level` 为 `warn` 或更高
-   - 启用 `logging.audit` 记录安全事件
-   - 定期清理旧日志文件
+1. 确认 `.env` 文件不存在
+2. 确认所有必需配置项已设置
+3. 确认 `ADMIN_TOKEN` 长度 ≥32 字符
 
 ## 更新日志
 
-### v1.0.0
+### v2.0.0 (2026-03-05)
+- 重构为 12-Factor 配置系统
+- 移除 `config.yml` 支持
+- 生产环境禁止 `.env` 文件
+- 添加配置验证
+
+### v1.0.0 (2026-01-26)
 - 初始版本，统一配置系统
-- 支持 YAML 配置文件
-- 支持环境变量覆盖
-- 实现配置加载优先级

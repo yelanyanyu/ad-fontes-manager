@@ -1,13 +1,60 @@
 <script setup>
+/**
+ * @file Sidebar.vue
+ * @description 应用侧边导航栏组件
+ *
+ * @component Sidebar
+ * @description 应用侧边导航栏，包含导航链接和设置入口。支持展开/收起状态切换，
+ *              显示 Word 后端连接状态指示器。
+ *
+ * @example
+ * <template>
+ *   <Sidebar />
+ * </template>
+ *
+ *
+ * import Sidebar from '@/components/Layout/Sidebar.vue';
+ *
+ *
+ * @dependencies
+ * - {@link useAppStore} - 应用状态管理，提供侧边栏展开/收起状态
+ * - {@link useWordStore} - Word 模块状态管理，提供后端连接状态
+ */
+
 import { useAppStore } from '@/stores/appStore';
 import { useWordStore } from '@/stores/wordStore';
 import { storeToRefs } from 'pinia';
 
+/**
+ * 应用状态管理实例
+ * @description 使用 useAppStore 获取的应用状态管理实例
+ */
 const appStore = useAppStore();
+
+/**
+ * Word 模块状态管理实例
+ * @description 使用 useWordStore 获取的 Word 模块状态管理实例
+ */
 const wordStore = useWordStore();
+
+/**
+ * 侧边栏展开状态
+ * @description 从 appStore 获取的响应式侧边栏状态，控制侧边栏的展开(true)或收起(false)
+ */
 const { sidebarOpen } = storeToRefs(appStore);
+
+/**
+ * 后端连接状态
+ * @description 从 wordStore 获取的响应式连接状态，用于显示设置图标旁的状态指示器
+ * 可能的值：'connected' | 'disconnected' | 'testing'
+ */
 const { connectionStatus } = storeToRefs(wordStore);
 
+/**
+ * 切换侧边栏展开/收起状态
+ * @description 调用 appStore 的 toggleSidebar 方法来切换侧边栏的展开/收起状态
+ * @returns {void}
+ */
 const toggle = () => {
   appStore.toggleSidebar();
 };
@@ -30,6 +77,7 @@ const toggle = () => {
 
     <!-- Navigation -->
     <nav class="flex-1 px-3 py-6 space-y-1 overflow-y-auto">
+      <!-- Words 导航链接 -->
       <RouterLink
         to="/"
         class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors group"
@@ -38,6 +86,7 @@ const toggle = () => {
         <i class="fa-solid fa-book w-5 text-center transition-colors group-hover:text-white" />
         <span class="sidebar-text font-medium whitespace-nowrap" :class="{ hidden: !sidebarOpen }">Words</span>
       </RouterLink>
+      <!-- Phrases 导航链接 -->
       <RouterLink
         to="/phrase"
         class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors group"
