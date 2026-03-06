@@ -2,6 +2,9 @@ import type { NextFunction, Request, Response } from 'express';
 
 const express = require('express') as typeof import('express');
 const router = express.Router();
+const appConfig = require('../utils/config.ts') as {
+  get: <T = unknown>(lookupPath: string, defaultValue?: T) => T;
+};
 
 const localStore = require('../localStore.ts') as {
   saveConfig: (config: Record<string, unknown>) => void;
@@ -71,12 +74,12 @@ router.post(
 router.get(
   '/config',
   asyncHandler(async (_req: Request, res: Response) => {
-    const config = localStore.getConfig();
+    const localConfig = localStore.getConfig();
     const safeConfig = {
-      MAX_LOCAL_ITEMS: config.MAX_LOCAL_ITEMS,
-      API_PORT: config.API_PORT,
-      CLIENT_DEV_PORT: config.CLIENT_DEV_PORT,
-      hasDatabaseUrl: !!(config.DATABASE_URL || process.env.DATABASE_URL),
+      MAX_LOCAL_ITEMS: localConfig.MAX_LOCAL_ITEMS,
+      API_PORT: localConfig.API_PORT,
+      CLIENT_DEV_PORT: localConfig.CLIENT_DEV_PORT,
+      hasDatabaseUrl: !!appConfig.get<string | null>('database.url', null),
     };
     res.json(safeConfig);
   })

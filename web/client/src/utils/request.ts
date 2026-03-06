@@ -1,9 +1,10 @@
-﻿import axios, {
+import axios, {
   type AxiosError,
   type AxiosRequestConfig,
   type InternalAxiosRequestConfig,
 } from 'axios';
 import { useAppStore } from '@/stores/appStore';
+import { attachWriteAuthHeader, resolveWriteAuthTokenFromRuntime } from '@/utils/writeAuth';
 
 export interface RequestConfig<D = unknown> extends AxiosRequestConfig<D> {
   skipErrorToast?: boolean;
@@ -26,7 +27,10 @@ const service = axios.create({
 });
 
 service.interceptors.request.use(
-  (config: InternalAxiosRequestConfig & { skipErrorToast?: boolean }) => config,
+  (config: InternalAxiosRequestConfig & { skipErrorToast?: boolean }) => {
+    const token = resolveWriteAuthTokenFromRuntime();
+    return attachWriteAuthHeader(config, token);
+  },
   error => Promise.reject(error)
 );
 

@@ -1,146 +1,299 @@
-**轻量级 12-Factor 配置系统 - 方案 A 实施规范**
+# 项目配置混乱检查与修正计划
 
-## 架构概述
-开发环境使用本地 `.env` 文件；生产环境通过 Docker Compose 加载服务器本地 `.env.production`（不提交 Git）。完全摒弃 `config.yml`，所有配置通过环境变量注入，应用启动时强制验证。
+## 诊断报告
 
-## 文件清单
+### 发现的问题
 
-| 文件 | 用途 | Git |
-|------|------|-----|
-| `.env` | 开发环境配置（真实值） | ❌ 忽略 |
-| `.env.example` | 配置模板（假值/说明） | ✅ 提交 |
-| `config.js` | 配置加载与验证逻辑 | ✅ 提交 |
-| `docker-compose.yml` | 生产编排（引用外部 env） | ✅ 提交 |
-| `.gitignore` | 排除 `.env` 等 | ✅ 提交 |
+#### 1. 配置文件位置混乱 ❌
 
-## 配置文件内容
+**问题描述：**
 
-### 1. .gitignore
-```gitignore
-.env
-.env.local
-.env.production
-node_modules/
-logs/
+* 项目根目录有 `.env` 和 `.env.production`
+
+* `web/` 目录下也有 `.env` 文件
+
+* 根据规范，应该只在**项目根目录**有 `.env` 文件.env.production **保留**，只删除 web/.env（多余的）。
+
+**规范要求：**
+
+```
+项目根目录/.env           ← 唯一正确的位置
+web/.env                  ← 多余，应该删除
 ```
 
-### 2. .env.example
+#### 2. 废弃的 `config.json` 仍在使用 ❌
+
+**问题描述：**
+
+* `web/client/vite.config.ts` 第 24-33 行仍在读取 `config.json`
+
+* `web/localStore.ts` 第 27 行使用 `config.json`
+
+* 根据 CONFIGURATION.md，已经移除了 `config.yml` 支持，但 `config.json` 仍有残留
+
+**代码位置：**
+
+```typescript
+// vite.config.ts 第 24-33 行
+const configPath = path.resolve(currentDir, '../config.json');
+let config: Record<string, unknown> = {};
+try {
+  config = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+} catch (_error) {
+  config = {};
+}
+const apiPort = Number(config.API_PORT || process.env.API_PORT || 8080);
+```
+
+#### 3. 环境变量命名不一致 ❌
+
+**问题描述：**
+
+* `vite.config.ts` 使用 `API_PORT` 和 `CLIENT_DEV_PORT`
+
+* `config.ts` 使用 `PORT` 和 `CLIENT_DEV_PORT`
+
+* 规范中说明 `PORT` 和 `SERVER_PORT` 是别名关系
+
+**实际映射：**
+
+```typescript
+// config.ts 中的映射
+PORT: 'server.port',
+SERVER_PORT: 'server.port',
+CLIENT_DEV_PORT: 'client.dev_port',
+```
+
+**但 vite.config.ts 中使用：**
+
+```typescript
+process.env.API_PORT  // 未在 config.ts 中定义！
+process.env.CLIENT_DEV_PORT
+```
+
+#### 4. 前端端口配置不规范 ❌
+
+**问题描述：**
+
+* 规范要求前端端口通过 `CLIENT_DEV_PORT` 配置
+
+* 但 `vite.config.ts` 先从 `config.json` 读取，再从环境变量读取
+
+* 应该统一从环境变量读取
+
+#### 5. 混合使用多种配置方式 ❌
+
+**问题描述：**
+
+| 文件                          | 使用的配置方式                    | 问题     |
+| --------------------------- | -------------------------- | ------ |
+| `web/utils/config.ts`       | 环境变量 → 代码默认值               | ✅ 规范   |
+| `web/client/vite.config.ts` | config.json → 环境变量         | ❌ 废弃方式 |
+| `web/localStore.ts`         | config.json                | ❌ 废弃方式 |
+| `web/routes/core.ts`        | config.get() + process.env | ❌ 混合使用 |
+
+### 配置规范回顾
+
+根据 `docs/CONFIGURATION.md`：
+
+1. **配置优先级**：系统环境变量 > `.env` 文件 > 代码默认值
+2. **必需配置**：`DATABASE_URL`, `ADMIN_TOKEN`, `NODE_ENV`
+3. **服务器端口**：`PORT` 或 `SERVER_PORT`（别名）
+4. **前端端口**：`CLIENT_DEV_PORT`
+5. **生产环境**：禁止 `.env` 文件，使用系统环境变量或 Docker env\_file
+
+## 修正计划
+
+### Phase 1: 清理废弃配置（P0）
+
+#### 任务 1.1: 删除多余的 .env 文件
+
+* **文件**: `web/.env`
+
+* **操作**: 删除此文件，所有配置统一到项目根目录 `.env`
+
+* **验证**: 确认 `web/` 目录下没有 `.env` 文件
+
+#### 任务 1.2: 移除 config.json 依赖
+
+* **文件**: `web/client/vite.config.ts`
+
+* **修改**:
+
+  * 删除第 24-30 行的 config.json 读取逻辑
+
+  * 直接从 `process.env` 读取配置
+
+  * 使用 `dotenv` 加载项目根目录的 `.env` 文件
+
+**修改后代码：**
+
+```typescript
+// vite.config.ts
+import dotenv from 'dotenv';
+import path from 'path';
+
+// 加载项目根目录的 .env 文件
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+const apiPort = Number(process.env.PORT || process.env.SERVER_PORT || 8080);
+const clientPort = process.env.CLIENT_DEV_PORT;
+```
+
+#### 任务 1.3: 更新 localStore.ts
+
+* **文件**: `web/localStore.ts`
+
+* **修改**:
+
+  * 删除 `config.json` 依赖
+
+  * 使用 `config.ts` 获取 `MAX_LOCAL_ITEMS`
+
+**修改后代码：**
+
+```typescript
+// localStore.ts
+const config = require('./utils/config.ts');
+this.limit = config.get('storage.max_items', 100);
+```
+
+### Phase 2: 统一配置访问（P0）
+
+#### 任务 2.1: 修复 routes/core.ts
+
+* **文件**: `web/routes/core.ts`
+
+* **问题**: 第 79 行混用 `config` 和 `process.env`
+
+* **修改**: 统一使用 `config.get()`
+
+**修改后代码：**
+
+```typescript
+// 第 79 行
+hasDatabaseUrl: !!config.get('database.url'),
+```
+
+#### 任务 2.2: 修复 vite.config.ts 环境变量
+
+* **文件**: `web/client/vite.config.ts`
+
+* **问题**: 使用 `API_PORT` 而不是 `PORT`
+
+* **修改**: 统一使用 `PORT` 或 `SERVER_PORT`
+
+**修改后代码：**
+
+```typescript
+const apiPort = Number(process.env.PORT || process.env.SERVER_PORT || 8080);
+```
+
+### Phase 3: 更新文档和模板（P1）
+
+#### 任务 3.1: 更新 .env.example
+
+* **文件**: `.env.example`
+
+* **操作**:
+
+  * 确保包含所有必需的环境变量
+
+  * 添加注释说明每个变量的用途
+
+  * 删除废弃的 `API_PORT`
+
+**更新后内容：**
+
 ```bash
+# 核心配置
 NODE_ENV=development
-PORT=3000
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-ADMIN_TOKEN=dev-token-change-in-production
+ADMIN_TOKEN=dev-token-not-for-production
+
+# 数据库配置
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/ad_fontes
+
+# 服务器配置（可选）
+PORT=8080                    # API 服务器端口
+SERVER_HOST=127.0.0.1        # 绑定地址
+SERVER_CORS_ORIGINS=["*"]    # 跨域来源
+SERVER_RATE_LIMIT=0          # 速率限制
+
+# 前端配置（可选）
+CLIENT_DEV_PORT=5173         # 前端开发服务器端口
+
+# 其他配置（可选）
+LOG_LEVEL=debug
+MAX_LOCAL_ITEMS=100
 ```
 
-### 3. config.js（配置中心）
-```javascript
-const fs = require('fs');
+#### 任务 3.2: 删除废弃的 config.json 文件
 
-// 开发环境加载 .env，生产环境禁止
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
-} else if (fs.existsSync('.env')) {
-  console.error('❌ 生产环境禁止存在 .env 文件');
-  process.exit(1);
-}
+* **操作**: 如果存在 `web/config.json`，删除它
 
-// 必填项验证
-const required = ['DATABASE_URL', 'ADMIN_TOKEN', 'NODE_ENV'];
-const missing = required.filter(k => !process.env[k]);
+### Phase 4: 验证和测试（P1）
 
-if (missing.length) {
-  console.error(`❌ 缺少环境变量: ${missing.join(', ')}`);
-  process.exit(1);
-}
+#### 任务 4.1: 验证配置加载
 
-module.exports = Object.freeze({
-  nodeEnv: process.env.NODE_ENV,
-  port: parseInt(process.env.PORT || '8080'),
-  databaseUrl: process.env.DATABASE_URL,
-  adminToken: process.env.ADMIN_TOKEN,
-  isProd: process.env.NODE_ENV === 'production',
-});
-```
+* **测试**:
 
-### 4. docker-compose.yml（生产）
-```yaml
-version: '3.8'
-services:
-  app:
-    build: .
-    container_name: ad-fontes-app
-    restart: unless-stopped
-    env_file:
-      - .env.production  # 仅服务器本地存在
-    environment:
-      - NODE_ENV=production
-    ports:
-      - "${PORT:-8080}:8080"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-```
+  1. 删除 `web/.env` 和 `config.json`
+  2. 在项目根目录 `.env` 中设置测试值
+  3. 启动前后端，验证配置正确加载
 
-### 5. Dockerfile（多阶段构建）
-```dockerfile
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
+#### 任务 4.2: 验证端口配置
 
-FROM node:20-alpine
-RUN apk add --no-cache dumb-init curl
-WORKDIR /app
-COPY --from=builder /app/node_modules ./node_modules
-COPY . .
-USER node
-EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s CMD curl -f http://localhost:8080/health || exit 1
-ENTRYPOINT ["dumb-init", "node", "index.js"]
-```
+* **测试**:
 
-## 开发与生产工作流
+  1. 修改 `.env` 中的 `PORT` 和 `CLIENT_DEV_PORT`
+  2. 重启服务，验证端口生效
 
-### 开发（本地）
-```bash
-cp .env.example .env
-# 编辑 .env 填入本地数据库真实信息
-npm install
-npm run dev
-```
+#### 任务 4.3: 验证生产环境检查
 
-### 生产（首次部署）
-```bash
-# 在服务器执行（一次性）
-echo "DATABASE_URL=postgresql://realuser:realpass@dbhost:5432/db
-ADMIN_TOKEN=$(openssl rand -hex 32)
-PORT=8080" > .env.production
+* **测试**:
 
-chmod 600 .env.production
-docker-compose up -d --build
-```
+  1. 设置 `NODE_ENV=production`
+  2. 确认应用检测到 `.env` 文件会报错退出
 
-### 生产（后续更新）
-```bash
-git pull
-docker-compose up -d --build
-```
+## 文件变更清单
 
-## 安全约束（红线）
+### 删除文件
 
-1. **Git 安全**：`.env` 和 `.env.production` 必须存在于 `.gitignore`，预提交钩子检查禁止提交含 `DATABASE_URL` 或 `ADMIN_TOKEN` 的文件
-2. **生产禁用文件**：生产容器内不得存在 `.env` 文件，仅通过 `env_file` 注入
-3. **Token 强度**：生产环境 `ADMIN_TOKEN` 必须 ≥ 32 字符，代码启动时校验长度
-4. **权限控制**：服务器上 `.env.production` 权限设为 `600`（仅 root 可读）
+* `web/.env` - 多余的配置文件
 
-## 验证命令
+* `web/config.json` - 废弃的配置文件（如果存在）
 
-```bash
-# 验证生产环境配置正确加载
-docker-compose exec app env | grep ADMIN_TOKEN
+### 修改文件
 
-# 验证应用健康
-curl http://localhost:8080/health
-```
+* `web/client/vite.config.ts` - 移除 config.json 依赖，统一环境变量
+
+* `web/localStore.ts` - 移除 config.json 依赖
+
+* `web/routes/core.ts` - 统一使用 config.get()
+
+* `.env.example` - 更新模板
+
+## 验收标准
+
+* [ ] `web/` 目录下没有 `.env` 文件
+
+* [ ] `web/` 目录下没有 `config.json` 文件
+
+* [ ] 所有配置统一从项目根目录 `.env` 加载
+
+* [ ] `vite.config.ts` 使用 `PORT` 而不是 `API_PORT`
+
+* [ ] `routes/core.ts` 统一使用 `config.get()`
+
+* [ ] `localStore.ts` 使用 `config.get()` 获取配置
+
+* [ ] 开发环境端口配置正常工作
+
+* [ ] 生产环境 `.env` 检测正常工作
+
+## 风险与注意事项
+
+1. **开发环境中断风险**：修改配置加载方式可能导致开发环境暂时无法启动
+2. **端口冲突**：修改端口配置后需要确保新端口未被占用
+3. **团队协作**：需要通知团队成员更新本地配置
+

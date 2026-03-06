@@ -1,6 +1,10 @@
 const fs = require('fs') as typeof import('fs');
 const path = require('path') as typeof import('path');
 const crypto = require('crypto') as typeof import('crypto');
+const config = require('./utils/config.ts') as {
+  get: <T = unknown>(lookupPath: string, defaultValue?: T) => T;
+  reload: () => Record<string, unknown>;
+};
 
 type LocalWordItem = {
   id: string;
@@ -19,15 +23,11 @@ type LocalConfig = {
 
 class LocalStore {
   private dataFile: string;
-  private configFile: string;
   private limit: number;
 
   constructor() {
     this.dataFile = path.join(__dirname, 'data', 'local_words.json');
-    this.configFile = path.join(__dirname, 'config.json');
-
-    const config = this.getConfig();
-    this.limit = Number(config.MAX_LOCAL_ITEMS) || 100;
+    this.limit = Number(config.get<number>('storage.max_items', 100)) || 100;
 
     const dataDir = path.dirname(this.dataFile);
     if (!fs.existsSync(dataDir)) {
@@ -36,24 +36,26 @@ class LocalStore {
   }
 
   getConfig(): LocalConfig {
-    if (!fs.existsSync(this.configFile)) return {};
-    try {
-      return JSON.parse(fs.readFileSync(this.configFile, 'utf8')) as LocalConfig;
-    } catch (error) {
-      console.error('Config read error:', error);
-      return {};
-    }
+    return {
+      DATABASE_URL: config.get<string | null>('database.url', null) || undefined,
+      API_PORT: Number(config.get<number>('server.port', 8080)),
+      CLIENT_DEV_PORT: Number(config.get<number>('client.dev_port', 5173)),
+      MAX_LOCAL_ITEMS: Number(config.get<number>('storage.max_items', 100)),
+    };
   }
 
-  saveConfig(config: Record<string, unknown>): void {
-    const current = this.getConfig();
-    const merged: LocalConfig = { ...current, ...config };
-
-    if (merged.MAX_LOCAL_ITEMS) {
-      this.limit = Number.parseInt(String(merged.MAX_LOCAL_ITEMS), 10) || 100;
+  saveConfig(nextConfig: Record<string, unknown>): void {
+    if (typeof nextConfig.DATABASE_URL === 'string' && nextConfig.DATABASE_URL.trim()) {
+      process.env.DATABASE_URL = nextConfig.DATABASE_URL.trim();
     }
 
-    fs.writeFileSync(this.configFile, JSON.stringify(merged, null, 2));
+    if (nextConfig.MAX_LOCAL_ITEMS !== undefined && nextConfig.MAX_LOCAL_ITEMS !== null) {
+      process.env.MAX_LOCAL_ITEMS = String(nextConfig.MAX_LOCAL_ITEMS);
+      const parsed = Number.parseInt(String(nextConfig.MAX_LOCAL_ITEMS), 10);
+      this.limit = Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+    }
+
+    config.reload();
   }
 
   private readData(): LocalWordItem[] {

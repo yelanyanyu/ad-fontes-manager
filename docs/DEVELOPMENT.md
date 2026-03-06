@@ -70,6 +70,36 @@ web/
 | 后端框架 | Express 5 | REST API |
 | 数据库 | PostgreSQL | 主存储 |
 | 本地存储 | LocalStorage | 离线缓存 |
+| 错误处理 | http-errors + http-status-codes | HTTP 错误创建和状态码管理 |
+
+### 错误处理
+
+项目使用分层错误处理架构：
+
+**依赖包：**
+- `http-errors` - 创建标准 HTTP 错误
+- `http-status-codes` - HTTP 状态码常量
+
+**自定义组件：**
+- `utils/errors.ts` - 自定义错误类和错误类型工厂
+  - `AppError` - 基础错误类
+  - `asyncHandler` - 异步错误捕获包装器
+  - `BadRequest`, `NotFound`, `Forbidden` 等 - 错误类型快捷方法
+- `middleware/errorHandler.ts` - 全局错误处理中间件
+
+**使用示例：**
+```typescript
+import { asyncHandler, BadRequest, NotFound } from '../utils/errors.ts';
+
+// 抛出错误
+throw BadRequest('参数错误', { field: 'name' });
+throw NotFound('单词不存在');
+
+// 包装异步路由
+router.get('/', asyncHandler(async (req, res) => {
+  // 错误会自动被捕获并传递给全局错误处理器
+}));
+```
 
 ## 开发规范
 
