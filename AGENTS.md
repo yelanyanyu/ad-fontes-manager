@@ -1,88 +1,29 @@
-# Ad Fontes Manager - Agent Guide
+# Repository Guidelines
 
-> **Quick Start**: Read `.opencode/skills/ad-fontes/SKILL.md` first
+## Project Structure & Module Organization
 
-## How to Use This Guide
+The application is split by runtime. `web/` contains the Express 5 backend: `server.ts`, `routes/`, `controllers/`, `services/`, `middleware/`, `db/`, and shared helpers in `utils/`. `web/client/` is the Vue 3.5 frontend with source under `src/` (`components/`, `views/`, `stores/`, `composables/`, `utils/`, `types/`). `node/` holds maintenance scripts, while `migrations/`, `schema.sql`, and `docs/` cover database evolution and project documentation. Read `.opencode/skills/ad-fontes/SKILL.md` and `PROJECT_DIAGNOSTIC_REPORT.md` before major changes.
 
-This project uses a **skill-based documentation system** to avoid context pollution. Instead of loading all documentation at once, agents load specific guides based on their current task.
+## Build, Test, and Development Commands
 
-## 📚 Skill Structure
+- `cd web && npm run dev`: start backend and Vite client together.
+- `cd web && npm run dev:server`: run only the Express API on port `8080`.
+- `cd web/client && npm run dev`: run only the Vue client.
+- `cd web && npm run build`: build the frontend bundle.
+- `cd web && npm run type-check`: backend TypeScript validation.
+- `cd web/client && npm run type-check`: frontend Vue/TypeScript validation.
+- `cd web && npm run lint` or `cd web/client && npm run lint`: ESLint checks.
+- `cd web/client && npm run test`: run Vitest unit tests.
+- `cd web && npm run test-api`: run the existing API smoke script against a running server.
 
-```
-.opencode/skills/ad-fontes/
-├── SKILL.md              # Entry point (always read first)
-├── getting-started.md    # First-time setup
-├── backend-patterns.md   # Express/API development
-├── frontend-patterns.md  # Vue 3/frontend development
-├── database-guide.md     # PostgreSQL/SQL patterns
-├── security-guide.md     # Authentication/security
-└── troubleshooting.md    # Debugging common issues
-```
+## Coding Style & Naming Conventions
 
-## 🎯 Quick Reference
+Use TypeScript-first changes and replace nearby `any` usages when you touch them. Prettier enforces 2-space indentation, single quotes, semicolons, trailing commas (`es5`), and 100-character lines. Keep Vue components and views in PascalCase like `EditorView.vue`; composables use `useX.ts`; stores use `xStore.ts`; backend modules use descriptive singular names such as `wordService.ts` and `wordController.ts`.
 
-**When starting work:**
-1. Read `SKILL.md` for project overview
-2. Based on your task, load the specific sub-guide
+## Testing Guidelines
 
-**Task → Guide Mapping:**
+Place frontend tests beside the source as `*.test.ts` (for example `src/utils/search.test.ts`). Backend tests live in `web/tests/`. There is no enforced global threshold yet, but the project target is 60% coverage for new code and current overall coverage is low, so every feature or bug fix should add at least one focused automated test plus the relevant manual/API verification.
 
-| Task | Load This Guide |
-|------|----------------|
-| First time on project | `getting-started.md` |
-| Backend/API work | `backend-patterns.md` |
-| Frontend/Vue work | `frontend-patterns.md` |
-| Database changes | `database-guide.md` |
-| Security review | `security-guide.md` |
-| Debugging bugs | `troubleshooting.md` |
+## Commit & Pull Request Guidelines
 
-## 📖 Key Documents
-
-**Project Overview:**
-- `README.md` - High-level project info
-- `PROJECT_DIAGNOSTIC_REPORT.md` - Known issues (287 `any` usages, etc.)
-- `docs/` - Detailed documentation (API, DATABASE, SECURITY, etc.)
-
-**Configuration:**
-- `.env.example` - Environment template
-- `schema.sql` - Database schema
-
-## 🚀 Development Commands
-
-```bash
-# Setup (first time)
-cd web && npm install
-cd client && npm install
-
-# Development
-npm run dev              # Both frontend + backend
-npm run dev:server       # Backend only
-npm run dev:client       # Frontend only
-
-# Quality checks
-npm run type-check       # TypeScript check
-npm run lint            # ESLint
-npm run format          # Prettier
-
-# Tests
-cd client && npm run test
-```
-
-## ⚠️ Critical Rules
-
-1. **Always read SKILL.md first** when starting
-2. **Check PROJECT_DIAGNOSTIC_REPORT.md** before major changes
-3. **Never commit `.env` files**
-4. **Run type-check before committing**
-5. **Replace `any` with proper types** when modifying code
-
-## 🔗 External Resources
-
-- Vue 3: https://vuejs.org/
-- Express: https://expressjs.com/
-- Pinia: https://pinia.vuejs.org/
-- PostgreSQL: https://www.postgresql.org/docs/
-
----
-
-**For detailed instructions, see the skill files in `.opencode/skills/ad-fontes/`**
+Follow Conventional Commits: `type(scope): subject`. Recent history uses patterns like `refactor(config): ...` and `fix(security): ...`. Keep commits scoped and descriptive. PRs should explain the user-facing change, list verification commands run, link the related issue or task, and include screenshots when UI behavior changes. Never commit `.env`; start from `.env.example` instead.
