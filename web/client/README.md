@@ -47,7 +47,7 @@ npm run dev
 ```
 
 *   默认访问地址: `http://localhost:5173`
-*   开发服务器会自动代理 `/api` 请求到后端（默认端口 3000，可配置）。
+*   开发服务器会自动代理 `/api` 请求到后端（默认端口 8080，可通过环境变量配置）。
 
 ### 3. 构建生产版本
 
@@ -122,12 +122,12 @@ console.log(store.dbRecords)
 ## ⚙️ 配置说明
 
 ### 代理配置 (`vite.config.ts`)
-开发环境下的 API 代理配置位于 `server.proxy`。它会自动尝试读取父目录的 `web/config.json` 或环境变量来确定后端端口。
+开发环境下的 API 代理配置位于 `server.proxy`。它会读取项目根目录 `.env` 中的 `PORT` / `SERVER_PORT`（默认 `8080`）。
 
 ```javascript
 // 逻辑片段
-const apiPort = config.API_PORT || process.env.API_PORT || 3000
-// 代理 /api -> http://localhost:3000
+const apiPort = Number(process.env.PORT || process.env.SERVER_PORT || 8080)
+// 代理 /api -> http://localhost:8080
 ```
 
 ### 样式配置 (`tailwind.config.ts`)
@@ -136,8 +136,8 @@ const apiPort = config.API_PORT || process.env.API_PORT || 3000
 ## ❓ 故障排除
 
 **Q: 启动时报错 "backend not connected"？**
-*   检查后端服务是否在端口 3000 (或配置的端口) 运行。
-*   检查 `web/config.json` 中的 `API_PORT` 设置是否正确。
+*   检查后端服务是否在端口 8080（或 `.env` 中 `PORT` / `SERVER_PORT` 指定端口）运行。
+*   检查根目录 `.env` 是否与当前启动参数一致（前端 `CLIENT_DEV_PORT`、后端 `PORT`）。
 
 **Q: 依赖安装失败？**
 *   尝试删除 `node_modules` 和 `package-lock.json` 后重新运行 `npm install`。

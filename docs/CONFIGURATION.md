@@ -106,6 +106,13 @@ chmod 600 .env.production
 | `SERVER_RATE_LIMIT` | ❌ | `0` | 每分钟请求限制，0=禁用 |
 | `SERVER_TIMEOUT_MS` | ❌ | `10000` | 请求超时毫秒数 |
 
+### 安全配置
+
+| 环境变量 | 必需 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `SECURITY_HELMET` | ❌ | `true` | 是否启用 Helmet 安全头 |
+| `SECURITY_HSTS` | ❌ | `true` | 是否发送 HSTS 头 |
+
 ### 数据库配置
 
 | 环境变量 | 必需 | 默认值 | 说明 |
@@ -142,7 +149,9 @@ postgresql://user:pass@host:5432/db?sslmode=require
 |----------|------|--------|------|
 | `LOG_LEVEL` | ❌ | `info` | 日志级别: `debug` \| `info` \| `warn` \| `error` |
 | `LOG_DIR` | ❌ | `./logs` | 日志文件目录 |
-| `LOG_AUDIT` | ❌ | `true` | 启用安全审计日志 |
+| `LOG_ROTATION_INTERVAL` | ❌ | `1d` | 日志切分周期 |
+| `LOG_ROTATION_MAX_SIZE` | ❌ | `10M` | 单个日志文件最大大小 |
+| `LOG_ROTATION_MAX_FILES` | ❌ | `30` | 保留的轮转日志文件数量 |
 
 ## 使用场景
 
@@ -171,6 +180,7 @@ DATABASE_URL=postgresql://user:pass@db:5432/ad_fontes?sslmode=require
 DATABASE_SSL=true
 SERVER_CORS_ORIGINS=[\"https://yourdomain.com\"]
 SERVER_RATE_LIMIT=100
+SECURITY_HSTS=true
 LOG_LEVEL=warn" > .env.production
 
 chmod 600 .env.production
@@ -189,6 +199,7 @@ export DATABASE_URL="postgresql://user:pass@host:5432/db?sslmode=require"
 export DATABASE_SSL="true"
 export SERVER_CORS_ORIGINS='["https://yourdomain.com"]'
 export SERVER_RATE_LIMIT="100"
+export SECURITY_HSTS="true"
 
 # 启动服务
 cd web && npm start
@@ -268,7 +279,7 @@ const allConfig = config.getAll();
 
 - 定期轮换 `ADMIN_TOKEN`
 - 定期清理旧日志文件
-- 监控配置变更（启用 `LOG_AUDIT`）
+- 定期检查日志目录与轮转策略是否符合保留要求
 
 ## 故障排查
 

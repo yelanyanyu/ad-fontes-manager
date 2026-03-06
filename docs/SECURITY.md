@@ -2,9 +2,11 @@
 
 ## 敏感数据管理
 
-### 配置文件
+### 环境变量配置
 
-项目使用 `web/config.json` 进行本地配置。此文件**绝对不能**提交到代码仓库，因为它可能包含以下敏感信息：
+项目已切换为通过环境变量加载配置。开发环境可使用根目录 `.env`，生产环境必须使用系统环境变量或 Docker `env_file`。请勿再使用 `web/config.json` / `web/config.json.template`。
+
+以下配置包含敏感信息，必须妥善保护：
 
 - 数据库凭证 (DATABASE_URL)
 - 管理员令牌 (ADMIN_TOKEN)
@@ -12,23 +14,21 @@
 
 #### 设置步骤
 
-1. 复制模板文件：
+1. 在项目根目录创建 `.env` 文件（可基于 `.env.example`）：
    ```bash
-   cp web/config.json.template web/config.json
+   cp .env.example .env
    ```
 
-2. 使用真实值编辑 `web/config.json`：
-   ```json
-   {
-     "DATABASE_URL": "postgresql://your_user:your_password@localhost:5432/your_db",
-     "API_PORT": 8080,
-     "CLIENT_DEV_PORT": 5173,
-     "MAX_LOCAL_ITEMS": 100,
-     "ADMIN_TOKEN": "your-secure-random-token"
-   }
+2. 使用真实值编辑 `.env`：
+   ```bash
+   NODE_ENV=development
+   DATABASE_URL=postgresql://your_user:your_password@localhost:5432/your_db
+   ADMIN_TOKEN=your-secure-random-token
+   PORT=8080
+   CLIENT_DEV_PORT=5173
    ```
 
-3. 确保文件被 Git 忽略（已在 `.gitignore` 中配置）
+3. 确保 `.env` 未被提交（已在 `.gitignore` 中配置）
 
 ### Git 历史清理（已完成）
 
@@ -73,7 +73,7 @@ export DATABASE_URL=postgresql://user:pass@host:5432/db
 export ADMIN_TOKEN=$(openssl rand -hex 32)
 
 # 可选
-export API_PORT=8080
+export PORT=8080
 export CLIENT_DEV_PORT=5173
 ```
 
@@ -117,7 +117,7 @@ export CLIENT_DEV_PORT=5173
 
 ```bash
 # 使用 husky
-npx husky add .husky/pre-commit "git diff --cached --name-only | grep -E 'config\.json|\.env' && exit 1 || exit 0"
+npx husky add .husky/pre-commit "git diff --cached --name-only | grep -E '\\.env(\\.|$)' && exit 1 || exit 0"
 ```
 
 ### GitHub Secret Scanning
@@ -135,12 +135,12 @@ git rev-list --objects --all | git cat-file --batch-check='%(objecttype) %(objec
 
 ## 安全清单
 
-- [x] `web/config.json` 在 `.gitignore` 中
-- [x] `web/config.json.template` 存在且使用占位值
+- [x] `.env` 在 `.gitignore` 中
 - [x] `web/config.json` 已从 Git 历史中移除
+- [x] `web/config.json.template` 已移除（不再使用）
 - [ ] 数据库密码已更改为强密码
 - [ ] ADMIN_TOKEN 是加密安全的随机字符串
-- [ ] 生产环境使用环境变量而非 config.json
+- [ ] 生产环境使用系统环境变量（不使用 `.env` 文件）
 - [ ] 团队成员了解安全策略
 - [ ] 启用了 GitHub Secret Scanning
 

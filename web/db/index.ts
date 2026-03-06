@@ -33,7 +33,7 @@ const getPool = async (): Promise<PoolLike> => {
 
   if (!targetUrl) {
     throw new Error(
-      'No database URL configured. Please set database.url in config.yml or AD_FONTES_DATABASE_URL environment variable.'
+      'No database URL configured. Please set DATABASE_URL in the environment or .env file.'
     );
   }
 

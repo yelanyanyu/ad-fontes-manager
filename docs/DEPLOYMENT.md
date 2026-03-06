@@ -55,7 +55,9 @@ SERVER_RATE_LIMIT=100
 # 日志配置
 LOG_LEVEL=warn
 LOG_DIR=./logs
-LOG_AUDIT=true
+LOG_ROTATION_INTERVAL=1d
+LOG_ROTATION_MAX_SIZE=10M
+LOG_ROTATION_MAX_FILES=30
 EOF
 
 # 设置文件权限 (仅 root 可读)
@@ -115,6 +117,7 @@ export DATABASE_URL="postgresql://user:password@localhost:5432/ad_fontes?sslmode
 export DATABASE_SSL="true"
 export SERVER_CORS_ORIGINS='["https://yourdomain.com"]'
 export SERVER_RATE_LIMIT="100"
+export SECURITY_HSTS="true"
 export LOG_LEVEL="warn"
 ```
 

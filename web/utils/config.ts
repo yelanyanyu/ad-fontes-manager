@@ -73,17 +73,10 @@ const defaultConfig: ConfigObject = {
       max_size: '10M',
       max_files: 30,
     },
-    audit: true,
-  },
-  features: {
-    local_draft: true,
-    sync: true,
-    conflict_detection: true,
   },
   security: {
     helmet: true,
     hsts: true,
-    min_password_length: 8,
   },
 };
 
@@ -103,7 +96,11 @@ const envMapping: Record<string, string> = {
   MAX_LOCAL_ITEMS: 'storage.max_items',
   LOG_LEVEL: 'logging.level',
   LOG_DIR: 'logging.dir',
-  LOG_AUDIT: 'logging.audit',
+  LOG_ROTATION_INTERVAL: 'logging.rotation.interval',
+  LOG_ROTATION_MAX_SIZE: 'logging.rotation.max_size',
+  LOG_ROTATION_MAX_FILES: 'logging.rotation.max_files',
+  SECURITY_HELMET: 'security.helmet',
+  SECURITY_HSTS: 'security.hsts',
 };
 
 function parseEnvValue(value: string | undefined): ConfigValue | undefined {
