@@ -1,4 +1,4 @@
-﻿import type { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 const express = require('express') as typeof import('express');
 const router = express.Router();
@@ -13,46 +13,25 @@ const { getPool, resetPool } = require('../db') as {
   resetPool: () => Promise<void>;
 };
 
-const { asyncHandler, Unauthorized, ServiceUnavailable } = require('../utils/errors.ts') as {
+const { asyncHandler, ServiceUnavailable } = require('../utils/errors.ts') as {
   asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
-  Unauthorized: (message: string) => Error;
-  ServiceUnavailable: (message: string) => Error;
+  ServiceUnavailable: (message: string, data?: unknown) => Error;
 };
 
 const { loggers } = require('../utils/logger.ts') as {
   loggers: {
-    auth: { error: (msg: string) => void; warn: (msg: string) => void };
     db: { error: (msg: string, error?: unknown) => void };
     system: { info: (msg: string) => void };
   };
 };
 
-const requireAdminAuth = (req: Request, _res: Response, next: NextFunction): void => {
-  const isProduction = process.env.NODE_ENV === 'production';
-  const adminToken = process.env.ADMIN_TOKEN;
-  const requestToken = req.headers['x-admin-token'];
-
-  if (isProduction) {
-    if (!adminToken) {
-      loggers.auth.error('[Security] ADMIN_TOKEN not configured in production');
-      throw ServiceUnavailable('Service unavailable: admin authentication not configured');
-    }
-
-    if (requestToken !== adminToken) {
-      loggers.auth.warn(`[Security] Unauthorized config access attempt from ${req.ip}`);
-      throw Unauthorized('Unauthorized: invalid admin token');
-    }
-  } else if (adminToken && requestToken !== adminToken) {
-    loggers.auth.warn(`[Security] Unauthorized config access attempt from ${req.ip} (dev mode)`);
-    throw Unauthorized('Unauthorized: invalid admin token');
-  }
-
-  next();
+const { requireWriteAccess } = require('../middleware/writeAuth.ts') as {
+  requireWriteAccess: (req: Request, res: Response, next: NextFunction) => void;
 };
 
 router.get(
   '/status',
-  asyncHandler(async (_req: Request, res: Response) => {
+  asyncHandler(async (req: Request, res: Response) => {
     try {
       const pool = await getPool();
       await pool.query('SELECT 1');
@@ -60,14 +39,17 @@ router.get(
     } catch (error) {
       const err = error as { message?: string };
       loggers.db.error('Database status check failed:', err.message);
-      res.json({ connected: false, error: err.message });
+      throw ServiceUnavailable('Database unavailable', {
+        connected: false,
+        route: req.originalUrl || req.url,
+      });
     }
   })
 );
 
 router.post(
   '/config',
-  requireAdminAuth,
+  requireWriteAccess,
   asyncHandler(async (req: Request, res: Response) => {
     const body = req.body as {
       database_url?: string;
@@ -115,3 +97,4 @@ router.get(
 );
 
 module.exports = router;
+

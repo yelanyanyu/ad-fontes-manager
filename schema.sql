@@ -238,39 +238,46 @@ CREATE POLICY "Allow public read access" ON user_requests
     FOR SELECT
     USING true;
 
--- Public write access
-CREATE POLICY "Allow public write access" ON words
+-- Controlled write access for service role (Phase 0 baseline hardening)
+-- NOTE: writes must go through trusted app/service DB credentials, not PUBLIC.
+CREATE POLICY "Allow service write access" ON words
     AS PERMISSIVE
     FOR ALL
+    TO postgres
     USING true
     WITH CHECK true;
 
-CREATE POLICY "Allow public write access" ON etymologies
+CREATE POLICY "Allow service write access" ON etymologies
     AS PERMISSIVE
     FOR ALL
+    TO postgres
     USING true
     WITH CHECK true;
 
-CREATE POLICY "Allow public write access" ON cognates
+CREATE POLICY "Allow service write access" ON cognates
     AS PERMISSIVE
     FOR ALL
+    TO postgres
     USING true
     WITH CHECK true;
 
-CREATE POLICY "Allow public write access" ON examples
+CREATE POLICY "Allow service write access" ON examples
     AS PERMISSIVE
     FOR ALL
+    TO postgres
     USING true
     WITH CHECK true;
 
-CREATE POLICY "Allow public write access" ON synonyms
+CREATE POLICY "Allow service write access" ON synonyms
     AS PERMISSIVE
     FOR ALL
+    TO postgres
     USING true
     WITH CHECK true;
 
-CREATE POLICY "Allow public write access" ON user_requests
+CREATE POLICY "Allow service write access" ON user_requests
     AS PERMISSIVE
     FOR ALL
+    TO postgres
     USING true
     WITH CHECK true;

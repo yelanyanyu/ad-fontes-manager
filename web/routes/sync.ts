@@ -26,6 +26,10 @@ const { asyncHandler, BadRequest } = require('../utils/errors.ts') as {
   BadRequest: (message: string, data?: unknown) => Error;
 };
 
+const { requireWriteAccess } = require('../middleware/writeAuth.ts') as {
+  requireWriteAccess: (req: Request, res: Response, next: () => void) => void;
+};
+
 const { StatusCodes } = require('http-status-codes') as {
   StatusCodes: { GONE: number };
 };
@@ -45,6 +49,7 @@ router.get('/local', (_req: Request, res: Response) => {
 
 router.post(
   '/local',
+  requireWriteAccess,
   asyncHandler(async (req: Request, res: Response) => {
     const body = req.body as { yaml?: string; id?: string; forceUpdate?: boolean };
     const yamlStr = String(body.yaml || '');
@@ -97,7 +102,7 @@ router.post(
   })
 );
 
-router.delete('/local/:id', (req: Request, res: Response) => {
+router.delete('/local/:id', requireWriteAccess, (req: Request, res: Response) => {
   localStore.delete(toStringValue(req.params.id));
   res.json({ success: true });
 });
@@ -130,6 +135,7 @@ router.post(
 
 router.post(
   '/sync/execute',
+  requireWriteAccess,
   asyncHandler(async (req: Request, res: Response) => {
     const { items, forceUpdate } = req.body as {
       items?: Array<{ id: string; raw_yaml: string }>;
@@ -169,7 +175,7 @@ router.post(
   })
 );
 
-router.post('/sync', (_req: Request, res: Response) => {
+router.post('/sync', requireWriteAccess, (_req: Request, res: Response) => {
   res.status(StatusCodes.GONE).json({ error: 'Deprecated. Use /sync/check and /sync/execute' });
 });
 
