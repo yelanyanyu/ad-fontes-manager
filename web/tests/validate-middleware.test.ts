@@ -71,6 +71,34 @@ test('validateQuery should replace req.query with parsed data', () => {
   assert.deepEqual(req.query, { page: 2, include: 'examples,cognates' });
 });
 
+test('validateQuery should work when req.query is getter-only (Express 5)', () => {
+  const { validateQuery } = freshRequire(validateModulePath);
+  const middleware = validateQuery(
+    z.object({
+      page: z.coerce.number().int().min(1).default(1),
+    })
+  );
+
+  const req: Record<string, unknown> = {};
+  Object.defineProperty(req, 'query', {
+    get() {
+      return { page: '3' };
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  let nextCalled = false;
+  assert.doesNotThrow(() =>
+    middleware(req as any, {}, () => {
+      nextCalled = true;
+    })
+  );
+
+  assert.equal(nextCalled, true);
+  assert.deepEqual((req as any).query, { page: 3 });
+});
+
 test('validateParams should replace req.params with parsed data', () => {
   const { validateParams } = freshRequire(validateModulePath);
   const middleware = validateParams(
