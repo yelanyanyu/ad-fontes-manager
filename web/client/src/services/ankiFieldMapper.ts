@@ -24,18 +24,6 @@ const firstExampleSentence = (data: UnknownRecord): string => {
   return toText((first as UnknownRecord).sentence);
 };
 
-const collectNotes = (data: UnknownRecord): string => {
-  const parts = [
-    `POS: ${toText(getByPath(data, 'yield.part_of_speech'))}`,
-    `Syllabification: ${toText(getByPath(data, 'yield.syllabification'))}`,
-    `EN: ${toText(getByPath(data, 'yield.contextual_meaning.en'))}`,
-    `ZH: ${toText(getByPath(data, 'yield.contextual_meaning.zh'))}`,
-    `Root: ${toText(getByPath(data, 'etymology.root_and_affixes.root'))}`,
-  ].filter(item => item && !item.endsWith(': '));
-
-  return parts.join('\n');
-};
-
 export const mapWordToAnkiFields = (
   data: UnknownRecord,
   addReverse: boolean,
@@ -49,7 +37,7 @@ export const mapWordToAnkiFields = (
   return {
     Word: lemma,
     Context: context,
-    notes: collectNotes(data),
+    notes: '',
     Back: back,
     'Add Reverse': addReverse ? 'true' : '',
     Media: media,
