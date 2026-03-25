@@ -78,8 +78,15 @@ class WordAssembler {
         isArray: true,
         getData: (data: Record<string, any>) => {
           const cognates = data.cognate_family?.cognates || [];
+          const seen = new Set<string>();
           return cognates
             .filter((c: Record<string, unknown>) => c.word)
+            .filter((c: Record<string, unknown>) => {
+              const word = c.word as string;
+              if (seen.has(word)) return false;
+              seen.add(word);
+              return true;
+            })
             .map((c: Record<string, unknown>) => ({
               word: c.word,
               logic: c.logic,
