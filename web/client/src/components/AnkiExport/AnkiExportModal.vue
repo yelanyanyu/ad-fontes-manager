@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import type { AnkiExportPayload } from '@/types/anki';
+import type { AnkiDuplicateConflict, AnkiExportPayload } from '@/types/anki';
 
 const props = defineProps<{
   open: boolean;
   busy: boolean;
   error: string;
   payload: AnkiExportPayload | null;
+  duplicateConflict: AnkiDuplicateConflict | null;
   ankiConnected: boolean;
   deckOptions: string[];
   modelOptions: string[];
@@ -27,6 +28,8 @@ const emit = defineEmits<{
   (e: 'browse-apkg-path'): void;
   (e: 'refresh'): void;
   (e: 'import-test'): void;
+  (e: 'resolve-conflict-overwrite'): void;
+  (e: 'resolve-conflict-skip'): void;
   (e: 'export-apkg'): void;
 }>();
 
@@ -139,6 +142,33 @@ const onOverlayClick = (): void => emit('close');
           {{ error }}
         </div>
 
+        <div
+          v-if="duplicateConflict"
+          class="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-3 text-sm"
+        >
+          <div class="font-semibold">检测到重复单词：{{ duplicateConflict.word }}</div>
+          <div class="text-xs mt-1">
+            Deck: {{ duplicateConflict.deckName }} | Model: {{ duplicateConflict.modelName }} | NoteId:
+            {{ duplicateConflict.noteId }}
+          </div>
+          <div class="mt-3 flex gap-2 justify-end">
+            <button
+              class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50"
+              :disabled="busy"
+              @click="emit('resolve-conflict-skip')"
+            >
+              跳过
+            </button>
+            <button
+              class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500"
+              :disabled="busy"
+              @click="emit('resolve-conflict-overwrite')"
+            >
+              覆盖已有卡片
+            </button>
+          </div>
+        </div>
+
         <div v-if="payload" class="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <h4 class="font-bold text-slate-700 text-sm mb-3">Target Fields Preview</h4>
           <div class="grid grid-cols-1 gap-2 text-xs">
@@ -167,7 +197,7 @@ const onOverlayClick = (): void => emit('close');
       <div class="px-5 py-4 border-t border-slate-100 flex flex-wrap justify-end gap-2">
         <button
           class="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-          :disabled="busy || !payload"
+          :disabled="busy || !payload || !!duplicateConflict"
           @click="emit('import-test')"
         >
           {{ busy ? 'Working...' : 'Import to Selected Deck' }}

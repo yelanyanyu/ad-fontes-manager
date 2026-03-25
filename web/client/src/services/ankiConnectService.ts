@@ -1,4 +1,6 @@
 import type {
+  AnkiConflictAction,
+  AnkiDuplicateConflict,
   AnkiConnectInvokePayload,
   AnkiConnectInvokeResult,
   AnkiExportPayload,
@@ -63,6 +65,55 @@ const ensureDeckExists = async (deckName: string): Promise<void> => {
   });
 };
 
+const escapeAnkiQueryValue = (value: string): string => value.replace(/(["\\])/g, '\\$1');
+
+const getExistingNoteByWord = async (
+  payload: AnkiExportPayload
+): Promise<AnkiDuplicateConflict | null> => {
+  const query = [
+    `deck:"${escapeAnkiQueryValue(payload.options.deckName)}"`,
+    `note:"${escapeAnkiQueryValue(payload.options.modelName)}"`,
+    `Word:"${escapeAnkiQueryValue(payload.fields.Word)}"`,
+  ].join(' ');
+
+  const noteIds = await invoke<number[]>({
+    action: 'findNotes',
+    version: ANKI_CONNECT_VERSION,
+    params: { query },
+  });
+
+  if (!noteIds.length) return null;
+
+  const [noteInfo] = await invoke<
+    Array<{
+      noteId: number;
+      fields: Record<string, { value: string }>;
+    }>
+  >({
+    action: 'notesInfo',
+    version: ANKI_CONNECT_VERSION,
+    params: { notes: [noteIds[0]] },
+  });
+
+  if (!noteInfo) return null;
+
+  return {
+    noteId: noteInfo.noteId,
+    deckName: payload.options.deckName,
+    modelName: payload.options.modelName,
+    word: payload.fields.Word,
+    existingFields: {
+      Word: noteInfo.fields.Word?.value || '',
+      Context: noteInfo.fields.Context?.value || '',
+      notes: noteInfo.fields.notes?.value || '',
+      Back: noteInfo.fields.Back?.value || '',
+      'Add Reverse': noteInfo.fields['Add Reverse']?.value || '',
+      Media: noteInfo.fields.Media?.value || '',
+    },
+    incomingFields: payload.fields,
+  };
+};
+
 export const pingAnkiConnect = async (): Promise<number> =>
   invoke<number>({ action: 'version', version: ANKI_CONNECT_VERSION });
 
@@ -108,6 +159,38 @@ export const importPayloadToAnki = async (
   });
 
   return { noteId };
+};
+
+export const checkDuplicateConflict = async (
+  payload: AnkiExportPayload
+): Promise<AnkiDuplicateConflict | null> => {
+  await pingAnkiConnect();
+  await ensureModelExists(payload.options.modelName);
+  await ensureDeckExists(payload.options.deckName);
+  return getExistingNoteByWord(payload);
+};
+
+export const applyDuplicateResolution = async (
+  payload: AnkiExportPayload,
+  conflict: AnkiDuplicateConflict,
+  action: AnkiConflictAction
+): Promise<{ noteId: number } | { skipped: true }> => {
+  if (action === 'skip') {
+    return { skipped: true };
+  }
+
+  await invoke({
+    action: 'updateNoteFields',
+    version: ANKI_CONNECT_VERSION,
+    params: {
+      note: {
+        id: conflict.noteId,
+        fields: payload.fields,
+      },
+    },
+  });
+
+  return { noteId: conflict.noteId };
 };
 
 export const downloadDeckAsApkg = async (

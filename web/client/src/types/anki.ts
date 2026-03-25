@@ -39,3 +39,19 @@ export interface ParsedWordSource {
   data: Record<string, unknown>;
   record: WordRecord;
 }
+
+export type AnkiConflictAction = 'overwrite' | 'skip';
+
+export interface AnkiDuplicateConflict {
+  noteId: number;
+  deckName: string;
+  modelName: string;
+  word: string;
+  existingFields: Partial<AnkiTargetFields>;
+  incomingFields: AnkiTargetFields;
+}
+
+export type AnkiImportResult =
+  | { status: 'imported'; noteId: number }
+  | { status: 'skipped' }
+  | { status: 'conflict'; conflict: AnkiDuplicateConflict };

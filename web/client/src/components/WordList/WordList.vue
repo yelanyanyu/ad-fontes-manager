@@ -215,6 +215,7 @@ const {
   busy: ankiExportBusy,
   error: ankiExportError,
   payload: ankiExportPayload,
+  duplicateConflict: ankiDuplicateConflict,
   ankiConnected: ankiConnected,
   deckOptions: ankiDeckOptions,
   modelOptions: ankiModelOptions,
@@ -229,6 +230,7 @@ const {
   browseApkgPath: browseAnkiApkgPath,
   updateAndRefresh: refreshAnkiExportPayload,
   importToAnki,
+  resolveDuplicateConflict,
   exportApkg,
 } = useAnkiExport();
 
@@ -242,10 +244,42 @@ const handleExport = async (): Promise<void> => {
 const handleImportToAnki = async (): Promise<void> => {
   try {
     const result = await importToAnki();
+    if (result.status === 'conflict') {
+      appStore.addToast('检测到重复单词，请选择覆盖或跳过。', 'warning');
+      return;
+    }
+    if (result.status === 'skipped') {
+      appStore.addToast('Skipped duplicate note.', 'info');
+      return;
+    }
     appStore.addToast(`Imported to Anki successfully (noteId: ${result.noteId})`, 'success');
   } catch (error) {
     const err = error as { message?: string };
     appStore.addToast(err.message || 'Failed to import to Anki', 'error');
+  }
+};
+
+const handleResolveDuplicateOverwrite = async (): Promise<void> => {
+  try {
+    const result = await resolveDuplicateConflict('overwrite');
+    if (result.status === 'imported') {
+      appStore.addToast(`Duplicate resolved by overwrite (noteId: ${result.noteId})`, 'success');
+    }
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to overwrite duplicate note', 'error');
+  }
+};
+
+const handleResolveDuplicateSkip = async (): Promise<void> => {
+  try {
+    const result = await resolveDuplicateConflict('skip');
+    if (result.status === 'skipped') {
+      appStore.addToast('Skipped duplicate note.', 'info');
+    }
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to skip duplicate note', 'error');
   }
 };
 
@@ -257,6 +291,10 @@ const handleExportApkg = async (): Promise<void> => {
     const err = error as { message?: string };
     appStore.addToast(err.message || 'Failed to export .apkg', 'error');
   }
+};
+
+const handleConnectAnkiExport = async (): Promise<void> => {
+  await connectAnkiExport(true);
 };
 
 const setAnkiDeckName = (value: string): void => {
@@ -463,6 +501,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :busy="ankiExportBusy"
       :error="ankiExportError"
       :payload="ankiExportPayload"
+      :duplicate-conflict="ankiDuplicateConflict"
       :anki-connected="ankiConnected"
       :deck-options="ankiDeckOptions"
       :model-options="ankiModelOptions"
@@ -472,7 +511,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :tags-input="ankiTagsInput"
       :apkg-path="ankiApkgPath"
       @close="closeAnkiExport"
-      @connect-anki="connectAnkiExport"
+      @connect-anki="handleConnectAnkiExport"
       @browse-apkg-path="browseAnkiApkgPath"
       @update:deck-name="setAnkiDeckName"
       @update:model-name="setAnkiModelName"
@@ -481,6 +520,8 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @update:apkg-path="setAnkiApkgPath"
       @refresh="refreshAnkiExportPayload"
       @import-test="handleImportToAnki"
+      @resolve-conflict-overwrite="handleResolveDuplicateOverwrite"
+      @resolve-conflict-skip="handleResolveDuplicateSkip"
       @export-apkg="handleExportApkg"
     />
     <WordActionMenu

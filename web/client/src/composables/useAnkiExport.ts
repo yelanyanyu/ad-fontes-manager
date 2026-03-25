@@ -3,13 +3,21 @@ import yaml from 'js-yaml';
 import request from '@/utils/request';
 import { createAnkiPayload, getDefaultAnkiOptions } from '@/services/ankiExportService';
 import {
+  applyDuplicateResolution,
+  checkDuplicateConflict,
   getDeckNames,
   getModelNames,
   importPayloadToAnki,
   pingAnkiConnect,
 } from '@/services/ankiConnectService';
 import { exportApkgViaAnkiConnect } from '@/services/apkgExportService';
-import type { AnkiExportPayload, ParsedWordSource } from '@/types/anki';
+import type {
+  AnkiConflictAction,
+  AnkiDuplicateConflict,
+  AnkiExportPayload,
+  AnkiImportResult,
+  ParsedWordSource,
+} from '@/types/anki';
 import type { WordRecord } from '@/types/word-list';
 
 type UnknownRecord = Record<string, unknown>;
@@ -23,6 +31,16 @@ interface StoredOptions {
   tags?: string[];
   apkgPath?: string;
 }
+
+const ankiSessionCache: {
+  connected: boolean;
+  deckOptions: string[];
+  modelOptions: string[];
+} = {
+  connected: false,
+  deckOptions: [],
+  modelOptions: [],
+};
 
 const parseYamlData = (source: unknown): UnknownRecord | null => {
   if (!source) return null;
@@ -56,10 +74,11 @@ export const useAnkiExport = () => {
   const busy = ref(false);
   const error = ref('');
   const payload = ref<AnkiExportPayload | null>(null);
+  const duplicateConflict = ref<AnkiDuplicateConflict | null>(null);
   const currentRecord = ref<WordRecord | null>(null);
-  const deckOptions = ref<string[]>([]);
-  const modelOptions = ref<string[]>([]);
-  const ankiConnected = ref(false);
+  const deckOptions = ref<string[]>([...ankiSessionCache.deckOptions]);
+  const modelOptions = ref<string[]>([...ankiSessionCache.modelOptions]);
+  const ankiConnected = ref(ankiSessionCache.connected);
 
   const defaults = getDefaultAnkiOptions();
   const stored = loadStoredOptions();
@@ -152,7 +171,11 @@ export const useAnkiExport = () => {
     return normalized.toLowerCase().endsWith('.apkg') ? normalized : `${normalized}.apkg`;
   };
 
-  const connectAnki = async (): Promise<void> => {
+  const connectAnki = async (force = false): Promise<void> => {
+    if (!force && ankiConnected.value && deckOptions.value.length > 0 && modelOptions.value.length > 0) {
+      return;
+    }
+
     busy.value = true;
     error.value = '';
     try {
@@ -161,6 +184,9 @@ export const useAnkiExport = () => {
       deckOptions.value = decks;
       modelOptions.value = models;
       ankiConnected.value = true;
+      ankiSessionCache.connected = true;
+      ankiSessionCache.deckOptions = [...decks];
+      ankiSessionCache.modelOptions = [...models];
 
       if (decks.length > 0 && !decks.includes(deckName.value)) {
         deckName.value = decks[0];
@@ -173,6 +199,7 @@ export const useAnkiExport = () => {
     } catch (err) {
       const e = err as { message?: string };
       ankiConnected.value = false;
+      ankiSessionCache.connected = false;
       error.value = e.message || 'Failed to connect to AnkiConnect';
       throw err;
     } finally {
@@ -219,7 +246,9 @@ export const useAnkiExport = () => {
     currentRecord.value = record;
 
     try {
-      await connectAnki();
+      if (!ankiConnected.value) {
+        await connectAnki();
+      }
       await refreshPayload();
     } catch (err) {
       const e = err as { message?: string };
@@ -233,6 +262,7 @@ export const useAnkiExport = () => {
   const close = (): void => {
     isOpen.value = false;
     error.value = '';
+    duplicateConflict.value = null;
   };
 
   const updateAndRefresh = async (): Promise<void> => {
@@ -250,7 +280,7 @@ export const useAnkiExport = () => {
     }
   };
 
-  const importToAnki = async (): Promise<{ noteId: number }> => {
+  const importToAnki = async (): Promise<AnkiImportResult> => {
     if (!payload.value) {
       throw new Error('Export payload is not ready');
     }
@@ -261,11 +291,45 @@ export const useAnkiExport = () => {
       if (!version) {
         throw new Error('AnkiConnect version check failed');
       }
+      const conflict = await checkDuplicateConflict(payload.value);
+      if (conflict) {
+        duplicateConflict.value = conflict;
+        return { status: 'conflict', conflict };
+      }
+
       const result = await importPayloadToAnki(payload.value);
-      return result;
+      return { status: 'imported', noteId: result.noteId };
     } catch (err) {
       const e = err as { message?: string };
       error.value = e.message || 'Failed to import note to Anki';
+      throw err;
+    } finally {
+      busy.value = false;
+    }
+  };
+
+  const resolveDuplicateConflict = async (
+    action: AnkiConflictAction
+  ): Promise<AnkiImportResult> => {
+    if (!payload.value || !duplicateConflict.value) {
+      throw new Error('No duplicate conflict to resolve');
+    }
+
+    busy.value = true;
+    error.value = '';
+    try {
+      const result = await applyDuplicateResolution(payload.value, duplicateConflict.value, action);
+      const conflictSnapshot = duplicateConflict.value;
+      duplicateConflict.value = null;
+
+      if ('skipped' in result) {
+        return { status: 'skipped' };
+      }
+
+      return { status: 'imported', noteId: result.noteId ?? conflictSnapshot.noteId };
+    } catch (err) {
+      const e = err as { message?: string };
+      error.value = e.message || 'Failed to resolve duplicate conflict';
       throw err;
     } finally {
       busy.value = false;
@@ -303,6 +367,7 @@ export const useAnkiExport = () => {
     busy,
     error,
     payload,
+    duplicateConflict,
     ankiConnected,
     deckOptions,
     modelOptions,
@@ -317,6 +382,7 @@ export const useAnkiExport = () => {
     browseApkgPath,
     updateAndRefresh,
     importToAnki,
+    resolveDuplicateConflict,
     exportApkg,
   };
 };
