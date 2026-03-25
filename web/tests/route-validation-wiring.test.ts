@@ -6,7 +6,8 @@ const wordsRoutePath = path.resolve(__dirname, '../routes/words.ts');
 const syncRoutePath = path.resolve(__dirname, '../routes/sync.ts');
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@127.0.0.1:5432/test_db';
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL || 'postgresql://test:test@127.0.0.1:5432/test_db';
 process.env.ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'test-admin-token';
 
 function freshRequire(modulePath: string): any {
@@ -29,7 +30,9 @@ function routeUsesMiddlewareByName(
   const routeLayer = getRouteLayer(router, method, routePath);
   assert.ok(routeLayer, `missing route ${method.toUpperCase()} ${routePath}`);
 
-  return routeLayer.route.stack.some((stackLayer: any) => stackLayer.handle?.name === middlewareName);
+  return routeLayer.route.stack.some(
+    (stackLayer: any) => stackLayer.handle?.name === middlewareName
+  );
 }
 
 test('words routes should register zod validation middlewares on key endpoints', () => {

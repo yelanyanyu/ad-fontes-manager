@@ -19,6 +19,19 @@ const assembler = require('./WordAssembler') as WordAssemblerLike;
 const { createContextLogger } = require('../../utils/logger.ts') as {
   createContextLogger: (context: Record<string, unknown>) => LoggerLike;
 };
+const { WordSchema } = require('../../schemas/word.ts') as {
+  WordSchema: {
+    safeParse: (input: unknown) => {
+      success: boolean;
+      data: WordSchemaInput;
+      error: {
+        issues: Array<{ message: string }>;
+      };
+    };
+  };
+};
+
+type WordSchemaInput = import('../../schemas/word.ts').WordSchemaInput;
 
 interface LoggerLike {
   debug: (obj: unknown, msg?: string) => void;
@@ -83,13 +96,16 @@ interface WordRepositoryLike {
 }
 
 interface WordAssemblerLike {
-  extractWordData: (data: Record<string, any>) => Record<string, unknown>;
+  extractWordData: (data: WordSchemaInput | Record<string, any>) => Record<string, unknown>;
   updateChildren: (
     client: DbClientLike,
     wordId: string | number,
-    data: Record<string, any>
+    data: WordSchemaInput | Record<string, any>
   ) => Promise<void>;
-  extractUserContext: (data: Record<string, any>) => { userWord?: string; userContext?: string };
+  extractUserContext: (data: WordSchemaInput | Record<string, any>) => {
+    userWord?: string;
+    userContext?: string;
+  };
 }
 
 class WordService {
@@ -126,6 +142,15 @@ class WordService {
       return { status: 'invalid', errors: validation.errors };
     }
 
+    const parsedWord = WordSchema.safeParse(data);
+    if (!parsedWord.success) {
+      const parseErrors = parsedWord.error.issues.map(issue => issue.message);
+      logger.warn({ errors: parseErrors }, 'Zod parse failed after compatibility validation');
+      return { status: 'invalid', errors: parseErrors };
+    }
+
+    const structuredData = parsedWord.data;
+
     const pool = await getPool();
     const client = await pool.connect();
 
@@ -140,13 +165,13 @@ class WordService {
         return { status: 'duplicate', lemma: existing.lemma, id: existing.id };
       }
 
-      const wordData = assembler.extractWordData(data);
+      const wordData = assembler.extractWordData(structuredData);
       logger.debug({ wordData }, 'Extracted word data');
 
       const insertResult = await repository.create(req, wordData, client);
       const wordId = insertResult.id;
 
-      await assembler.updateChildren(client, wordId, data);
+      await assembler.updateChildren(client, wordId, structuredData);
       await client.query('COMMIT');
 
       logger.info(

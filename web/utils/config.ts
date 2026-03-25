@@ -1,5 +1,16 @@
 const path = require('path') as typeof import('path');
 const fs = require('fs') as typeof import('fs');
+const { ConfigSchema } = require('../schemas/config.ts') as {
+  ConfigSchema: {
+    safeParse: (value: unknown) => {
+      success: boolean;
+      data: unknown;
+      error: {
+        issues: Array<{ path: Array<string | number>; message: string }>;
+      };
+    };
+  };
+};
 
 type Primitive = string | number | boolean | null;
 type ConfigValue = Primitive | ConfigObject | ConfigValue[];
@@ -181,36 +192,26 @@ function getByPath(config: ConfigObject, lookupPath: string): ConfigValue | unde
   return current;
 }
 
-function validateConfig(config: ConfigObject): void {
-  const required = [
-    { path: 'database.url', env: 'DATABASE_URL' },
-    { path: 'core.admin_token', env: 'ADMIN_TOKEN' },
-    { path: 'core.env', env: 'NODE_ENV' },
-  ];
-
-  const missing: string[] = [];
-  for (const item of required) {
-    if (!getByPath(config, item.path)) {
-      missing.push(item.env);
-    }
-  }
-
-  if (missing.length > 0) {
-    console.error('❌ 缺少必需的环境变量:');
-    missing.forEach(env => console.error(`   - ${env}`));
+function validateConfig(config: ConfigObject): ConfigObject {
+  const result = ConfigSchema.safeParse(config);
+  if (!result.success) {
+    console.error('❌ 配置校验失败:');
+    result.error.issues.forEach(issue => {
+      const issuePath = issue.path.length > 0 ? issue.path.join('.') : 'root';
+      console.error(`   - ${issuePath}: ${issue.message}`);
+    });
     process.exit(1);
   }
 
-  if (getByPath(config, 'core.env') === 'production') {
-    const adminToken = String(getByPath(config, 'core.admin_token') ?? '');
-    if (adminToken.length < 32) {
-      console.error('❌ 生产环境 ADMIN_TOKEN 必须至少 32 字符');
-      process.exit(1);
-    }
-    if (!getByPath(config, 'database.ssl')) {
-      console.warn('⚠️  警告: 生产环境建议启用数据库 SSL (DATABASE_SSL=true)');
-    }
+  const validatedConfig = result.data as ConfigObject;
+  if (
+    getByPath(validatedConfig, 'core.env') === 'production' &&
+    !getByPath(validatedConfig, 'database.ssl')
+  ) {
+    console.warn('⚠️  警告: 生产环境建议启用数据库 SSL (DATABASE_SSL=true)');
   }
+
+  return validatedConfig;
 }
 
 let configCache: ConfigObject | null = null;
@@ -218,8 +219,7 @@ let configCache: ConfigObject | null = null;
 function loadConfig(): ConfigObject {
   if (configCache) return configCache;
   const envConfig = loadFromEnv();
-  configCache = deepMerge(defaultConfig, envConfig);
-  validateConfig(configCache);
+  configCache = validateConfig(deepMerge(defaultConfig, envConfig));
   return configCache;
 }
 

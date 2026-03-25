@@ -12,7 +12,10 @@ const {
   OptionalBooleanFromInput: z.ZodType<boolean | undefined>;
   OptionalIntegerFromQuery: z.ZodType<number | undefined>;
   OptionalTrimmedString: z.ZodType<string | undefined>;
-  PaginationSchema: z.ZodObject<{ page: z.ZodType<number | undefined>; limit: z.ZodType<number | undefined> }>;
+  PaginationSchema: z.ZodObject<{
+    page: z.ZodType<number | undefined>;
+    limit: z.ZodType<number | undefined>;
+  }>;
   SortSchema: z.ZodEnum<{ az: 'az'; za: 'za'; newest: 'newest'; oldest: 'oldest' }>;
 };
 

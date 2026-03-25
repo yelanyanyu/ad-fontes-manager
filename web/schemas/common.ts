@@ -29,12 +29,15 @@ const toOptionalBoolean = (value: unknown): boolean | undefined | unknown => {
   return singleValue;
 };
 
-const NonEmptyString = z.string().trim().min(1, '不能为空');
-const NonEmptyStringArray = z.array(NonEmptyString).min(1, '不能为空数组');
-const UUIDSchema = z.string().uuid('无效 UUID');
+const NonEmptyString = z.string().trim().min(1, 'must not be empty');
+const NonEmptyStringArray = z.array(NonEmptyString).min(1, 'array must not be empty');
+const UUIDSchema = z.string().uuid('invalid uuid');
 const SortSchema = z.enum(['az', 'za', 'newest', 'oldest']);
 
-const OptionalIntegerFromQuery = z.preprocess(toOptionalInteger, z.number().int().positive().optional());
+const OptionalIntegerFromQuery = z.preprocess(
+  toOptionalInteger,
+  z.number().int().positive().optional()
+);
 const OptionalBooleanFromInput = z.preprocess(toOptionalBoolean, z.boolean().optional());
 const OptionalTrimmedString = z.preprocess(
   toTrimmedStringOrUndefined,

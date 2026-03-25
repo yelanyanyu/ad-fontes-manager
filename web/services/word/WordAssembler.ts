@@ -1,4 +1,7 @@
-﻿interface FieldMap {
+type WordSchemaInput = import('../../schemas/word.ts').WordSchemaInput;
+type WordInputData = WordSchemaInput | Record<string, any>;
+
+interface FieldMap {
   db: string;
   source: string;
 }
@@ -7,9 +10,7 @@ interface TableConfig {
   table: string;
   fields: FieldMap[];
   isArray: boolean;
-  getData: (
-    data: Record<string, any>
-  ) => Record<string, unknown> | Array<Record<string, unknown>> | null;
+  getData: (data: WordInputData) => Record<string, unknown> | Array<Record<string, unknown>> | null;
 }
 
 interface DbClientLike {
@@ -51,7 +52,7 @@ class WordAssembler {
           { db: 'meaning_evolution_zh', source: 'etymology.meaning_evolution_zh' },
         ],
         isArray: false,
-        getData: (data: Record<string, any>) => {
+        getData: (data: WordInputData) => {
           const etym = data.etymology || {};
           const roots = etym.root_and_affixes || {};
           const origins = etym.historical_origins || {};
@@ -76,7 +77,7 @@ class WordAssembler {
           { db: 'logic', source: 'logic' },
         ],
         isArray: true,
-        getData: (data: Record<string, any>) => {
+        getData: (data: WordInputData) => {
           const cognates = data.cognate_family?.cognates || [];
           const seen = new Set<string>();
           return cognates
@@ -101,7 +102,7 @@ class WordAssembler {
           { db: 'translation_zh', source: 'translation_zh' },
         ],
         isArray: true,
-        getData: (data: Record<string, any>) => {
+        getData: (data: WordInputData) => {
           const examples = data.application?.selected_examples || [];
           return examples
             .filter((e: Record<string, unknown>) => e.sentence)
@@ -119,7 +120,7 @@ class WordAssembler {
           { db: 'meaning_zh', source: 'meaning_zh' },
         ],
         isArray: true,
-        getData: (data: Record<string, any>) => {
+        getData: (data: WordInputData) => {
           const synonyms = data.nuance?.synonyms || [];
           return synonyms
             .filter((s: Record<string, unknown>) => s.word)
@@ -135,7 +136,7 @@ class WordAssembler {
   async updateChildren(
     client: DbClientLike,
     wordId: string | number,
-    data: Record<string, any>
+    data: WordInputData
   ): Promise<void> {
     await this._clearChildren(client, wordId);
     await this._insertChildren(client, wordId, data);
@@ -152,7 +153,7 @@ class WordAssembler {
   private async _insertChildren(
     client: DbClientLike,
     wordId: string | number,
-    data: Record<string, any>
+    data: WordInputData
   ): Promise<void> {
     const insertPromises: Array<Promise<void>> = [];
 
@@ -192,7 +193,7 @@ class WordAssembler {
     await client.query(sql, [wordId, ...values]);
   }
 
-  extractWordData(data: Record<string, any>): WordData {
+  extractWordData(data: WordInputData): WordData {
     const yieldData = data.yield || {};
     const nuanceData = data.nuance || {};
 
@@ -204,11 +205,11 @@ class WordAssembler {
       contextualMeaningZh: yieldData.contextual_meaning?.zh,
       otherCommonMeanings: yieldData.other_common_meanings || [],
       imageDifferentiationZh: nuanceData.image_differentiation_zh,
-      originalYaml: data,
+      originalYaml: data as Record<string, unknown>,
     };
   }
 
-  extractUserContext(data: Record<string, any>): UserContextData {
+  extractUserContext(data: WordInputData): UserContextData {
     const yieldData = data.yield || {};
     return {
       userWord: yieldData.user_word,
