@@ -27,6 +27,13 @@ const toStringValue = (value: unknown): string => {
   return String(value || '');
 };
 
+interface RequestWithValidatedQuery extends Request {
+  validatedQuery?: Record<string, unknown>;
+}
+
+const getQuery = (req: Request): Record<string, unknown> =>
+  (req as RequestWithValidatedQuery).validatedQuery || (req.query as Record<string, unknown>) || {};
+
 class WordController {
   list = asyncHandler(async (req: Request, res: Response) => {
     const words = await wordService.listWords(req);
@@ -34,12 +41,13 @@ class WordController {
   });
 
   getDetails = asyncHandler(async (req: Request, res: Response) => {
-    const word = toStringValue(req.query.word).trim();
+    const query = getQuery(req);
+    const word = toStringValue(query.word).trim();
     if (!word) {
       throw BadRequest('Word parameter required');
     }
 
-    const includeRaw = toStringValue(req.query.include).trim();
+    const includeRaw = toStringValue(query.include).trim();
     const include = includeRaw
       ? includeRaw
           .split(',')
@@ -57,7 +65,8 @@ class WordController {
   });
 
   check = asyncHandler(async (req: Request, res: Response) => {
-    const userWord = toStringValue(req.query.word);
+    const query = getQuery(req);
+    const userWord = toStringValue(query.word);
     if (!userWord) {
       throw BadRequest('Word parameter required');
     }

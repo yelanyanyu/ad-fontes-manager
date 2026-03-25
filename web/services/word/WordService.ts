@@ -43,6 +43,7 @@ interface LoggerLike {
 interface RequestLike {
   id?: string;
   query?: Record<string, unknown>;
+  validatedQuery?: Record<string, unknown>;
 }
 
 interface DbClientLike {
@@ -109,6 +110,10 @@ interface WordAssemblerLike {
 }
 
 class WordService {
+  private _getQuery(req: RequestLike): Record<string, unknown> {
+    return req.validatedQuery || req.query || {};
+  }
+
   async addWord(
     req: RequestLike,
     wordText: string,
@@ -214,7 +219,7 @@ class WordService {
   }
 
   async listWords(req: RequestLike): Promise<Record<string, unknown> | Record<string, unknown>[]> {
-    const query = req.query || {};
+    const query = this._getQuery(req);
     if (query.page || query.limit || query.search || query.sort) {
       return this.listWordsPaged(req);
     }
@@ -222,7 +227,7 @@ class WordService {
   }
 
   async listWordsPaged(req: RequestLike): Promise<Record<string, unknown>> {
-    const query = req.query || {};
+    const query = this._getQuery(req);
     const options = {
       page: parseInt(String(query.page || '1'), 10) || 1,
       limit: parseInt(String(query.limit || '20'), 10) || 20,

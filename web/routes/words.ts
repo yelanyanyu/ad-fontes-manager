@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { ZodTypeAny } from 'zod';
+import type { ZodType } from 'zod';
 
 const express = require('express') as typeof import('express');
 const router = express.Router();
@@ -18,9 +18,15 @@ const { requireWriteAccess } = require('../middleware/writeAuth.ts') as {
 };
 
 const { validateBody, validateQuery, validateParams } = require('../middleware/validate.ts') as {
-  validateBody: (schema: ZodTypeAny) => (req: Request, res: Response, next: () => void) => void;
-  validateQuery: (schema: ZodTypeAny) => (req: Request, res: Response, next: () => void) => void;
-  validateParams: (schema: ZodTypeAny) => (req: Request, res: Response, next: () => void) => void;
+  validateBody: (
+    schema: ZodType<unknown>
+  ) => (req: Request, res: Response, next: () => void) => void;
+  validateQuery: (
+    schema: ZodType<unknown>
+  ) => (req: Request, res: Response, next: () => void) => void;
+  validateParams: (
+    schema: ZodType<unknown>
+  ) => (req: Request, res: Response, next: () => void) => void;
 };
 
 const {
@@ -30,11 +36,11 @@ const {
   SaveWordBodySchema,
   AddWordBodySchema,
 } = require('../schemas/requests/words.ts') as {
-  WordIdParamsSchema: ZodTypeAny;
-  WordListQuerySchema: ZodTypeAny;
-  WordDetailsQuerySchema: ZodTypeAny;
-  SaveWordBodySchema: ZodTypeAny;
-  AddWordBodySchema: ZodTypeAny;
+  WordIdParamsSchema: ZodType<unknown>;
+  WordListQuerySchema: ZodType<unknown>;
+  WordDetailsQuerySchema: ZodType<unknown>;
+  SaveWordBodySchema: ZodType<unknown>;
+  AddWordBodySchema: ZodType<unknown>;
 };
 
 // WordController methods are already wrapped by asyncHandler in controller layer.

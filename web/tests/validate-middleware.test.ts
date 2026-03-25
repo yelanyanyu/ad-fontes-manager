@@ -51,7 +51,7 @@ test('validateBody should throw BadRequest with VALIDATION_ERROR code on invalid
   );
 });
 
-test('validateQuery should replace req.query with parsed data', () => {
+test('validateQuery should store parsed query on req.validatedQuery and res.locals', () => {
   const { validateQuery } = freshRequire(validateModulePath);
   const middleware = validateQuery(
     z.object({
@@ -61,14 +61,17 @@ test('validateQuery should replace req.query with parsed data', () => {
   );
 
   const req = { query: { page: '2', include: 'examples,cognates' } };
+  const res = { locals: {} as Record<string, unknown> };
   let nextCalled = false;
 
-  middleware(req, {}, () => {
+  middleware(req as any, res as any, () => {
     nextCalled = true;
   });
 
   assert.equal(nextCalled, true);
-  assert.deepEqual(req.query, { page: 2, include: 'examples,cognates' });
+  assert.deepEqual((req as any).validatedQuery, { page: 2, include: 'examples,cognates' });
+  assert.deepEqual(res.locals.validatedQuery, { page: 2, include: 'examples,cognates' });
+  assert.deepEqual(req.query, { page: '2', include: 'examples,cognates' });
 });
 
 test('validateQuery should work when req.query is getter-only (Express 5)', () => {
@@ -88,15 +91,52 @@ test('validateQuery should work when req.query is getter-only (Express 5)', () =
     enumerable: true,
   });
 
+  const res = { locals: {} as Record<string, unknown> };
   let nextCalled = false;
   assert.doesNotThrow(() =>
-    middleware(req as any, {}, () => {
+    middleware(req as any, res as any, () => {
       nextCalled = true;
     })
   );
 
   assert.equal(nextCalled, true);
-  assert.deepEqual((req as any).query, { page: 3 });
+  assert.deepEqual((req as any).validatedQuery, { page: 3 });
+  assert.deepEqual(res.locals.validatedQuery, { page: 3 });
+  assert.deepEqual((req as any).query, { page: '3' });
+});
+
+test('validateQuery should still expose parsed query through res.locals on non-extensible req', () => {
+  const { validateQuery } = freshRequire(validateModulePath);
+  const middleware = validateQuery(
+    z.object({
+      page: z.coerce.number().int().min(1).default(1),
+      limit: z.coerce.number().int().min(1).default(20),
+    })
+  );
+
+  const queryStore: Record<string, unknown> = { page: '4', limit: '30', stale: 'x' };
+  const req: Record<string, unknown> = {};
+  const res = { locals: {} as Record<string, unknown> };
+
+  Object.defineProperty(req, 'query', {
+    get() {
+      return queryStore;
+    },
+    enumerable: true,
+    configurable: false,
+  });
+  Object.preventExtensions(req);
+
+  let nextCalled = false;
+  assert.doesNotThrow(() =>
+    middleware(req as any, res as any, () => {
+      nextCalled = true;
+    })
+  );
+
+  assert.equal(nextCalled, true);
+  assert.deepEqual(res.locals.validatedQuery, { page: 4, limit: 30 });
+  assert.deepEqual(queryStore, { page: '4', limit: '30', stale: 'x' });
 });
 
 test('validateParams should replace req.params with parsed data', () => {

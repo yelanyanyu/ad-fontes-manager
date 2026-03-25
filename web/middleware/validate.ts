@@ -1,11 +1,11 @@
 import type { NextFunction, Request, Response } from 'express';
-import type { ZodTypeAny } from 'zod';
+import type { ZodType } from 'zod';
 
 const { BadRequest } = require('../utils/errors.ts') as {
   BadRequest: (message: string, data?: unknown) => Error;
 };
 
-const parseOrThrow = (schema: ZodTypeAny, payload: unknown): unknown => {
+const parseOrThrow = (schema: ZodType<unknown>, payload: unknown): unknown => {
   const result = schema.safeParse(payload);
   if (result.success) return result.data;
 
@@ -28,23 +28,55 @@ const setRequestField = <K extends 'body' | 'query' | 'params'>(
       configurable: true,
     });
   } catch {
-    (req as Request & Record<string, unknown>)[key] = value as unknown;
+    const current = (req as Request & Record<string, unknown>)[key];
+
+    if (
+      current &&
+      typeof current === 'object' &&
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(current) &&
+      !Array.isArray(value)
+    ) {
+      for (const existingKey of Object.keys(current as Record<string, unknown>)) {
+        delete (current as Record<string, unknown>)[existingKey];
+      }
+
+      Object.assign(current as Record<string, unknown>, value as Record<string, unknown>);
+      return;
+    }
+
+    throw new TypeError(`Unable to write validated request.${key}`);
   }
 };
 
-const validateBody = (schema: ZodTypeAny) =>
+const validateBody = (schema: ZodType<unknown>) =>
   function validateBodyMiddleware(req: Request, _res: Response, next: NextFunction): void {
     setRequestField(req, 'body', parseOrThrow(schema, req.body) as Request['body']);
     next();
   };
 
-const validateQuery = (schema: ZodTypeAny) =>
-  function validateQueryMiddleware(req: Request, _res: Response, next: NextFunction): void {
-    setRequestField(req, 'query', parseOrThrow(schema, req.query) as Request['query']);
+const validateQuery = (schema: ZodType<unknown>) =>
+  function validateQueryMiddleware(req: Request, res: Response, next: NextFunction): void {
+    const validatedQuery = parseOrThrow(schema, req.query) as Record<string, unknown>;
+
+    try {
+      Object.defineProperty(req, 'validatedQuery', {
+        value: validatedQuery,
+        writable: true,
+        enumerable: false,
+        configurable: true,
+      });
+    } catch {
+      // Keep runtime stable even when request object disallows extension.
+    }
+
+    res.locals.validatedQuery = validatedQuery;
+
     next();
   };
 
-const validateParams = (schema: ZodTypeAny) =>
+const validateParams = (schema: ZodType<unknown>) =>
   function validateParamsMiddleware(req: Request, _res: Response, next: NextFunction): void {
     setRequestField(req, 'params', parseOrThrow(schema, req.params) as Request['params']);
     next();

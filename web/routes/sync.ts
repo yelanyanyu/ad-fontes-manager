@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { ZodTypeAny } from 'zod';
+import type { ZodType } from 'zod';
 
 const express = require('express') as typeof import('express');
 const router = express.Router();
@@ -32,8 +32,12 @@ const { requireWriteAccess } = require('../middleware/writeAuth.ts') as {
 };
 
 const { validateBody, validateParams } = require('../middleware/validate.ts') as {
-  validateBody: (schema: ZodTypeAny) => (req: Request, res: Response, next: () => void) => void;
-  validateParams: (schema: ZodTypeAny) => (req: Request, res: Response, next: () => void) => void;
+  validateBody: (
+    schema: ZodType<unknown>
+  ) => (req: Request, res: Response, next: () => void) => void;
+  validateParams: (
+    schema: ZodType<unknown>
+  ) => (req: Request, res: Response, next: () => void) => void;
 };
 
 const {
@@ -42,10 +46,10 @@ const {
   SyncCheckBodySchema,
   SyncExecuteBodySchema,
 } = require('../schemas/requests/sync.ts') as {
-  SyncLocalParamsSchema: ZodTypeAny;
-  SyncLocalSaveBodySchema: ZodTypeAny;
-  SyncCheckBodySchema: ZodTypeAny;
-  SyncExecuteBodySchema: ZodTypeAny;
+  SyncLocalParamsSchema: ZodType<unknown>;
+  SyncLocalSaveBodySchema: ZodType<unknown>;
+  SyncCheckBodySchema: ZodType<unknown>;
+  SyncExecuteBodySchema: ZodType<unknown>;
 };
 
 const { StatusCodes } = require('http-status-codes') as {

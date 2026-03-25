@@ -25,6 +25,15 @@ const { AppError } = require('../utils/errors.ts') as {
   };
 };
 
+const { loggers } = require('../utils/logger.ts') as {
+  loggers: {
+    api: {
+      error: (payload: Record<string, unknown>, message: string) => void;
+      warn: (payload: Record<string, unknown>, message: string) => void;
+    };
+  };
+};
+
 interface ErrorLike {
   statusCode?: number;
   message?: string;
@@ -78,6 +87,23 @@ const errorHandler = (err: ErrorLike, req: Request, res: Response, _next: NextFu
 
   if (isDev && statusCode >= StatusCodes.INTERNAL_SERVER_ERROR) {
     response.stack = err.stack;
+  }
+
+  const logPayload = {
+    requestId: (req as Request & { id?: string }).id,
+    method: req.method,
+    path: req.originalUrl || req.url,
+    statusCode,
+    message,
+    errorName: err.name,
+    errorCode: err.code,
+    stack: err.stack,
+    data,
+  };
+  if (statusCode >= StatusCodes.INTERNAL_SERVER_ERROR) {
+    loggers.api.error(logPayload, 'Unhandled server error');
+  } else if (statusCode >= 400) {
+    loggers.api.warn(logPayload, 'Request failed');
   }
 
   res.status(statusCode).json(response);
