@@ -34,12 +34,14 @@ import ConflictModal from '@/components/ui/ConflictModal.vue';
 import WordActionMenu from '@/components/WordList/WordActionMenu.vue';
 import DeleteConfirmModal from '@/components/WordList/DeleteConfirmModal.vue';
 import BatchSyncModal from '@/components/WordList/BatchSyncModal.vue';
+import AnkiExportModal from '@/components/AnkiExport/AnkiExportModal.vue';
 import WordListToolbar from '@/components/WordList/WordListToolbar.vue';
 import WordListPagination from '@/components/WordList/WordListPagination.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search';
 import { useWordEditorLoader } from '@/composables/useWordEditorLoader';
 import { useWordSync } from '@/composables/useWordSync';
+import { useAnkiExport } from '@/composables/useAnkiExport';
 import type {
   DbListMeta,
   DiffBadge,
@@ -208,9 +210,68 @@ const confirmDelete = async () => {
   pendingDelete.value = null;
 };
 
-const handleExport = (): void => {
-  appStore.addToast('Export feature is not implemented yet.', 'info');
+const {
+  isOpen: ankiExportOpen,
+  busy: ankiExportBusy,
+  error: ankiExportError,
+  payload: ankiExportPayload,
+  deckName: ankiDeckName,
+  modelName: ankiModelName,
+  addReverse: ankiAddReverse,
+  tagsInput: ankiTagsInput,
+  apkgPath: ankiApkgPath,
+  open: openAnkiExport,
+  close: closeAnkiExport,
+  updateAndRefresh: refreshAnkiExportPayload,
+  importToAnkiTestDeck,
+  exportApkg,
+} = useAnkiExport();
+
+const handleExport = async (): Promise<void> => {
+  const selected = selectedMenuItem.value;
+  if (!selected) return;
   showMenuId.value = null;
+  await openAnkiExport(selected);
+};
+
+const handleImportToAnki = async (): Promise<void> => {
+  try {
+    const result = await importToAnkiTestDeck();
+    appStore.addToast(`Imported to Anki test deck (noteId: ${result.noteId})`, 'success');
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to import to Anki', 'error');
+  }
+};
+
+const handleExportApkg = async (): Promise<void> => {
+  try {
+    await exportApkg();
+    appStore.addToast('.apkg exported successfully', 'success');
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to export .apkg', 'error');
+  }
+};
+
+const setAnkiDeckName = (value: string): void => {
+  ankiDeckName.value = value;
+};
+
+const setAnkiModelName = (value: string): void => {
+  ankiModelName.value = value;
+};
+
+const setAnkiAddReverse = (value: boolean): void => {
+  ankiAddReverse.value = value;
+};
+
+const setAnkiTagsInput = (value: string): void => {
+  ankiTagsInput.value = value;
+};
+
+const setAnkiApkgPath = (value: string): void => {
+  ankiApkgPath.value = value;
 };
 
 const localSyncItems = computed<LocalSyncItem[]>(() => {
@@ -392,12 +453,32 @@ const paginationRange = computed<Array<number | '...'>>(() => {
   <div
     class="bg-white rounded-xl shadow-sm border border-slate-200 flex-col flex h-full overflow-hidden ml-1"
   >
+    <AnkiExportModal
+      :open="ankiExportOpen"
+      :busy="ankiExportBusy"
+      :error="ankiExportError"
+      :payload="ankiExportPayload"
+      :deck-name="ankiDeckName"
+      :model-name="ankiModelName"
+      :add-reverse="ankiAddReverse"
+      :tags-input="ankiTagsInput"
+      :apkg-path="ankiApkgPath"
+      @close="closeAnkiExport"
+      @update:deck-name="setAnkiDeckName"
+      @update:model-name="setAnkiModelName"
+      @update:add-reverse="setAnkiAddReverse"
+      @update:tags-input="setAnkiTagsInput"
+      @update:apkg-path="setAnkiApkgPath"
+      @refresh="refreshAnkiExportPayload"
+      @import-test="handleImportToAnki"
+      @export-apkg="handleExportApkg"
+    />
     <WordActionMenu
       :open="showMenuId !== null"
       :item="selectedMenuItem"
       @close="showMenuId = null"
       @sync="syncOne"
-      @export="handleExport"
+      @export="void handleExport()"
       @delete="openDelete"
     />
     <DeleteConfirmModal :open="!!pendingDelete" @cancel="cancelDelete" @confirm="confirmDelete" />

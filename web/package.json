@@ -11,6 +11,7 @@
     "build": "cd client && npm run build",
     "test-api": "tsx test-api.ts",
     "smoke:query-getter": "tsx scripts/smoke-query-getter.ts",
+    "smoke:anki-relay": "tsx scripts/smoke-anki-relay.ts",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

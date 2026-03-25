@@ -72,6 +72,17 @@ const ConfigSchema = z
     client: z.object({
       dev_port: z.number().int().min(1).max(65535),
     }),
+    anki: z.object({
+      host: z
+        .string()
+        .trim()
+        .min(1)
+        .refine(
+          isValidHost,
+          'anki.host must be localhost, 0.0.0.0, an IP, or a domain'
+        ),
+      port: z.number().int().min(1).max(65535),
+    }),
     storage: z.object({
       max_items: z.number().int().positive(),
     }),

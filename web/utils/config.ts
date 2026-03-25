@@ -73,6 +73,10 @@ const defaultConfig: ConfigObject = {
   client: {
     dev_port: 5173,
   },
+  anki: {
+    host: '127.0.0.1',
+    port: 8765,
+  },
   storage: {
     max_items: 100,
   },
@@ -104,6 +108,8 @@ const envMapping: Record<string, string> = {
   DATABASE_SSL: 'database.ssl',
   DATABASE_POOL_SIZE: 'database.pool_size',
   CLIENT_DEV_PORT: 'client.dev_port',
+  ANKI_CONNECT_HOST: 'anki.host',
+  ANKI_CONNECT_PORT: 'anki.port',
   MAX_LOCAL_ITEMS: 'storage.max_items',
   LOG_LEVEL: 'logging.level',
   LOG_DIR: 'logging.dir',
