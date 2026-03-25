@@ -18,7 +18,7 @@ The application is split by runtime. `web/` contains the Express 5 backend: `ser
 
 ## Coding Style & Naming Conventions
 
-Use TypeScript-first changes and replace nearby `any` usages when you touch them. Prettier enforces 2-space indentation, single quotes, semicolons, trailing commas (`es5`), and 100-character lines. Keep Vue components and views in PascalCase like `EditorView.vue`; composables use `useX.ts`; stores use `xStore.ts`; backend modules use descriptive singular names such as `wordService.ts` and `wordController.ts`.
+Use TypeScript-first changes and replace nearby `any` usages when you touch them. Default to Zod for all new boundary validation and type derivation: new request validation, config parsing, shared input/output contracts, and reusable parsing helpers should start from schemas under `web/schemas/`, with TypeScript types inferred from those schemas where practical. Avoid adding ad-hoc manual validation for new code when a Zod schema is the natural fit. Prettier enforces 2-space indentation, single quotes, semicolons, trailing commas (`es5`), and 100-character lines. Keep Vue components and views in PascalCase like `EditorView.vue`; composables use `useX.ts`; stores use `xStore.ts`; backend modules use descriptive singular names such as `wordService.ts` and `wordController.ts`.
 
 ## Testing Guidelines
 

@@ -75,6 +75,7 @@ cd client && npm run test
 3. **Never commit `.env` files**
 4. **Run type-check before committing**
 5. **Replace `any` with proper types** when modifying code
+6. **Default to Zod for new boundary code**: define new request validation, config parsing, shared contracts, and reusable input/output schemas in `web/schemas/` first, then infer and reuse types from those schemas where practical
 
 ## 🔗 External Resources
 
