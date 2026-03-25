@@ -1,4 +1,5 @@
-﻿import type { Request, Response } from 'express';
+import type { Request, Response } from 'express';
+import type { ZodTypeAny } from 'zod';
 
 const express = require('express') as typeof import('express');
 const router = express.Router();
@@ -30,6 +31,23 @@ const { requireWriteAccess } = require('../middleware/writeAuth.ts') as {
   requireWriteAccess: (req: Request, res: Response, next: () => void) => void;
 };
 
+const { validateBody, validateParams } = require('../middleware/validate.ts') as {
+  validateBody: (schema: ZodTypeAny) => (req: Request, res: Response, next: () => void) => void;
+  validateParams: (schema: ZodTypeAny) => (req: Request, res: Response, next: () => void) => void;
+};
+
+const {
+  SyncLocalParamsSchema,
+  SyncLocalSaveBodySchema,
+  SyncCheckBodySchema,
+  SyncExecuteBodySchema,
+} = require('../schemas/requests/sync.ts') as {
+  SyncLocalParamsSchema: ZodTypeAny;
+  SyncLocalSaveBodySchema: ZodTypeAny;
+  SyncCheckBodySchema: ZodTypeAny;
+  SyncExecuteBodySchema: ZodTypeAny;
+};
+
 const { StatusCodes } = require('http-status-codes') as {
   StatusCodes: { GONE: number };
 };
@@ -50,9 +68,10 @@ router.get('/local', (_req: Request, res: Response) => {
 router.post(
   '/local',
   requireWriteAccess,
+  validateBody(SyncLocalSaveBodySchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const body = req.body as { yaml?: string; id?: string; forceUpdate?: boolean };
-    const yamlStr = String(body.yaml || '');
+    const body = req.body as { yaml: string; id?: string; forceUpdate?: boolean };
+    const yamlStr = body.yaml;
     const id = body.id;
     const forceUpdate = body.forceUpdate;
 
@@ -102,18 +121,21 @@ router.post(
   })
 );
 
-router.delete('/local/:id', requireWriteAccess, (req: Request, res: Response) => {
-  localStore.delete(toStringValue(req.params.id));
-  res.json({ success: true });
-});
+router.delete(
+  '/local/:id',
+  requireWriteAccess,
+  validateParams(SyncLocalParamsSchema),
+  (req: Request, res: Response) => {
+    localStore.delete(toStringValue(req.params.id));
+    res.json({ success: true });
+  }
+);
 
 router.post(
   '/sync/check',
+  validateBody(SyncCheckBodySchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { items } = req.body as { items?: Array<{ id: string; raw_yaml: string }> };
-    if (!Array.isArray(items)) {
-      throw BadRequest('Items array required');
-    }
+    const { items } = req.body as { items: Array<{ id: string; raw_yaml: string }> };
 
     const results: Array<Record<string, unknown>> = [];
     const pool = await getPool();
@@ -136,15 +158,12 @@ router.post(
 router.post(
   '/sync/execute',
   requireWriteAccess,
+  validateBody(SyncExecuteBodySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const { items, forceUpdate } = req.body as {
-      items?: Array<{ id: string; raw_yaml: string }>;
+      items: Array<{ id: string; raw_yaml: string }>;
       forceUpdate?: boolean;
     };
-
-    if (!Array.isArray(items)) {
-      throw BadRequest('Items array required');
-    }
 
     const results: {
       success: number;
