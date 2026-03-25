@@ -215,6 +215,9 @@ const {
   busy: ankiExportBusy,
   error: ankiExportError,
   payload: ankiExportPayload,
+  ankiConnected: ankiConnected,
+  deckOptions: ankiDeckOptions,
+  modelOptions: ankiModelOptions,
   deckName: ankiDeckName,
   modelName: ankiModelName,
   addReverse: ankiAddReverse,
@@ -222,8 +225,10 @@ const {
   apkgPath: ankiApkgPath,
   open: openAnkiExport,
   close: closeAnkiExport,
+  connectAnki: connectAnkiExport,
+  browseApkgPath: browseAnkiApkgPath,
   updateAndRefresh: refreshAnkiExportPayload,
-  importToAnkiTestDeck,
+  importToAnki,
   exportApkg,
 } = useAnkiExport();
 
@@ -236,8 +241,8 @@ const handleExport = async (): Promise<void> => {
 
 const handleImportToAnki = async (): Promise<void> => {
   try {
-    const result = await importToAnkiTestDeck();
-    appStore.addToast(`Imported to Anki test deck (noteId: ${result.noteId})`, 'success');
+    const result = await importToAnki();
+    appStore.addToast(`Imported to Anki successfully (noteId: ${result.noteId})`, 'success');
   } catch (error) {
     const err = error as { message?: string };
     appStore.addToast(err.message || 'Failed to import to Anki', 'error');
@@ -458,12 +463,17 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :busy="ankiExportBusy"
       :error="ankiExportError"
       :payload="ankiExportPayload"
+      :anki-connected="ankiConnected"
+      :deck-options="ankiDeckOptions"
+      :model-options="ankiModelOptions"
       :deck-name="ankiDeckName"
       :model-name="ankiModelName"
       :add-reverse="ankiAddReverse"
       :tags-input="ankiTagsInput"
       :apkg-path="ankiApkgPath"
       @close="closeAnkiExport"
+      @connect-anki="connectAnkiExport"
+      @browse-apkg-path="browseAnkiApkgPath"
       @update:deck-name="setAnkiDeckName"
       @update:model-name="setAnkiModelName"
       @update:add-reverse="setAnkiAddReverse"

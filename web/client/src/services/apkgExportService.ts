@@ -18,7 +18,31 @@ const triggerBrowserDownload = (blob: Blob, fileName: string): void => {
   document.body.appendChild(anchor);
   anchor.click();
   document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
+  // Revoke too early can produce truncated files in some browsers.
+  window.setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 30_000);
+};
+
+const hasZipEocdSignature = async (blob: Blob): Promise<boolean> => {
+  if (blob.size < 22) return false;
+  const tailWindow = Math.min(blob.size, 66_000);
+  const start = blob.size - tailWindow;
+  const tail = new Uint8Array(await blob.slice(start).arrayBuffer());
+
+  // EOCD signature: 0x50 0x4b 0x05 0x06
+  for (let i = tail.length - 4; i >= 0; i -= 1) {
+    if (
+      tail[i] === 0x50 &&
+      tail[i + 1] === 0x4b &&
+      tail[i + 2] === 0x05 &&
+      tail[i + 3] === 0x06
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 export const exportApkgViaAnkiConnect = async (
@@ -27,6 +51,10 @@ export const exportApkgViaAnkiConnect = async (
 ): Promise<{ ok: boolean; fileName: string }> => {
   const normalizedFileName = sanitizeFileName(outputFileName);
   const apkgBlob = await downloadDeckAsApkg(payload.options.deckName, normalizedFileName);
+  const validZip = await hasZipEocdSignature(apkgBlob);
+  if (!validZip) {
+    throw new Error('Downloaded .apkg is invalid (missing ZIP EOCD). Please retry export.');
+  }
   triggerBrowserDownload(apkgBlob, normalizedFileName);
   return { ok: true, fileName: normalizedFileName };
 };

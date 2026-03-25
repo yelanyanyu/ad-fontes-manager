@@ -191,6 +191,7 @@ router.post(
       const apkgBuffer = await fs.readFile(tempPath);
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Content-Disposition', `attachment; filename="${finalFileName}"`);
+      res.setHeader('Content-Length', String(apkgBuffer.byteLength));
       res.status(200).send(apkgBuffer);
     } finally {
       await fs.unlink(tempPath).catch(() => undefined);

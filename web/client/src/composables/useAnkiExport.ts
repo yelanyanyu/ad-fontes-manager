@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import yaml from 'js-yaml';
 import request from '@/utils/request';
 import { createAnkiPayload, getDefaultAnkiOptions } from '@/services/ankiExportService';
@@ -87,6 +87,24 @@ export const useAnkiExport = () => {
       tags: tags.value,
       apkgPath: apkgPath.value,
     });
+  };
+
+  const syncPayloadOptions = (): void => {
+    if (!payload.value) return;
+    payload.value = {
+      ...payload.value,
+      fields: {
+        ...payload.value.fields,
+        'Add Reverse': addReverse.value ? 'yes' : '',
+      },
+      options: {
+        ...payload.value.options,
+        deckName: deckName.value,
+        modelName: modelName.value,
+        addReverse: addReverse.value,
+        tags: tags.value,
+      },
+    };
   };
 
   const resolveParsedSource = async (record: WordRecord): Promise<ParsedWordSource> => {
@@ -232,7 +250,7 @@ export const useAnkiExport = () => {
     }
   };
 
-  const importToAnkiTestDeck = async (): Promise<{ noteId: number }> => {
+  const importToAnki = async (): Promise<{ noteId: number }> => {
     if (!payload.value) {
       throw new Error('Export payload is not ready');
     }
@@ -271,6 +289,15 @@ export const useAnkiExport = () => {
     }
   };
 
+  watch([deckName, modelName, addReverse, tagsInput], () => {
+    persistOptions();
+    syncPayloadOptions();
+  });
+
+  watch(apkgPath, () => {
+    persistOptions();
+  });
+
   return {
     isOpen,
     busy,
@@ -289,7 +316,7 @@ export const useAnkiExport = () => {
     connectAnki,
     browseApkgPath,
     updateAndRefresh,
-    importToAnkiTestDeck,
+    importToAnki,
     exportApkg,
   };
 };

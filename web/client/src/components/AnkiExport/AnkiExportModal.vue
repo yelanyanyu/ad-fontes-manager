@@ -6,6 +6,9 @@ const props = defineProps<{
   busy: boolean;
   error: string;
   payload: AnkiExportPayload | null;
+  ankiConnected: boolean;
+  deckOptions: string[];
+  modelOptions: string[];
   deckName: string;
   modelName: string;
   addReverse: boolean;
@@ -20,6 +23,8 @@ const emit = defineEmits<{
   (e: 'update:addReverse', value: boolean): void;
   (e: 'update:tagsInput', value: string): void;
   (e: 'update:apkgPath', value: string): void;
+  (e: 'connect-anki'): void;
+  (e: 'browse-apkg-path'): void;
   (e: 'refresh'): void;
   (e: 'import-test'): void;
   (e: 'export-apkg'): void;
@@ -43,23 +48,43 @@ const onOverlayClick = (): void => emit('close');
       </div>
 
       <div class="p-5 space-y-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-sm text-slate-600">
+            <span v-if="ankiConnected" class="text-emerald-600 font-semibold">Anki connected</span>
+            <span v-else class="text-amber-600 font-semibold">Anki not connected</span>
+          </div>
+          <button
+            class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+            :disabled="busy"
+            @click="emit('connect-anki')"
+          >
+            Connect / Refresh Decks
+          </button>
+        </div>
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <label class="text-sm text-slate-700 font-medium">
             Deck Name
-            <input
+            <select
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               :value="deckName"
-              @input="emit('update:deckName', ($event.target as HTMLInputElement).value)"
-            />
+              @change="emit('update:deckName', ($event.target as HTMLSelectElement).value)"
+            >
+              <option v-if="!deckOptions.length" :value="deckName">{{ deckName || '(empty)' }}</option>
+              <option v-for="deck in deckOptions" :key="deck" :value="deck">{{ deck }}</option>
+            </select>
           </label>
 
           <label class="text-sm text-slate-700 font-medium">
             Model Name
-            <input
+            <select
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               :value="modelName"
-              @input="emit('update:modelName', ($event.target as HTMLInputElement).value)"
-            />
+              @change="emit('update:modelName', ($event.target as HTMLSelectElement).value)"
+            >
+              <option v-if="!modelOptions.length" :value="modelName">{{ modelName || '(empty)' }}</option>
+              <option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option>
+            </select>
           </label>
         </div>
 
@@ -84,11 +109,20 @@ const onOverlayClick = (): void => emit('close');
         </div>
         <label class="text-sm text-slate-700 font-medium block">
           .apkg Output Path (AnkiConnect)
-          <input
-            class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            :value="apkgPath"
-            @input="emit('update:apkgPath', ($event.target as HTMLInputElement).value)"
-          />
+          <div class="mt-1 flex gap-2">
+            <input
+              class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              :value="apkgPath"
+              @input="emit('update:apkgPath', ($event.target as HTMLInputElement).value)"
+            />
+            <button
+              class="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+              :disabled="busy"
+              @click="emit('browse-apkg-path')"
+            >
+              Browse
+            </button>
+          </div>
         </label>
 
         <div class="flex justify-end">
@@ -136,7 +170,7 @@ const onOverlayClick = (): void => emit('close');
           :disabled="busy || !payload"
           @click="emit('import-test')"
         >
-          {{ busy ? 'Working...' : 'Import to Anki (test)' }}
+          {{ busy ? 'Working...' : 'Import to Selected Deck' }}
         </button>
         <button
           class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:bg-blue-300"
