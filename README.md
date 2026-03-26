@@ -55,6 +55,13 @@ npm run dev
 - **分页功能**：服务端分页，自定义每页数量
 - **卡片预览**：精美单词卡片生成与下载
 
+### Anki 集成 (v1.5.1+)
+- **AnkiConnect 支持**：直接导入卡片到 Anki
+- **.apkg 导出**：导出 Anki 包文件
+- **智能字段映射**：自动映射单词、上下文、笔记等字段
+- **重复检测**：检测并处理重复卡片冲突
+- **可配置选项**：自定义牌组、模型、标签和反向卡片
+
 ### 技术栈
 
 | 层级 | 技术 | 版本 |
@@ -67,6 +74,7 @@ npm run dev
 | 状态管理 | Pinia | 3.x |
 | 样式 | Tailwind CSS | 3.4+ |
 | 日志 | Pino | 10.x |
+| 验证 | Zod | 4.x |
 
 ## 配置
 
@@ -103,6 +111,15 @@ docker-compose up -d
 | `DATABASE_URL` | PostgreSQL 连接字符串 |
 | `ADMIN_TOKEN` | 管理员 API 令牌（生产环境 ≥32 字符） |
 | `NODE_ENV` | 运行环境: `development` / `production` / `test` |
+
+### AnkiConnect 配置 (可选)
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `ANKI_CONNECT_HOST` | AnkiConnect 主机地址 | `127.0.0.1` |
+| `ANKI_CONNECT_PORT` | AnkiConnect 端口 | `8765` |
+
+**注意**: Docker 环境请使用 `host.docker.internal` 代替 `127.0.0.1`。
 
 ### 配置优先级
 

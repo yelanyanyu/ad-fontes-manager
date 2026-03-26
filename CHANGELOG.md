@@ -6,6 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-03-27
+
+### ✨ New Features
+
+- **Anki 导出功能**: 新增完整的 Anki 卡片导出功能
+  - 支持通过 AnkiConnect 直接导入卡片到 Anki
+  - 支持导出 .apkg 文件格式
+  - 智能字段映射：自动映射单词、上下文、笔记、背面等字段
+  - 重复卡片检测：检测并处理重复单词卡片冲突
+  - 可配置牌组和模型选择
+  - 支持添加反向卡片（Add Reverse）
+  - 支持自定义标签
+
+- **Zod 验证框架**: 集成 Zod 进行全面的请求参数验证
+  - 添加请求参数验证中间件
+  - 定义完整的请求 Schema（单词、同步、认证等）
+  - 支持查询参数和请求体验证
+  - 添加运行时验证测试
+
+### 🔧 Improvements
+
+- **配置系统增强**: 重构配置系统，增强环境变量支持
+  - 添加 AnkiConnect 主机和端口配置（ANKI_CONNECT_HOST, ANKI_CONNECT_PORT）
+  - 更新 .env.example 文档，添加详细的 Anki 配置说明
+  - 优化配置验证错误提示
+
+- **代码质量**: 
+  - 优化 Anki 字段映射逻辑，移除未使用代码
+  - 增强 Anki 导出验证和错误处理
+  - 修复 Express 5 中 req.query 验证兼容性问题
+
+### 🐛 Bug Fixes
+
+- **导出文件修复**: 修复 Anki 导出文件截断问题
+- **验证中间件修复**: 修复 Express 5 中 req.query 为 getter-only 时的验证问题
+
+### 🏗️ Infrastructure
+
+- **Docker 配置优化**:
+  - 修复 Dockerfile 缺少 schemas 目录复制问题
+  - 更新 .env.production 模板，添加 Docker 专用配置说明
+  - 添加 host.docker.internal 支持，便于容器访问宿主机服务
+
+### 📝 Documentation
+
+- **Anki 集成文档**: 添加详细的 AnkiConnect 配置说明
+- **部署文档更新**: 更新 Docker 部署指南，包含环境变量配置最佳实践
+
+---
+
 ## [1.5.0] - 2026-03-06
 
 ### ✨ New Features

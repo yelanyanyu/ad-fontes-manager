@@ -303,6 +303,118 @@ GET /health
 }
 ```
 
+## Anki 导出
+
+### 连接 AnkiConnect
+
+```http
+POST /anki/connect
+```
+
+**说明**: 代理到 AnkiConnect 服务，用于检测连接状态和获取牌组/模型列表。
+
+**请求体:**
+
+```json
+{
+  "action": "deckNames",
+  "version": 6
+}
+```
+
+**响应:**
+
+```json
+{
+  "result": ["Default", "English Words"],
+  "error": null
+}
+```
+
+### 导出 .apkg 文件
+
+```http
+POST /anki/export-apkg
+```
+
+**说明**: 导出指定牌组为 .apkg 文件，通过 AnkiConnect 生成。
+
+**请求体:**
+
+```json
+{
+  "deckName": "English Words",
+  "fileName": "english_words.apkg",
+  "includeSched": false
+}
+```
+
+**响应:**
+
+- 成功: 返回二进制文件流 (Content-Type: application/octet-stream)
+- 失败: 返回 JSON 错误信息
+
+### 导入单词到 Anki
+
+```http
+POST /words/:id/anki
+```
+
+**说明**: 将指定单词导入到 Anki。
+
+**请求体:**
+
+```json
+{
+  "deckName": "English Words",
+  "modelName": "Basic",
+  "tags": ["vocabulary", "ad-fontes"],
+  "addReverse": false
+}
+```
+
+**响应:**
+
+```json
+{
+  "success": true,
+  "noteId": 1234567890
+}
+```
+
+### 检查重复卡片
+
+```http
+POST /words/:id/anki/check-duplicate
+```
+
+**说明**: 检查单词是否已在 Anki 中存在。
+
+**请求体:**
+
+```json
+{
+  "deckName": "English Words",
+  "modelName": "Basic"
+}
+```
+
+**响应:**
+
+```json
+{
+  "hasConflict": true,
+  "conflict": {
+    "noteId": 1234567890,
+    "deckName": "English Words",
+    "modelName": "Basic",
+    "word": "example",
+    "existingFields": { ... },
+    "incomingFields": { ... }
+  }
+}
+```
+
 ## 错误处理
 
 ### 错误响应格式

@@ -52,6 +52,10 @@ SERVER_HOST=0.0.0.0
 SERVER_CORS_ORIGINS=["https://yourdomain.com"]
 SERVER_RATE_LIMIT=100
 
+# AnkiConnect 配置 (可选)
+ANKI_CONNECT_HOST=host.docker.internal
+ANKI_CONNECT_PORT=8765
+
 # 日志配置
 LOG_LEVEL=warn
 LOG_DIR=./logs
@@ -146,6 +150,19 @@ pm2 startup
 - [ ] `LOG_LEVEL` 设置为 `warn` 或 `error`
 - [ ] `.env.production` 文件权限为 `600`
 - [ ] 防火墙已配置，只开放必要端口
+
+### AnkiConnect 配置 (可选)
+
+如需使用 Anki 导出功能:
+
+- [ ] Anki 已安装并运行
+- [ ] AnkiConnect 插件已安装 (代码: 2055492159)
+- [ ] `ANKI_CONNECT_HOST` 设置为正确的主机地址
+  - Docker: `host.docker.internal`
+  - 本地: `127.0.0.1`
+- [ ] `ANKI_CONNECT_PORT` 设置为 AnkiConnect 监听端口 (默认: 8765)
+
+**注意**: AnkiConnect 默认只接受本地连接。如需跨机器访问，需配置 AnkiConnect 的 `webCorsOriginList`。
 
 ## 健康检查
 
@@ -246,6 +263,11 @@ cp .env.production /secure/backup/.env.production.$(date +%Y%m%d)
 6. **备份策略**: 制定定期备份计划
 
 ## 更新日志
+
+### 2026-03-27 (v1.5.1)
+- 添加 AnkiConnect 配置说明
+- 添加 Anki 导出功能部署指南
+- 更新 Docker 配置支持 host.docker.internal
 
 ### 2026-03-05
 - 初始部署文档
