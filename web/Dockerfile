@@ -41,6 +41,7 @@ COPY controllers ./controllers
 COPY services ./services
 COPY utils ./utils
 COPY middleware ./middleware
+COPY schemas ./schemas
 
 # Copy built frontend assets from builder stage
 COPY --from=builder /app/dist ./dist
