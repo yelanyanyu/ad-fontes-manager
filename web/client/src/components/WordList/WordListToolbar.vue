@@ -16,6 +16,7 @@ defineProps<{
   syncAllLoading: boolean;
   selectedCount: number;
   hasSelection: boolean;
+  selectingAllMatching?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -32,6 +33,7 @@ const emit = defineEmits<{
   (e: 'print-selected'): void;
   (e: 'clear-selection'): void;
   (e: 'open-batch-anki-export'): void;
+  (e: 'select-all-matching'): void;
 }>();
 
 const onSearchInput = (event: Event) => {
@@ -149,6 +151,16 @@ const onPageSizeChange = (event: Event) => {
             @change="onPageSizeChange"
           />
         </div>
+        <button
+          v-if="isBackendConnected"
+          class="text-xs bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-600 hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          title="Select all records matching current search"
+          :disabled="!!selectingAllMatching"
+          @click="emit('select-all-matching')"
+        >
+          <i class="fa-solid fa-check-double" :class="{ 'fa-spin fa-spinner': !!selectingAllMatching }" />
+          <span>{{ selectingAllMatching ? 'Selecting...' : 'Select All Matching' }}</span>
+        </button>
         <button
           v-if="isBackendConnected && localSyncCount"
           :disabled="syncAllLoading"

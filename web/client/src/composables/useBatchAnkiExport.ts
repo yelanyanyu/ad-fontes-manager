@@ -1,4 +1,5 @@
-import { computed, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
+import { storeToRefs } from 'pinia';
 import {
   applyDuplicateResolution,
   checkDuplicateConflict,
@@ -14,16 +15,12 @@ import {
   summarizeBatchStatuses,
   updateBatchItemsResolution,
 } from '@/services/batchAnkiService';
-import { getDefaultAnkiOptions } from '@/services/ankiExportService';
-import {
-  getInitialAnkiExportOptions,
-  saveStoredAnkiExportOptions,
-} from '@/services/ankiExportOptionsStore';
+import { saveStoredAnkiExportOptions } from '@/services/ankiExportOptionsStore';
 import { buildExportPayload } from '@/services/ankiPayloadBuilder';
+import { useBatchAnkiStore } from '@/stores/batchAnkiStore';
 import { makeWordSelectionKey } from '@/utils/wordSelection';
 import type {
   BatchAnkiExportItem,
-  BatchAnkiProgress,
   AnkiConflictAction,
   BatchAnkiProgressPhase,
 } from '@/types/anki';
@@ -40,23 +37,24 @@ const ankiSessionCache: {
 };
 
 export const useBatchAnkiExport = () => {
-  const defaults = getDefaultAnkiOptions();
-  const initialOptions = getInitialAnkiExportOptions();
-
-  const isOpen = ref(false);
-  const busy = ref(false);
-  const error = ref('');
-  const items = ref<BatchAnkiExportItem[]>([]);
-  const ankiConnected = ref(ankiSessionCache.connected);
-  const deckOptions = ref<string[]>([...ankiSessionCache.deckOptions]);
-  const modelOptions = ref<string[]>([...ankiSessionCache.modelOptions]);
-  const deckName = ref(initialOptions.deckName || defaults.deckName);
-  const modelName = ref(initialOptions.modelName || defaults.modelName);
-  const addReverse = ref(
-    typeof initialOptions.addReverse === 'boolean' ? initialOptions.addReverse : defaults.addReverse
-  );
-  const tagsInput = ref(initialOptions.tagsInput || defaults.tags.join(', '));
-  const progress = ref<BatchAnkiProgress>(createBatchProgress('idle', 0));
+  const batchStore = useBatchAnkiStore();
+  const {
+    isOpen,
+    busy,
+    error,
+    items,
+    progress,
+    taskStarted,
+    configLocked,
+    ankiConnected,
+    deckOptions,
+    modelOptions,
+    deckName,
+    modelName,
+    addReverse,
+    tagsInput,
+    summaryVisible,
+  } = storeToRefs(batchStore);
 
   const tags = computed(() =>
     tagsInput.value
@@ -66,6 +64,9 @@ export const useBatchAnkiExport = () => {
   );
 
   const statusSummary = computed(() => summarizeBatchStatuses(items.value));
+  const hasActiveTask = computed(() => items.value.length > 0);
+  const isRunning = computed(() => progress.value.phase === 'check' || progress.value.phase === 'import');
+  const canEditConfig = computed(() => !configLocked.value && !isRunning.value && !busy.value);
 
   const setItem = (key: string, patch: Partial<BatchAnkiExportItem>): void => {
     items.value = items.value.map(item => (item.key === key ? { ...item, ...patch } : item));
@@ -135,6 +136,9 @@ export const useBatchAnkiExport = () => {
   const open = async (records: WordRecord[]): Promise<void> => {
     isOpen.value = true;
     error.value = '';
+    summaryVisible.value = false;
+    taskStarted.value = false;
+    configLocked.value = false;
     items.value = records.map(record => ({
       key: makeWordSelectionKey(record),
       id: String(record.id),
@@ -158,16 +162,30 @@ export const useBatchAnkiExport = () => {
     }
   };
 
+  const reopenPanel = (): void => {
+    if (items.value.length === 0) return;
+    isOpen.value = true;
+  };
+
   const close = (): void => {
     isOpen.value = false;
-    error.value = '';
-    progress.value = createBatchProgress('idle', 0);
+  };
+
+  const dismissSummary = (): void => {
+    summaryVisible.value = false;
+  };
+
+  const markTaskStarted = (): void => {
+    taskStarted.value = true;
+    configLocked.value = true;
   };
 
   const checkDuplicates = async (): Promise<void> => {
     if (!items.value.length) return;
     busy.value = true;
     error.value = '';
+    summaryVisible.value = true;
+    markTaskStarted();
     progress.value = createBatchProgress('check', items.value.length);
 
     try {
@@ -234,6 +252,8 @@ export const useBatchAnkiExport = () => {
 
     busy.value = true;
     error.value = '';
+    summaryVisible.value = true;
+    markTaskStarted();
     progress.value = createBatchProgress('import', importable.length);
 
     try {
@@ -303,7 +323,7 @@ export const useBatchAnkiExport = () => {
 
   watch([deckName, modelName, addReverse, tagsInput], () => {
     persistOptions();
-    if (!isOpen.value) return;
+    if (!isOpen.value || configLocked.value) return;
     resetCheckState();
   });
 
@@ -313,6 +333,20 @@ export const useBatchAnkiExport = () => {
     if (phase === 'import') return `Importing to Anki ${progress.value.processed}/${progress.value.total}`;
     return '';
   });
+
+  const stageLabel = computed(() => {
+    if (progress.value.phase === 'check') return 'Checking';
+    if (progress.value.phase === 'import') return 'Importing';
+    if (busy.value) return 'Running';
+    if (hasActiveTask.value) return 'Idle';
+    return 'Idle';
+  });
+
+  if (ankiSessionCache.connected && deckOptions.value.length === 0 && modelOptions.value.length === 0) {
+    ankiConnected.value = true;
+    deckOptions.value = [...ankiSessionCache.deckOptions];
+    modelOptions.value = [...ankiSessionCache.modelOptions];
+  }
 
   return {
     isOpen,
@@ -328,9 +362,15 @@ export const useBatchAnkiExport = () => {
     modelOptions,
     progress,
     progressLabel,
+    stageLabel,
     statusSummary,
+    hasActiveTask,
+    canEditConfig,
+    summaryVisible,
     open,
     close,
+    reopenPanel,
+    dismissSummary,
     connectAnki,
     checkDuplicates,
     setDuplicatesResolutionAll,

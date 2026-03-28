@@ -39,6 +39,7 @@ import BatchAnkiExportModal from '@/components/AnkiExport/BatchAnkiExportModal.v
 import WordListToolbar from '@/components/WordList/WordListToolbar.vue';
 import WordListPagination from '@/components/WordList/WordListPagination.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
+import request from '@/utils/request';
 import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search';
 import {
   addVisibleSelections,
@@ -51,6 +52,12 @@ import { useWordEditorLoader } from '@/composables/useWordEditorLoader';
 import { useWordSync } from '@/composables/useWordSync';
 import { useAnkiExport } from '@/composables/useAnkiExport';
 import { useBatchAnkiExport } from '@/composables/useBatchAnkiExport';
+import {
+  buildSelectAllMatchingDecision,
+  collectAllDbMatchingRecords,
+  mergeRecordsIntoSelectionMap,
+  type SelectAllMatchingPageResult,
+} from '@/services/selectAllMatchingService';
 import type {
   DbListMeta,
   DiffBadge,
@@ -81,6 +88,12 @@ interface WordStoreLike {
 
 interface AppStoreLike {
   addToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
+}
+
+interface WordListApiResponse {
+  items?: WordRecord[];
+  page?: number;
+  totalPages?: number;
 }
 
 const wordStore = useWordStore() as unknown as WordStoreLike;
@@ -171,6 +184,7 @@ const displayedRecords = computed<WordRecord[]>(() => {
 
 const selectedKeys = ref<Set<string>>(new Set());
 const selectedItemsByKey = ref<Map<string, WordRecord>>(new Map());
+const selectingAllMatching = ref(false);
 const selectedCount = computed<number>(() => selectedKeys.value.size);
 const hasSelection = computed<boolean>(() => selectedCount.value > 0);
 const selectedExportRecords = computed<WordRecord[]>(() => [...selectedItemsByKey.value.values()]);
@@ -182,6 +196,14 @@ const selectedLemmas = computed<string[]>(() => {
 });
 const isAllVisibleSelected = computed<boolean>(() => {
   return displayedRecords.value.length > 0 && visibleSelectedCount.value === displayedRecords.value.length;
+});
+const showBatchSummaryBar = computed<boolean>(() => {
+  return (
+    batchAnkiHasActiveTask.value &&
+    (batchAnkiSummaryVisible.value ||
+      batchAnkiProgress.value.phase !== 'idle' ||
+      batchAnkiBusy.value)
+  );
 });
 
 const clearSelection = (): void => {
@@ -398,6 +420,11 @@ const {
   items: batchAnkiItems,
   progress: batchAnkiProgress,
   progressLabel: batchAnkiProgressLabel,
+  stageLabel: batchAnkiStageLabel,
+  statusSummary: batchAnkiStatusSummary,
+  hasActiveTask: batchAnkiHasActiveTask,
+  canEditConfig: batchAnkiCanEditConfig,
+  summaryVisible: batchAnkiSummaryVisible,
   ankiConnected: batchAnkiConnected,
   deckOptions: batchAnkiDeckOptions,
   modelOptions: batchAnkiModelOptions,
@@ -407,6 +434,8 @@ const {
   tagsInput: batchAnkiTagsInput,
   open: openBatchAnkiExportModal,
   close: closeBatchAnkiExportModal,
+  reopenPanel: reopenBatchAnkiPanel,
+  dismissSummary: dismissBatchAnkiSummary,
   connectAnki: connectBatchAnki,
   checkDuplicates: checkBatchDuplicates,
   setDuplicatesResolutionAll,
@@ -414,6 +443,15 @@ const {
 } = useBatchAnkiExport();
 
 const openBatchAnkiExport = async (): Promise<void> => {
+  const taskRunning = batchAnkiBusy.value || batchAnkiProgress.value.phase !== 'idle';
+  if (batchAnkiHasActiveTask.value && taskRunning) {
+    reopenBatchAnkiPanel();
+    return;
+  }
+  if (batchAnkiHasActiveTask.value && !selectedExportRecords.value.length) {
+    reopenBatchAnkiPanel();
+    return;
+  }
   if (!selectedExportRecords.value.length) {
     appStore.addToast('No selected words for batch export', 'warning');
     return;
@@ -443,6 +481,75 @@ const ignoreAllBatchDuplicates = (): void => {
 
 const overwriteAllBatchDuplicates = (): void => {
   setDuplicatesResolutionAll('overwrite');
+};
+
+const openBatchPanelFromSummary = (): void => {
+  reopenBatchAnkiPanel();
+};
+
+const closeBatchSummary = (): void => {
+  dismissBatchAnkiSummary();
+};
+
+const fetchDbPageForSelection = async (
+  page: number,
+  limit: number
+): Promise<SelectAllMatchingPageResult> => {
+  const response = await request.get<WordListApiResponse>('/words', {
+    params: {
+      page,
+      limit,
+      search: dbListMeta.value.search || '',
+      sort: dbListMeta.value.sort || sort.value,
+    },
+    skipErrorToast: true,
+  });
+
+  return {
+    items: response.items || [],
+    page: Number(response.page || page),
+    totalPages: Number(response.totalPages || 1),
+  };
+};
+
+const selectAllMatching = async (): Promise<void> => {
+  if (selectingAllMatching.value) return;
+  selectingAllMatching.value = true;
+
+  try {
+    const currentSearch = isBackendConnected.value ? dbListMeta.value.search || '' : search.value;
+    const localMatched = filterRecordsBySearch(localRecords.value || [], currentSearch, searchMode.value);
+    const dbTotal = isBackendConnected.value ? dbListMeta.value.total || 0 : 0;
+    const decision = buildSelectAllMatchingDecision(dbTotal, localMatched.length);
+
+    if (decision.total <= 0) {
+      appStore.addToast('No matching words found', 'info');
+      return;
+    }
+
+    if (decision.requiresConfirm) {
+      const confirmed = window.confirm(
+        `You are about to select ${decision.total} words. This exceeds 150 and may take longer to process. Continue?`
+      );
+      if (!confirmed) return;
+    }
+
+    const dbMatched = isBackendConnected.value && dbTotal > 0
+      ? await collectAllDbMatchingRecords(fetchDbPageForSelection, 200)
+      : [];
+    const mergedMap = mergeRecordsIntoSelectionMap(
+      selectedItemsByKey.value,
+      [...localMatched, ...dbMatched]
+    );
+    selectedItemsByKey.value = mergedMap;
+    selectedKeys.value = new Set(mergedMap.keys());
+    appStore.addToast(`Selected ${decision.total} matching words`, 'success');
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to select all matching words', 'error');
+  } finally {
+    selectingAllMatching.value = false;
+  }
 };
 
 const previewBatchWord = (wordId: string): void => {
@@ -676,7 +783,9 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :model-name="batchAnkiModelName"
       :add-reverse="batchAnkiAddReverse"
       :tags-input="batchAnkiTagsInput"
+      :can-edit-config="batchAnkiCanEditConfig"
       @close="closeBatchAnkiExportModal"
+      @return="closeBatchAnkiExportModal"
       @connect-anki="connectBatchAnki(true)"
       @update:deck-name="setBatchDeckName"
       @update:model-name="setBatchModelName"
@@ -740,6 +849,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :sync-all-loading="syncAllLoading"
       :selected-count="selectedCount"
       :has-selection="hasSelection"
+      :selecting-all-matching="selectingAllMatching"
       @update-search="updateSearch"
       @search="handleSearch"
       @search-keydown="handleSearchKeydown"
@@ -752,8 +862,47 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @refresh="refresh"
       @print-selected="printSelectedLemmas"
       @clear-selection="clearSelection"
+      @select-all-matching="void selectAllMatching()"
       @open-batch-anki-export="void openBatchAnkiExport()"
     />
+    <div v-if="showBatchSummaryBar" class="px-4 py-2 border-b border-slate-100 bg-blue-50/50">
+      <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="text-xs font-semibold text-blue-700 whitespace-nowrap">
+            {{ batchAnkiStageLabel }}
+          </span>
+          <span class="text-xs text-slate-600 whitespace-nowrap">
+            {{ batchAnkiProgress.processed }}/{{ batchAnkiProgress.total }}
+          </span>
+          <div class="w-44 h-2 rounded-full bg-slate-200 overflow-hidden">
+            <div
+              class="h-full bg-blue-500 transition-all duration-300"
+              :style="{ width: `${batchAnkiProgress.percent}%` }"
+            />
+          </div>
+          <span class="text-xs text-slate-500">
+            imported {{ batchAnkiStatusSummary.imported + batchAnkiStatusSummary.overwritten }},
+            duplicate {{ batchAnkiStatusSummary.duplicate }},
+            failed {{ batchAnkiStatusSummary.failed }}
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            class="text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            @click="openBatchPanelFromSummary"
+          >
+            Open Batch Panel
+          </button>
+          <button
+            class="text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            :disabled="batchAnkiBusy || batchAnkiProgress.phase !== 'idle'"
+            @click="closeBatchSummary"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div class="flex-1 overflow-y-auto bg-slate-50">
       <div

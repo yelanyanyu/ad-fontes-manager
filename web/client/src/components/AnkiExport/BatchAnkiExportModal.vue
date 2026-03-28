@@ -15,10 +15,12 @@ defineProps<{
   modelName: string;
   addReverse: boolean;
   tagsInput: string;
+  canEditConfig: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: 'close'): void;
+  (e: 'return'): void;
   (e: 'update:deckName', value: string): void;
   (e: 'update:modelName', value: string): void;
   (e: 'update:addReverse', value: boolean): void;
@@ -31,7 +33,7 @@ const emit = defineEmits<{
   (e: 'preview-word', wordId: string): void;
 }>();
 
-const onOverlayClick = (): void => emit('close');
+const onOverlayClick = (): void => emit('return');
 
 const statusClassMap: Record<string, string> = {
   pending: 'bg-slate-100 text-slate-600 border-slate-200',
@@ -52,12 +54,20 @@ const statusClassMap: Record<string, string> = {
     <div class="w-full max-w-6xl h-[90vh] rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden flex flex-col">
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
         <h3 class="text-slate-800 font-bold text-base">Batch Export to Anki</h3>
-        <button
-          class="w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-          @click="emit('close')"
-        >
-          <i class="fa-solid fa-xmark" />
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+            @click="emit('return')"
+          >
+            Back to List
+          </button>
+          <button
+            class="w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            @click="emit('close')"
+          >
+            <i class="fa-solid fa-xmark" />
+          </button>
+        </div>
       </div>
 
       <div class="p-5 border-b border-slate-100 space-y-4">
@@ -82,6 +92,7 @@ const statusClassMap: Record<string, string> = {
             <select
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               :value="deckName"
+              :disabled="!canEditConfig"
               @change="emit('update:deckName', ($event.target as HTMLSelectElement).value)"
             >
               <option v-if="!deckOptions.length" :value="deckName">{{ deckName || '(empty)' }}</option>
@@ -93,6 +104,7 @@ const statusClassMap: Record<string, string> = {
             <select
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               :value="modelName"
+              :disabled="!canEditConfig"
               @change="emit('update:modelName', ($event.target as HTMLSelectElement).value)"
             >
               <option v-if="!modelOptions.length" :value="modelName">{{ modelName || '(empty)' }}</option>
@@ -104,6 +116,7 @@ const statusClassMap: Record<string, string> = {
             <input
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               :value="tagsInput"
+              :disabled="!canEditConfig"
               @input="emit('update:tagsInput', ($event.target as HTMLInputElement).value)"
             />
           </label>
@@ -114,6 +127,7 @@ const statusClassMap: Record<string, string> = {
             type="checkbox"
             class="rounded border-slate-300"
             :checked="addReverse"
+            :disabled="!canEditConfig"
             @change="emit('update:addReverse', ($event.target as HTMLInputElement).checked)"
           />
           <span>Add Reverse Card</span>
@@ -122,7 +136,7 @@ const statusClassMap: Record<string, string> = {
         <div class="flex flex-wrap gap-2">
           <button
             class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
-            :disabled="busy || !items.length"
+            :disabled="busy || !items.length || !canEditConfig"
             @click="emit('check-duplicates')"
           >
             Check Duplicates
