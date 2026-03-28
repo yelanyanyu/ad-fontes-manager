@@ -5,7 +5,7 @@ const DEFAULT_OPTIONS: AnkiExportOptions = {
   deckName: 'test',
   modelName: 'AdFontesWord',
   addReverse: true,
-  tags: ['ad-fontes'],
+  tags: [],
 };
 
 export const getDefaultAnkiOptions = (): AnkiExportOptions => ({ ...DEFAULT_OPTIONS });

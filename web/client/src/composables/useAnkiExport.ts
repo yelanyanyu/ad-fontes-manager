@@ -1,7 +1,10 @@
 import { computed, ref, watch } from 'vue';
-import yaml from 'js-yaml';
-import request from '@/utils/request';
-import { createAnkiPayload, getDefaultAnkiOptions } from '@/services/ankiExportService';
+import { getDefaultAnkiOptions } from '@/services/ankiExportService';
+import { buildExportPayload } from '@/services/ankiPayloadBuilder';
+import {
+  getInitialAnkiExportOptions,
+  saveStoredAnkiExportOptions,
+} from '@/services/ankiExportOptionsStore';
 import {
   applyDuplicateResolution,
   checkDuplicateConflict,
@@ -16,21 +19,8 @@ import type {
   AnkiDuplicateConflict,
   AnkiExportPayload,
   AnkiImportResult,
-  ParsedWordSource,
 } from '@/types/anki';
 import type { WordRecord } from '@/types/word-list';
-
-type UnknownRecord = Record<string, unknown>;
-
-const STORAGE_KEY = 'adfontes.anki.export.options';
-
-interface StoredOptions {
-  deckName?: string;
-  modelName?: string;
-  addReverse?: boolean;
-  tags?: string[];
-  apkgPath?: string;
-}
 
 const ankiSessionCache: {
   connected: boolean;
@@ -40,33 +30,6 @@ const ankiSessionCache: {
   connected: false,
   deckOptions: [],
   modelOptions: [],
-};
-
-const parseYamlData = (source: unknown): UnknownRecord | null => {
-  if (!source) return null;
-  if (typeof source === 'string') {
-    const parsed = yaml.load(source);
-    return parsed && typeof parsed === 'object' ? (parsed as UnknownRecord) : null;
-  }
-  if (typeof source === 'object') {
-    return source as UnknownRecord;
-  }
-  return null;
-};
-
-const loadStoredOptions = (): StoredOptions => {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as StoredOptions;
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-};
-
-const saveStoredOptions = (options: StoredOptions): void => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(options));
 };
 
 export const useAnkiExport = () => {
@@ -81,15 +44,14 @@ export const useAnkiExport = () => {
   const ankiConnected = ref(ankiSessionCache.connected);
 
   const defaults = getDefaultAnkiOptions();
-  const stored = loadStoredOptions();
-
-  const deckName = ref(stored.deckName || defaults.deckName);
-  const modelName = ref(stored.modelName || defaults.modelName);
+  const initialOptions = getInitialAnkiExportOptions();
+  const deckName = ref(initialOptions.deckName || defaults.deckName);
+  const modelName = ref(initialOptions.modelName || defaults.modelName);
   const addReverse = ref(
-    typeof stored.addReverse === 'boolean' ? stored.addReverse : defaults.addReverse
+    typeof initialOptions.addReverse === 'boolean' ? initialOptions.addReverse : defaults.addReverse
   );
-  const tagsInput = ref((stored.tags || defaults.tags).join(', '));
-  const apkgPath = ref(stored.apkgPath || 'C:\\Users\\lenovo\\Downloads\\ad-fontes-test.apkg');
+  const tagsInput = ref(initialOptions.tagsInput || defaults.tags.join(', '));
+  const apkgPath = ref(initialOptions.apkgPath || 'C:\\Users\\lenovo\\Downloads\\ad-fontes-test.apkg');
 
   const tags = computed(() =>
     tagsInput.value
@@ -99,7 +61,7 @@ export const useAnkiExport = () => {
   );
 
   const persistOptions = (): void => {
-    saveStoredOptions({
+    saveStoredAnkiExportOptions({
       deckName: deckName.value,
       modelName: modelName.value,
       addReverse: addReverse.value,
@@ -126,38 +88,9 @@ export const useAnkiExport = () => {
     };
   };
 
-  const resolveParsedSource = async (record: WordRecord): Promise<ParsedWordSource> => {
-    const localData = parseYamlData(record.original_yaml || record.raw_yaml);
-    if (localData) {
-      return {
-        id: String(record.id),
-        record,
-        data: localData,
-      };
-    }
-
-    const full = await request.get<{ original_yaml?: unknown }>(
-      `/words/${encodeURIComponent(record.id)}`,
-      {
-        skipErrorToast: true,
-      }
-    );
-    const fetched = parseYamlData(full?.original_yaml);
-    if (!fetched) {
-      throw new Error('Failed to resolve YAML source for export');
-    }
-
-    return {
-      id: String(record.id),
-      record,
-      data: fetched,
-    };
-  };
-
   const refreshPayload = async (): Promise<void> => {
     if (!currentRecord.value) return;
-    const source = await resolveParsedSource(currentRecord.value);
-    payload.value = createAnkiPayload(source, {
+    payload.value = await buildExportPayload(currentRecord.value, {
       deckName: deckName.value,
       modelName: modelName.value,
       addReverse: addReverse.value,

@@ -35,6 +35,7 @@ import WordActionMenu from '@/components/WordList/WordActionMenu.vue';
 import DeleteConfirmModal from '@/components/WordList/DeleteConfirmModal.vue';
 import BatchSyncModal from '@/components/WordList/BatchSyncModal.vue';
 import AnkiExportModal from '@/components/AnkiExport/AnkiExportModal.vue';
+import BatchAnkiExportModal from '@/components/AnkiExport/BatchAnkiExportModal.vue';
 import WordListToolbar from '@/components/WordList/WordListToolbar.vue';
 import WordListPagination from '@/components/WordList/WordListPagination.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
@@ -49,6 +50,7 @@ import {
 import { useWordEditorLoader } from '@/composables/useWordEditorLoader';
 import { useWordSync } from '@/composables/useWordSync';
 import { useAnkiExport } from '@/composables/useAnkiExport';
+import { useBatchAnkiExport } from '@/composables/useBatchAnkiExport';
 import type {
   DbListMeta,
   DiffBadge,
@@ -168,9 +170,10 @@ const displayedRecords = computed<WordRecord[]>(() => {
 });
 
 const selectedKeys = ref<Set<string>>(new Set());
-const selectedItemsByKey = ref<Map<string, Pick<WordRecord, 'lemma' | 'yield'>>>(new Map());
+const selectedItemsByKey = ref<Map<string, WordRecord>>(new Map());
 const selectedCount = computed<number>(() => selectedKeys.value.size);
 const hasSelection = computed<boolean>(() => selectedCount.value > 0);
+const selectedExportRecords = computed<WordRecord[]>(() => [...selectedItemsByKey.value.values()]);
 const visibleSelectedCount = computed<number>(() => {
   return displayedRecords.value.filter(item => isWordSelected(selectedKeys.value, item)).length;
 });
@@ -201,10 +204,7 @@ const toggleSelection = (item: WordRecord): void => {
     nextItems.delete(key);
   } else {
     nextKeys.add(key);
-    nextItems.set(key, {
-      lemma: item.lemma,
-      yield: item.yield,
-    });
+    nextItems.set(key, { ...item });
   }
   selectedKeys.value = nextKeys;
   selectedItemsByKey.value = nextItems;
@@ -223,10 +223,7 @@ const toggleSelectAllVisible = (): void => {
   }
   selectedKeys.value = addVisibleSelections(selectedKeys.value, displayedRecords.value);
   displayedRecords.value.forEach(item => {
-    nextItems.set(makeWordSelectionKey(item), {
-      lemma: item.lemma,
-      yield: item.yield,
-    });
+    nextItems.set(makeWordSelectionKey(item), { ...item });
   });
   selectedItemsByKey.value = nextItems;
 };
@@ -392,6 +389,65 @@ const setAnkiTagsInput = (value: string): void => {
 
 const setAnkiApkgPath = (value: string): void => {
   ankiApkgPath.value = value;
+};
+
+const {
+  isOpen: batchAnkiOpen,
+  busy: batchAnkiBusy,
+  error: batchAnkiError,
+  items: batchAnkiItems,
+  progress: batchAnkiProgress,
+  progressLabel: batchAnkiProgressLabel,
+  ankiConnected: batchAnkiConnected,
+  deckOptions: batchAnkiDeckOptions,
+  modelOptions: batchAnkiModelOptions,
+  deckName: batchAnkiDeckName,
+  modelName: batchAnkiModelName,
+  addReverse: batchAnkiAddReverse,
+  tagsInput: batchAnkiTagsInput,
+  open: openBatchAnkiExportModal,
+  close: closeBatchAnkiExportModal,
+  connectAnki: connectBatchAnki,
+  checkDuplicates: checkBatchDuplicates,
+  setDuplicatesResolutionAll,
+  importReadyItems: importBatchReadyItems,
+} = useBatchAnkiExport();
+
+const openBatchAnkiExport = async (): Promise<void> => {
+  if (!selectedExportRecords.value.length) {
+    appStore.addToast('No selected words for batch export', 'warning');
+    return;
+  }
+  await openBatchAnkiExportModal(selectedExportRecords.value);
+};
+
+const setBatchDeckName = (value: string): void => {
+  batchAnkiDeckName.value = value;
+};
+
+const setBatchModelName = (value: string): void => {
+  batchAnkiModelName.value = value;
+};
+
+const setBatchAddReverse = (value: boolean): void => {
+  batchAnkiAddReverse.value = value;
+};
+
+const setBatchTagsInput = (value: string): void => {
+  batchAnkiTagsInput.value = value;
+};
+
+const ignoreAllBatchDuplicates = (): void => {
+  setDuplicatesResolutionAll('skip');
+};
+
+const overwriteAllBatchDuplicates = (): void => {
+  setDuplicatesResolutionAll('overwrite');
+};
+
+const previewBatchWord = (wordId: string): void => {
+  closeBatchAnkiExportModal();
+  handlePreview(wordId);
 };
 
 const localSyncItems = computed<LocalSyncItem[]>(() => {
@@ -606,6 +662,32 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @resolve-conflict-skip="handleResolveDuplicateSkip"
       @export-apkg="handleExportApkg"
     />
+    <BatchAnkiExportModal
+      :open="batchAnkiOpen"
+      :busy="batchAnkiBusy"
+      :error="batchAnkiError"
+      :items="batchAnkiItems"
+      :progress="batchAnkiProgress"
+      :progress-label="batchAnkiProgressLabel"
+      :anki-connected="batchAnkiConnected"
+      :deck-options="batchAnkiDeckOptions"
+      :model-options="batchAnkiModelOptions"
+      :deck-name="batchAnkiDeckName"
+      :model-name="batchAnkiModelName"
+      :add-reverse="batchAnkiAddReverse"
+      :tags-input="batchAnkiTagsInput"
+      @close="closeBatchAnkiExportModal"
+      @connect-anki="connectBatchAnki(true)"
+      @update:deck-name="setBatchDeckName"
+      @update:model-name="setBatchModelName"
+      @update:add-reverse="setBatchAddReverse"
+      @update:tags-input="setBatchTagsInput"
+      @check-duplicates="checkBatchDuplicates"
+      @ignore-all-duplicates="ignoreAllBatchDuplicates"
+      @overwrite-all-duplicates="overwriteAllBatchDuplicates"
+      @import-ready-items="importBatchReadyItems"
+      @preview-word="previewBatchWord"
+    />
     <WordActionMenu
       :open="showMenuId !== null"
       :item="selectedMenuItem"
@@ -670,6 +752,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @refresh="refresh"
       @print-selected="printSelectedLemmas"
       @clear-selection="clearSelection"
+      @open-batch-anki-export="void openBatchAnkiExport()"
     />
 
     <div class="flex-1 overflow-y-auto bg-slate-50">

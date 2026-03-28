@@ -55,3 +55,37 @@ export type AnkiImportResult =
   | { status: 'imported'; noteId: number }
   | { status: 'skipped' }
   | { status: 'conflict'; conflict: AnkiDuplicateConflict };
+
+export type BatchAnkiItemStatus =
+  | 'pending'
+  | 'checking'
+  | 'duplicate'
+  | 'ready'
+  | 'importing'
+  | 'imported'
+  | 'skipped'
+  | 'overwritten'
+  | 'failed';
+
+export type BatchDuplicateResolution = 'undecided' | 'skip' | 'overwrite';
+export type BatchAnkiProgressPhase = 'idle' | 'check' | 'import';
+
+export interface BatchAnkiProgress {
+  phase: BatchAnkiProgressPhase;
+  processed: number;
+  total: number;
+  percent: number;
+}
+
+export interface BatchAnkiExportItem {
+  key: string;
+  id: string;
+  lemma: string;
+  record: WordRecord;
+  payload: AnkiExportPayload | null;
+  conflict: AnkiDuplicateConflict | null;
+  resolution: BatchDuplicateResolution;
+  status: BatchAnkiItemStatus;
+  error: string;
+  noteId: number | null;
+}
