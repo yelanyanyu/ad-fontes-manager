@@ -9,9 +9,19 @@ interface WriteAuthTokenSources {
   localStorageToken?: string | null;
   envToken?: string | null;
   isDev: boolean;
+  runtimeHostname?: string | null;
 }
 
 const normalizeToken = (value: string | null | undefined): string => String(value || '').trim();
+const normalizeHostname = (value: string | null | undefined): string =>
+  String(value || '')
+    .trim()
+    .toLowerCase();
+
+const isLoopbackHostname = (hostname: string): boolean => {
+  if (!hostname) return false;
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+};
 
 export const isWriteMethod = (method: string | undefined): boolean => {
   if (!method) return false;
@@ -25,13 +35,15 @@ export const resolveWriteAuthToken = (sources: WriteAuthTokenSources): string =>
   const envToken = normalizeToken(sources.envToken);
   if (envToken) return envToken;
 
-  if (sources.isDev) return DEV_WRITE_TOKEN_FALLBACK;
+  const runtimeHostname = normalizeHostname(sources.runtimeHostname);
+  if (sources.isDev || isLoopbackHostname(runtimeHostname)) return DEV_WRITE_TOKEN_FALLBACK;
 
   return '';
 };
 
 export const resolveWriteAuthTokenFromRuntime = (): string => {
   let localStorageToken = '';
+  let runtimeHostname = '';
 
   if (typeof window !== 'undefined' && window.localStorage) {
     try {
@@ -39,12 +51,15 @@ export const resolveWriteAuthTokenFromRuntime = (): string => {
     } catch {
       localStorageToken = '';
     }
+
+    runtimeHostname = window.location?.hostname || '';
   }
 
   return resolveWriteAuthToken({
     localStorageToken,
     envToken: import.meta.env.VITE_ADMIN_TOKEN,
     isDev: Boolean(import.meta.env.DEV),
+    runtimeHostname,
   });
 };
 
@@ -65,4 +80,3 @@ export const attachWriteAuthHeader = (
   config.headers = headers;
   return config;
 };
-

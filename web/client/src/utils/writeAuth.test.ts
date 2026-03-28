@@ -47,6 +47,17 @@ describe('writeAuth', () => {
     expect(token).toBe('');
   });
 
+  it('falls back to dev token for localhost runtime in non-dev mode', () => {
+    const token = resolveWriteAuthToken({
+      localStorageToken: '',
+      envToken: '',
+      isDev: false,
+      runtimeHostname: 'localhost',
+    });
+
+    expect(token).toBe(DEV_WRITE_TOKEN_FALLBACK);
+  });
+
   it('attaches admin token header for write requests', () => {
     const config = {
       method: 'post',
@@ -71,4 +82,3 @@ describe('writeAuth', () => {
     expect(headers.get('X-Admin-Token')).toBeUndefined();
   });
 });
-
