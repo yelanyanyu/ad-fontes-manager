@@ -14,6 +14,8 @@ defineProps<{
   localSyncCount: number;
   totalCount: number;
   syncAllLoading: boolean;
+  selectedCount: number;
+  hasSelection: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -27,6 +29,7 @@ const emit = defineEmits<{
   (e: 'page-size-change', value: string): void;
   (e: 'open-sync-all'): void;
   (e: 'refresh'): void;
+  (e: 'print-selected'): void;
 }>();
 
 const onSearchInput = (event: Event) => {
@@ -155,6 +158,16 @@ const onPageSizeChange = (event: Event) => {
         </button>
       </div>
       <div class="flex items-center gap-3">
+        <button
+          v-if="hasSelection"
+          class="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1.5 hover:bg-blue-100 shadow-sm flex items-center gap-2"
+          title="Print selected lemmas"
+          data-test="print-selected-button"
+          @click="emit('print-selected')"
+        >
+          <i class="fa-solid fa-print" />
+          <span>Print Selected ({{ selectedCount }})</span>
+        </button>
         <span
           class="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"
         >

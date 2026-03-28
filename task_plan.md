@@ -1,518 +1,307 @@
-# Anki 导出与导入实施计划
+# WordList 多选功能实施计划（结合当前项目实际情况优化）
 
-> **For Claude:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task-by-task.
+## 任务目标
 
-**Goal:** 为词条预览与词条列表中的独立 `Export` 入口提供完整的 Anki 工作流，支持按目标 note 字段映射导出、直接连接 AnkiConnect 向 `test` 牌组导入验证，并支持生成可分发的 `.apkg` 包。
+在单词列表中增加基础多选能力，允许用户勾选当前列表里的多个词条，并通过工具栏按钮触发一个临时测试动作：
 
-**Architecture:** 采用“前端发起导出 + 导出服务统一编排 + 本地集成能力分层”的方式。前端负责选择导出动作、显示预览和反馈；导出服务负责字段映射、note 载荷组装和动作分发；AnkiConnect 联调用于本地即时验证；`.apkg` 生成功能通过独立打包层实现，避免把复杂打包逻辑直接塞进 Vue 组件。
+- 点击按钮后，在浏览器控制台输出当前选中词条的 `lemma`
+- 第一阶段仅验证列表层的数据流、交互和组件边界
+- 不在本次实现中引入批量删除、批量导出、跨页持久选择等扩展能力
 
-**Tech Stack:** Vue 3.5、Pinia、TypeScript、现有 `generator.ts`、Clipboard API、localStorage、AnkiConnect、`.apkg` 打包库或本地 Node 打包脚本、`yml_example.yml` 作为样例输入。
+这个计划基于当前仓库的真实实现来制定，而不是从零设计：
 
----
+- 列表组件是 [`web/client/src/components/WordList/WordList.vue`](web/client/src/components/WordList/WordList.vue)
+- 工具栏组件是 [`web/client/src/components/WordList/WordListToolbar.vue`](web/client/src/components/WordList/WordListToolbar.vue)
+- 当前列表数据来自“本地记录 + 当前页数据库记录”的合并结果，而不是单一数组
+- 当前数据库列表带分页，且搜索、排序、页大小切换都会重新请求数据
 
-## 1. 背景与新增目标
+## 当前实现现状
 
-当前项目已经同时存在：
+### 已有基础
 
-- `Copy HTML Code (Anki)` 这个核心功能
-- 词条菜单中的独立 `Export` 按钮
+- `WordList.vue` 已负责列表展示、搜索、排序、分页、同步、删除、导出等主流程
+- `WordListToolbar.vue` 已经承担顶部工具栏的按钮和筛选交互
+- `displayedRecords` 是前端最终渲染用的数据源，已经把 `localRecords` 与 `dbRecords` 合并
+- 每行当前已有查看、编辑、更多操作按钮，说明行级操作入口已经存在
 
-这两个入口的职责需要继续保持区分：
+### 需要特别注意的现实约束
 
-- `Copy HTML Code (Anki)` 保持不变，继续服务于现有核心能力
-- 独立 `Export` 按钮升级为正式的 Anki 导出 / 导入入口
+1. 列表是混合数据源
+本地词条和数据库词条可能同时存在于同一列表中，选中状态不能简单假设“`id` 全局唯一且不冲突”。
 
-在此基础上，新增的实际需求不再只是“复制 HTML”或“下载 TSV”，而是完整支持以下能力：
+2. 数据库列表是分页数据
+当前 `dbRecords` 只代表当前页，不是全量数据，因此“全选”只能定义为“全选当前屏幕可见列表项”，不能定义为全库全选。
 
-1. 针对目标 Anki note model 的固定字段进行映射
-2. 直接连接本地 AnkiConnect
-3. 在 `test` 牌组中完成真实导入测试
-4. 支持导出 `.apkg`
-5. 用 `yml_example.yml` 验证完整链路
+3. 列表会频繁刷新
+搜索、排序、分页、刷新、同步、删除都会触发列表变化。如果不定义清楚，选中状态会出现“选中了看不见的项”或者“按钮计数与页面不一致”的问题。
 
-## 2. 目标字段模型
+4. 当前功能目标只是测试版
+用户要求的动作是“打印选中 lemma 到控制台”，因此第一阶段应优先做到低侵入、可验证、可扩展，而不是提前抽象成全局批量操作系统。
 
-根据你提供的目标卡组截图，目标字段固定为：
+## 设计结论
 
-1. `Word`
-2. `Context`
-3. `notes`
-4. `Back`
-5. `Add Reverse`
-6. `Media`
+### 第一版范围
 
-这意味着本次计划不能再只做“通用映射 UI”，而需要优先围绕该 note model 落地一套可工作的默认映射和真实导入流程。
+- 在表格第一列加入复选框列
+- 支持单行选择
+- 支持表头“全选当前可见项”
+- 在工具栏中增加一个“打印选中项”的测试按钮
+- 按钮文案展示当前选中数量
+- 点击按钮后输出选中项的 `lemma` 数组
 
-### 2.1 字段语义建议
+### 第一版明确不做
 
-- `Word`
-  - 卡片正面核心词条
-  - 默认取 `yield.lemma`
+- 不做跨页保留选择
+- 不做搜索条件变化后的隐式保留选择
+- 不做 Pinia 持久化
+- 不做批量删除、批量同步、批量导出
+- 不做 Shift 连选
 
-- `Context`
-  - 用户上下文句或核心例句
-  - 默认优先取 `yield.user_context_sentence`
+### 推荐的状态策略
 
-- `notes`
-  - 供 Anki 浏览器中快速查看的简要备注
-  - 可由词性、音节划分、中文释义、同源词摘要等拼接
+选中状态保留在 `WordList.vue` 本地，而不是放进 `wordStore`。
 
-- `Back`
-  - 卡片背面完整内容
-  - 默认由现有 `generator.ts` 输出的主卡 HTML 或结构化导出结果生成
+原因：
 
-- `Add Reverse`
-  - 控制是否生成反向卡
-  - 建议使用布尔值或约定字符串，如 `true` / `false`
+- 这是纯列表交互状态，不属于全局业务数据
+- 当前需求只是测试动作，放进 store 会增加复杂度
+- 后续如果演进为批量操作，再决定是否抽到 composable 或 store 更合理
 
-- `Media`
-  - 关联媒体文件名或媒体占位字段
-  - 第一阶段允许为空，但字段结构必须保留
+## 实施方案
 
-## 3. 范围
+### 1. 在 `WordList.vue` 增加本地选中状态
 
-### 3.1 本次必须完成
+建议新增：
 
-1. 保持 `Copy HTML Code (Anki)` 核心功能和文案不变。
-2. 将独立 `Export` 按钮升级为正式 Anki 导出入口。
-3. 支持基于上述 6 个固定字段生成 note 数据。
-4. 支持从 `yml_example.yml` 对应的数据结构生成 Anki note。
-5. 支持通过 AnkiConnect 将 note 直接导入本地 `test` 牌组。
-6. 支持导出 `.apkg` 文件。
-7. 提供导出预览和导入反馈。
-8. 对核心映射、AnkiConnect 载荷和 `.apkg` 生成增加测试与手工验证步骤。
+- `selectedKeys: Ref<Set<string>>`
+- `makeSelectionKey(item: WordRecord): string`
+- `isSelected(item: WordRecord): boolean`
+- `toggleSelection(item: WordRecord): void`
+- `toggleSelectAllVisible(): void`
+- `clearSelection(): void`
 
-### 3.2 本次不做
+### 2. 选中键不要直接使用 `id`
 
-- 不替换 `Copy HTML Code (Anki)` 现有行为
-- 不做多 note type 动态建模
-- 不做复杂模板编辑器
-- 不做云端同步到 AnkiWeb
-- 不做批量选择多个词条导出
-
-## 4. 样例输入约束
-
-本计划默认使用 `yml_example.yml` 作为导出设计与验证的样例输入。
-
-### 4.1 已确认的重要数据来源
-
-从 `yml_example.yml` 可以直接提取或推导：
-
-- `yield.lemma`
-- `yield.user_context_sentence`
-- `yield.part_of_speech`
-- `yield.syllabification`
-- `yield.contextual_meaning.en`
-- `yield.contextual_meaning.zh`
-- `etymology.*`
-- `cognate_family.*`
-- `application.selected_examples`
-- `nuance.*`
-
-### 4.2 默认字段映射建议
+由于当前列表来自本地和数据库两类来源，建议使用组合键：
 
 ```ts
-const defaultFieldMapping = {
-  Word: 'yield.lemma',
-  Context: 'yield.user_context_sentence',
-  notes: 'summary.notes',
-  Back: 'rendered.backHtml',
-  'Add Reverse': 'exportOptions.addReverse',
-  Media: 'media.primary',
-};
+const makeSelectionKey = (item: WordRecord) => `${item.isLocal ? 'local' : 'db'}:${item.id}`;
 ```
 
-### 4.3 `notes` 字段建议内容
+这样可以避免本地记录和数据库记录恰好出现相同 `id` 时互相污染选中状态。
 
-建议先生成紧凑且稳定的摘要，而不是堆满整个背面内容：
+### 3. 基于 `displayedRecords` 计算选中结果
 
-- `part_of_speech`
-- `syllabification`
-- 英文释义
-- 中文释义
-- 1 条最关键的词源摘要
+建议增加以下计算属性：
 
-这样更利于在 Anki Browser 中快速浏览。
+- `selectedRecords`
+- `selectedCount`
+- `selectedLemmas`
+- `isAllVisibleSelected`
+- `hasSelection`
 
-## 5. 导出能力设计
+`selectedLemmas` 推荐继续复用当前列表里的 fallback 逻辑：
 
-本次导出能力分成三条路径：
-
-1. **预览导出**
-   - 让用户看到即将发送 / 打包的 note 内容
-
-2. **AnkiConnect 直接导入**
-   - 直接把 note 发送到本地 Anki 的 `test` 牌组
-
-3. **`.apkg` 离线导出**
-   - 生成可分发、可手工导入的牌组文件
-
-### 5.1 为什么需要三条路径
-
-- 预览解决“导入前可见性”
-- AnkiConnect 解决“本地即时验证”
-- `.apkg` 解决“可分享、可备份、无需依赖本地 Anki 正在运行”
-
-## 6. 推荐架构
-
-```text
-UI Layer
-  WordPreview.vue
-  WordActionMenu.vue
-  AnkiExportModal.vue
-
-State / Orchestration
-  useAnkiExport.ts
-
-Domain / Export Logic
-  ankiExportService.ts
-  ankiFieldMapper.ts
-  ankiBackRenderer.ts
-
-Integration Layer
-  ankiConnectService.ts
-  apkgExportService.ts
-
-Types / Contracts
-  types/anki.ts
-
-Input Fixtures
-  yml_example.yml
+```ts
+item.lemma || item.yield?.lemma
 ```
 
-### 6.1 模块职责
-
-- `AnkiExportModal.vue`
-  - 预览字段映射结果
-  - 选择导出动作
-  - 触发导入到 Anki / 导出 `.apkg`
-
-- `useAnkiExport.ts`
-  - 管理弹窗状态、当前词条、导出动作 loading/error/success
-  - 调用各 service
-
-- `ankiExportService.ts`
-  - 从词条数据生成统一 note 结构
-  - 聚合字段映射、背面渲染和媒体占位
-
-- `ankiFieldMapper.ts`
-  - 把词条数据映射到固定字段：
-    - `Word`
-    - `Context`
-    - `notes`
-    - `Back`
-    - `Add Reverse`
-    - `Media`
+并在输出前过滤空值，避免控制台出现无意义项。
 
-- `ankiConnectService.ts`
-  - 负责和本地 AnkiConnect 通信
-  - 检查服务可达性
-  - 创建牌组 / 添加 note / 可选清理测试数据
-
-- `apkgExportService.ts`
-  - 负责 `.apkg` 打包
-  - 组装 deck、model、notes、media
-
-## 7. 关键决策
-
-### 7.1 `Export` 按钮的正式职责
-
-`Export` 按钮不再只承担“提示未实现”，而是承担完整工作流：
-
-- 查看导出预览
-- 导入到本地 Anki
-- 下载 `.apkg`
-
-### 7.2 为什么要真实接 AnkiConnect
-
-如果只做静态导出，计划会停留在“格式看起来像能用”。  
-你现在明确要求在 `test` 牌组中直接导入验证，所以必须把 AnkiConnect 纳入主路径，而不是后续扩展。
-
-### 7.3 为什么 `.apkg` 不能只靠前端拼字符串
-
-`.apkg` 本质上不是普通文本导出，而是包含 deck/model/note/media 的打包格式。  
-因此应当把 `.apkg` 生成看作独立能力，放到专门打包层处理，而不是复用 TSV/HTML 逻辑硬拼。
-
-## 8. 分阶段实施
-
-### Phase 1: 固定字段模型与样例映射
-
-**目标：** 先围绕目标 note 字段和 `yml_example.yml` 把映射规则确定下来。
-
-**Files:**
-- Create: `web/client/src/types/anki.ts`
-- Create: `web/client/src/services/ankiFieldMapper.ts`
-- Create: `web/client/src/services/ankiExportService.ts`
-- Reference: `yml_example.yml`
-
-**任务：**
-1. 为固定字段定义类型：
-   - `Word`
-   - `Context`
-   - `notes`
-   - `Back`
-   - `Add Reverse`
-   - `Media`
-2. 设计 `yml_example.yml` 到目标字段的默认映射。
-3. 统一 `notes` 摘要生成规则。
-4. 统一 `Back` 字段的 HTML/富文本来源。
-
-**验收标准：**
-- 给定 `yml_example.yml` 可稳定生成一份 note 载荷。
-- 目标 6 字段全部有明确来源或兜底逻辑。
-
-**测试：**
-- `ankiFieldMapper` 单元测试
-- `yml_example.yml` 映射快照测试
-
-### Phase 2: 导出弹窗与动作分发
-
-**目标：** 让独立 `Export` 按钮真正可用。
-
-**Files:**
-- Create: `web/client/src/components/AnkiExport/AnkiExportModal.vue`
-- Create: `web/client/src/composables/useAnkiExport.ts`
-- Modify: `web/client/src/components/WordList/WordActionMenu.vue`
-- Modify: `web/client/src/components/WordList/WordList.vue`
-- Optional Modify: `web/client/src/components/WordPreview/WordPreview.vue`
-
-**任务：**
-1. 保持 `Copy HTML Code (Anki)` 不变。
-2. 将菜单里的独立 `Export` 按钮接到新弹窗。
-3. 在弹窗中展示：
-   - 6 个字段预览
-   - 导入到 Anki
-   - 导出 `.apkg`
-4. 增加动作执行状态与错误反馈。
-
-**验收标准：**
-- 点击 `Export` 可打开正式导出弹窗。
-- 用户可看到固定字段的预览结果。
-- `Copy HTML Code (Anki)` 与 `Export` 职责清晰。
-
-**测试：**
-- 弹窗渲染测试
-- Export 入口触发测试
-
-### Phase 3: AnkiConnect 集成与 `test` 牌组验证
-
-**目标：** 建立本地直连 Anki 的真实导入能力。
-
-**Files:**
-- Create: `web/client/src/services/ankiConnectService.ts`
-- Modify: `web/client/src/services/ankiExportService.ts`
-- Modify: `web/client/src/composables/useAnkiExport.ts`
-
-**任务：**
-1. 封装 AnkiConnect 基本请求能力。
-2. 增加连通性检查，如 `version` / `deckNames`。
-3. 增加 `test` 牌组检测或创建流程。
-4. 将生成的 note 直接导入 `test` 牌组。
-5. 返回成功 note id、失败原因等结果。
-
-**验收标准：**
-- 本地 Anki 启动且开启 AnkiConnect 时，导入动作可成功执行。
-- 目标牌组固定为 `test`。
-- 失败时能明确区分：
-  - Anki 未启动
-  - AnkiConnect 不可达
-  - 字段不匹配
-  - note model 不存在
-
-**测试：**
-- `ankiConnectService` 请求构造测试
-- 使用 mock 的联调测试
-
-**手工验证：**
-1. 启动 Anki 与 AnkiConnect。
-2. 从 `Export` 弹窗执行“导入到 Anki”。
-3. 在 `test` 牌组中确认 note 已出现。
-
-### Phase 4: `.apkg` 导出
-
-**目标：** 支持生成可导入的牌组文件。
-
-**Files:**
-- Create: `web/client/src/services/apkgExportService.ts` 或等效本地导出桥接层
-- Modify: `web/client/src/services/ankiExportService.ts`
-- Modify: `web/client/src/composables/useAnkiExport.ts`
-
-**任务：**
-1. 选定 `.apkg` 生成方案：
-   - 优先现成库
-   - 不可行时使用本地 Node 打包脚本
-2. 定义 deck name、model name、字段顺序。
-3. 将 note 数据写入 `.apkg`。
-4. 将 `Media` 字段纳入结构，即使初期为空。
-5. 支持浏览器下载或本地生成文件。
-
-**验收标准：**
-- 可以生成一个可导入 Anki 的 `.apkg` 文件。
-- 字段顺序与目标 note model 一致。
-- 使用 `yml_example.yml` 可产出有效样例包。
-
-**测试：**
-- `.apkg` 生成结构测试
-- deck/model 字段顺序测试
-
-### Phase 5: 设置与可配置项
-
-**目标：** 在固定字段模型稳定后，再开放必要配置。
-
-**Files:**
-- Modify: `web/client/src/views/SettingsView.vue`
-- Modify or Create: `web/client/src/utils/` 下与配置持久化相关文件
-
-**任务：**
-1. 配置以下默认值：
-   - note model 名称
-   - 默认牌组名称
-   - `Add Reverse` 默认值
-2. 允许对固定字段来源做有限配置，而不是完全自由映射。
-3. 保存到 localStorage。
-
-**验收标准：**
-- 用户不需要每次重复填写配置。
-- 配置不会破坏目标字段顺序。
+### 4. 明确定义“全选”的作用域
 
-**测试：**
-- 设置持久化测试
-- 默认值加载测试
+表头复选框的语义应为：
 
-### Phase 6: 打磨与发布前验证
+- 全选当前 `displayedRecords` 中的可见项
+- 取消全选当前 `displayedRecords` 中的可见项
 
-**目标：** 确保整条导出 / 导入链路可交付。
+不要把它实现成“全库全选”或“跨页累计全选”，因为当前项目没有对应的数据模型和交互提示。
 
-**Files:**
-- Modify: 以上相关文件
-- Test: `web/client/src/**/*.test.ts`
+### 5. 在列表变化时主动清理选中状态
 
-**任务：**
-1. 完善错误提示。
-2. 处理字段缺失兜底。
-3. 检查移动端可用性。
-4. 明确用户提示文案：
-   - `导入到 Anki (test deck)`
-   - `下载 .apkg`
+第一版推荐采用“保守清理”策略：
 
-**验收标准：**
-- `Export` 弹窗可以完成两条真实动作：
-  - 导入到 `test`
-  - 下载 `.apkg`
-- 样例数据 `yml_example.yml` 能走通主链路。
-
-## 9. 测试策略
-
-### 9.1 单元测试
-
-- `ankiFieldMapper`
-  - 固定字段映射正确
-  - 缺字段时兜底正确
+- 搜索执行后清空选中
+- 排序变化后清空选中
+- 页大小变化后清空选中
+- 翻页后清空选中
+- 手动刷新后清空选中
+- 删除成功后清空选中
+- 批量同步完成后清空选中
 
-- `ankiExportService`
-  - note 结构正确
-  - `Back` 字段输出正确
-  - `notes` 摘要稳定
-
-- `ankiConnectService`
-  - action 请求体正确
-  - `test` 牌组逻辑正确
+原因：
 
-- `apkgExportService`
-  - model 字段顺序正确
-  - deck 信息正确
+- 当前页面没有“已选中但不可见”的提示区域
+- 数据是动态合并的，刷新后保留旧选中容易制造误操作
+- 这是测试版，优先保证行为可理解
 
-### 9.2 组件测试
+如果希望体验更丝滑，也可以改成“仅保留当前仍然可见的 key”，但第一版不建议增加额外复杂度。
 
-- `AnkiExportModal.vue`
-  - 字段预览渲染正确
-  - 点击“导入到 Anki”触发正确动作
-  - 点击“下载 .apkg”触发正确动作
+### 6. 工具栏按钮放在 `WordListToolbar.vue`
 
-### 9.3 手工验证
+建议在工具栏右侧操作区增加一个临时测试按钮，而不是放到每行 action menu。
 
-1. 使用 `yml_example.yml` 对应词条生成导出预览。
-2. 确认以下 6 个字段都有值或可接受兜底：
-   - `Word`
-   - `Context`
-   - `notes`
-   - `Back`
-   - `Add Reverse`
-   - `Media`
-3. 启动 Anki + AnkiConnect。
-4. 通过 `Export` 弹窗导入到 `test` 牌组。
-5. 在 Anki 中检查导入结果。
-6. 生成 `.apkg` 并手工导入验证。
+原因：
 
-## 10. 风险与对策
+- 这是针对“多选集合”的动作，不是单条记录动作
+- 工具栏本身已经承载 `Sync All` 和 `Refresh`，语义上更统一
+- 当前页面结构能容纳一个轻量按钮，不需要新增弹窗
 
-### 风险 1：AnkiConnect 在用户环境不可用
+推荐新增 props：
 
-**影响：** 无法完成直接导入。
+- `selectedCount: number`
+- `hasSelection: boolean`
 
-**对策：**
-- 明确检测连接状态
-- `.apkg` 导出作为兜底路径
+推荐新增 emits：
 
-### 风险 2：目标 note model 与字段顺序不匹配
+- `print-selected`
 
-**影响：** 导入后字段错位。
+按钮建议：
 
-**对策：**
-- 固定字段顺序
-- 对目标字段做严格映射测试
+- 仅在 `hasSelection === true` 时显示，避免空操作
+- 文案类似 `Print Selected (3)`
+- 保持现有页面风格，沿用当前工具栏的 `slate / blue` 设计语言，不额外做风格重构
 
-### 风险 3：`.apkg` 打包方案前端不可行
+### 7. 表格结构调整
 
-**影响：** 浏览器侧无法稳定生成包。
+建议在现有表格中增加一列选择列：
 
-**对策：**
-- 优先评估现成库
-- 如前端方案不稳定，切换为本地 Node 打包脚本或项目内辅助脚本
+- 表头第一列：全选复选框
+- 每行第一列：单项复选框
+- 列宽控制在 `w-10` 或相近窄列
 
-### 风险 4：`Back` 字段 HTML 过于依赖现有预览渲染
+选中行建议增加轻量高亮：
 
-**影响：** 页面改动影响导出结果。
+- 维持当前 `hover:bg-slate-50/60` 逻辑
+- 叠加选中态，比如 `bg-blue-50/60`
 
-**对策：**
-- 独立封装 `Back` 渲染逻辑
-- 避免组件直接决定 Anki 背面结构
+注意不要破坏当前右侧操作按钮区域宽度和对齐。
 
-## 11. 建议提交策略
+## 组件级改动清单
 
-1. `feat(anki): add fixed field mapping for target note model`
-2. `feat(anki): add export modal and export orchestration`
-3. `feat(anki): integrate anki-connect for test deck import`
-4. `feat(anki): add apkg export pipeline`
-5. `test(anki): cover mapping import and apkg flows`
+### 必改文件
 
-## 12. 最终交付标准
+[`web/client/src/components/WordList/WordList.vue`](web/client/src/components/WordList/WordList.vue)
 
-满足以下条件即可视为本计划完成：
+- 增加本地选中状态和相关计算属性
+- 在表格中加入复选框列
+- 将 `selectedCount` / `hasSelection` 透传给工具栏
+- 响应工具栏的 `print-selected` 事件
+- 在合适的列表刷新节点调用 `clearSelection`
 
-- `Copy HTML Code (Anki)` 保持原有核心功能不变
-- 独立 `Export` 按钮成为正式 Anki 入口
-- 目标字段固定支持：
-  - `Word`
-  - `Context`
-  - `notes`
-  - `Back`
-  - `Add Reverse`
-  - `Media`
-- 可以把 note 直接导入本地 Anki 的 `test` 牌组
-- 可以导出 `.apkg`
-- `yml_example.yml` 可以跑通主验证链路
+[`web/client/src/components/WordList/WordListToolbar.vue`](web/client/src/components/WordList/WordListToolbar.vue)
 
-## 13. 后续扩展
+- 扩展 props 与 emits
+- 增加测试按钮
+- 保持现有工具栏布局稳定
 
-本计划完成后，可继续演进：
+### 当前阶段不建议修改
 
-1. 支持批量导出多个词条
-2. 支持多个 note model
-3. 支持媒体真实打包而非占位
-4. 支持导入历史记录
-5. 支持更多 deck 策略
+[`web/client/src/stores/wordStore.ts`](web/client/src/stores/wordStore.ts)
 
----
+- 这个需求不需要把选中状态放入 store
+- 除非实现过程中发现必须和批量业务动作共享，否则不动 store
 
-如果按这份计划继续实施，建议顺序是：先把固定字段映射和样例跑通，再做 AnkiConnect 联调，最后补 `.apkg`。这样最容易尽早看到真实可用结果，也最方便定位问题到底出在字段、连接，还是打包阶段。
+## 推荐实施顺序
+
+### Phase 1：最小可运行版本
+
+1. 在 `WordList.vue` 建立本地选中状态和组合 key 逻辑
+2. 为表格加入复选框列
+3. 加入 `selectedCount` / `selectedLemmas` / `isAllVisibleSelected`
+4. 在 `WordListToolbar.vue` 增加 `print-selected` 按钮
+5. 点击按钮后输出选中的 lemma
+
+### Phase 2：交互收口
+
+1. 给选中行增加高亮样式
+2. 在搜索、分页、排序、刷新等动作后统一清空选择
+3. 检查“全选”和“局部取消”在混合数据源下是否正常
+
+### Phase 3：验证与回归
+
+1. 手动验证交互链路
+2. 补一个前端单元测试，至少覆盖选中数量或工具栏按钮显示逻辑
+3. 运行前端类型检查
+
+## 测试与验证计划
+
+### 手动验证
+
+1. 进入首页词条列表，确认表格新增复选框列
+2. 勾选单条记录，确认行高亮与按钮出现
+3. 勾选多条记录，确认按钮数量同步更新
+4. 点击工具栏按钮，确认控制台输出所选 lemma 数组
+5. 点击表头复选框，确认只影响当前可见列表项
+6. 执行搜索、翻页、排序、刷新，确认选中状态被清空
+7. 本地词条与数据库词条混合存在时，确认选中计数准确
+
+### 自动化验证
+
+建议新增一个贴近组件行为的前端测试，优先级如下：
+
+1. `WordListToolbar.vue`：`selectedCount > 0` 时显示按钮，否则隐藏
+2. 或者 `WordList.vue`：选择若干项后，向工具栏传递正确计数
+
+当前仓库前端测试基础较弱，因此这次至少补一个聚焦测试即可，不建议一次性引入复杂挂载测试矩阵。
+
+### 命令验证
+
+建议执行：
+
+```bash
+cd web/client && npm run type-check
+cd web/client && npm run test
+```
+
+如果本次只新增了很轻的组件逻辑，至少也要完成 `type-check`。
+
+## 风险与规避
+
+### 风险 1：混合数据源导致选中冲突
+
+规避方式：
+
+- 使用 `local:${id}` / `db:${id}` 组合 key
+
+### 风险 2：分页后保留旧选中造成误解
+
+规避方式：
+
+- 第一版统一清空选择，而不是跨页保留
+
+### 风险 3：工具栏布局被挤压
+
+规避方式：
+
+- 将新按钮做成轻量按钮
+- 保持与 `Sync All`、`Reload All` 同一视觉等级
+
+### 风险 4：实现过度扩张
+
+规避方式：
+
+- 第一版只做“多选 + 打印”
+- 不提前接入批量删除/导出/同步
+
+## 验收标准
+
+- 用户可以在 `WordList` 中勾选多个词条
+- 工具栏会显示当前选中数量
+- 点击测试按钮后，控制台能输出选中项 lemma 数组
+- 表头全选仅作用于当前可见列表
+- 搜索、排序、翻页、刷新后不会留下难以理解的历史选中状态
+- 不修改全局 store 结构，不引入与当前需求无关的复杂抽象
+
+## 后续可扩展方向
+
+如果第一版验证通过，后续可以基于同一套选中模型继续扩展：
+
+- 批量同步
+- 批量导出到 Anki
+- 批量删除
+- 跨页保留选择
+- 顶部显示“已选中 X 项，可清空”
+- 将多选逻辑抽为 `useWordSelection` composable
+
+但这些都应在第一版稳定后再推进，而不是和当前测试目标一起打包。

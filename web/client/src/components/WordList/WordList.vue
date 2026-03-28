@@ -39,6 +39,7 @@ import WordListToolbar from '@/components/WordList/WordListToolbar.vue';
 import WordListPagination from '@/components/WordList/WordListPagination.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search';
+import { makeWordSelectionKey, getSelectedLemmas } from '@/utils/wordSelection';
 import { useWordEditorLoader } from '@/composables/useWordEditorLoader';
 import { useWordSync } from '@/composables/useWordSync';
 import { useAnkiExport } from '@/composables/useAnkiExport';
@@ -160,6 +161,57 @@ const displayedRecords = computed<WordRecord[]>(() => {
   return filterRecordsBySearch(merged, search.value, searchMode.value);
 });
 
+const selectedKeys = ref<Set<string>>(new Set());
+const selectedRecords = computed<WordRecord[]>(() => {
+  return displayedRecords.value.filter(item => selectedKeys.value.has(makeWordSelectionKey(item)));
+});
+const selectedCount = computed<number>(() => selectedRecords.value.length);
+const hasSelection = computed<boolean>(() => selectedCount.value > 0);
+const selectedLemmas = computed<string[]>(() => {
+  return getSelectedLemmas(displayedRecords.value, selectedKeys.value);
+});
+const isAllVisibleSelected = computed<boolean>(() => {
+  return (
+    displayedRecords.value.length > 0 &&
+    displayedRecords.value.every(item => selectedKeys.value.has(makeWordSelectionKey(item)))
+  );
+});
+
+const clearSelection = (): void => {
+  if (selectedKeys.value.size > 0) {
+    selectedKeys.value = new Set();
+  }
+};
+
+const isSelected = (item: WordRecord): boolean => {
+  return selectedKeys.value.has(makeWordSelectionKey(item));
+};
+
+const toggleSelection = (item: WordRecord): void => {
+  const key = makeWordSelectionKey(item);
+  const next = new Set(selectedKeys.value);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+  selectedKeys.value = next;
+};
+
+const toggleSelectAllVisible = (): void => {
+  if (!displayedRecords.value.length) return;
+  if (isAllVisibleSelected.value) {
+    clearSelection();
+    return;
+  }
+  selectedKeys.value = new Set(displayedRecords.value.map(item => makeWordSelectionKey(item)));
+};
+
+const printSelectedLemmas = (): void => {
+  if (!selectedLemmas.value.length) return;
+  console.log('Selected lemmas:', selectedLemmas.value);
+};
+
 const emit = defineEmits<{
   (e: 'preview', id: string): void;
   (e: 'edit', id: string): void;
@@ -208,6 +260,7 @@ const confirmDelete = async () => {
   if (!pendingDelete.value) return;
   await wordStore.deleteWord(pendingDelete.value.id, pendingDelete.value.isLocal);
   pendingDelete.value = null;
+  clearSelection();
 };
 
 const {
@@ -325,6 +378,7 @@ const localSyncItems = computed<LocalSyncItem[]>(() => {
 });
 
 const refresh = async () => {
+  clearSelection();
   await Promise.all([wordStore.fetchLocalRecords(), wordStore.fetchDbRecords()]);
 };
 
@@ -375,6 +429,14 @@ onActivated(() => {
 watch(searchMode, value => {
   localStorage.setItem(searchModeStorageKey, value);
 });
+watch(displayedRecords, records => {
+  if (!selectedKeys.value.size) return;
+  const visibleKeys = new Set(records.map(item => makeWordSelectionKey(item)));
+  const next = new Set([...selectedKeys.value].filter(key => visibleKeys.has(key)));
+  if (next.size !== selectedKeys.value.size) {
+    selectedKeys.value = next;
+  }
+});
 const canSearch = computed(() => {
   return !loading.value;
 });
@@ -395,6 +457,7 @@ const handleSearch = async () => {
   if (!canSearch.value) return;
   const normalized = normalizeSearchInput(search.value);
   const searchValue = isBlankSearch(normalized) ? '' : normalized;
+  clearSelection();
   await wordStore.fetchDbRecords({ search: searchValue, page: 1 });
 };
 
@@ -418,6 +481,7 @@ const closeSearchMode = () => {
 };
 
 const setSearchMode = (mode: SearchMode): void => {
+  clearSelection();
   searchMode.value = mode;
   searchModeOpen.value = false;
 };
@@ -426,12 +490,14 @@ const updateSort = (value: string): void => {
   if (value === 'az' || value === 'za' || value === 'newest' || value === 'oldest') {
     sort.value = value;
   }
+  clearSelection();
   handleSort();
 };
 
 const updatePageSize = (value: string): void => {
   const next = Number(value);
   pageSize.value = Number.isFinite(next) ? next : pageSize.value;
+  clearSelection();
   handlePageSize();
 };
 
@@ -454,6 +520,7 @@ const handlePageSize = () => {
 const changePage = (delta: number): void => {
   const newPage = dbListMeta.value.page + delta;
   if (newPage >= 1 && newPage <= dbListMeta.value.totalPages) {
+    clearSelection();
     void wordStore.fetchDbRecords({ page: newPage });
   }
 };
@@ -468,6 +535,7 @@ const changePage = (delta: number): void => {
  */
 const goToPage = (page: number): void => {
   if (page >= 1 && page <= dbListMeta.value.totalPages) {
+    clearSelection();
     void wordStore.fetchDbRecords({ page });
   }
 };
@@ -574,6 +642,8 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :local-sync-count="localSyncItems.length"
       :total-count="totalCount"
       :sync-all-loading="syncAllLoading"
+      :selected-count="selectedCount"
+      :has-selection="hasSelection"
       @update-search="updateSearch"
       @search="handleSearch"
       @search-keydown="handleSearchKeydown"
@@ -584,6 +654,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @page-size-change="updatePageSize"
       @open-sync-all="openSyncAll"
       @refresh="refresh"
+      @print-selected="printSelectedLemmas"
     />
 
     <div class="flex-1 overflow-y-auto bg-slate-50">
@@ -605,6 +676,18 @@ const paginationRange = computed<Array<number | '...'>>(() => {
               <tr>
                 <th
                   scope="col"
+                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left w-10"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="isAllVisibleSelected"
+                    class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    aria-label="Select all visible words"
+                    @change="toggleSelectAllVisible"
+                  />
+                </th>
+                <th
+                  scope="col"
                   class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left w-24"
                 >
                   Src
@@ -622,7 +705,20 @@ const paginationRange = computed<Array<number | '...'>>(() => {
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-              <tr v-for="item in displayedRecords" :key="item.id" class="hover:bg-slate-50/60">
+              <tr
+                v-for="item in displayedRecords"
+                :key="makeWordSelectionKey(item)"
+                :class="isSelected(item) ? 'bg-blue-50/60' : 'hover:bg-slate-50/60'"
+              >
+                <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
+                  <input
+                    type="checkbox"
+                    :checked="isSelected(item)"
+                    class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    :aria-label="`Select ${item.lemma || item.yield?.lemma || item.id}`"
+                    @change="toggleSelection(item)"
+                  />
+                </td>
                 <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
                   <span
                     v-if="item.isLocal"
