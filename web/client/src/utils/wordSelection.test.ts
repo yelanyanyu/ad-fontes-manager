@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { getSelectedLemmas, makeWordSelectionKey } from './wordSelection';
+import {
+  addVisibleSelections,
+  getSelectedLemmas,
+  isWordSelected,
+  makeWordSelectionKey,
+  removeVisibleSelections,
+} from './wordSelection';
 
 describe('makeWordSelectionKey', () => {
   it('creates distinct keys for local and db records with same id', () => {
@@ -9,14 +15,42 @@ describe('makeWordSelectionKey', () => {
 });
 
 describe('getSelectedLemmas', () => {
-  it('returns only selected lemmas and ignores empty values', () => {
+  it('returns lemmas from persisted selected items and ignores empty values', () => {
     const records = [
-      { id: '1', isLocal: true, lemma: 'alpha' },
-      { id: '1', isLocal: false, yield: { lemma: 'beta' } },
-      { id: '2', isLocal: false, lemma: '' },
+      { lemma: 'alpha' },
+      { yield: { lemma: 'beta' } },
+      { lemma: '' },
     ];
 
-    const selectedKeys = new Set(['local:1', 'db:1', 'db:2']);
-    expect(getSelectedLemmas(records, selectedKeys)).toEqual(['alpha', 'beta']);
+    expect(getSelectedLemmas(records)).toEqual(['alpha', 'beta']);
+  });
+});
+
+describe('cross-page selection helpers', () => {
+  it('adds visible selections without clearing items from other pages', () => {
+    const existing = new Set(['db:10']);
+    const next = addVisibleSelections(existing, [
+      { id: '11', isLocal: false },
+      { id: '12', isLocal: false },
+    ]);
+
+    expect([...next]).toEqual(['db:10', 'db:11', 'db:12']);
+  });
+
+  it('removes only current page selections and keeps hidden selections', () => {
+    const existing = new Set(['db:10', 'db:11', 'local:1']);
+    const next = removeVisibleSelections(existing, [
+      { id: '11', isLocal: false },
+      { id: '1', isLocal: true },
+    ]);
+
+    expect([...next]).toEqual(['db:10']);
+  });
+
+  it('checks selection by composite key so local/db ids do not collide', () => {
+    const selectedKeys = new Set(['db:7']);
+
+    expect(isWordSelected(selectedKeys, { id: '7', isLocal: false })).toBe(true);
+    expect(isWordSelected(selectedKeys, { id: '7', isLocal: true })).toBe(false);
   });
 });

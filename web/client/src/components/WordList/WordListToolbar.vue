@@ -30,6 +30,7 @@ const emit = defineEmits<{
   (e: 'open-sync-all'): void;
   (e: 'refresh'): void;
   (e: 'print-selected'): void;
+  (e: 'clear-selection'): void;
 }>();
 
 const onSearchInput = (event: Event) => {
@@ -167,6 +168,16 @@ const onPageSizeChange = (event: Event) => {
         >
           <i class="fa-solid fa-print" />
           <span>Print Selected ({{ selectedCount }})</span>
+        </button>
+        <button
+          v-if="hasSelection"
+          class="text-xs bg-white border border-slate-200 text-slate-600 rounded px-2 py-1.5 hover:bg-slate-50 shadow-sm flex items-center gap-2"
+          title="Clear all selected items"
+          data-test="clear-selection-button"
+          @click="emit('clear-selection')"
+        >
+          <i class="fa-solid fa-xmark" />
+          <span>Clear Selection</span>
         </button>
         <span
           class="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"

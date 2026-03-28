@@ -39,7 +39,13 @@ import WordListToolbar from '@/components/WordList/WordListToolbar.vue';
 import WordListPagination from '@/components/WordList/WordListPagination.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search';
-import { makeWordSelectionKey, getSelectedLemmas } from '@/utils/wordSelection';
+import {
+  addVisibleSelections,
+  getSelectedLemmas,
+  isWordSelected,
+  makeWordSelectionKey,
+  removeVisibleSelections,
+} from '@/utils/wordSelection';
 import { useWordEditorLoader } from '@/composables/useWordEditorLoader';
 import { useWordSync } from '@/composables/useWordSync';
 import { useAnkiExport } from '@/composables/useAnkiExport';
@@ -162,49 +168,67 @@ const displayedRecords = computed<WordRecord[]>(() => {
 });
 
 const selectedKeys = ref<Set<string>>(new Set());
-const selectedRecords = computed<WordRecord[]>(() => {
-  return displayedRecords.value.filter(item => selectedKeys.value.has(makeWordSelectionKey(item)));
-});
-const selectedCount = computed<number>(() => selectedRecords.value.length);
+const selectedItemsByKey = ref<Map<string, Pick<WordRecord, 'lemma' | 'yield'>>>(new Map());
+const selectedCount = computed<number>(() => selectedKeys.value.size);
 const hasSelection = computed<boolean>(() => selectedCount.value > 0);
+const visibleSelectedCount = computed<number>(() => {
+  return displayedRecords.value.filter(item => isWordSelected(selectedKeys.value, item)).length;
+});
 const selectedLemmas = computed<string[]>(() => {
-  return getSelectedLemmas(displayedRecords.value, selectedKeys.value);
+  return getSelectedLemmas([...selectedItemsByKey.value.values()]);
 });
 const isAllVisibleSelected = computed<boolean>(() => {
-  return (
-    displayedRecords.value.length > 0 &&
-    displayedRecords.value.every(item => selectedKeys.value.has(makeWordSelectionKey(item)))
-  );
+  return displayedRecords.value.length > 0 && visibleSelectedCount.value === displayedRecords.value.length;
 });
 
 const clearSelection = (): void => {
   if (selectedKeys.value.size > 0) {
     selectedKeys.value = new Set();
+    selectedItemsByKey.value = new Map();
   }
 };
 
 const isSelected = (item: WordRecord): boolean => {
-  return selectedKeys.value.has(makeWordSelectionKey(item));
+  return isWordSelected(selectedKeys.value, item);
 };
 
 const toggleSelection = (item: WordRecord): void => {
   const key = makeWordSelectionKey(item);
-  const next = new Set(selectedKeys.value);
-  if (next.has(key)) {
-    next.delete(key);
+  const nextKeys = new Set(selectedKeys.value);
+  const nextItems = new Map(selectedItemsByKey.value);
+  if (nextKeys.has(key)) {
+    nextKeys.delete(key);
+    nextItems.delete(key);
   } else {
-    next.add(key);
+    nextKeys.add(key);
+    nextItems.set(key, {
+      lemma: item.lemma,
+      yield: item.yield,
+    });
   }
-  selectedKeys.value = next;
+  selectedKeys.value = nextKeys;
+  selectedItemsByKey.value = nextItems;
 };
 
 const toggleSelectAllVisible = (): void => {
   if (!displayedRecords.value.length) return;
+  const nextItems = new Map(selectedItemsByKey.value);
   if (isAllVisibleSelected.value) {
-    clearSelection();
+    selectedKeys.value = removeVisibleSelections(selectedKeys.value, displayedRecords.value);
+    displayedRecords.value.forEach(item => {
+      nextItems.delete(makeWordSelectionKey(item));
+    });
+    selectedItemsByKey.value = nextItems;
     return;
   }
-  selectedKeys.value = new Set(displayedRecords.value.map(item => makeWordSelectionKey(item)));
+  selectedKeys.value = addVisibleSelections(selectedKeys.value, displayedRecords.value);
+  displayedRecords.value.forEach(item => {
+    nextItems.set(makeWordSelectionKey(item), {
+      lemma: item.lemma,
+      yield: item.yield,
+    });
+  });
+  selectedItemsByKey.value = nextItems;
 };
 
 const printSelectedLemmas = (): void => {
@@ -429,14 +453,6 @@ onActivated(() => {
 watch(searchMode, value => {
   localStorage.setItem(searchModeStorageKey, value);
 });
-watch(displayedRecords, records => {
-  if (!selectedKeys.value.size) return;
-  const visibleKeys = new Set(records.map(item => makeWordSelectionKey(item)));
-  const next = new Set([...selectedKeys.value].filter(key => visibleKeys.has(key)));
-  if (next.size !== selectedKeys.value.size) {
-    selectedKeys.value = next;
-  }
-});
 const canSearch = computed(() => {
   return !loading.value;
 });
@@ -520,7 +536,6 @@ const handlePageSize = () => {
 const changePage = (delta: number): void => {
   const newPage = dbListMeta.value.page + delta;
   if (newPage >= 1 && newPage <= dbListMeta.value.totalPages) {
-    clearSelection();
     void wordStore.fetchDbRecords({ page: newPage });
   }
 };
@@ -535,7 +550,6 @@ const changePage = (delta: number): void => {
  */
 const goToPage = (page: number): void => {
   if (page >= 1 && page <= dbListMeta.value.totalPages) {
-    clearSelection();
     void wordStore.fetchDbRecords({ page });
   }
 };
@@ -655,6 +669,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @open-sync-all="openSyncAll"
       @refresh="refresh"
       @print-selected="printSelectedLemmas"
+      @clear-selection="clearSelection"
     />
 
     <div class="flex-1 overflow-y-auto bg-slate-50">
