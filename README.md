@@ -1,372 +1,183 @@
 # Ad Fontes Manager
 
-> 词源数据管理器 - Ad Fontes 英语学习生态系统的核心数据管理组件
+Ad Fontes Manager 是 Ad Fontes 英语学习体系里的词条管理工具。它负责几件事：保存词条、编辑 YAML、预览卡片、同步本地和数据库的数据，以及把词条导出到 Anki。
 
-Ad Fontes Manager 是一个全栈 Web 应用，专为管理、可视化和存储词源数据而设计。支持离线优先、冲突同步和精美卡片预览。卡片预览如下所示：
-<img width="1920" height="5354" alt="fdea07d995293bbd82b7c7a158213ae4" src="https://github.com/user-attachments/assets/b9212257-b347-4cbf-8e7a-248640883e02" />
+这个项目是一个前后端分离的 Web 应用。前端用 Vue 3，后端用 Express 5，数据库是 PostgreSQL。后端断开时，前端还能先把词条存到本地，等恢复连接后再同步。
 
+## 这个项目现在能做什么
+
+- 管理本地词条和数据库词条
+- 用 YAML 编辑词条内容，并做基本校验
+- 搜索、排序、分页查看词条
+- 比较本地和数据库的差异，再决定是否覆盖
+- 预览单词卡片的 HTML 效果
+- 导出单个词条到 AnkiConnect 或 `.apkg`
+- 跨页保留选择结果
+- 批量检测重复词条，再导入到 Anki
+- 关闭批量弹窗后继续在后台执行检查或导入
+- 在当前搜索结果上执行 `Select All Matching`
+
+## 适合什么场景
+
+- 你平时先离线整理词条，之后再统一同步到数据库
+- 你需要反复调整 YAML，并随时看预览结果
+- 你会把词条做成 Anki 卡片，而且希望单条导出和批量导出保持同一套样式
+- 你一次要处理很多词条，不想因为翻页或临时离开界面丢掉选择和任务状态
+
+## 环境要求
+
+- Node.js 22 LTS 或更高版本
+- npm 10 或更高版本
+- PostgreSQL 14 或更高版本
+
+如果你只想先跑前端和本地存储流程，没有数据库也能启动一部分功能。
 
 ## 快速开始
 
-### 环境要求
-
-- **Node.js**: 22 LTS 或更高版本
-- **npm**: 10.0.0 或更高版本
-- **PostgreSQL**: 14+ (可选，支持离线模式)
-
-### 安装与运行
-
 ```bash
-# 1. 克隆项目
+# 克隆项目
 git clone <repository-url>
 cd ad-fontes-manager
 
-# 2. 安装依赖
+# 安装后端依赖
 cd web
 npm install
-cd client && npm install && cd ..
 
-# 3. 配置环境
+# 安装前端依赖
+cd client
+npm install
+cd ..
+
+# 配置环境变量
 cp .env.example .env
-# 编辑 .env 文件设置数据库连接
 
-# 4. 初始化数据库（可选）
-cd node && npm run init-db && cd ..
+# 如需初始化数据库
+cd ../node
+npm install
+npm run init-db
+cd ../web
 
-# 5. 启动开发服务器
+# 启动开发环境
 npm run dev
 ```
 
-服务启动后：
+启动后默认地址：
+
 - 前端：`http://localhost:5173`
-- API：`http://localhost:8080/api`
+- 后端 API：`http://localhost:8080/api`
 
-## 核心特性
+## 常用命令
 
-### 离线优先架构
-- **双重存储**：浏览器 LocalStorage + PostgreSQL
-- **智能同步**：离线 -> 在线自动批量上传
-- **冲突检测**：可视化差异对比工具
-- **自动刷新**：冲突解决后编辑器自动更新
+```bash
+# 同时启动前后端
+cd web && npm run dev
 
-### 数据管理
-- **YAML 编辑器**：实时预览和格式验证
-- **搜索排序**：模糊搜索 + 多种排序方式
-- **分页功能**：服务端分页，自定义每页数量
-- **卡片预览**：精美单词卡片生成与下载
+# 只启动后端
+cd web && npm run dev:server
 
-### Anki 集成 (v1.5.1+)
-- **AnkiConnect 支持**：直接导入卡片到 Anki
-- **.apkg 导出**：导出 Anki 包文件
-- **智能字段映射**：自动映射单词、上下文、笔记等字段
-- **重复检测**：检测并处理重复卡片冲突
-- **可配置选项**：自定义牌组、模型、标签和反向卡片
+# 只启动前端
+cd web/client && npm run dev
 
-### 技术栈
+# 构建前端
+cd web && npm run build
 
-| 层级 | 技术 | 版本 |
-|------|------|------|
-| 运行时 | Node.js | 22 LTS |
-| 后端框架 | Express | 5.x |
-| 数据库 | PostgreSQL | 14+ |
-| 前端框架 | Vue | 3.5+ |
-| 构建工具 | Vite | 7.x |
-| 状态管理 | Pinia | 3.x |
-| 样式 | Tailwind CSS | 3.4+ |
-| 日志 | Pino | 10.x |
-| 验证 | Zod | 4.x |
+# 后端类型检查
+cd web && npm run type-check
+
+# 前端类型检查
+cd web/client && npm run type-check
+
+# 前端测试
+cd web/client && npm run test
+```
+
+## 目录结构
+
+```text
+ad-fontes-manager/
+|-- web/
+|   |-- client/              # Vue 前端
+|   |-- controllers/         # 控制器
+|   |-- routes/              # 路由
+|   |-- services/            # 业务逻辑
+|   |-- middleware/          # 中间件
+|   |-- db/                  # 数据库访问
+|   |-- utils/               # 工具函数
+|   `-- server.ts            # 后端入口
+|-- node/                    # 维护脚本
+|-- migrations/              # 数据库迁移
+|-- docs/                    # 项目文档
+|-- schema.sql               # 数据库结构
+|-- README.md
+`-- CHANGELOG.md
+```
+
+## Anki 导出说明
+
+项目里现在有两条导出路径。
+
+单个词条导出：
+- 选择 deck、model、是否加反向卡、tags
+- 生成当前词条的 HTML 字段
+- 导入到 AnkiConnect，或导出为 `.apkg`
+
+批量导出：
+- 复用单条导出的 HTML 和字段逻辑
+- 先列出所有待导出的词条
+- 可以先做重复检测
+- 对重复项统一选择跳过或覆盖
+- 导入时显示进度
+- 任务开始后，就算关掉弹窗或切换当前 SPA 页面，也会继续执行
+
+目前 `tags` 的默认值是空。
+
+## 批量选择说明
+
+词条列表的选择逻辑最近做过一轮调整，现在的行为是：
+
+- 翻页时保留已选项
+- 搜索、排序、刷新、修改每页数量后会清空选择
+- 表头复选框只作用于当前页
+- 工具栏显示总选中数
+- 可以手动清空全部选择
+- 可以对当前搜索结果执行 `Select All Matching`
+
+如果当前搜索结果的总数超过 `150`，界面会先弹出确认提示，确认后才会真正加入选择集。
 
 ## 配置
 
-本项目遵循 [12-Factor App](https://12factor.net/) 原则，使用环境变量管理配置。
+项目按环境变量读取配置。
 
-### 快速配置
-
-**开发环境**:
-```bash
-# 1. 复制环境变量模板
-cp .env.example .env
-
-# 2. 编辑 .env，填入你的数据库密码
-# DATABASE_URL=postgresql://postgres:your_password@localhost:5432/ad_fontes
-
-# 3. 启动服务
-cd web && npm run dev
-```
-
-**生产环境**:
-```bash
-# 使用 Docker Compose
-echo "NODE_ENV=production
-ADMIN_TOKEN=$(openssl rand -hex 32)
-DATABASE_URL=postgresql://user:pass@db:5432/db?sslmode=require" > .env.production
-
-docker-compose up -d
-```
-
-### 必需配置项
+必填项：
 
 | 变量 | 说明 |
-|------|------|
-| `DATABASE_URL` | PostgreSQL 连接字符串 |
-| `ADMIN_TOKEN` | 管理员 API 令牌（生产环境 ≥32 字符） |
-| `NODE_ENV` | 运行环境: `development` / `production` / `test` |
+| --- | --- |
+| `DATABASE_URL` | PostgreSQL 连接串 |
+| `ADMIN_TOKEN` | 管理接口令牌 |
+| `NODE_ENV` | `development`、`production` 或 `test` |
 
-### AnkiConnect 配置 (可选)
+可选的 Anki 配置：
 
 | 变量 | 说明 | 默认值 |
-|------|------|--------|
+| --- | --- | --- |
 | `ANKI_CONNECT_HOST` | AnkiConnect 主机地址 | `127.0.0.1` |
 | `ANKI_CONNECT_PORT` | AnkiConnect 端口 | `8765` |
 
-**注意**: Docker 环境请使用 `host.docker.internal` 代替 `127.0.0.1`。
-
-### 配置优先级
-
-```
-1. 系统环境变量 (最高优先级)
-2. .env 文件 (仅开发环境)
-3. 代码默认值 (最低优先级)
-```
-
-**注意**: 生产环境禁止 `.env` 文件，应用会立即退出并报错。
-
-更多配置说明请参考 [配置文档](./docs/CONFIGURATION.md)。
-
-## Docker 构建
-
-### 快速启动
-
-```powershell
-# 1. 确保 Docker Desktop 正在运行
-docker version
-
-# 2. 构建并启动（自动读取 .env.production）
-docker-compose up -d --build
-
-# 3. 查看日志
-docker-compose logs -f
-
-# 4. 检查健康状态
-curl http://localhost:8080/api/core/health
-```
-
-### 环境配置
-
-项目使用 `.env.production` 文件配置环境变量。docker-compose 会自动读取此文件。
-
-**本地开发配置示例** (`.env.production`):
-
-```env
-NODE_ENV=production
-ADMIN_TOKEN=your-secure-admin-token-min-32-characters-here
-DATABASE_URL=postgresql://postgres:password@host.docker.internal:5432/ad_fontes
-DATABASE_SSL=false
-SERVER_CORS_ORIGINS=["http://localhost:8080"]
-LOG_LEVEL=debug
-```
-
-**注意**: `host.docker.internal` 用于容器访问宿主机的 PostgreSQL。
-
-### Windows Docker Desktop
-
-**前置条件**:
-- 安装 [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop)
-- 确保 Docker Desktop 正在运行（系统托盘图标显示绿色）
-
-**构建步骤**:
-
-```powershell
-# 构建并启动
-docker-compose up -d --build
-
-# 查看日志
-docker-compose logs -f
-
-# 检查健康状态
-curl http://localhost:8080/api/core/health
-```
-
-### Linux/macOS
-
-```bash
-# 构建并启动
-docker-compose up -d --build
-
-# 查看日志
-docker-compose logs -f
-
-# 检查健康状态
-curl http://localhost:8080/api/core/health
-```
-
-### 常用命令
-
-```bash
-# 停止服务
-docker-compose down
-
-# 重启服务
-docker-compose restart
-
-# 查看容器状态
-docker-compose ps
-
-# 更新部署
-git pull origin main
-docker-compose up -d --build
-
-# 清理旧镜像
-docker image prune -f
-```
-
-### 环境变量说明
-
-| 变量 | 必需 | 说明 |
-|------|------|------|
-| `NODE_ENV` | ✅ | 设为 `production` |
-| `ADMIN_TOKEN` | ✅ | 管理员令牌，≥32 字符 |
-| `DATABASE_URL` | ✅ | PostgreSQL 连接字符串 |
-| `DATABASE_SSL` | ✅ | 生产环境必须 `true` |
-| `SERVER_CORS_ORIGINS` | ✅ | 允许的跨域来源 |
-| `SERVER_RATE_LIMIT` | ❌ | 速率限制，建议 100-300 |
-| `LOG_LEVEL` | ❌ | 日志级别，建议 `warn` |
-
-### Docker 安全特性
-
-生产镜像已包含以下安全优化：
-- **非 root 用户运行**: 容器以 `appuser` (UID 1001) 运行
-- **最小化镜像**: 使用 Alpine Linux 基础镜像
-- **健康检查**: 自动监控容器健康状态
-- **资源限制**: CPU 和内存使用限制
-
-详细部署指南请参考 [部署文档](./docs/DEPLOYMENT.md)。
-
-## 项目结构
-
-```
-ad-fontes-manager
-├── web/
-│   ├── client/          # Vue 3 前端
-│   ├── controllers/     # Express 控制器
-│   ├── routes/          # API 路由
-│   ├── services/        # 业务逻辑
-│   ├── utils/           # 工具函数
-│   │   ├── logger.ts    # Pino 日志系统
-│   │   └── config.ts    # 配置管理
-│   └── server.ts        # 后端入口
-├── docs/                # 文档目录
-├── node/                # Node.js 工具脚本
-│   ├── init_db.ts       # 数据库初始化
-│   ├── loader.ts        # YAML 数据导入
-│   └── migrate_v2.ts    # 数据库迁移
-├── schema.sql           # 数据库 Schema
-└── README.md            # 本文件
-```
-
 ## 文档
 
-- [API 文档](./docs/API.md) - REST API 接口说明
-- [数据库文档](./docs/DATABASE.md) - 数据库 Schema 和表结构
-- [开发文档](./docs/DEVELOPMENT.md) - 架构说明和开发者指南
-- [安全指南](./docs/SECURITY.md) - 安全配置和最佳实践
-- [日志系统](./docs/LOGGING.md) - 后端日志配置和使用
-- [配置说明](./docs/CONFIGURATION.md) - 统一配置系统说明
-- [TypeScript 迁移](./docs/TYPESCRIPT_MIGRATION.md) - TypeScript 迁移指南
-- [编辑器设置](./docs/EDITOR_SETUP.md) - 编辑器配置建议
+- [docs/API.md](./docs/API.md)
+- [docs/DATABASE.md](./docs/DATABASE.md)
+- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md)
+- [docs/CONFIGURATION.md](./docs/CONFIGURATION.md)
+- [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)
+- [docs/SECURITY.md](./docs/SECURITY.md)
 
-## TypeScript 检查
+## 版本记录
 
-项目支持分层 TypeScript 类型检查：
+更新历史见 [CHANGELOG.md](./CHANGELOG.md)。
 
-```bash
-# 前端（Vue SFC + TS）
-cd web/client
-npm run type-check
-
-# Web 服务端
-cd ../
-npm run type-check
-
-# Node 工具脚本
-cd ../../node
-npm run type-check
-```
-
-## 数据库 Schema
-
-```mermaid
-erDiagram
-    words ||--o| etymologies : has
-    words ||--o{ cognates : has
-    words ||--o{ examples : has
-    words ||--o{ synonyms : has
-    words ||--o{ user_requests : tracks
-
-    words {
-        uuid id PK
-        text lemma UK
-        text syllabification
-        text part_of_speech
-        jsonb original_yaml
-        timestamptz created_at
-        timestamptz updated_at
-        int revision_count
-    }
-
-    etymologies {
-        uuid word_id PK,FK
-        text prefix
-        text root
-        text suffix
-        text pie_root
-        text visual_imagery_zh
-    }
-
-    cognates {
-        uuid id PK
-        uuid word_id FK
-        text cognate_word
-        text logic
-    }
-
-    examples {
-        uuid id PK
-        uuid word_id FK
-        text example_type
-        text sentence
-    }
-
-    synonyms {
-        uuid id PK
-        uuid word_id FK
-        text synonym_word
-    }
-
-    user_requests {
-        uuid id PK
-        uuid word_id FK
-        text user_input
-        text context_sentence
-    }
-```
-
-## 更新日志
-
-查看 [CHANGELOG.md](./CHANGELOG.md) 了解详细更新历史。
-
-## Ad Fontes 生态
-
-本项目是 Ad Fontes 三部曲之一：
-
-1. **[Ad Fontes Prompts](https://github.com/yelanyanyu/ad-fontes-prompts)** - 核心提示词库
-2. **[Ad Fontes Browser Extension](https://github.com/yelanyanyu/ad-fontes-browser-extension)** - 浏览器插件
-3. **Ad Fontes Manager (本项目)** - 数据管理器
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request。
+当前已发布版本是 `1.5.0`。`1.6.0` 还在整理中。
 
 ## 许可证
 
-[MIT License](./LICENSE)
+[MIT](./LICENSE)

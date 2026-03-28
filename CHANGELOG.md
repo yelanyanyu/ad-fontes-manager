@@ -6,215 +6,141 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-## [1.5.1] - 2026-03-27
+## [1.6.0] - 2026-03-28
 
-### ✨ New Features
+### 新增
 
-- **Anki 导出功能**: 新增完整的 Anki 卡片导出功能
-  - 支持通过 AnkiConnect 直接导入卡片到 Anki
-  - 支持导出 .apkg 文件格式
-  - 智能字段映射：自动映射单词、上下文、笔记、背面等字段
-  - 重复卡片检测：检测并处理重复单词卡片冲突
-  - 可配置牌组和模型选择
-  - 支持添加反向卡片（Add Reverse）
-  - 支持自定义标签
+- 新增单词到 Anki 的完整导出流程，支持 AnkiConnect 和 `.apkg` 导出。
+- 新增共享的 Anki 导出 payload 生成逻辑，确保单条导出和批量导出使用同一套 HTML 样式和字段映射。
+- 新增批量导出到 Anki 的能力。
+- 新增批量重复检测，以及对重复项统一跳过或覆盖的处理方式。
+- 新增批量列表里的 `Preview HTML` 入口。
+- 在 `WordList` 中新增跨页保留选择。
+- 在工具栏中新增 `Clear Selection` 和总选中数显示。
+- 新增 `Select All Matching`，可以按当前搜索条件选中全部匹配结果。
+- 新增大批量选择确认提示；当 `Select All Matching` 超过 `150` 个词条时，会先要求确认。
+- 新增后台批量任务；关闭批量弹窗后，重复检测和导入仍可继续执行。
+- 在主界面新增简化版批量任务进度显示。
+- 新增可恢复的批量任务面板；用户返回主界面后，可以重新打开同一个任务。
+- 新增基于 Pinia 的批量任务会话状态，用于当前 SPA 会话内的状态保留。
+- 新增批量导出 helper、选择 helper、`select-all-matching` helper 和批量任务 store 的测试。
 
-- **Zod 验证框架**: 集成 Zod 进行全面的请求参数验证
-  - 添加请求参数验证中间件
-  - 定义完整的请求 Schema（单词、同步、认证等）
-  - 支持查询参数和请求体验证
-  - 添加运行时验证测试
+### 变更
 
-### 🔧 Improvements
+- 将单条导出和批量导出的默认 Anki tags 改为空。
+- 调整批量导出交互，使其复用单条导出的配置模型。
+- 将批量弹窗从一次性操作窗口改为可隐藏、可重新打开的任务详情面板。
+- 调整导出配置行为；批量检查或导入开始后，deck、model、reverse card 和 tags 会锁定。
+- 调整选择语义；表头复选框只作用于当前页，但整体选择集可以跨页保留。
 
-- **配置系统增强**: 重构配置系统，增强环境变量支持
-  - 添加 AnkiConnect 主机和端口配置（ANKI_CONNECT_HOST, ANKI_CONNECT_PORT）
-  - 更新 .env.example 文档，添加详细的 Anki 配置说明
-  - 优化配置验证错误提示
+### 修复
 
-- **代码质量**: 
-  - 优化 Anki 字段映射逻辑，移除未使用代码
-  - 增强 Anki 导出验证和错误处理
-  - 修复 Express 5 中 req.query 验证兼容性问题
+- 修复批量导出 payload 依赖当前页数据的问题，避免翻页后已选词条无法继续导出。
+- 修复重复项处理流程，让未决议的重复项在导入前保持可见，并能在一次批量操作中统一处理。
 
-### 🐛 Bug Fixes
+### 文档
 
-- **导出文件修复**: 修复 Anki 导出文件截断问题
-- **验证中间件修复**: 修复 Express 5 中 req.query 为 getter-only 时的验证问题
-
-### 🏗️ Infrastructure
-
-- **Docker 配置优化**:
-  - 修复 Dockerfile 缺少 schemas 目录复制问题
-  - 更新 .env.production 模板，添加 Docker 专用配置说明
-  - 添加 host.docker.internal 支持，便于容器访问宿主机服务
-
-### 📝 Documentation
-
-- **Anki 集成文档**: 添加详细的 AnkiConnect 配置说明
-- **部署文档更新**: 更新 Docker 部署指南，包含环境变量配置最佳实践
-
----
+- 更新 README，补充批量导出、跨页选择、`Select All Matching` 和后台任务的说明。
 
 ## [1.5.0] - 2026-03-06
 
-### ✨ New Features
+### Added
 
-- **TypeScript 全面迁移**: 将整个项目从 JavaScript 迁移到 TypeScript
-  - 前端 Vue 组件全面支持 TypeScript，增强类型安全
-  - 后端 Express 服务迁移至 TypeScript
-  - Node 工具脚本迁移至 TypeScript
-  - 添加分层类型检查命令（`npm run type-check`）
-- **ESLint TypeScript 增强**: 添加 Promise 相关规则和配置
-- **数据库类型定义**: 添加完整的数据库类型定义和初始化脚本
-- **连接池优化**: 添加数据库连接池、错误处理和服务器基础配置
-- **单词服务模块**: 实现完整的单词服务模块及相关功能
+- Completed TypeScript migration across frontend, backend, and Node maintenance scripts.
+- Added layered type checking commands.
+- Added database typings and initialization support.
+- Added the word service module and related backend structure.
 
-### 🔧 Improvements
+### Changed
 
-- **WordList 组件重构**: 拆分大型组件为多个独立组件和组合式函数，提升可维护性
-- **WordEditor 组件增强**: 迁移至 TypeScript 并增强类型安全
-- **代码清理**: 清理废弃代码和文件，优化项目结构
-
-### 🏗️ Infrastructure
-
-- **Docker 配置优化**: 更新 Dockerfile 支持 TypeScript 构建
-- **构建流程优化**: 更新构建脚本以支持 TypeScript 编译
-
----
+- Refactored major frontend components such as `WordList` and `WordEditor`.
+- Improved build flow and Docker support for TypeScript-based builds.
+- Cleaned up deprecated files and project structure.
 
 ## [1.4.0] - 2026-03-05
 
-### ✨ New Features
+### Added
 
-- **12-Factor 配置系统**: 重构项目配置系统，完全遵循 12-Factor App 原则
-  - 移除 `config.yml` 支持，统一使用环境变量配置
-  - 生产环境禁止 `.env` 文件，强制使用系统环境变量
-  - 添加配置验证和友好的错误提示信息
+- Introduced a 12-factor configuration model based on environment variables.
 
-### 🔧 Improvements
+### Changed
 
-- **日志系统优化**: 替换 console.log 为 wordLogger，统一前端日志输出
-- **错误处理改进**: 统一使用 globalThis.fetch 并改进错误处理逻辑
-- **编辑器优化**: 优化编辑上下文设置逻辑，添加单独设置 YAML 方法
+- Improved the logging system and error handling flow.
+- Updated editor context handling and configuration validation behavior.
 
-### 🐛 Bug Fixes
+### Fixed
 
-- **YAML 验证修复**: 修复 YAML 验证逻辑并添加空输入检查
-- **渲染错误修复**: 修复重复的 div 标签导致渲染错误，兼容 Firefox 与 Chrome 浏览器
-- **覆盖单词修复**: 修复覆盖单词功能失效的问题
-
-### 🏗️ Infrastructure
-
-- **Dockerfile 更新**: 更新 Dockerfile 配置以支持新的 12-Factor 配置系统
-
----
+- Fixed YAML validation edge cases.
+- Fixed rendering issues caused by duplicated DOM structure.
+- Fixed overwrite-word behavior.
 
 ## [1.3.0] - 2026-03-05
 
-### ✨ New Features
+### Added
 
-- **统一日志系统**: 集成 Pino 日志框架，支持结构化 JSON 日志、日志轮转和请求上下文追踪
-- **全局状态管理**: 添加全局状态管理模块和工具函数，优化状态共享
-- **错误处理增强**: 添加全局错误处理中间件和自定义错误类，提升错误响应质量
-- **配置管理**: 支持通过 `/api/core/config` 端点动态管理应用配置
+- Added structured Pino logging.
+- Added global state management helpers.
+- Added global error handling middleware and custom error types.
+- Added runtime config management through `/api/core/config`.
 
-### 🔧 Improvements
+### Changed
 
-- **词汇服务重构**: 将单词服务模块重构为多文件结构，提升可维护性和可测试性
-- **数据库字段映射修复**: 修复 cognates 和 synonyms 表的字段映射问题，确保 YAML 数据正确保存
-- **Pino 日志 API 修复**: 修正所有日志调用参数顺序（对象在前，消息在后）
-- **文档整理**: 将所有文档统一迁移到 `docs/` 目录，更新文档结构和引用
+- Refactored word services into a more maintainable multi-file structure.
+- Corrected database field mapping for several YAML-backed entities.
+- Consolidated documentation into the `docs/` directory.
 
-### 🔐 Security
+### Security
 
-- **Helmet 安全头**: 添加 Helmet 中间件，提供 XSS、点击劫持等安全防护
-- **管理员身份验证**: `/api/core/config` 端点需要 `x-admin-token` 验证
-- **敏感数据清理**: 从 Git 历史中移除 `config.json`，防止敏感信息泄露
-- **连接池安全配置**: 添加最大连接数(20)、空闲超时(30s)、连接超时(5s)限制
-
-### 🏗️ Infrastructure
-
-- **Node.js 升级**: 升级至 Node.js 22 LTS，获得长期支持
-- **代码规范**: 统一代码格式，添加 ESLint 和 Prettier 配置
-- **依赖升级**: 升级 Express 至 5.0，修复已知安全漏洞
-
-### 📝 Documentation
-
-- **数据库文档**: 添加完整的数据库 Schema 文档，包含 Mermaid ER 图
-- **日志文档**: 添加后端日志系统使用文档
-- **开发文档**: 更新开发文档，包含架构说明和开发者指南
-- **安全指南**: 添加安全指南，包含敏感数据管理和最佳实践
-
----
+- Added Helmet-based security headers.
+- Protected `/api/core/config` with admin-token authentication.
+- Removed sensitive config artifacts from tracked history.
+- Improved connection-pool safety defaults.
 
 ## [1.2.3] - 2026-01-26
 
-### ✨ New Features
+### Added
 
-- **预览集成 (Preview Integration)**:
-  - 双模式预览: 完美移植 yml2html 工具，支持"精美卡片"和"Markdown 笔记"两种预览模式
-  - 深度解析: 预览模式支持词源分析、历史典故、视觉画面等核心字段的完整渲染
-  - 交互增强: 列表卡片新增"更多"菜单，支持快速进入预览页
+- Added preview integration with rich card and Markdown modes.
+- Added stronger YAML validation in the editor.
+- Added list-level quick access to preview views.
 
-- **编辑器增强**:
-  - 实时校验: 集成 js-yaml，在编辑 YAML 时提供实时的格式校验与错误提示 (Valid/Error)
+### Changed
 
-- **布局重构**:
-  - 侧边栏设计: 将顶部导航重构为可收起的左侧侧边栏 (Sidebar)，优化屏幕空间利用率
-  - 头部优化: 统一 Header 区域，固定展示 Logo 与应用标题
-
-### 🔧 Improvements
-
-- **UI/UX**:
-  - 搜索栏迁移: 将搜索框从顶部 Header 移至列表工具栏，使筛选操作更贴近数据列表
-  - 侧边栏交互: 收起侧边栏时自动居中图标，展开时恢复左对齐，提供更精致的视觉体验
-  - Markdown 样式: 引入 github-markdown-css，确保预览模式下的 Markdown 渲染（列表、引用、代码块）样式规范美观
-
----
+- Refactored the main layout into a sidebar-based application shell.
+- Improved list-toolbar search placement and general UI behavior.
 
 ## [1.2.2] - 2026-01-20
 
-### ✨ New Features
+### Added
 
-- **卡片图片生成**: WordPreview 支持生成并下载单词卡片图片
-- **服务端分页**: 实现单词列表的服务端分页和详情按需加载
-- **搜索功能增强**: 
-  - 添加精确匹配搜索模式并支持持久化设置
-  - 添加搜索输入标准化和防抖处理
-- **单词添加接口**: 添加单词添加接口并实现严格 YAML 校验
-- **单词详情接口**: 新增查询单词详情的对外接口
+- Added downloadable word card image generation.
+- Added server-side pagination and on-demand detail loading.
+- Added exact-match search mode with persisted settings.
+- Added backend endpoints for adding words and retrieving word details.
 
-### 🔧 Improvements
+### Changed
 
-- **前端重构**: 重构前端为 Vue 3 + Vite 单页应用
-- **端口配置**: 将端口配置统一迁移到 config.json 中
-
----
+- Rebuilt the frontend around Vue 3 and Vite.
 
 ## [1.2.0] - 2026-01-15
 
-### ✨ New Features
+### Added
 
-- **智能冲突解决**: v2 版本引入智能冲突检测和解决机制
-- **YAML 到数据库**: 新增 YAML 到 PostgreSQL 数据库的 Web 服务
-
----
+- Added conflict detection and resolution in the v2 workflow.
+- Added the web service that writes YAML word data into PostgreSQL.
 
 ## [1.1.0] - 2026-01-10
 
-### ✨ New Features
+### Added
 
-- **离线优先架构**: 浏览器 LocalStorage + PostgreSQL 双重存储
-- **智能同步**: 离线 -> 在线自动批量上传
-- **冲突检测**: 可视化差异对比工具
-
----
+- Added offline-first storage with LocalStorage and PostgreSQL.
+- Added automatic sync from local storage to the online database.
+- Added visual diff tooling for conflict inspection.
 
 ## [1.0.0] - 2026-01-01
 
-### ✨ New Features
+### Added
 
-- 初始版本发布
-- 基础词汇管理功能
-- YAML 编辑器支持
+- Initial release.
+- Basic word management.
+- YAML editor support.
