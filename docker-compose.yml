@@ -3,6 +3,10 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      args:
+        # Frontend is built at image build time; pass token into Vite bundle.
+        # Set VITE_ADMIN_TOKEN to the same value as ADMIN_TOKEN.
+        VITE_ADMIN_TOKEN: ${VITE_ADMIN_TOKEN}
     container_name: ad-fontes-manager
     restart: unless-stopped
     env_file:

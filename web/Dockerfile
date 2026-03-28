@@ -2,6 +2,11 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
+# Build-time token for frontend write auth header injection.
+# This value is baked into frontend assets by Vite.
+ARG VITE_ADMIN_TOKEN
+ENV VITE_ADMIN_TOKEN=${VITE_ADMIN_TOKEN}
+
 # Copy root package.json and client package.json to leverage cache
 COPY package*.json ./
 COPY client/package*.json ./client/
