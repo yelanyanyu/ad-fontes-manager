@@ -16,6 +16,9 @@ defineProps<{
   addReverse: boolean;
   tagsInput: string;
   canEditConfig: boolean;
+  canCancel: boolean;
+  canResume: boolean;
+  lastStoppedPhase: 'check' | 'import' | null;
 }>();
 
 const emit = defineEmits<{
@@ -30,6 +33,9 @@ const emit = defineEmits<{
   (e: 'ignore-all-duplicates'): void;
   (e: 'overwrite-all-duplicates'): void;
   (e: 'import-ready-items'): void;
+  (e: 'cancel-operation'): void;
+  (e: 'resume-operation'): void;
+  (e: 'restart-operation'): void;
   (e: 'preview-word', wordId: string): void;
 }>();
 
@@ -162,6 +168,33 @@ const statusClassMap: Record<string, string> = {
           >
             Import Ready Items
           </button>
+          <button
+            v-if="canCancel"
+            class="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-sm hover:bg-red-50"
+            @click="emit('cancel-operation')"
+          >
+            Cancel Batch Operation
+          </button>
+          <button
+            v-if="canResume"
+            class="px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 text-sm hover:bg-blue-50"
+            :disabled="busy"
+            @click="emit('resume-operation')"
+          >
+            Resume
+          </button>
+          <button
+            v-if="canResume"
+            class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
+            :disabled="busy"
+            @click="emit('restart-operation')"
+          >
+            Restart
+          </button>
+        </div>
+
+        <div v-if="canResume && lastStoppedPhase" class="text-xs text-amber-700">
+          Batch operation was cancelled during {{ lastStoppedPhase }}.
         </div>
 
         <div v-if="progress.total > 0" class="space-y-2">

@@ -48,6 +48,9 @@ describe('batchAnkiStore', () => {
     ];
     store.taskStarted = true;
     store.configLocked = true;
+    store.cancelRequested = true;
+    store.canResume = true;
+    store.lastStoppedPhase = 'import';
     store.summaryVisible = true;
     store.progress = { phase: 'import', processed: 1, total: 2, percent: 50 };
 
@@ -56,6 +59,9 @@ describe('batchAnkiStore', () => {
     expect(store.items).toHaveLength(0);
     expect(store.taskStarted).toBe(false);
     expect(store.configLocked).toBe(false);
+    expect(store.cancelRequested).toBe(false);
+    expect(store.canResume).toBe(false);
+    expect(store.lastStoppedPhase).toBeNull();
     expect(store.summaryVisible).toBe(false);
     expect(store.progress.phase).toBe('idle');
   });

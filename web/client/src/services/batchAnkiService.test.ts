@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createBatchProgress,
   getImportableBatchItems,
+  markPendingItemsCancelled,
   stepBatchProgress,
   summarizeBatchStatuses,
   updateBatchItemsResolution,
@@ -69,5 +70,20 @@ describe('summarizeBatchStatuses', () => {
     const summary = summarizeBatchStatuses(items);
     expect(summary.imported).toBe(1);
     expect(summary.failed).toBe(2);
+  });
+});
+
+describe('markPendingItemsCancelled', () => {
+  it('marks matching statuses as cancelled', () => {
+    const items = [
+      createItem('a', 'pending'),
+      createItem('b', 'ready'),
+      createItem('c', 'imported'),
+    ];
+
+    const output = markPendingItemsCancelled(items, ['pending', 'ready']);
+    expect(output[0].status).toBe('cancelled');
+    expect(output[1].status).toBe('cancelled');
+    expect(output[2].status).toBe('imported');
   });
 });

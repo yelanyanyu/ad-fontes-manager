@@ -64,6 +64,7 @@ export type BatchAnkiItemStatus =
   | 'importing'
   | 'imported'
   | 'skipped'
+  | 'cancelled'
   | 'overwritten'
   | 'failed';
 

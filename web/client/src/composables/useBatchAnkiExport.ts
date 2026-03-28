@@ -11,6 +11,7 @@ import {
 import {
   createBatchProgress,
   getImportableBatchItems,
+  markPendingItemsCancelled,
   stepBatchProgress,
   summarizeBatchStatuses,
   updateBatchItemsResolution,
@@ -46,6 +47,9 @@ export const useBatchAnkiExport = () => {
     progress,
     taskStarted,
     configLocked,
+    cancelRequested,
+    canResume,
+    lastStoppedPhase,
     ankiConnected,
     deckOptions,
     modelOptions,
@@ -67,6 +71,7 @@ export const useBatchAnkiExport = () => {
   const hasActiveTask = computed(() => items.value.length > 0);
   const isRunning = computed(() => progress.value.phase === 'check' || progress.value.phase === 'import');
   const canEditConfig = computed(() => !configLocked.value && !isRunning.value && !busy.value);
+  const canCancel = computed(() => isRunning.value && busy.value);
 
   const setItem = (key: string, patch: Partial<BatchAnkiExportItem>): void => {
     items.value = items.value.map(item => (item.key === key ? { ...item, ...patch } : item));
@@ -139,6 +144,9 @@ export const useBatchAnkiExport = () => {
     summaryVisible.value = false;
     taskStarted.value = false;
     configLocked.value = false;
+    cancelRequested.value = false;
+    canResume.value = false;
+    lastStoppedPhase.value = null;
     items.value = records.map(record => ({
       key: makeWordSelectionKey(record),
       id: String(record.id),
@@ -178,20 +186,63 @@ export const useBatchAnkiExport = () => {
   const markTaskStarted = (): void => {
     taskStarted.value = true;
     configLocked.value = true;
+    cancelRequested.value = false;
+    canResume.value = false;
+  };
+
+  const cancelBatchOperation = (): void => {
+    cancelRequested.value = true;
+    summaryVisible.value = true;
+  };
+
+  const stopBatchOperation = (
+    phase: 'check' | 'import',
+    cancellableStatuses: Array<BatchAnkiExportItem['status']>
+  ): void => {
+    items.value = markPendingItemsCancelled(items.value, cancellableStatuses);
+    canResume.value = true;
+    lastStoppedPhase.value = phase;
+    cancelRequested.value = false;
+    summaryVisible.value = true;
+    error.value = `Batch ${phase} cancelled by user`;
+  };
+
+  const reviveCancelledItemsForResume = (phase: 'check' | 'import'): void => {
+    items.value = items.value.map(item => {
+      if (item.status !== 'cancelled') return item;
+      if (phase === 'check') {
+        return {
+          ...item,
+          status: 'pending',
+        };
+      }
+
+      return {
+        ...item,
+        status: item.conflict ? 'duplicate' : 'ready',
+      };
+    });
   };
 
   const checkDuplicates = async (): Promise<void> => {
-    if (!items.value.length) return;
+    const checkTargets = items.value.filter(item => item.status === 'pending' || item.status === 'cancelled');
+    if (!checkTargets.length) return;
     busy.value = true;
     error.value = '';
     summaryVisible.value = true;
     markTaskStarted();
-    progress.value = createBatchProgress('check', items.value.length);
+    lastStoppedPhase.value = null;
+    progress.value = createBatchProgress('check', checkTargets.length);
 
     try {
       if (!ankiConnected.value) await connectAnki(true);
 
-      for (const item of items.value) {
+      for (const item of checkTargets) {
+        if (cancelRequested.value) {
+          stopBatchOperation('check', ['pending', 'cancelled']);
+          break;
+        }
+
         setItem(item.key, {
           status: 'checking',
           error: '',
@@ -229,6 +280,15 @@ export const useBatchAnkiExport = () => {
         }
 
         progress.value = stepBatchProgress(progress.value);
+
+        if (cancelRequested.value) {
+          stopBatchOperation('check', ['pending', 'cancelled']);
+          break;
+        }
+      }
+
+      if (!canResume.value) {
+        lastStoppedPhase.value = null;
       }
     } catch (err) {
       const e = err as { message?: string };
@@ -254,12 +314,18 @@ export const useBatchAnkiExport = () => {
     error.value = '';
     summaryVisible.value = true;
     markTaskStarted();
+    lastStoppedPhase.value = null;
     progress.value = createBatchProgress('import', importable.length);
 
     try {
       if (!ankiConnected.value) await connectAnki(true);
 
       for (const item of importable) {
+        if (cancelRequested.value) {
+          stopBatchOperation('import', ['ready', 'duplicate', 'cancelled']);
+          break;
+        }
+
         setItem(item.key, {
           status: 'importing',
           error: '',
@@ -308,6 +374,15 @@ export const useBatchAnkiExport = () => {
         }
 
         progress.value = stepBatchProgress(progress.value);
+
+        if (cancelRequested.value) {
+          stopBatchOperation('import', ['ready', 'duplicate', 'cancelled']);
+          break;
+        }
+      }
+
+      if (!canResume.value) {
+        lastStoppedPhase.value = null;
       }
     } catch (err) {
       const e = err as { message?: string };
@@ -333,6 +408,29 @@ export const useBatchAnkiExport = () => {
     if (phase === 'import') return `Importing to Anki ${progress.value.processed}/${progress.value.total}`;
     return '';
   });
+
+  const resumeBatchOperation = async (): Promise<void> => {
+    if (!canResume.value || !lastStoppedPhase.value) return;
+    if (lastStoppedPhase.value === 'check') {
+      reviveCancelledItemsForResume('check');
+      await checkDuplicates();
+      return;
+    }
+    reviveCancelledItemsForResume('import');
+    await importReadyItems();
+  };
+
+  const restartBatchOperation = (): void => {
+    cancelRequested.value = false;
+    canResume.value = false;
+    lastStoppedPhase.value = null;
+    error.value = '';
+    summaryVisible.value = true;
+    resetCheckState();
+    configLocked.value = false;
+    taskStarted.value = false;
+    progress.value = createBatchProgress('idle', 0);
+  };
 
   const stageLabel = computed(() => {
     if (progress.value.phase === 'check') return 'Checking';
@@ -366,14 +464,21 @@ export const useBatchAnkiExport = () => {
     statusSummary,
     hasActiveTask,
     canEditConfig,
+    canCancel,
+    canResume,
+    cancelRequested,
+    lastStoppedPhase,
     summaryVisible,
     open,
     close,
     reopenPanel,
     dismissSummary,
     connectAnki,
+    cancelBatchOperation,
     checkDuplicates,
     setDuplicatesResolutionAll,
     importReadyItems,
+    resumeBatchOperation,
+    restartBatchOperation,
   };
 };

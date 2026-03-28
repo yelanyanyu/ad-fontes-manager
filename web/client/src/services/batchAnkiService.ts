@@ -56,6 +56,7 @@ export const summarizeBatchStatuses = (
     importing: 0,
     imported: 0,
     skipped: 0,
+    cancelled: 0,
     overwritten: 0,
     failed: 0,
   };
@@ -63,4 +64,18 @@ export const summarizeBatchStatuses = (
     acc[item.status] += 1;
     return acc;
   }, initial);
+};
+
+export const markPendingItemsCancelled = (
+  items: BatchAnkiExportItem[],
+  allowedStatuses: BatchAnkiItemStatus[]
+): BatchAnkiExportItem[] => {
+  const statusSet = new Set(allowedStatuses);
+  return items.map(item => {
+    if (!statusSet.has(item.status)) return item;
+    return {
+      ...item,
+      status: 'cancelled',
+    };
+  });
 };

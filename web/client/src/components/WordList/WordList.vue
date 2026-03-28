@@ -424,6 +424,9 @@ const {
   statusSummary: batchAnkiStatusSummary,
   hasActiveTask: batchAnkiHasActiveTask,
   canEditConfig: batchAnkiCanEditConfig,
+  canCancel: batchAnkiCanCancel,
+  canResume: batchAnkiCanResume,
+  lastStoppedPhase: batchAnkiLastStoppedPhase,
   summaryVisible: batchAnkiSummaryVisible,
   ankiConnected: batchAnkiConnected,
   deckOptions: batchAnkiDeckOptions,
@@ -437,9 +440,12 @@ const {
   reopenPanel: reopenBatchAnkiPanel,
   dismissSummary: dismissBatchAnkiSummary,
   connectAnki: connectBatchAnki,
+  cancelBatchOperation,
   checkDuplicates: checkBatchDuplicates,
   setDuplicatesResolutionAll,
   importReadyItems: importBatchReadyItems,
+  resumeBatchOperation,
+  restartBatchOperation,
 } = useBatchAnkiExport();
 
 const openBatchAnkiExport = async (): Promise<void> => {
@@ -485,6 +491,26 @@ const overwriteAllBatchDuplicates = (): void => {
 
 const openBatchPanelFromSummary = (): void => {
   reopenBatchAnkiPanel();
+};
+
+const cancelBatchFromSummary = (): void => {
+  const confirmed = window.confirm(
+    'Cancel the current batch operation? The current item will finish, then remaining items will stop.'
+  );
+  if (!confirmed) return;
+  cancelBatchOperation();
+};
+
+const resumeBatchFromSummary = async (): Promise<void> => {
+  await resumeBatchOperation();
+};
+
+const handleCancelBatchOperation = (): void => {
+  const confirmed = window.confirm(
+    'Cancel the current batch operation? The current item will finish, then remaining items will stop.'
+  );
+  if (!confirmed) return;
+  cancelBatchOperation();
 };
 
 const closeBatchSummary = (): void => {
@@ -784,6 +810,9 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :add-reverse="batchAnkiAddReverse"
       :tags-input="batchAnkiTagsInput"
       :can-edit-config="batchAnkiCanEditConfig"
+      :can-cancel="batchAnkiCanCancel"
+      :can-resume="batchAnkiCanResume"
+      :last-stopped-phase="batchAnkiLastStoppedPhase"
       @close="closeBatchAnkiExportModal"
       @return="closeBatchAnkiExportModal"
       @connect-anki="connectBatchAnki(true)"
@@ -795,6 +824,9 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @ignore-all-duplicates="ignoreAllBatchDuplicates"
       @overwrite-all-duplicates="overwriteAllBatchDuplicates"
       @import-ready-items="importBatchReadyItems"
+      @cancel-operation="handleCancelBatchOperation"
+      @resume-operation="resumeBatchOperation"
+      @restart-operation="restartBatchOperation"
       @preview-word="previewBatchWord"
     />
     <WordActionMenu
@@ -883,7 +915,14 @@ const paginationRange = computed<Array<number | '...'>>(() => {
           <span class="text-xs text-slate-500">
             imported {{ batchAnkiStatusSummary.imported + batchAnkiStatusSummary.overwritten }},
             duplicate {{ batchAnkiStatusSummary.duplicate }},
-            failed {{ batchAnkiStatusSummary.failed }}
+            failed {{ batchAnkiStatusSummary.failed }},
+            cancelled {{ batchAnkiStatusSummary.cancelled }}
+          </span>
+          <span
+            v-if="batchAnkiCanResume && batchAnkiLastStoppedPhase"
+            class="text-xs text-amber-700 whitespace-nowrap"
+          >
+            Cancelled during {{ batchAnkiLastStoppedPhase }}
           </span>
         </div>
         <div class="flex items-center gap-2">
@@ -892,6 +931,20 @@ const paginationRange = computed<Array<number | '...'>>(() => {
             @click="openBatchPanelFromSummary"
           >
             Open Batch Panel
+          </button>
+          <button
+            v-if="batchAnkiCanCancel"
+            class="text-xs px-2 py-1 rounded border border-red-200 bg-white text-red-700 hover:bg-red-50"
+            @click="cancelBatchFromSummary"
+          >
+            Cancel
+          </button>
+          <button
+            v-if="batchAnkiCanResume"
+            class="text-xs px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+            @click="void resumeBatchFromSummary()"
+          >
+            Resume
           </button>
           <button
             class="text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"

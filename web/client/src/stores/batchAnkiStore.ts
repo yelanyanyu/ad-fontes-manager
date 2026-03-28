@@ -11,6 +11,9 @@ interface BatchAnkiState {
   progress: BatchAnkiProgress;
   taskStarted: boolean;
   configLocked: boolean;
+  cancelRequested: boolean;
+  canResume: boolean;
+  lastStoppedPhase: 'check' | 'import' | null;
   ankiConnected: boolean;
   deckOptions: string[];
   modelOptions: string[];
@@ -40,6 +43,9 @@ export const useBatchAnkiStore = defineStore('batchAnki', {
     progress: defaultProgress(),
     taskStarted: false,
     configLocked: false,
+    cancelRequested: false,
+    canResume: false,
+    lastStoppedPhase: null,
     ankiConnected: false,
     deckOptions: [],
     modelOptions: [],
@@ -59,6 +65,9 @@ export const useBatchAnkiStore = defineStore('batchAnki', {
       this.error = '';
       this.taskStarted = false;
       this.configLocked = false;
+      this.cancelRequested = false;
+      this.canResume = false;
+      this.lastStoppedPhase = null;
       this.summaryVisible = false;
       this.resetProgress();
     },
