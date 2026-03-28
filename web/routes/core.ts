@@ -84,6 +84,7 @@ router.get(
       API_PORT: localConfig.API_PORT,
       CLIENT_DEV_PORT: localConfig.CLIENT_DEV_PORT,
       hasDatabaseUrl: !!appConfig.get<string | null>('database.url', null),
+      rateLimitPerMinute: Number(appConfig.get<number>('server.rate_limit', 0)),
     };
     res.json(safeConfig);
   })
