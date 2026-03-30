@@ -41,6 +41,7 @@ export interface ParsedWordSource {
 }
 
 export type AnkiConflictAction = 'overwrite' | 'skip';
+export type AnkiImportStrategy = 'add_if_not_duplicate' | 'overwrite_if_duplicate';
 
 export interface AnkiDuplicateConflict {
   noteId: number;
@@ -53,6 +54,7 @@ export interface AnkiDuplicateConflict {
 
 export type AnkiImportResult =
   | { status: 'imported'; noteId: number }
+  | { status: 'overwritten'; noteId: number }
   | { status: 'skipped' }
   | { status: 'conflict'; conflict: AnkiDuplicateConflict };
 

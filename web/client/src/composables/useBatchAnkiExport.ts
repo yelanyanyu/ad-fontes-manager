@@ -5,7 +5,8 @@ import {
   checkDuplicateConflict,
   getDeckNames,
   getModelNames,
-  importPayloadToAnki,
+  importPayloadWithStrategy,
+  isAnkiDuplicateConflictError,
   pingAnkiConnect,
 } from '@/services/ankiConnectService';
 import {
@@ -20,11 +21,7 @@ import { saveStoredAnkiExportOptions } from '@/services/ankiExportOptionsStore';
 import { buildExportPayload } from '@/services/ankiPayloadBuilder';
 import { useBatchAnkiStore } from '@/stores/batchAnkiStore';
 import { makeWordSelectionKey } from '@/utils/wordSelection';
-import type {
-  BatchAnkiExportItem,
-  AnkiConflictAction,
-  BatchAnkiProgressPhase,
-} from '@/types/anki';
+import type { BatchAnkiExportItem, AnkiConflictAction, BatchAnkiProgressPhase } from '@/types/anki';
 import type { WordRecord } from '@/types/word-list';
 
 const ankiSessionCache: {
@@ -69,7 +66,9 @@ export const useBatchAnkiExport = () => {
 
   const statusSummary = computed(() => summarizeBatchStatuses(items.value));
   const hasActiveTask = computed(() => items.value.length > 0);
-  const isRunning = computed(() => progress.value.phase === 'check' || progress.value.phase === 'import');
+  const isRunning = computed(
+    () => progress.value.phase === 'check' || progress.value.phase === 'import'
+  );
   const canEditConfig = computed(() => !configLocked.value && !isRunning.value && !busy.value);
   const canCancel = computed(() => isRunning.value && busy.value);
 
@@ -99,7 +98,12 @@ export const useBatchAnkiExport = () => {
   };
 
   const connectAnki = async (force = false): Promise<void> => {
-    if (!force && ankiConnected.value && deckOptions.value.length > 0 && modelOptions.value.length > 0) {
+    if (
+      !force &&
+      ankiConnected.value &&
+      deckOptions.value.length > 0 &&
+      modelOptions.value.length > 0
+    ) {
       return;
     }
 
@@ -225,7 +229,9 @@ export const useBatchAnkiExport = () => {
   };
 
   const checkDuplicates = async (): Promise<void> => {
-    const checkTargets = items.value.filter(item => item.status === 'pending' || item.status === 'cancelled');
+    const checkTargets = items.value.filter(
+      item => item.status === 'pending' || item.status === 'cancelled'
+    );
     if (!checkTargets.length) return;
     busy.value = true;
     error.value = '';
@@ -343,11 +349,7 @@ export const useBatchAnkiExport = () => {
             item.conflict &&
             item.resolution === 'overwrite'
           ) {
-            const result = await applyDuplicateResolution(
-              item.payload,
-              item.conflict,
-              'overwrite'
-            );
+            const result = await applyDuplicateResolution(item.payload, item.conflict, 'overwrite');
             if ('skipped' in result) {
               setItem(item.key, {
                 status: 'skipped',
@@ -359,18 +361,27 @@ export const useBatchAnkiExport = () => {
               });
             }
           } else {
-            const result = await importPayloadToAnki(item.payload);
+            const result = await importPayloadWithStrategy(item.payload, 'overwrite_if_duplicate');
             setItem(item.key, {
-              status: 'imported',
+              status: result.mode === 'overwritten' ? 'overwritten' : 'imported',
               noteId: result.noteId,
             });
           }
         } catch (err) {
-          const e = err as { message?: string };
-          setItem(item.key, {
-            status: 'failed',
-            error: e.message || 'Import failed',
-          });
+          if (isAnkiDuplicateConflictError(err)) {
+            setItem(item.key, {
+              status: 'duplicate',
+              conflict: err.conflict,
+              resolution: 'undecided',
+              error: '',
+            });
+          } else {
+            const e = err as { message?: string };
+            setItem(item.key, {
+              status: 'failed',
+              error: e.message || 'Import failed',
+            });
+          }
         }
 
         progress.value = stepBatchProgress(progress.value);
@@ -404,8 +415,10 @@ export const useBatchAnkiExport = () => {
 
   const progressLabel = computed(() => {
     const phase = progress.value.phase as BatchAnkiProgressPhase;
-    if (phase === 'check') return `Checking duplicates ${progress.value.processed}/${progress.value.total}`;
-    if (phase === 'import') return `Importing to Anki ${progress.value.processed}/${progress.value.total}`;
+    if (phase === 'check')
+      return `Checking duplicates ${progress.value.processed}/${progress.value.total}`;
+    if (phase === 'import')
+      return `Importing to Anki ${progress.value.processed}/${progress.value.total}`;
     return '';
   });
 
@@ -440,7 +453,11 @@ export const useBatchAnkiExport = () => {
     return 'Idle';
   });
 
-  if (ankiSessionCache.connected && deckOptions.value.length === 0 && modelOptions.value.length === 0) {
+  if (
+    ankiSessionCache.connected &&
+    deckOptions.value.length === 0 &&
+    modelOptions.value.length === 0
+  ) {
     ankiConnected.value = true;
     deckOptions.value = [...ankiSessionCache.deckOptions];
     modelOptions.value = [...ankiSessionCache.modelOptions];

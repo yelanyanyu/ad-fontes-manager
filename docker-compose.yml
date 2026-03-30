@@ -16,7 +16,11 @@ services:
     ports:
       - "${PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/core/health"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://${HEALTHCHECK_HOST:-127.0.0.1}:${HEALTHCHECK_PORT:-8080}/api/core/health || exit 1",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

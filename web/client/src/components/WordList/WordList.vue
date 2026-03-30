@@ -348,6 +348,10 @@ const handleImportToAnki = async (): Promise<void> => {
       appStore.addToast('Skipped duplicate note.', 'info');
       return;
     }
+    if (result.status === 'overwritten') {
+      appStore.addToast(`Updated existing Anki note (noteId: ${result.noteId})`, 'success');
+      return;
+    }
     appStore.addToast(`Imported to Anki successfully (noteId: ${result.noteId})`, 'success');
   } catch (error) {
     const err = error as { message?: string };

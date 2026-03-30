@@ -24,9 +24,6 @@ RUN npm run build
 # Stage 2: Production Runtime
 FROM node:22-alpine
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
-
 # Create non-root user for security
 RUN addgroup -g 1001 -S appgroup && \
     adduser -S appuser -u 1001 -G appgroup
@@ -60,11 +57,13 @@ USER appuser
 # Environment variables should be passed at runtime
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV HEALTHCHECK_HOST=127.0.0.1
+ENV HEALTHCHECK_PORT=8080
 
 EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:8080/api/core/health || exit 1
+  CMD sh -c "wget -q -O /dev/null http://${HEALTHCHECK_HOST}:${HEALTHCHECK_PORT}/api/core/health || exit 1"
 
 CMD ["npm", "run", "start"]

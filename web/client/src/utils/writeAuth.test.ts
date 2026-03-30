@@ -17,7 +17,7 @@ describe('writeAuth', () => {
     expect(isWriteMethod(undefined)).toBe(false);
   });
 
-  it('prefers local token over env token', () => {
+  it('prefers local token over env token in development', () => {
     const token = resolveWriteAuthToken({
       localStorageToken: 'local-token',
       envToken: 'env-token',
@@ -47,15 +47,24 @@ describe('writeAuth', () => {
     expect(token).toBe('');
   });
 
-  it('falls back to dev token for localhost runtime in non-dev mode', () => {
+  it('prefers env token over local token in production', () => {
     const token = resolveWriteAuthToken({
-      localStorageToken: '',
-      envToken: '',
+      localStorageToken: 'local-token',
+      envToken: 'env-token',
       isDev: false,
-      runtimeHostname: 'localhost',
     });
 
-    expect(token).toBe(DEV_WRITE_TOKEN_FALLBACK);
+    expect(token).toBe('env-token');
+  });
+
+  it('falls back to local token in production when env token is missing', () => {
+    const token = resolveWriteAuthToken({
+      localStorageToken: 'local-token',
+      envToken: '',
+      isDev: false,
+    });
+
+    expect(token).toBe('local-token');
   });
 
   it('attaches admin token header for write requests', () => {

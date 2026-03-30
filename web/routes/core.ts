@@ -107,8 +107,8 @@ router.get(
 router.post(
   '/anki/connect',
   asyncHandler(async (req: Request, res: Response) => {
-    const host = appConfig.get<string>('anki.host', '127.0.0.1');
-    const port = appConfig.get<number>('anki.port', 8765);
+    const host = appConfig.get<string>('anki.host');
+    const port = appConfig.get<number>('anki.port');
     const upstreamUrl = `http://${host}:${port}/`;
 
     const upstream = await fetch(upstreamUrl, {
@@ -139,8 +139,8 @@ router.post(
       throw BadRequest('deckName is required for apkg export');
     }
 
-    const host = appConfig.get<string>('anki.host', '127.0.0.1');
-    const port = appConfig.get<number>('anki.port', 8765);
+    const host = appConfig.get<string>('anki.host');
+    const port = appConfig.get<number>('anki.port');
     const upstreamUrl = `http://${host}:${port}/`;
 
     const safeFileName = (body.fileName || `${deckName}.apkg`)

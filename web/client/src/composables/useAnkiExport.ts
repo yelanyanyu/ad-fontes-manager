@@ -7,10 +7,10 @@ import {
 } from '@/services/ankiExportOptionsStore';
 import {
   applyDuplicateResolution,
-  checkDuplicateConflict,
   getDeckNames,
   getModelNames,
-  importPayloadToAnki,
+  importPayloadWithStrategy,
+  isAnkiDuplicateConflictError,
   pingAnkiConnect,
 } from '@/services/ankiConnectService';
 import { exportApkgViaAnkiConnect } from '@/services/apkgExportService';
@@ -51,7 +51,9 @@ export const useAnkiExport = () => {
     typeof initialOptions.addReverse === 'boolean' ? initialOptions.addReverse : defaults.addReverse
   );
   const tagsInput = ref(initialOptions.tagsInput || defaults.tags.join(', '));
-  const apkgPath = ref(initialOptions.apkgPath || 'C:\\Users\\lenovo\\Downloads\\ad-fontes-test.apkg');
+  const apkgPath = ref(
+    initialOptions.apkgPath || 'C:\\Users\\lenovo\\Downloads\\ad-fontes-test.apkg'
+  );
 
   const tags = computed(() =>
     tagsInput.value
@@ -105,7 +107,12 @@ export const useAnkiExport = () => {
   };
 
   const connectAnki = async (force = false): Promise<void> => {
-    if (!force && ankiConnected.value && deckOptions.value.length > 0 && modelOptions.value.length > 0) {
+    if (
+      !force &&
+      ankiConnected.value &&
+      deckOptions.value.length > 0 &&
+      modelOptions.value.length > 0
+    ) {
       return;
     }
 
@@ -149,7 +156,8 @@ export const useAnkiExport = () => {
     };
 
     if (!globalWindow.showSaveFilePicker) {
-      error.value = 'Current browser does not support file save picker; please input file name manually.';
+      error.value =
+        'Current browser does not support file save picker; please input file name manually.';
       return;
     }
 
@@ -224,15 +232,18 @@ export const useAnkiExport = () => {
       if (!version) {
         throw new Error('AnkiConnect version check failed');
       }
-      const conflict = await checkDuplicateConflict(payload.value);
-      if (conflict) {
-        duplicateConflict.value = conflict;
-        return { status: 'conflict', conflict };
+      const result = await importPayloadWithStrategy(payload.value, 'overwrite_if_duplicate');
+      if (result.mode === 'overwritten') {
+        return { status: 'overwritten', noteId: result.noteId };
       }
 
-      const result = await importPayloadToAnki(payload.value);
       return { status: 'imported', noteId: result.noteId };
     } catch (err) {
+      if (isAnkiDuplicateConflictError(err)) {
+        duplicateConflict.value = err.conflict;
+        return { status: 'conflict', conflict: err.conflict };
+      }
+
       const e = err as { message?: string };
       error.value = e.message || 'Failed to import note to Anki';
       throw err;
