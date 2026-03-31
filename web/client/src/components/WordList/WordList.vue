@@ -195,7 +195,10 @@ const selectedLemmas = computed<string[]>(() => {
   return getSelectedLemmas([...selectedItemsByKey.value.values()]);
 });
 const isAllVisibleSelected = computed<boolean>(() => {
-  return displayedRecords.value.length > 0 && visibleSelectedCount.value === displayedRecords.value.length;
+  return (
+    displayedRecords.value.length > 0 &&
+    visibleSelectedCount.value === displayedRecords.value.length
+  );
 });
 const showBatchSummaryBar = computed<boolean>(() => {
   return (
@@ -326,7 +329,6 @@ const {
   browseApkgPath: browseAnkiApkgPath,
   updateAndRefresh: refreshAnkiExportPayload,
   importToAnki,
-  resolveDuplicateConflict,
   exportApkg,
 } = useAnkiExport();
 
@@ -356,30 +358,6 @@ const handleImportToAnki = async (): Promise<void> => {
   } catch (error) {
     const err = error as { message?: string };
     appStore.addToast(err.message || 'Failed to import to Anki', 'error');
-  }
-};
-
-const handleResolveDuplicateOverwrite = async (): Promise<void> => {
-  try {
-    const result = await resolveDuplicateConflict('overwrite');
-    if (result.status === 'imported') {
-      appStore.addToast(`Duplicate resolved by overwrite (noteId: ${result.noteId})`, 'success');
-    }
-  } catch (error) {
-    const err = error as { message?: string };
-    appStore.addToast(err.message || 'Failed to overwrite duplicate note', 'error');
-  }
-};
-
-const handleResolveDuplicateSkip = async (): Promise<void> => {
-  try {
-    const result = await resolveDuplicateConflict('skip');
-    if (result.status === 'skipped') {
-      appStore.addToast('Skipped duplicate note.', 'info');
-    }
-  } catch (error) {
-    const err = error as { message?: string };
-    appStore.addToast(err.message || 'Failed to skip duplicate note', 'error');
   }
 };
 
@@ -548,7 +526,11 @@ const selectAllMatching = async (): Promise<void> => {
 
   try {
     const currentSearch = isBackendConnected.value ? dbListMeta.value.search || '' : search.value;
-    const localMatched = filterRecordsBySearch(localRecords.value || [], currentSearch, searchMode.value);
+    const localMatched = filterRecordsBySearch(
+      localRecords.value || [],
+      currentSearch,
+      searchMode.value
+    );
     const dbTotal = isBackendConnected.value ? dbListMeta.value.total || 0 : 0;
     const decision = buildSelectAllMatchingDecision(dbTotal, localMatched.length);
 
@@ -564,13 +546,14 @@ const selectAllMatching = async (): Promise<void> => {
       if (!confirmed) return;
     }
 
-    const dbMatched = isBackendConnected.value && dbTotal > 0
-      ? await collectAllDbMatchingRecords(fetchDbPageForSelection, 200)
-      : [];
-    const mergedMap = mergeRecordsIntoSelectionMap(
-      selectedItemsByKey.value,
-      [...localMatched, ...dbMatched]
-    );
+    const dbMatched =
+      isBackendConnected.value && dbTotal > 0
+        ? await collectAllDbMatchingRecords(fetchDbPageForSelection, 200)
+        : [];
+    const mergedMap = mergeRecordsIntoSelectionMap(selectedItemsByKey.value, [
+      ...localMatched,
+      ...dbMatched,
+    ]);
     selectedItemsByKey.value = mergedMap;
     selectedKeys.value = new Set(mergedMap.keys());
     appStore.addToast(`Selected ${decision.total} matching words`, 'success');
@@ -795,8 +778,6 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @update:apkg-path="setAnkiApkgPath"
       @refresh="refreshAnkiExportPayload"
       @import-test="handleImportToAnki"
-      @resolve-conflict-overwrite="handleResolveDuplicateOverwrite"
-      @resolve-conflict-skip="handleResolveDuplicateSkip"
       @export-apkg="handleExportApkg"
     />
     <BatchAnkiExportModal
@@ -918,9 +899,8 @@ const paginationRange = computed<Array<number | '...'>>(() => {
           </div>
           <span class="text-xs text-slate-500">
             imported {{ batchAnkiStatusSummary.imported + batchAnkiStatusSummary.overwritten }},
-            duplicate {{ batchAnkiStatusSummary.duplicate }},
-            failed {{ batchAnkiStatusSummary.failed }},
-            cancelled {{ batchAnkiStatusSummary.cancelled }}
+            duplicate {{ batchAnkiStatusSummary.duplicate }}, failed
+            {{ batchAnkiStatusSummary.failed }}, cancelled {{ batchAnkiStatusSummary.cancelled }}
           </span>
           <span
             v-if="batchAnkiCanResume && batchAnkiLastStoppedPhase"

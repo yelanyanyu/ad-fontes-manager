@@ -42,6 +42,7 @@ export interface ParsedWordSource {
 
 export type AnkiConflictAction = 'overwrite' | 'skip';
 export type AnkiImportStrategy = 'add_if_not_duplicate' | 'overwrite_if_duplicate';
+export type AnkiDuplicateState = 'ready' | 'duplicate';
 
 export interface AnkiDuplicateConflict {
   noteId: number;
@@ -86,6 +87,7 @@ export interface BatchAnkiExportItem {
   lemma: string;
   record: WordRecord;
   payload: AnkiExportPayload | null;
+  preflightDuplicateState: AnkiDuplicateState | null;
   conflict: AnkiDuplicateConflict | null;
   resolution: BatchDuplicateResolution;
   status: BatchAnkiItemStatus;

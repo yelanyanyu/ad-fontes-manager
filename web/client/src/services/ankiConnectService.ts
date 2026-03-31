@@ -1,6 +1,7 @@
 import type {
   AnkiConflictAction,
   AnkiDuplicateConflict,
+  AnkiDuplicateState,
   AnkiConnectInvokePayload,
   AnkiConnectInvokeResult,
   AnkiExportPayload,
@@ -29,6 +30,40 @@ export class AnkiDuplicateConflictError extends Error {
 
 export const isAnkiDuplicateConflictError = (error: unknown): error is AnkiDuplicateConflictError =>
   error instanceof AnkiDuplicateConflictError;
+
+export class AnkiImportStateMismatchError extends Error {
+  word: string;
+  expectedState: AnkiDuplicateState;
+  actualState: AnkiDuplicateState;
+  deckName: string;
+  modelName: string;
+  noteId: number | null;
+
+  constructor(params: {
+    word: string;
+    expectedState: AnkiDuplicateState;
+    actualState: AnkiDuplicateState;
+    deckName: string;
+    modelName: string;
+    noteId: number | null;
+  }) {
+    const { word, expectedState, actualState, deckName, modelName, noteId } = params;
+    super(
+      `Import state mismatch for "${word}": expected "${expectedState}" but detected "${actualState}" before import (deck="${deckName}", model="${modelName}", noteId=${noteId ?? 'n/a'})`
+    );
+    this.name = 'AnkiImportStateMismatchError';
+    this.word = word;
+    this.expectedState = expectedState;
+    this.actualState = actualState;
+    this.deckName = deckName;
+    this.modelName = modelName;
+    this.noteId = noteId;
+  }
+}
+
+export const isAnkiImportStateMismatchError = (
+  error: unknown
+): error is AnkiImportStateMismatchError => error instanceof AnkiImportStateMismatchError;
 
 const normalizeFieldValue = (value: string | undefined): string =>
   (value ?? '').replace(/\r\n/g, '\n').trim();
@@ -103,40 +138,73 @@ export const isDuplicateAddNoteError = (message: string): boolean =>
 const getExistingNoteByWord = async (
   payload: AnkiExportPayload
 ): Promise<AnkiDuplicateConflict | null> => {
-  const query = [
-    `deck:"${escapeAnkiQueryValue(payload.options.deckName)}"`,
-    `note:"${escapeAnkiQueryValue(payload.options.modelName)}"`,
-    `Word:"${escapeAnkiQueryValue(payload.fields.Word)}"`,
-  ].join(' ');
+  const escapedWord = escapeAnkiQueryValue(payload.fields.Word.trim());
+  const escapedDeck = escapeAnkiQueryValue(payload.options.deckName);
+  const escapedModel = escapeAnkiQueryValue(payload.options.modelName);
+  const incomingWord = normalizeFieldValue(payload.fields.Word);
 
-  const noteIds = await invoke<number[]>({
-    action: 'findNotes',
-    version: ANKI_CONNECT_VERSION,
-    params: { query },
-  });
+  const queries = [
+    [`deck:"${escapedDeck}"`, `note:"${escapedModel}"`, `Word:"${escapedWord}"`].join(' '),
+    [`deck:"${escapedDeck}"`, `note:"${escapedModel}"`, `"${escapedWord}"`].join(' '),
+    [`deck:"${escapedDeck}"`, `"${escapedWord}"`].join(' '),
+    `"${escapedWord}"`,
+  ];
 
-  if (!noteIds.length) return null;
+  let matchingNoteInfo: NoteInfoResponse | null = null;
+  for (const query of queries) {
+    const noteIds = await invoke<number[]>({
+      action: 'findNotes',
+      version: ANKI_CONNECT_VERSION,
+      params: { query },
+    });
 
-  const [noteInfo] = await invoke<Array<NoteInfoResponse>>({
-    action: 'notesInfo',
-    version: ANKI_CONNECT_VERSION,
-    params: { notes: [noteIds[0]] },
-  });
+    if (!noteIds.length) continue;
 
-  if (!noteInfo) return null;
+    const noteInfos = await invoke<Array<NoteInfoResponse>>({
+      action: 'notesInfo',
+      version: ANKI_CONNECT_VERSION,
+      params: { notes: noteIds },
+    });
+
+    const exactWordFieldMatch = noteInfos.find(noteInfo => {
+      const wordField = noteInfo.fields.Word?.value;
+      return normalizeFieldValue(wordField) === incomingWord;
+    });
+    if (exactWordFieldMatch) {
+      matchingNoteInfo = exactWordFieldMatch;
+      break;
+    }
+
+    const exactFirstFieldMatch = noteInfos.find(noteInfo => {
+      const firstField = Object.values(noteInfo.fields)[0]?.value;
+      return normalizeFieldValue(firstField) === incomingWord;
+    });
+    if (exactFirstFieldMatch) {
+      matchingNoteInfo = exactFirstFieldMatch;
+      break;
+    }
+
+    const fallback = noteInfos[0];
+    if (fallback) {
+      matchingNoteInfo = fallback;
+      break;
+    }
+  }
+
+  if (!matchingNoteInfo) return null;
 
   return {
-    noteId: noteInfo.noteId,
+    noteId: matchingNoteInfo.noteId,
     deckName: payload.options.deckName,
     modelName: payload.options.modelName,
     word: payload.fields.Word,
     existingFields: {
-      Word: noteInfo.fields.Word?.value || '',
-      Context: noteInfo.fields.Context?.value || '',
-      notes: noteInfo.fields.notes?.value || '',
-      Back: noteInfo.fields.Back?.value || '',
-      'Add Reverse': noteInfo.fields['Add Reverse']?.value || '',
-      Media: noteInfo.fields.Media?.value || '',
+      Word: matchingNoteInfo.fields.Word?.value || '',
+      Context: matchingNoteInfo.fields.Context?.value || '',
+      notes: matchingNoteInfo.fields.notes?.value || '',
+      Back: matchingNoteInfo.fields.Back?.value || '',
+      'Add Reverse': matchingNoteInfo.fields['Add Reverse']?.value || '',
+      Media: matchingNoteInfo.fields.Media?.value || '',
     },
     incomingFields: payload.fields,
   };
@@ -203,11 +271,24 @@ export const importPayloadToAnki = async (
 
 export const importPayloadWithStrategy = async (
   payload: AnkiExportPayload,
-  strategy: AnkiImportStrategy
+  strategy: AnkiImportStrategy,
+  expectedDuplicateState?: AnkiDuplicateState
 ): Promise<{ noteId: number; mode: 'added' | 'overwritten' }> => {
   await prepareAnkiTarget(payload);
 
   const conflict = await getExistingNoteByWord(payload);
+  const actualDuplicateState: AnkiDuplicateState = conflict ? 'duplicate' : 'ready';
+  if (expectedDuplicateState && expectedDuplicateState !== actualDuplicateState) {
+    throw new AnkiImportStateMismatchError({
+      word: payload.fields.Word,
+      expectedState: expectedDuplicateState,
+      actualState: actualDuplicateState,
+      deckName: payload.options.deckName,
+      modelName: payload.options.modelName,
+      noteId: conflict?.noteId ?? null,
+    });
+  }
+
   if (!conflict) {
     const added = await importPayloadToAnki(payload);
     return { noteId: added.noteId, mode: 'added' };

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   AnkiDuplicateConflictError,
+  AnkiImportStateMismatchError,
   isAnkiDuplicateConflictError,
+  isAnkiImportStateMismatchError,
   isDuplicateAddNoteError,
 } from '@/services/ankiConnectService';
 
@@ -33,5 +35,21 @@ describe('ankiConnectService duplicate safeguards', () => {
     expect(isAnkiDuplicateConflictError(error)).toBe(true);
     expect(error.conflict.noteId).toBe(42);
     expect(isAnkiDuplicateConflictError(new Error('plain'))).toBe(false);
+  });
+
+  it('identifies import state mismatch errors with type guard', () => {
+    const error = new AnkiImportStateMismatchError({
+      word: 'abacus',
+      expectedState: 'ready',
+      actualState: 'duplicate',
+      deckName: 'test',
+      modelName: 'AdFontesWord',
+      noteId: 42,
+    });
+
+    expect(isAnkiImportStateMismatchError(error)).toBe(true);
+    expect(error.expectedState).toBe('ready');
+    expect(error.actualState).toBe('duplicate');
+    expect(isAnkiImportStateMismatchError(new Error('plain'))).toBe(false);
   });
 });

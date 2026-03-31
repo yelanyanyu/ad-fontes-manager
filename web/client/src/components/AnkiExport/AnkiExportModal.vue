@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AnkiDuplicateConflict, AnkiExportPayload } from '@/types/anki';
 
-const props = defineProps<{
+defineProps<{
   open: boolean;
   busy: boolean;
   error: string;
@@ -28,8 +28,6 @@ const emit = defineEmits<{
   (e: 'browse-apkg-path'): void;
   (e: 'refresh'): void;
   (e: 'import-test'): void;
-  (e: 'resolve-conflict-overwrite'): void;
-  (e: 'resolve-conflict-skip'): void;
   (e: 'export-apkg'): void;
 }>();
 
@@ -39,7 +37,9 @@ const onOverlayClick = (): void => emit('close');
 <template>
   <div v-if="open" class="fixed inset-0 z-40 bg-black/40" @click="onOverlayClick" />
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div class="w-full max-w-3xl rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden">
+    <div
+      class="w-full max-w-3xl rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden"
+    >
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
         <h3 class="text-slate-800 font-bold text-base">Export to Anki</h3>
         <button
@@ -73,7 +73,9 @@ const onOverlayClick = (): void => emit('close');
               :value="deckName"
               @change="emit('update:deckName', ($event.target as HTMLSelectElement).value)"
             >
-              <option v-if="!deckOptions.length" :value="deckName">{{ deckName || '(empty)' }}</option>
+              <option v-if="!deckOptions.length" :value="deckName">
+                {{ deckName || '(empty)' }}
+              </option>
               <option v-for="deck in deckOptions" :key="deck" :value="deck">{{ deck }}</option>
             </select>
           </label>
@@ -85,7 +87,9 @@ const onOverlayClick = (): void => emit('close');
               :value="modelName"
               @change="emit('update:modelName', ($event.target as HTMLSelectElement).value)"
             >
-              <option v-if="!modelOptions.length" :value="modelName">{{ modelName || '(empty)' }}</option>
+              <option v-if="!modelOptions.length" :value="modelName">
+                {{ modelName || '(empty)' }}
+              </option>
               <option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option>
             </select>
           </label>
@@ -110,6 +114,7 @@ const onOverlayClick = (): void => emit('close');
             <span>Add Reverse Card</span>
           </label>
         </div>
+
         <label class="text-sm text-slate-700 font-medium block">
           .apkg Output Path (AnkiConnect)
           <div class="mt-1 flex gap-2">
@@ -138,33 +143,33 @@ const onOverlayClick = (): void => emit('close');
           </button>
         </div>
 
-        <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">
+        <div
+          v-if="error"
+          class="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm"
+        >
           {{ error }}
         </div>
 
         <div
           v-if="duplicateConflict"
-          class="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-3 text-sm"
+          class="rounded-lg border border-red-200 bg-red-50 text-red-800 px-3 py-3 text-sm"
         >
-          <div class="font-semibold">检测到重复单词：{{ duplicateConflict.word }}</div>
+          <div class="font-semibold">Detected duplicate word: {{ duplicateConflict.word }}</div>
           <div class="text-xs mt-1">
-            Deck: {{ duplicateConflict.deckName }} | Model: {{ duplicateConflict.modelName }} | NoteId:
+            Deck: {{ duplicateConflict.deckName }} | Model: {{ duplicateConflict.modelName }} |
+            NoteId:
             {{ duplicateConflict.noteId }}
           </div>
-          <div class="mt-3 flex gap-2 justify-end">
+          <div class="mt-2 text-xs text-red-700">
+            Duplicate detected. Overwrite will replace all fields in the existing note.
+          </div>
+          <div class="mt-3 flex justify-end">
             <button
-              class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50"
-              :disabled="busy"
-              @click="emit('resolve-conflict-skip')"
+              class="px-3 py-1.5 rounded-lg border border-red-300 bg-red-600 text-white text-sm hover:bg-red-500"
+              :disabled="busy || !payload"
+              @click="emit('import-test')"
             >
-              跳过
-            </button>
-            <button
-              class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500"
-              :disabled="busy"
-              @click="emit('resolve-conflict-overwrite')"
-            >
-              覆盖已有卡片
+              {{ busy ? 'Working...' : 'Overwrite And Import' }}
             </button>
           </div>
         </div>
@@ -196,11 +201,21 @@ const onOverlayClick = (): void => emit('close');
 
       <div class="px-5 py-4 border-t border-slate-100 flex flex-wrap justify-end gap-2">
         <button
-          class="px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
-          :disabled="busy || !payload || !!duplicateConflict"
+          :class="
+            duplicateConflict
+              ? 'px-4 py-2 rounded-lg border border-red-300 bg-red-600 text-white hover:bg-red-500 text-sm'
+              : 'px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm'
+          "
+          :disabled="busy || !payload"
           @click="emit('import-test')"
         >
-          {{ busy ? 'Working...' : 'Import to Selected Deck' }}
+          {{
+            busy
+              ? 'Working...'
+              : duplicateConflict
+                ? 'Overwrite Existing Note'
+                : 'Import to Selected Deck'
+          }}
         </button>
         <button
           class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:bg-blue-300"

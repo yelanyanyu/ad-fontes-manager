@@ -20,6 +20,7 @@ const createItem = (
   lemma: key,
   record: { id: key } as WordRecord,
   payload: null,
+  preflightDuplicateState: null,
   conflict: null,
   resolution: 'undecided',
   status,
@@ -44,8 +45,12 @@ describe('updateBatchItemsResolution', () => {
 describe('getImportableBatchItems', () => {
   it('keeps ready items and resolved duplicates', () => {
     const items = [
-      createItem('a', 'ready'),
-      createItem('b', 'duplicate', { conflict: { noteId: 1 } as any, resolution: 'skip' }),
+      createItem('a', 'ready', { preflightDuplicateState: 'ready' }),
+      createItem('b', 'duplicate', {
+        preflightDuplicateState: 'duplicate',
+        conflict: { noteId: 1 } as any,
+        resolution: 'skip',
+      }),
       createItem('c', 'duplicate', { conflict: { noteId: 2 } as any, resolution: 'undecided' }),
       createItem('d', 'failed'),
     ];
@@ -66,7 +71,11 @@ describe('progress helpers', () => {
 
 describe('summarizeBatchStatuses', () => {
   it('counts status totals', () => {
-    const items = [createItem('a', 'imported'), createItem('b', 'failed'), createItem('c', 'failed')];
+    const items = [
+      createItem('a', 'imported'),
+      createItem('b', 'failed'),
+      createItem('c', 'failed'),
+    ];
     const summary = summarizeBatchStatuses(items);
     expect(summary.imported).toBe(1);
     expect(summary.failed).toBe(2);

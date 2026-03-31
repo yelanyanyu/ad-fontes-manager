@@ -20,8 +20,14 @@ export const updateBatchItemsResolution = (
 
 export const getImportableBatchItems = (items: BatchAnkiExportItem[]): BatchAnkiExportItem[] => {
   return items.filter(item => {
-    if (item.status === 'ready') return true;
-    if (item.status === 'duplicate' && item.conflict && item.resolution !== 'undecided') return true;
+    if (item.preflightDuplicateState === 'ready' && item.status === 'ready') return true;
+    if (
+      item.preflightDuplicateState === 'duplicate' &&
+      item.status === 'duplicate' &&
+      item.resolution !== 'undecided'
+    ) {
+      return true;
+    }
     return false;
   });
 };

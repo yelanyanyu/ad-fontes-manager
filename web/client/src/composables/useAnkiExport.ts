@@ -6,17 +6,18 @@ import {
   saveStoredAnkiExportOptions,
 } from '@/services/ankiExportOptionsStore';
 import {
-  applyDuplicateResolution,
+  checkDuplicateConflict,
   getDeckNames,
   getModelNames,
   importPayloadWithStrategy,
   isAnkiDuplicateConflictError,
+  isAnkiImportStateMismatchError,
   pingAnkiConnect,
 } from '@/services/ankiConnectService';
 import { exportApkgViaAnkiConnect } from '@/services/apkgExportService';
 import type {
-  AnkiConflictAction,
   AnkiDuplicateConflict,
+  AnkiDuplicateState,
   AnkiExportPayload,
   AnkiImportResult,
 } from '@/types/anki';
@@ -38,6 +39,7 @@ export const useAnkiExport = () => {
   const error = ref('');
   const payload = ref<AnkiExportPayload | null>(null);
   const duplicateConflict = ref<AnkiDuplicateConflict | null>(null);
+  const duplicateState = ref<AnkiDuplicateState | null>(null);
   const currentRecord = ref<WordRecord | null>(null);
   const deckOptions = ref<string[]>([...ankiSessionCache.deckOptions]);
   const modelOptions = ref<string[]>([...ankiSessionCache.modelOptions]);
@@ -100,6 +102,18 @@ export const useAnkiExport = () => {
     });
   };
 
+  const refreshDuplicateState = async (): Promise<void> => {
+    if (!payload.value) {
+      duplicateConflict.value = null;
+      duplicateState.value = null;
+      return;
+    }
+
+    const conflict = await checkDuplicateConflict(payload.value);
+    duplicateConflict.value = conflict;
+    duplicateState.value = conflict ? 'duplicate' : 'ready';
+  };
+
   const normalizeExportFileName = (value: string): string => {
     const normalized = value.replace(/^.*[\\/]/, '').trim();
     if (!normalized) return 'ad-fontes-export.apkg';
@@ -136,6 +150,7 @@ export const useAnkiExport = () => {
       }
       persistOptions();
       await refreshPayload();
+      await refreshDuplicateState();
     } catch (err) {
       const e = err as { message?: string };
       ankiConnected.value = false;
@@ -191,6 +206,7 @@ export const useAnkiExport = () => {
         await connectAnki();
       }
       await refreshPayload();
+      await refreshDuplicateState();
     } catch (err) {
       const e = err as { message?: string };
       error.value = e.message || 'Failed to build export payload';
@@ -204,6 +220,7 @@ export const useAnkiExport = () => {
     isOpen.value = false;
     error.value = '';
     duplicateConflict.value = null;
+    duplicateState.value = null;
   };
 
   const updateAndRefresh = async (): Promise<void> => {
@@ -213,6 +230,7 @@ export const useAnkiExport = () => {
     error.value = '';
     try {
       await refreshPayload();
+      await refreshDuplicateState();
     } catch (err) {
       const e = err as { message?: string };
       error.value = e.message || 'Failed to refresh export payload';
@@ -225,6 +243,8 @@ export const useAnkiExport = () => {
     if (!payload.value) {
       throw new Error('Export payload is not ready');
     }
+    const payloadSnapshot = payload.value;
+
     busy.value = true;
     error.value = '';
     try {
@@ -232,48 +252,40 @@ export const useAnkiExport = () => {
       if (!version) {
         throw new Error('AnkiConnect version check failed');
       }
-      const result = await importPayloadWithStrategy(payload.value, 'overwrite_if_duplicate');
+      if (!duplicateState.value) {
+        throw new Error('Duplicate status is not ready, please refresh preview first.');
+      }
+
+      const strategy =
+        duplicateState.value === 'duplicate' ? 'overwrite_if_duplicate' : 'add_if_not_duplicate';
+      const result = await importPayloadWithStrategy(
+        payloadSnapshot,
+        strategy,
+        duplicateState.value
+      );
       if (result.mode === 'overwritten') {
+        duplicateConflict.value = null;
+        duplicateState.value = 'ready';
         return { status: 'overwritten', noteId: result.noteId };
       }
 
+      duplicateConflict.value = null;
+      duplicateState.value = 'ready';
       return { status: 'imported', noteId: result.noteId };
     } catch (err) {
       if (isAnkiDuplicateConflictError(err)) {
         duplicateConflict.value = err.conflict;
+        duplicateState.value = 'duplicate';
         return { status: 'conflict', conflict: err.conflict };
+      }
+
+      if (isAnkiImportStateMismatchError(err)) {
+        duplicateState.value = err.actualState;
+        duplicateConflict.value = await checkDuplicateConflict(payloadSnapshot);
       }
 
       const e = err as { message?: string };
       error.value = e.message || 'Failed to import note to Anki';
-      throw err;
-    } finally {
-      busy.value = false;
-    }
-  };
-
-  const resolveDuplicateConflict = async (
-    action: AnkiConflictAction
-  ): Promise<AnkiImportResult> => {
-    if (!payload.value || !duplicateConflict.value) {
-      throw new Error('No duplicate conflict to resolve');
-    }
-
-    busy.value = true;
-    error.value = '';
-    try {
-      const result = await applyDuplicateResolution(payload.value, duplicateConflict.value, action);
-      const conflictSnapshot = duplicateConflict.value;
-      duplicateConflict.value = null;
-
-      if ('skipped' in result) {
-        return { status: 'skipped' };
-      }
-
-      return { status: 'imported', noteId: result.noteId ?? conflictSnapshot.noteId };
-    } catch (err) {
-      const e = err as { message?: string };
-      error.value = e.message || 'Failed to resolve duplicate conflict';
       throw err;
     } finally {
       busy.value = false;
@@ -300,6 +312,8 @@ export const useAnkiExport = () => {
   watch([deckName, modelName, addReverse, tagsInput], () => {
     persistOptions();
     syncPayloadOptions();
+    duplicateConflict.value = null;
+    duplicateState.value = null;
   });
 
   watch(apkgPath, () => {
@@ -312,6 +326,7 @@ export const useAnkiExport = () => {
     error,
     payload,
     duplicateConflict,
+    duplicateState,
     ankiConnected,
     deckOptions,
     modelOptions,
@@ -326,7 +341,6 @@ export const useAnkiExport = () => {
     browseApkgPath,
     updateAndRefresh,
     importToAnki,
-    resolveDuplicateConflict,
     exportApkg,
   };
 };

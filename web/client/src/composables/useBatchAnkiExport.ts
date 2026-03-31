@@ -1,7 +1,6 @@
 import { computed, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
-  applyDuplicateResolution,
   checkDuplicateConflict,
   getDeckNames,
   getModelNames,
@@ -80,6 +79,7 @@ export const useBatchAnkiExport = () => {
     items.value = items.value.map(item => ({
       ...item,
       payload: null,
+      preflightDuplicateState: null,
       conflict: null,
       resolution: 'undecided',
       status: 'pending',
@@ -157,6 +157,7 @@ export const useBatchAnkiExport = () => {
       lemma: String(record.lemma || record.yield?.lemma || record.lemma_preview || record.id),
       record,
       payload: null,
+      preflightDuplicateState: null,
       conflict: null,
       resolution: 'undecided',
       status: 'pending',
@@ -265,6 +266,7 @@ export const useBatchAnkiExport = () => {
           if (conflict) {
             setItem(item.key, {
               payload,
+              preflightDuplicateState: 'duplicate',
               conflict,
               resolution: 'undecided',
               status: 'duplicate',
@@ -272,6 +274,7 @@ export const useBatchAnkiExport = () => {
           } else {
             setItem(item.key, {
               payload,
+              preflightDuplicateState: 'ready',
               conflict: null,
               resolution: 'undecided',
               status: 'ready',
@@ -340,37 +343,51 @@ export const useBatchAnkiExport = () => {
           if (!item.payload) {
             throw new Error('Payload not prepared; please run duplicate check first.');
           }
-          if (item.status === 'duplicate' && item.conflict && item.resolution === 'skip') {
+          if (item.preflightDuplicateState === 'duplicate' && item.resolution === 'skip') {
             setItem(item.key, {
               status: 'skipped',
             });
-          } else if (
-            item.status === 'duplicate' &&
-            item.conflict &&
-            item.resolution === 'overwrite'
-          ) {
-            const result = await applyDuplicateResolution(item.payload, item.conflict, 'overwrite');
-            if ('skipped' in result) {
-              setItem(item.key, {
-                status: 'skipped',
-              });
-            } else {
-              setItem(item.key, {
-                status: 'overwritten',
-                noteId: result.noteId,
-              });
-            }
-          } else {
-            const result = await importPayloadWithStrategy(item.payload, 'overwrite_if_duplicate');
+            continue;
+          }
+
+          if (item.preflightDuplicateState === 'duplicate' && item.resolution === 'overwrite') {
+            const result = await importPayloadWithStrategy(
+              item.payload,
+              'overwrite_if_duplicate',
+              'duplicate'
+            );
             setItem(item.key, {
               status: result.mode === 'overwritten' ? 'overwritten' : 'imported',
               noteId: result.noteId,
             });
+            continue;
+          }
+
+          if (item.preflightDuplicateState === 'ready') {
+            const result = await importPayloadWithStrategy(
+              item.payload,
+              'add_if_not_duplicate',
+              'ready'
+            );
+            setItem(item.key, {
+              status: result.mode === 'overwritten' ? 'overwritten' : 'imported',
+              noteId: result.noteId,
+            });
+            continue;
+          }
+
+          if (item.preflightDuplicateState === 'duplicate' && item.resolution === 'undecided') {
+            throw new Error('Duplicate item is unresolved; choose skip or overwrite first.');
+          } else {
+            throw new Error(
+              'Item duplicate preflight status is missing; run duplicate check first.'
+            );
           }
         } catch (err) {
           if (isAnkiDuplicateConflictError(err)) {
             setItem(item.key, {
               status: 'duplicate',
+              preflightDuplicateState: 'duplicate',
               conflict: err.conflict,
               resolution: 'undecided',
               error: '',
