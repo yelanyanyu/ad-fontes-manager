@@ -18,6 +18,7 @@ import {
 } from '@/services/batchAnkiService';
 import { saveStoredAnkiExportOptions } from '@/services/ankiExportOptionsStore';
 import { buildExportPayload } from '@/services/ankiPayloadBuilder';
+import { exportBatchApkgViaAnkiConnect } from '@/services/apkgExportService';
 import { useBatchAnkiStore } from '@/stores/batchAnkiStore';
 import { makeWordSelectionKey } from '@/utils/wordSelection';
 import type { BatchAnkiExportItem, AnkiConflictAction, BatchAnkiProgressPhase } from '@/types/anki';
@@ -73,6 +74,12 @@ export const useBatchAnkiExport = () => {
 
   const setItem = (key: string, patch: Partial<BatchAnkiExportItem>): void => {
     items.value = items.value.map(item => (item.key === key ? { ...item, ...patch } : item));
+  };
+
+  const normalizeExportFileName = (value: string): string => {
+    const normalized = value.replace(/^.*[\\/]/, '').trim();
+    if (!normalized) return 'ad-fontes-export.apkg';
+    return normalized.toLowerCase().endsWith('.apkg') ? normalized : `${normalized}.apkg`;
   };
 
   const resetCheckState = (): void => {
@@ -315,6 +322,41 @@ export const useBatchAnkiExport = () => {
     items.value = updateBatchItemsResolution(items.value, action);
   };
 
+  const exportApkg = async (): Promise<void> => {
+    if (!items.value.length) {
+      throw new Error('No selected words for .apkg export');
+    }
+
+    busy.value = true;
+    error.value = '';
+    summaryVisible.value = true;
+
+    try {
+      const payloads = await Promise.all(
+        items.value.map(async item => {
+          if (item.payload) return item.payload;
+          return buildExportPayload(item.record, {
+            deckName: deckName.value,
+            modelName: modelName.value,
+            addReverse: addReverse.value,
+            tags: tags.value,
+          });
+        })
+      );
+
+      await exportBatchApkgViaAnkiConnect(
+        payloads,
+        normalizeExportFileName(`${deckName.value || 'ad-fontes-export'}-batch.apkg`)
+      );
+    } catch (err) {
+      const e = err as { message?: string };
+      error.value = e.message || 'Batch .apkg export failed';
+      throw err;
+    } finally {
+      busy.value = false;
+    }
+  };
+
   const importReadyItems = async (): Promise<void> => {
     const importable = getImportableBatchItems(items.value);
     if (!importable.length) return;
@@ -511,6 +553,7 @@ export const useBatchAnkiExport = () => {
     cancelBatchOperation,
     checkDuplicates,
     setDuplicatesResolutionAll,
+    exportApkg,
     importReadyItems,
     resumeBatchOperation,
     restartBatchOperation,

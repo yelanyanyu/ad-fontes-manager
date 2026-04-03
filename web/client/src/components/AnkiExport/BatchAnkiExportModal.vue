@@ -33,6 +33,7 @@ const emit = defineEmits<{
   (e: 'ignore-all-duplicates'): void;
   (e: 'overwrite-all-duplicates'): void;
   (e: 'import-ready-items'): void;
+  (e: 'export-apkg'): void;
   (e: 'cancel-operation'): void;
   (e: 'resume-operation'): void;
   (e: 'restart-operation'): void;
@@ -59,7 +60,7 @@ const statusClassMap: Record<string, string> = {
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <div class="w-full max-w-6xl h-[90vh] rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden flex flex-col">
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-        <h3 class="text-slate-800 font-bold text-base">Batch Export to Anki</h3>
+        <h3 class="text-slate-800 font-bold text-base">Batch Anki Card Operations</h3>
         <div class="flex items-center gap-2">
           <button
             class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
@@ -160,6 +161,13 @@ const statusClassMap: Record<string, string> = {
             @click="emit('overwrite-all-duplicates')"
           >
             Overwrite All Duplicates
+          </button>
+          <button
+            class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-500 disabled:bg-indigo-300"
+            :disabled="busy || !items.length"
+            @click="emit('export-apkg')"
+          >
+            Export Selected as .apkg
           </button>
           <button
             class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-500 disabled:bg-blue-300"

@@ -175,12 +175,12 @@ const onPageSizeChange = (event: Event) => {
         <button
           v-if="hasSelection"
           class="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-2 py-1.5 hover:bg-emerald-100 shadow-sm flex items-center gap-2"
-          title="Batch export selected words to Anki"
+          title="Open batch Anki operations for selected words"
           data-test="batch-export-anki-button"
           @click="emit('open-batch-anki-export')"
         >
           <i class="fa-solid fa-layer-group" />
-          <span>Batch Export to Anki</span>
+          <span>Batch Anki Actions</span>
         </button>
         <button
           v-if="hasSelection"

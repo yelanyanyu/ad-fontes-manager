@@ -377,15 +377,19 @@ export const applyDuplicateResolution = async (
   return { noteId: conflict.noteId };
 };
 
-export const downloadDeckAsApkg = async (deckName: string, fileName: string): Promise<Blob> => {
-  await pingAnkiConnect();
-  await ensureDeckExists(deckName);
+export const downloadPayloadsAsApkg = async (
+  payloads: AnkiExportPayload[],
+  fileName: string
+): Promise<Blob> => {
+  if (!payloads.length) {
+    throw new Error('At least one payload is required for .apkg export');
+  }
+
   return request.post<Blob>(
     '/anki/export-apkg',
     {
-      deckName,
-      includeSched: false,
       fileName,
+      payloads,
     },
     {
       responseType: 'blob',

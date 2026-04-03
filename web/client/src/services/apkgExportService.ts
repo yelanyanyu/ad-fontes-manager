@@ -1,5 +1,5 @@
 import type { AnkiExportPayload } from '@/types/anki';
-import { downloadDeckAsApkg } from '@/services/ankiConnectService';
+import { downloadPayloadsAsApkg } from '@/services/ankiConnectService';
 
 const DEFAULT_FILE_NAME = 'ad-fontes-export.apkg';
 
@@ -45,16 +45,30 @@ const hasZipEocdSignature = async (blob: Blob): Promise<boolean> => {
   return false;
 };
 
-export const exportApkgViaAnkiConnect = async (
-  payload: AnkiExportPayload,
+const downloadApkgViaBackend = async (
+  payloads: AnkiExportPayload[],
   outputFileName: string
 ): Promise<{ ok: boolean; fileName: string }> => {
   const normalizedFileName = sanitizeFileName(outputFileName);
-  const apkgBlob = await downloadDeckAsApkg(payload.options.deckName, normalizedFileName);
+  const apkgBlob = await downloadPayloadsAsApkg(payloads, normalizedFileName);
   const validZip = await hasZipEocdSignature(apkgBlob);
   if (!validZip) {
     throw new Error('Downloaded .apkg is invalid (missing ZIP EOCD). Please retry export.');
   }
   triggerBrowserDownload(apkgBlob, normalizedFileName);
   return { ok: true, fileName: normalizedFileName };
+};
+
+export const exportApkgViaAnkiConnect = async (
+  payload: AnkiExportPayload,
+  outputFileName: string
+): Promise<{ ok: boolean; fileName: string }> => {
+  return downloadApkgViaBackend([payload], outputFileName);
+};
+
+export const exportBatchApkgViaAnkiConnect = async (
+  payloads: AnkiExportPayload[],
+  outputFileName: string
+): Promise<{ ok: boolean; fileName: string }> => {
+  return downloadApkgViaBackend(payloads, outputFileName);
 };

@@ -425,6 +425,7 @@ const {
   cancelBatchOperation,
   checkDuplicates: checkBatchDuplicates,
   setDuplicatesResolutionAll,
+  exportApkg: exportBatchApkg,
   importReadyItems: importBatchReadyItems,
   resumeBatchOperation,
   restartBatchOperation,
@@ -469,6 +470,16 @@ const ignoreAllBatchDuplicates = (): void => {
 
 const overwriteAllBatchDuplicates = (): void => {
   setDuplicatesResolutionAll('overwrite');
+};
+
+const handleBatchExportApkg = async (): Promise<void> => {
+  try {
+    await exportBatchApkg();
+    appStore.addToast('Batch .apkg exported successfully', 'success');
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to export batch .apkg', 'error');
+  }
 };
 
 const openBatchPanelFromSummary = (): void => {
@@ -808,6 +819,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @check-duplicates="checkBatchDuplicates"
       @ignore-all-duplicates="ignoreAllBatchDuplicates"
       @overwrite-all-duplicates="overwriteAllBatchDuplicates"
+      @export-apkg="handleBatchExportApkg"
       @import-ready-items="importBatchReadyItems"
       @cancel-operation="handleCancelBatchOperation"
       @resume-operation="resumeBatchOperation"

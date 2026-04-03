@@ -54,7 +54,7 @@ export const useAnkiExport = () => {
   );
   const tagsInput = ref(initialOptions.tagsInput || defaults.tags.join(', '));
   const apkgPath = ref(
-    initialOptions.apkgPath || 'C:\\Users\\lenovo\\Downloads\\ad-fontes-test.apkg'
+    initialOptions.apkgPath || 'ad-fontes-export.apkg'
   );
 
   const tags = computed(() =>
@@ -203,10 +203,20 @@ export const useAnkiExport = () => {
 
     try {
       if (!ankiConnected.value) {
-        await connectAnki();
+        try {
+          await connectAnki();
+        } catch {
+          // Continue with local payload preview and .apkg export without AnkiConnect.
+        }
       }
+
       await refreshPayload();
-      await refreshDuplicateState();
+      if (ankiConnected.value) {
+        await refreshDuplicateState();
+      } else {
+        duplicateConflict.value = null;
+        duplicateState.value = null;
+      }
     } catch (err) {
       const e = err as { message?: string };
       error.value = e.message || 'Failed to build export payload';
@@ -230,7 +240,12 @@ export const useAnkiExport = () => {
     error.value = '';
     try {
       await refreshPayload();
-      await refreshDuplicateState();
+      if (ankiConnected.value) {
+        await refreshDuplicateState();
+      } else {
+        duplicateConflict.value = null;
+        duplicateState.value = null;
+      }
     } catch (err) {
       const e = err as { message?: string };
       error.value = e.message || 'Failed to refresh export payload';

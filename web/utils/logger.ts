@@ -143,6 +143,7 @@ const loggers = {
   sync: createModuleLogger('sync'),
   db: createModuleLogger('db'),
   api: createModuleLogger('api'),
+  anki: createModuleLogger('anki'),
   auth: createModuleLogger('auth'),
   system: createModuleLogger('system'),
 };

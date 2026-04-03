@@ -1,12 +1,26 @@
 import type { NextFunction, Request, Response } from 'express';
 
 const express = require('express') as typeof import('express');
-const os = require('node:os') as typeof import('node:os');
-const path = require('node:path') as typeof import('node:path');
-const fs = require('node:fs/promises') as typeof import('node:fs/promises');
 const router = express.Router();
 const appConfig = require('../utils/config.ts') as {
   get: <T = unknown>(lookupPath: string, defaultValue?: T) => T;
+};
+const { validateBody } = require('../middleware/validate.ts') as {
+  validateBody: (schema: unknown) => (req: Request, res: Response, next: NextFunction) => void;
+};
+const { AnkiExportApkgBodySchema } = require('../schemas/requests/anki.ts') as {
+  AnkiExportApkgBodySchema: unknown;
+};
+const { buildApkgBuffer, normalizeApkgFileName } = require('../services/anki/apkgService.ts') as {
+  buildApkgBuffer: (
+    payloads: Array<{
+      options: { deckName: string; modelName: string };
+      fields: Record<string, string>;
+      sourceWordId?: string;
+      sourceLemma?: string;
+    }>
+  ) => Promise<Buffer>;
+  normalizeApkgFileName: (value: string) => string;
 };
 
 const localStore = require('../localStore.ts') as {
@@ -19,16 +33,27 @@ const { getPool, resetPool } = require('../db') as {
   resetPool: () => Promise<void>;
 };
 
-const { asyncHandler, ServiceUnavailable, BadRequest } = require('../utils/errors.ts') as {
+const { asyncHandler, ServiceUnavailable } = require('../utils/errors.ts') as {
   asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
   ServiceUnavailable: (message: string, data?: unknown) => Error;
-  BadRequest: (message: string, data?: unknown) => Error;
 };
 
-const { loggers } = require('../utils/logger.ts') as {
+const { createContextLogger, loggers } = require('../utils/logger.ts') as {
+  createContextLogger: (context: Record<string, unknown>) => {
+    info: (payload: Record<string, unknown>, message?: string) => void;
+    debug: (payload: Record<string, unknown>, message?: string) => void;
+    warn: (payload: Record<string, unknown>, message?: string) => void;
+    error: (payload: Record<string, unknown>, message?: string) => void;
+  };
   loggers: {
     db: { error: (msg: string, error?: unknown) => void };
     system: { info: (msg: string) => void };
+    anki: {
+      info: (payload: Record<string, unknown>, message?: string) => void;
+      debug: (payload: Record<string, unknown>, message?: string) => void;
+      warn: (payload: Record<string, unknown>, message?: string) => void;
+      error: (payload: Record<string, unknown>, message?: string) => void;
+    };
   };
 };
 
@@ -110,95 +135,95 @@ router.post(
     const host = appConfig.get<string>('anki.host');
     const port = appConfig.get<number>('anki.port');
     const upstreamUrl = `http://${host}:${port}/`;
+    const requestId = (req as Request & { id?: string }).id;
+    const route = req.originalUrl || req.url;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const action = typeof body.action === 'string' ? body.action : undefined;
+    const relayLogger = createContextLogger({
+      module: 'anki',
+      requestId,
+      route,
+      upstreamUrl,
+    });
 
-    const upstream = await fetch(upstreamUrl, {
+    relayLogger.info(
+      {
+        requestId,
+        method: req.method,
+        route,
+        upstreamUrl,
+        action,
+      },
+      'Relaying AnkiConnect request'
+    );
+    relayLogger.debug(
+      {
+        requestId,
+        method: req.method,
+        route,
+        upstreamUrl,
+        body,
+      },
+      'AnkiConnect request payload'
+    );
+
+    const upstream = await globalThis.fetch(upstreamUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(req.body ?? {}),
+      body: JSON.stringify(body),
     });
 
     const payload = (await upstream.json()) as Record<string, unknown>;
+    relayLogger.debug(
+      {
+        requestId,
+        method: req.method,
+        route,
+        upstreamUrl,
+        statusCode: upstream.status,
+        response: payload,
+      },
+      'AnkiConnect response payload'
+    );
+    relayLogger.info(
+      {
+        requestId,
+        method: req.method,
+        route,
+        upstreamUrl,
+        statusCode: upstream.status,
+        success: upstream.status >= 200 && upstream.status < 300,
+      },
+      'AnkiConnect request completed'
+    );
     res.status(upstream.status).json(payload);
   })
 );
 
 router.post(
   '/anki/export-apkg',
+  validateBody(AnkiExportApkgBodySchema),
   asyncHandler(async (req: Request, res: Response) => {
     const body = (req.body || {}) as {
-      deckName?: string;
-      modelName?: string;
-      includeSched?: boolean;
       fileName?: string;
+      payloads: Array<{
+        options: { deckName: string; modelName: string };
+        fields: Record<string, string>;
+        sourceWordId?: string;
+        sourceLemma?: string;
+      }>;
     };
-    const deckName = (body.deckName || '').trim();
+    const deckName = body.payloads[0]?.options.deckName || 'ad-fontes-export';
+    const finalFileName = normalizeApkgFileName(body.fileName || `${deckName}.apkg`);
+    const apkgBuffer = await buildApkgBuffer(body.payloads);
 
-    if (!deckName) {
-      throw BadRequest('deckName is required for apkg export');
-    }
-
-    const host = appConfig.get<string>('anki.host');
-    const port = appConfig.get<number>('anki.port');
-    const upstreamUrl = `http://${host}:${port}/`;
-
-    const safeFileName = (body.fileName || `${deckName}.apkg`)
-      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
-      .replace(/\s+/g, ' ')
-      .trim();
-    const finalFileName = safeFileName.toLowerCase().endsWith('.apkg')
-      ? safeFileName
-      : `${safeFileName}.apkg`;
-    const tempPath = path.join(
-      os.tmpdir(),
-      `ad-fontes-${Date.now()}-${Math.random().toString(36).slice(2)}.apkg`
-    );
-
-    try {
-      const upstream = await fetch(upstreamUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'exportPackage',
-          version: 6,
-          params: {
-            deck: deckName,
-            path: tempPath,
-            includeSched: Boolean(body.includeSched),
-          },
-        }),
-      });
-
-      const ankiResult = (await upstream.json()) as {
-        result?: boolean;
-        error?: string | null;
-      };
-      if (!upstream.ok) {
-        throw ServiceUnavailable('AnkiConnect request failed', {
-          status: upstream.status,
-          result: ankiResult,
-        });
-      }
-      if (ankiResult.error) {
-        throw BadRequest(`AnkiConnect error: ${ankiResult.error}`);
-      }
-      if (!ankiResult.result) {
-        throw ServiceUnavailable('AnkiConnect exportPackage returned false');
-      }
-
-      const apkgBuffer = await fs.readFile(tempPath);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Disposition', `attachment; filename="${finalFileName}"`);
-      res.setHeader('Content-Length', String(apkgBuffer.byteLength));
-      res.status(200).send(apkgBuffer);
-    } finally {
-      await fs.unlink(tempPath).catch(() => undefined);
-    }
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${finalFileName}"`);
+    res.setHeader('Content-Length', String(apkgBuffer.byteLength));
+    res.status(200).send(apkgBuffer);
   })
 );
 
 module.exports = router;
-

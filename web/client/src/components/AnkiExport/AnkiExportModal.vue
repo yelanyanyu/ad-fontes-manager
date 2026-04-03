@@ -41,7 +41,7 @@ const onOverlayClick = (): void => emit('close');
       class="w-full max-w-3xl rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden"
     >
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-        <h3 class="text-slate-800 font-bold text-base">Export to Anki</h3>
+        <h3 class="text-slate-800 font-bold text-base">Anki Card Export</h3>
         <button
           class="w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           @click="emit('close')"
@@ -116,7 +116,7 @@ const onOverlayClick = (): void => emit('close');
         </div>
 
         <label class="text-sm text-slate-700 font-medium block">
-          .apkg Output Path (AnkiConnect)
+          .apkg File Name
           <div class="mt-1 flex gap-2">
             <input
               class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
@@ -222,7 +222,7 @@ const onOverlayClick = (): void => emit('close');
           :disabled="busy || !payload"
           @click="emit('export-apkg')"
         >
-          {{ busy ? 'Working...' : 'Export .apkg via AnkiConnect' }}
+          {{ busy ? 'Working...' : 'Export .apkg' }}
         </button>
       </div>
     </div>

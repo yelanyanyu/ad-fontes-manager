@@ -34,6 +34,6 @@ export const getInitialAnkiExportOptions = () => {
     modelName: stored.modelName || defaults.modelName,
     addReverse: typeof stored.addReverse === 'boolean' ? stored.addReverse : defaults.addReverse,
     tagsInput: (stored.tags || defaults.tags).join(', '),
-    apkgPath: stored.apkgPath || 'C:\\Users\\lenovo\\Downloads\\ad-fontes-test.apkg',
+    apkgPath: stored.apkgPath || 'ad-fontes-export.apkg',
   };
 };
