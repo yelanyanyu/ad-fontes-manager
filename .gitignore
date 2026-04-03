@@ -50,4 +50,4 @@ config.yml.template
 *.temp
 
 # Local git worktrees
-.worktrees/
+*worktrees*

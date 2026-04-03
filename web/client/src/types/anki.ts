@@ -1,13 +1,12 @@
 import type { WordRecord } from '@/types/word-list';
 
-export interface AnkiTargetFields {
-  Word: string;
-  Context: string;
-  notes: string;
-  Back: string;
-  'Add Reverse': string;
-  Media: string;
-}
+export type AnkiTargetFields = Record<string, string>;
+
+export type AnkiFieldRole = 'word' | 'context' | 'notes' | 'back' | 'addReverse' | 'media';
+
+export type AnkiCanonicalFields = Record<AnkiFieldRole, string>;
+
+export type AnkiFieldMapping = Record<AnkiFieldRole, string>;
 
 export interface AnkiExportOptions {
   deckName: string;
@@ -21,6 +20,7 @@ export interface AnkiExportPayload {
   options: AnkiExportOptions;
   sourceWordId: string;
   sourceLemma: string;
+  fieldMapping?: AnkiFieldMapping;
 }
 
 export interface AnkiConnectInvokePayload {

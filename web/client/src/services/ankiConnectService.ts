@@ -2,11 +2,13 @@ import type {
   AnkiConflictAction,
   AnkiDuplicateConflict,
   AnkiDuplicateState,
+  AnkiFieldMapping,
   AnkiConnectInvokePayload,
   AnkiConnectInvokeResult,
   AnkiExportPayload,
   AnkiImportStrategy,
 } from '@/types/anki';
+import { DEFAULT_ANKI_FIELD_MAPPING } from '@/services/ankiFieldMapper';
 import request from '@/utils/request';
 
 const ANKI_CONNECT_VERSION = 6;
@@ -65,8 +67,48 @@ export const isAnkiImportStateMismatchError = (
   error: unknown
 ): error is AnkiImportStateMismatchError => error instanceof AnkiImportStateMismatchError;
 
+export class AnkiDuplicateNotesAmbiguityError extends Error {
+  word: string;
+  noteIds: number[];
+
+  constructor(word: string, noteIds: number[]) {
+    super(
+      `Detected multiple Anki notes for "${word}" (${noteIds.join(
+        ', '
+      )}). Please clean up duplicate notes in Anki before updating.`
+    );
+    this.name = 'AnkiDuplicateNotesAmbiguityError';
+    this.word = word;
+    this.noteIds = noteIds;
+  }
+}
+
 const normalizeFieldValue = (value: string | undefined): string =>
   (value ?? '').replace(/\r\n/g, '\n').trim();
+
+const resolveFieldMapping = (payload: AnkiExportPayload): AnkiFieldMapping =>
+  payload.fieldMapping || DEFAULT_ANKI_FIELD_MAPPING;
+
+const getPayloadWordFieldName = (payload: AnkiExportPayload): string =>
+  resolveFieldMapping(payload).word;
+
+const getPayloadWordValue = (payload: AnkiExportPayload): string =>
+  normalizeFieldValue(payload.fields[getPayloadWordFieldName(payload)]);
+
+const getNonEmptyFields = (fields: Record<string, string>): Record<string, string> => {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => normalizeFieldValue(value) !== '')
+  );
+};
+
+const flattenNoteFields = (noteInfo: NoteInfoResponse): Record<string, string> => {
+  return Object.fromEntries(
+    Object.entries(noteInfo.fields).map(([fieldName, fieldValue]) => [
+      fieldName,
+      fieldValue.value || '',
+    ])
+  );
+};
 
 const invoke = async <T>(payload: AnkiConnectInvokePayload): Promise<T> => {
   const data = await request.post<AnkiConnectInvokeResult<T>>('/anki/connect', payload, {
@@ -138,58 +180,41 @@ export const isDuplicateAddNoteError = (message: string): boolean =>
 const getExistingNoteByWord = async (
   payload: AnkiExportPayload
 ): Promise<AnkiDuplicateConflict | null> => {
-  const escapedWord = escapeAnkiQueryValue(payload.fields.Word.trim());
+  const wordFieldName = getPayloadWordFieldName(payload);
+  const incomingWord = getPayloadWordValue(payload);
+  if (!incomingWord) {
+    return null;
+  }
+
+  const escapedWord = escapeAnkiQueryValue(incomingWord);
   const escapedDeck = escapeAnkiQueryValue(payload.options.deckName);
   const escapedModel = escapeAnkiQueryValue(payload.options.modelName);
-  const incomingWord = normalizeFieldValue(payload.fields.Word);
 
-  const queries = [
-    [`deck:"${escapedDeck}"`, `note:"${escapedModel}"`, `Word:"${escapedWord}"`].join(' '),
-    [`deck:"${escapedDeck}"`, `note:"${escapedModel}"`, `"${escapedWord}"`].join(' '),
-    [`deck:"${escapedDeck}"`, `"${escapedWord}"`].join(' '),
-    `"${escapedWord}"`,
-  ];
+  const query = [
+    `deck:"${escapedDeck}"`,
+    `note:"${escapedModel}"`,
+    `${wordFieldName}:"${escapedWord}"`,
+  ].join(' ');
 
-  let matchingNoteInfo: NoteInfoResponse | null = null;
-  for (const query of queries) {
-    const noteIds = await invoke<number[]>({
-      action: 'findNotes',
-      version: ANKI_CONNECT_VERSION,
-      params: { query },
-    });
+  const noteIds = await invoke<number[]>({
+    action: 'findNotes',
+    version: ANKI_CONNECT_VERSION,
+    params: { query },
+  });
 
-    if (!noteIds.length) continue;
-
-    const noteInfos = await invoke<Array<NoteInfoResponse>>({
-      action: 'notesInfo',
-      version: ANKI_CONNECT_VERSION,
-      params: { notes: noteIds },
-    });
-
-    const exactWordFieldMatch = noteInfos.find(noteInfo => {
-      const wordField = noteInfo.fields.Word?.value;
-      return normalizeFieldValue(wordField) === incomingWord;
-    });
-    if (exactWordFieldMatch) {
-      matchingNoteInfo = exactWordFieldMatch;
-      break;
-    }
-
-    const exactFirstFieldMatch = noteInfos.find(noteInfo => {
-      const firstField = Object.values(noteInfo.fields)[0]?.value;
-      return normalizeFieldValue(firstField) === incomingWord;
-    });
-    if (exactFirstFieldMatch) {
-      matchingNoteInfo = exactFirstFieldMatch;
-      break;
-    }
-
-    const fallback = noteInfos[0];
-    if (fallback) {
-      matchingNoteInfo = fallback;
-      break;
-    }
+  if (!noteIds.length) {
+    return null;
   }
+
+  if (noteIds.length > 1) {
+    throw new AnkiDuplicateNotesAmbiguityError(incomingWord, noteIds);
+  }
+
+  const [matchingNoteInfo] = await invoke<Array<NoteInfoResponse>>({
+    action: 'notesInfo',
+    version: ANKI_CONNECT_VERSION,
+    params: { notes: noteIds },
+  });
 
   if (!matchingNoteInfo) return null;
 
@@ -197,15 +222,8 @@ const getExistingNoteByWord = async (
     noteId: matchingNoteInfo.noteId,
     deckName: payload.options.deckName,
     modelName: payload.options.modelName,
-    word: payload.fields.Word,
-    existingFields: {
-      Word: matchingNoteInfo.fields.Word?.value || '',
-      Context: matchingNoteInfo.fields.Context?.value || '',
-      notes: matchingNoteInfo.fields.notes?.value || '',
-      Back: matchingNoteInfo.fields.Back?.value || '',
-      'Add Reverse': matchingNoteInfo.fields['Add Reverse']?.value || '',
-      Media: matchingNoteInfo.fields.Media?.value || '',
-    },
+    word: incomingWord,
+    existingFields: flattenNoteFields(matchingNoteInfo),
     incomingFields: payload.fields,
   };
 };
@@ -280,7 +298,7 @@ export const importPayloadWithStrategy = async (
   const actualDuplicateState: AnkiDuplicateState = conflict ? 'duplicate' : 'ready';
   if (expectedDuplicateState && expectedDuplicateState !== actualDuplicateState) {
     throw new AnkiImportStateMismatchError({
-      word: payload.fields.Word,
+      word: getPayloadWordValue(payload),
       expectedState: expectedDuplicateState,
       actualState: actualDuplicateState,
       deckName: payload.options.deckName,
@@ -322,13 +340,15 @@ export const applyDuplicateResolution = async (
     return { skipped: true };
   }
 
+  const fieldsToUpdate = getNonEmptyFields(payload.fields);
+
   await invoke({
     action: 'updateNoteFields',
     version: ANKI_CONNECT_VERSION,
     params: {
       note: {
         id: conflict.noteId,
-        fields: payload.fields,
+        fields: fieldsToUpdate,
       },
     },
   });
@@ -343,11 +363,9 @@ export const applyDuplicateResolution = async (
     throw new Error(`Anki overwrite verification failed: note ${conflict.noteId} not found`);
   }
 
-  const changedFieldDiagnostics = Object.entries(payload.fields).flatMap(
+  const changedFieldDiagnostics = Object.entries(fieldsToUpdate).flatMap(
     ([fieldName, incomingValue]) => {
-      const previousValue = normalizeFieldValue(
-        conflict.existingFields[fieldName as keyof typeof conflict.existingFields]
-      );
+      const previousValue = normalizeFieldValue(conflict.existingFields[fieldName]);
       const expectedValue = normalizeFieldValue(incomingValue);
       const actualValue = normalizeFieldValue(noteInfoAfterUpdate.fields[fieldName]?.value);
 

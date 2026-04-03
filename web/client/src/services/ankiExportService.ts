@@ -1,5 +1,5 @@
 import type { AnkiExportOptions, AnkiExportPayload, ParsedWordSource } from '@/types/anki';
-import { mapWordToAnkiFields } from '@/services/ankiFieldMapper';
+import { DEFAULT_ANKI_FIELD_MAPPING, mapWordToAnkiFields } from '@/services/ankiFieldMapper';
 
 const DEFAULT_OPTIONS: AnkiExportOptions = {
   deckName: 'test',
@@ -20,14 +20,16 @@ export const createAnkiPayload = (
     tags: Array.isArray(options.tags) ? options.tags : DEFAULT_OPTIONS.tags,
   };
 
-  const fields = mapWordToAnkiFields(source.data, finalOptions.addReverse);
+  const fieldMapping = DEFAULT_ANKI_FIELD_MAPPING;
+  const fields = mapWordToAnkiFields(source.data, finalOptions.addReverse, '', fieldMapping);
   const sourceLemma =
-    fields.Word || source.record.lemma || source.record.lemma_preview || source.id;
+    fields[fieldMapping.word] || source.record.lemma || source.record.lemma_preview || source.id;
 
   return {
     fields,
     options: finalOptions,
     sourceWordId: source.id,
     sourceLemma,
+    fieldMapping,
   };
 };

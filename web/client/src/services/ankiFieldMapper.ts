@@ -1,7 +1,16 @@
 import { generateCardHTML } from '@/utils/generator';
-import type { AnkiTargetFields } from '@/types/anki';
+import type { AnkiCanonicalFields, AnkiFieldMapping, AnkiTargetFields } from '@/types/anki';
 
 type UnknownRecord = Record<string, unknown>;
+
+export const DEFAULT_ANKI_FIELD_MAPPING: AnkiFieldMapping = {
+  word: 'Word',
+  context: 'Context',
+  notes: 'notes',
+  back: 'Back',
+  addReverse: 'Add Reverse',
+  media: 'Media',
+};
 
 const getByPath = (obj: UnknownRecord, path: string): unknown =>
   path.split('.').reduce<unknown>((acc, key) => {
@@ -24,22 +33,46 @@ const firstExampleSentence = (data: UnknownRecord): string => {
   return toText((first as UnknownRecord).sentence);
 };
 
-export const mapWordToAnkiFields = (
+export const buildCanonicalAnkiFields = (
   data: UnknownRecord,
   addReverse: boolean,
   media = ''
-): AnkiTargetFields => {
+): AnkiCanonicalFields => {
   const lemma = toText(getByPath(data, 'yield.lemma'));
   const context =
     toText(getByPath(data, 'yield.user_context_sentence')) || firstExampleSentence(data);
   const back = generateCardHTML(data);
 
   return {
-    Word: lemma,
-    Context: context,
+    word: lemma,
+    context,
     notes: '',
-    Back: back,
-    'Add Reverse': addReverse ? 'true' : '',
-    Media: media,
+    back,
+    addReverse: addReverse ? 'true' : '',
+    media,
   };
+};
+
+export const mapCanonicalFieldsToAnkiFields = (
+  canonicalFields: AnkiCanonicalFields,
+  fieldMapping: AnkiFieldMapping = DEFAULT_ANKI_FIELD_MAPPING
+): AnkiTargetFields => {
+  return {
+    [fieldMapping.word]: canonicalFields.word,
+    [fieldMapping.context]: canonicalFields.context,
+    [fieldMapping.notes]: canonicalFields.notes,
+    [fieldMapping.back]: canonicalFields.back,
+    [fieldMapping.addReverse]: canonicalFields.addReverse,
+    [fieldMapping.media]: canonicalFields.media,
+  };
+};
+
+export const mapWordToAnkiFields = (
+  data: UnknownRecord,
+  addReverse: boolean,
+  media = '',
+  fieldMapping: AnkiFieldMapping = DEFAULT_ANKI_FIELD_MAPPING
+): AnkiTargetFields => {
+  const canonicalFields = buildCanonicalAnkiFields(data, addReverse, media);
+  return mapCanonicalFieldsToAnkiFields(canonicalFields, fieldMapping);
 };
