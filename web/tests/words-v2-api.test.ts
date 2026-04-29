@@ -209,11 +209,16 @@ test('V2 API: GET /api/v2/words returns English word list', async () => {
   assert.equal(item.language, 'en');
 });
 
-test('V2 API: GET /api/v2/words?language=de returns empty German word list', async () => {
-  const res = await api('GET', '?language=de&limit=1');
+test('V2 API: GET /api/v2/words?language=de returns German word list', async () => {
+  const res = await api('GET', '?language=de&limit=10');
   assert.equal(res.status, 200);
-  const body = res.data as { items?: unknown[]; total?: number };
-  assert.equal(body.total, 0, 'German list should be empty before adding any German words');
+  const body = res.data as { items?: Array<{ language: string }>; total?: number };
+  assert.ok(Array.isArray(body.items), 'items should be an array');
+  assert.ok((body.total ?? 0) >= 0, 'total should be defined');
+  // All returned items must be German
+  for (const item of (body.items || [])) {
+    assert.equal(item.language, 'de', 'German list items must have language=de');
+  }
 });
 
 test('V2 API: GET /api/v2/words/details returns word by lemma', async () => {

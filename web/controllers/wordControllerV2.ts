@@ -8,6 +8,7 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
   saveWord: (req: Request, yamlStr: string, forceUpdate?: boolean) => Promise<unknown>;
   addWord: (req: Request, word: string, yamlStr: string) => Promise<Record<string, unknown>>;
   deleteWord: (req: Request, id: string) => Promise<unknown>;
+  validateYaml: (req: Request, yamlStr: string) => Promise<{ valid: boolean; errors: string[]; language?: string }>;
 };
 
 const { asyncHandler, BadRequest, Conflict, UnprocessableEntity } =
@@ -113,6 +114,16 @@ class WordControllerV2 {
   delete = asyncHandler(async (req: Request, res: Response) => {
     await wordServiceV2.deleteWord(req, toStringValue(req.params.id));
     res.json({ success: true });
+  });
+
+  validate = asyncHandler(async (req: Request, res: Response) => {
+    const { yaml: yamlStr } = req.body as { yaml?: string };
+    if (!yamlStr) {
+      res.status(422).json({ valid: false, errors: ['YAML content is required'] });
+      return;
+    }
+    const result = await wordServiceV2.validateYaml(req, yamlStr);
+    res.json(result);
   });
 }
 

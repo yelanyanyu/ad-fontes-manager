@@ -21,6 +21,10 @@ const optionalString = (fieldPath: string) =>
 const requiredObject = <T extends z.ZodRawShape>(shape: T, _fieldPath: string) =>
   z.object(shape).passthrough();
 
+/** Like requiredObject but rejects unknown keys — use for inner objects where hierarchy matters. */
+const strictObject = <T extends z.ZodRawShape>(shape: T, fieldPath: string) =>
+  z.object(shape).strict();
+
 const nonEmptyArray = (fieldPath: string) =>
   z.array(z.unknown()).min(1, `${fieldPath} must be a non-empty array`);
 
@@ -30,5 +34,6 @@ module.exports = {
   requiredString,
   optionalString,
   requiredObject,
+  strictObject,
   nonEmptyArray,
 };

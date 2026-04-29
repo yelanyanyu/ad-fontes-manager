@@ -50,7 +50,6 @@ const defaultDbListMeta = (): DbListMeta => ({
   totalPages: 1,
   search: '',
   sort: 'newest',
-  language: 'en',
 });
 
 export const useWordStore = defineStore('word', {
@@ -126,7 +125,7 @@ export const useWordStore = defineStore('word', {
             totalPages: Number(res.totalPages || 1),
             search: String(p.search || ''),
             sort: p.sort,
-            language: String(p.language || 'en'),
+            language: String(p.language || currentLang),
           };
           wordLogger.info(
             `Loaded ${this.dbRecords.length} records from database (page ${this.dbListMeta.page}/${this.dbListMeta.totalPages})`

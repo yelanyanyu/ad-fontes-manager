@@ -5,6 +5,7 @@ const {
   isNonEmptyString,
   requiredString,
   requiredObject,
+  strictObject,
   nonEmptyArray,
 } = require('./helpers');
 
@@ -17,9 +18,9 @@ const EnglishWordSchema = z
       .optional()
       .refine(value => value === undefined || isRecord(value), 'root must be an object'),
     yield: base.yieldSchema,
-    etymology: requiredObject(
+    etymology: strictObject(
       {
-        root_and_affixes: requiredObject(
+        root_and_affixes: strictObject(
           {
             prefix: requiredString('etymology.root_and_affixes.prefix'),
             root: requiredString('etymology.root_and_affixes.root'),
@@ -28,7 +29,7 @@ const EnglishWordSchema = z
           },
           'etymology.root_and_affixes'
         ),
-        historical_origins: requiredObject(
+        historical_origins: strictObject(
           {
             history_myth: requiredString('etymology.historical_origins.history_myth'),
             source_word: requiredString('etymology.historical_origins.source_word'),
@@ -69,7 +70,7 @@ const EnglishWordSchema = z
       },
       'application'
     ),
-    nuance: requiredObject(
+    nuance: strictObject(
       {
         image_differentiation_zh: requiredString('nuance.image_differentiation_zh'),
         synonyms: nonEmptyArray('nuance.synonyms').refine((rows: unknown[]) => {
@@ -83,7 +84,7 @@ const EnglishWordSchema = z
       'nuance'
     ),
   })
-  .passthrough();
+  .strict();
 
 export interface EnglishWordSchemaInput {
   root?: Record<string, unknown>;

@@ -12,6 +12,7 @@ const wordControllerV2 = require('../controllers/wordControllerV2') as {
   save: (req: Request, res: Response) => Promise<void>;
   addWord: (req: Request, res: Response) => Promise<void>;
   delete: (req: Request, res: Response) => Promise<void>;
+  validate: (req: Request, res: Response) => Promise<void>;
 };
 
 const { requireWriteAccess } = require('../middleware/writeAuth.ts') as {
@@ -47,6 +48,9 @@ router.get('/details', validateQuery(WordDetailsQuerySchemaV2), (req: Request, r
 );
 router.get('/check', (req: Request, res: Response) =>
   wordControllerV2.check(req, res)
+);
+router.post('/validate', (req: Request, res: Response) =>
+  wordControllerV2.validate(req, res)
 );
 router.get('/:id', validateParams(WordIdParamsSchema), (req: Request, res: Response) =>
   wordControllerV2.get(req, res)

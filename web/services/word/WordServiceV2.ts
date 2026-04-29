@@ -214,6 +214,42 @@ class WordServiceV2 {
     };
   }
 
+  async validateYaml(
+    req: RequestLike,
+    yamlStr: string
+  ): Promise<{ valid: boolean; errors: string[]; language?: string }> {
+    if (!yamlStr) {
+      return { valid: false, errors: ['YAML content is required'] };
+    }
+
+    let data: Record<string, any>;
+    try {
+      data = yaml.load(yamlStr) as Record<string, any>;
+    } catch (error) {
+      const err = error as { message?: string };
+      return { valid: false, errors: [`YAML parse error: ${err.message}`] };
+    }
+
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return { valid: false, errors: ['YAML must be an object'] };
+    }
+
+    const language = this.detectLanguage(data);
+    const lemma = data?.yield?.lemma;
+    const wordLower = String(lemma || '').trim().toLowerCase();
+
+    if (!wordLower) {
+      return { valid: false, errors: ['yield.lemma is required'] };
+    }
+
+    const validation = validator.validate(data, wordLower, language);
+    return {
+      valid: validation.valid,
+      errors: validation.errors,
+      language,
+    };
+  }
+
   async checkWord(
     req: RequestLike,
     userWord: string,
@@ -288,6 +324,13 @@ class WordServiceV2 {
     if (!lemma) {
       logger.error('Save word failed: YAML missing yield.lemma');
       return { success: false, error: 'YAML missing yield.lemma' };
+    }
+
+    const wordLower = lemma;
+    const validation = validator.validate(data, wordLower, language);
+    if (!validation.valid) {
+      logger.warn({ errors: validation.errors }, 'Validation failed in saveWord');
+      return { success: false, error: 'Invalid YAML', errors: validation.errors };
     }
 
     logger.debug({ lemma, language, contentLength: yamlStr.length }, 'Saving word (v2)');

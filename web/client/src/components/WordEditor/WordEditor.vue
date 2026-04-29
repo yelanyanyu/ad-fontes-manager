@@ -23,7 +23,7 @@
  * - @/utils/conflict: 冲突处理工具（diff 适配器、YAML 格式化器）
  */
 
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
 import yaml from 'js-yaml';
 import { useWordStore } from '@/stores/wordStore';
@@ -32,6 +32,7 @@ import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import type { ConflictData, EditorStatus, SaveTarget } from '@/types/word-editor';
+import request from '@/utils/request';
 
 interface WordStoreLike {
   editorYaml: string;
@@ -119,38 +120,77 @@ const isEmpty = computed(() => {
 });
 
 /**
- * @description 处理编辑器输入并验证 YAML 格式
- * 实时验证用户输入的 YAML 文本，更新验证状态
- * 验证规则：
- * 1. 必须是有效的 YAML 语法
- * 2. 解析结果必须是对象类型（非字符串、数字、数组等）
- * 3. 解析结果必须包含 yield 字段
+ * Schema validation errors from the backend.
+ */
+const schemaErrors = ref<string[]>([]);
+const validating = ref(false);
+let validateTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * @description 处理编辑器输入并验证 YAML（语法 + Schema）
+ * - 第一步：本地 YAML 语法检查（即时）
+ * - 第二步：服务端 Schema 校验（300ms 防抖）
  * @function handleInput
  * @returns {void}
  */
 const handleInput = () => {
-  // 空输入时清空状态
   if (!input.value || input.value.trim().length === 0) {
     status.value = '';
+    schemaErrors.value = [];
     return;
   }
+
+  // Step 1: local syntax check (instant)
   try {
     const result = yaml.load(input.value) as Record<string, unknown> | null;
-    // 检查是否为对象类型（非 null、非数组、包含 yield 字段）
     if (
       result &&
       typeof result === 'object' &&
       !Array.isArray(result) &&
       result.yield !== undefined
     ) {
-      status.value = 'Valid YAML';
+      status.value = validating.value ? 'Valid YAML' : 'Valid YAML';
     } else {
       status.value = 'Invalid YAML';
+      schemaErrors.value = [];
+      return;
     }
   } catch {
     status.value = 'Invalid YAML';
+    schemaErrors.value = [];
+    return;
   }
+
+  // Step 2: debounced server-side schema validation
+  if (validateTimer) clearTimeout(validateTimer);
+  validateTimer = setTimeout(async () => {
+    validating.value = true;
+    try {
+      const res = await request.post<{
+        valid: boolean;
+        errors: string[];
+        language?: string;
+      }>('/v2/words/validate', { yaml: input.value });
+
+      if (res.valid) {
+        schemaErrors.value = [];
+        status.value = 'Valid YAML';
+      } else {
+        schemaErrors.value = res.errors || [];
+        status.value = 'Invalid YAML';
+      }
+    } catch {
+      // If the API is unreachable, still allow saving (backend will validate)
+      schemaErrors.value = [];
+    } finally {
+      validating.value = false;
+    }
+  }, 300);
 };
+
+onUnmounted(() => {
+  if (validateTimer) clearTimeout(validateTimer);
+});
 
 /**
  * @description 监听 editorYaml 变化，同步到编辑器
@@ -273,9 +313,14 @@ const overwrite = async () => {
         <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider">YAML Editor</h2>
         <span
           class="text-xs font-mono"
-          :class="status === 'Valid YAML' ? 'text-green-500' : 'text-red-500'"
-          >{{ status }}</span
-        >
+          :class="status === 'Valid YAML' ? 'text-green-500' : status === '' ? 'text-slate-400' : 'text-red-500'"
+        >{{ status || 'Ready' }}</span>
+      </div>
+      <!-- Schema validation errors -->
+      <div v-if="schemaErrors.length > 0" class="px-4 py-2 bg-red-50 border-t border-red-100 flex-none">
+        <ul class="text-xs text-red-600 space-y-0.5">
+          <li v-for="(err, i) in schemaErrors" :key="i">• {{ err }}</li>
+        </ul>
       </div>
       <div class="flex gap-2">
         <button
