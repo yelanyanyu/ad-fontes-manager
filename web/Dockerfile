@@ -64,6 +64,6 @@ EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD sh -c "wget -q -O /dev/null http://${HEALTHCHECK_HOST}:${HEALTHCHECK_PORT}/api/core/health || exit 1"
+  CMD sh -c "wget -q -O /dev/null http://${HEALTHCHECK_HOST}:${HEALTHCHECK_PORT}/api/health || exit 1"
 
 CMD ["npm", "run", "start"]

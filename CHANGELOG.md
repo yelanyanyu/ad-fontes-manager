@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-04-29
+
+### Added
+
+- Multi-language support with v2 API (`/api/v2/words`) and `words_v2` table.
+- German word support with full etymological analysis: `morphological_analysis`, `historical_phonology` (Grimm/Verner laws, OHG/MHG), `historical_semantics`, `dialectal_notes`, `observations`, `genus`, `kasus`.
+- Language-specific Zod validation schemas (`EnglishWordSchema`, `GermanWordSchema`) in `web/schemas/word/`.
+- Language detection: auto-detects language from YAML content (`contextual_meaning.de` presence, `yield.language` field).
+- Language switcher in Header (flag dropdown, localStorage persistence, list auto-refresh).
+- Language-adaptive preview rendering (card HTML + Markdown) in `generator.ts` for both English and German YAML structures.
+- `WordServiceV2`, `WordRepositoryV2`, `WordAssemblerV2` — single-table JSONB backend pipeline.
+- Database migration `20260429_language_decoupling.up.sql` with 321-word data migration.
+- 14 integration tests for v2 API (`tests/words-v2-api.test.ts`).
+
+### Changed
+
+- Frontend fully migrated to v2 API for all word operations (list, save, delete, preview, Anki export).
+- `WordValidator.validate()` now accepts optional `language` parameter.
+- `generator.ts` rewritten with language detection — renders German-specific fields (components table, phonology chain, dialect notes, etc.).
+- `appStore` extended with `currentLanguage` state, persisted to localStorage.
+- API docs updated with full v2 endpoint reference.
+
+### Database
+
+- New `words_v2` table: `id`, `lemma`, `language`, `part_of_speech`, `content` (JSONB).
+- `UNIQUE(lemma, language)` constraint — same lemma can exist in multiple languages.
+- Old 6 tables (`words`, `etymologies`, `cognates`, `examples`, `synonyms`, `user_requests`) preserved for backward compatibility.
+
 ## [1.6.0] - 2026-03-28
 
 ### 新增

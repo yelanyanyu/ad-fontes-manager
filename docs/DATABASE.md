@@ -226,6 +226,85 @@ All tables have Row Level Security (RLS) enabled:
 
 ---
 
+## words_v2 (Multi-Language, Introduced 2026-04-29)
+
+Single-table JSONB-first design that replaces the above 6-table schema for all new data. Old tables (`words`, `etymologies`, `cognates`, `examples`, `synonyms`) are preserved for backward compatibility.
+
+### ER (Simplified)
+
+```mermaid
+erDiagram
+    words_v2 ||--o{ user_requests : tracks
+
+    words_v2 {
+        uuid id PK
+        text lemma
+        text language "en, de, etc."
+        text part_of_speech
+        jsonb content "Full YAML document"
+        timestamptz created_at
+        timestamptz updated_at
+        int revision_count
+    }
+```
+
+### Columns
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | UUID | NO | `gen_random_uuid()` | Primary key |
+| `lemma` | TEXT | NO | - | Canonical form of the word |
+| `language` | TEXT | NO | `'en'` | Language code (en, de, fr, etc.) |
+| `part_of_speech` | TEXT | YES | - | Part of speech (noun, Verb, etc.) |
+| `content` | JSONB | NO | - | **Full YAML document** — the single source of truth |
+| `created_at` | TIMESTAMPTZ | NO | `now()` | Creation timestamp |
+| `updated_at` | TIMESTAMPTZ | NO | `now()` | Last update timestamp |
+| `revision_count` | INTEGER | YES | `1` | Number of times updated |
+
+### Constraints
+
+- `UNIQUE (lemma, language)` — same lemma can exist in multiple languages
+
+### Indexes
+
+- `idx_words_v2_language` on `language`
+- `idx_words_v2_lemma_lang` on `(lemma, language)`
+- `idx_words_v2_content` (GIN index on `content` JSONB)
+
+### content JSONB Structure
+
+The `content` column stores the complete YAML document as JSONB. Structure varies by language:
+
+**English:**
+```json
+{
+  "yield": { "lemma": "...", "contextual_meaning": { "en": "...", "zh": "..." }, ... },
+  "etymology": { "root_and_affixes": {...}, "historical_origins": {...}, ... },
+  "cognate_family": { "cognates": [...] },
+  "application": { "selected_examples": [...] },
+  "nuance": { "synonyms": [...], "image_differentiation_zh": "..." }
+}
+```
+
+**German:**
+```json
+{
+  "yield": { "lemma": "...", "genus": "das", "kasus": "Nominativ", "contextual_meaning": { "de": "...", "zh": "..." }, ... },
+  "etymology": { "morphological_analysis": {...}, "historical_origins": {...}, "historical_phonology": {...}, "historical_semantics": {...}, ... },
+  "cognate_family": { "cognates": [{ "word": "...", "german_equivalent": "...", "logic": "..." }] },
+  "application": { "selected_examples": [...] },
+  "nuance": { "synonyms": [{ "word": "...", "meaning_zh": "...", "connotation_difference": "..." }], ... },
+  "dialectal_notes": { "low_german": "...", ... },
+  "observations": { "register": "...", "false_friends": "...", "calque_status": "..." }
+}
+```
+
+### Migration
+
+See `migrations/20260429_language_decoupling.up.sql` for the migration script. Data was migrated by copying `words.original_yaml` directly into `words_v2.content` (not rebuilding from sub-table columns, which may be stale).
+
+---
+
 ## See Also
 
 - [schema.sql](../schema.sql) - Full schema definition
