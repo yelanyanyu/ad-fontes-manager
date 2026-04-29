@@ -13,5 +13,6 @@ export interface PreviewRecord {
   isLocal?: boolean;
   lemma?: string;
   original_yaml?: string | PreviewYamlData;
+  content?: string | PreviewYamlData;
   raw_yaml?: string;
 }

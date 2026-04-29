@@ -527,7 +527,7 @@ const fetchDbPageForSelection = async (
   page: number,
   limit: number
 ): Promise<SelectAllMatchingPageResult> => {
-  const response = await request.get<WordListApiResponse>('/words', {
+  const response = await request.get<WordListApiResponse>('/v2/words', {
     params: {
       page,
       limit,

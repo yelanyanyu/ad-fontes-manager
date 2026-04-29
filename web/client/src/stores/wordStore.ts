@@ -50,6 +50,7 @@ const defaultDbListMeta = (): DbListMeta => ({
   totalPages: 1,
   search: '',
   sort: 'newest',
+  language: 'en',
 });
 
 export const useWordStore = defineStore('word', {
@@ -90,7 +91,7 @@ export const useWordStore = defineStore('word', {
           ...r,
           isLocal: true,
           lemma: r.lemma || r.lemma_preview,
-          original_yaml: r.original_yaml || r.raw_yaml,
+          original_yaml: r.content || r.original_yaml || r.raw_yaml,
         }));
         wordLogger.info(`Loaded ${this.localRecords.length} local records`);
       } catch (e) {
@@ -103,12 +104,13 @@ export const useWordStore = defineStore('word', {
       wordLogger.debug('Fetching database records...', params);
       try {
         const p = { ...this.dbListMeta, ...params };
-        const res = await request.get('/words', {
+        const res = await request.get('/v2/words', {
           params: {
             page: p.page,
             limit: p.limit,
             search: p.search,
             sort: p.sort,
+            language: p.language || 'en',
           },
           skipErrorToast: true,
         });
@@ -122,6 +124,7 @@ export const useWordStore = defineStore('word', {
             totalPages: Number(res.totalPages || 1),
             search: String(p.search || ''),
             sort: p.sort,
+            language: String(p.language || 'en'),
           };
           wordLogger.info(
             `Loaded ${this.dbRecords.length} records from database (page ${this.dbListMeta.page}/${this.dbListMeta.totalPages})`
@@ -237,7 +240,7 @@ export const useWordStore = defineStore('word', {
           },
         });
         const res = await request.post(
-          '/words',
+          '/v2/words',
           { yaml: yamlContent, forceUpdate: !!force },
           { skipErrorToast: true }
         );
@@ -305,7 +308,7 @@ export const useWordStore = defineStore('word', {
       wordLogger.debug('Deleting word...', { id, isLocal, lemma });
 
       try {
-        const endpoint = isLocal ? `/local/${id}` : `/words/${id}`;
+        const endpoint = isLocal ? `/local/${id}` : `/v2/words/${id}`;
         await request.delete(endpoint, { skipErrorToast: true });
         wordLogger.success(`Word "${lemma}" deleted from ${isLocal ? 'local' : 'database'}`, {
           id,

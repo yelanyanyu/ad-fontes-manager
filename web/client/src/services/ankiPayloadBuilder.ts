@@ -19,7 +19,8 @@ const parseYamlData = (source: unknown): UnknownRecord | null => {
 };
 
 export const resolveParsedSource = async (record: WordRecord): Promise<ParsedWordSource> => {
-  const localData = parseYamlData(record.original_yaml || record.raw_yaml);
+  // Prefer content (v2) over original_yaml (v1) during migration period
+  const localData = parseYamlData(record.content || record.original_yaml || record.raw_yaml);
   if (localData) {
     return {
       id: String(record.id),
@@ -28,13 +29,13 @@ export const resolveParsedSource = async (record: WordRecord): Promise<ParsedWor
     };
   }
 
-  const full = await request.get<{ original_yaml?: unknown }>(
-    `/words/${encodeURIComponent(record.id)}`,
+  const full = await request.get<{ content?: unknown; original_yaml?: unknown }>(
+    `/v2/words/${encodeURIComponent(record.id)}`,
     {
       skipErrorToast: true,
     }
   );
-  const fetched = parseYamlData(full?.original_yaml);
+  const fetched = parseYamlData(full?.content || full?.original_yaml);
   if (!fetched) {
     throw new Error('Failed to resolve YAML source for export');
   }

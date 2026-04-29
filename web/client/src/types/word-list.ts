@@ -12,6 +12,7 @@ export interface WordRecord {
   lemma?: string;
   lemma_preview?: string;
   original_yaml?: string | Record<string, unknown>;
+  content?: string | Record<string, unknown>;
   raw_yaml?: string;
   yield?: WordYield;
   [key: string]: unknown;
@@ -48,4 +49,5 @@ export interface DbListMeta {
   totalPages: number;
   search: string;
   sort: SortMode;
+  language?: string;
 }

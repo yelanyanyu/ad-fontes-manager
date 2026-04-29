@@ -141,14 +141,15 @@ const loadWord = async (): Promise<void> => {
       return;
     }
 
-    let data: string | PreviewYamlData | undefined = record.original_yaml || record.raw_yaml;
+    let data: string | PreviewYamlData | undefined = record.content || record.original_yaml || record.raw_yaml;
 
     // Fetch full data if missing yaml (e.g. from DB list which might be partial)
     if (!data && !record.isLocal) {
-      const full = await request.get(`/words/${encodeURIComponent(props.wordId)}`, {
+      const full = await request.get(`/v2/words/${encodeURIComponent(props.wordId)}`, {
         skipErrorToast: true,
       });
-      data = full.original_yaml;
+      data = full.content || full.original_yaml;
+      record.content = full.content;
       record.original_yaml = full.original_yaml;
     }
 

@@ -1,7 +1,20 @@
 import type { ZodIssue } from 'zod';
 
-const { WordSchema } = require('../../schemas/word.ts') as {
-  WordSchema: {
+const { EnglishWordSchema, GermanWordSchema } = require('../../schemas/word.ts') as {
+  EnglishWordSchema: {
+    safeParse: (input: unknown) => {
+      success: boolean;
+      data: {
+        yield: {
+          lemma: string;
+        };
+      };
+      error: {
+        issues: ZodIssue[];
+      };
+    };
+  };
+  GermanWordSchema: {
     safeParse: (input: unknown) => {
       success: boolean;
       data: {
@@ -24,8 +37,10 @@ interface ValidationResult {
 }
 
 class WordValidator {
-  validate(data: unknown, wordLower: string): ValidationResult {
-    const parseResult = WordSchema.safeParse(data);
+  validate(data: unknown, wordLower: string, language: string = 'en'): ValidationResult {
+    const schema = language === 'de' ? GermanWordSchema : EnglishWordSchema;
+    const parseResult = schema.safeParse(data);
+
     if (!parseResult.success) {
       return {
         valid: false,

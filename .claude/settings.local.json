@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c \"SELECT to_regclass\\('public.words_v2'\\) IS NOT NULL AS exists;\")",
+      "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c \"SELECT version\\(\\);\")",
+      "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -f \"d:/myCode/formal-projects/ad-fontes-manager/migrations/20260429_language_decoupling.up.sql\")",
+      "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c \"SELECT COUNT\\(*\\), language FROM words_v2 GROUP BY language;\")",
+      "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c \"SELECT lemma, language, jsonb_pretty\\(content\\)->'yield'->'lemma' AS yaml_lemma, jsonb_pretty\\(content\\)->'etymology' IS NOT NULL AS has_etymology, jsonb_pretty\\(content\\)->'cognate_family' IS NOT NULL AS has_cognates FROM words_v2 LIMIT 3;\")",
+      "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c \"SELECT lemma, language, content->'yield'->>'lemma' AS yaml_lemma, \\(content->'etymology'\\) IS NOT NULL AS has_etymology, \\(content->'cognate_family'\\) IS NOT NULL AS has_cognates FROM words_v2 LIMIT 3;\")",
+      "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c ' *)"
+    ]
+  }
+}

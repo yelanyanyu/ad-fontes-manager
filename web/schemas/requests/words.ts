@@ -47,10 +47,28 @@ const AddWordBodySchema = z.object({
   yaml: NonEmptyString,
 });
 
+// v2 schemas — add optional language parameter
+const WordListQuerySchemaV2 = PaginationSchema.extend({
+  search: OptionalTrimmedString,
+  language: OptionalTrimmedString,
+  sort: z.preprocess(value => {
+    if (value === undefined || value === null || value === '') return undefined;
+    const singleValue = Array.isArray(value) ? value[0] : value;
+    return String(singleValue).trim().toLowerCase();
+  }, SortSchema.optional()),
+});
+
+const WordDetailsQuerySchemaV2 = z.object({
+  word: NonEmptyString,
+  language: OptionalTrimmedString,
+});
+
 module.exports = {
   WordIdParamsSchema,
   WordListQuerySchema,
+  WordListQuerySchemaV2,
   WordDetailsQuerySchema,
+  WordDetailsQuerySchemaV2,
   SaveWordBodySchema,
   AddWordBodySchema,
   OptionalIntegerFromQuery,
