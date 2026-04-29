@@ -6,33 +6,45 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-## [1.7.0] - 2026-04-29
+## [1.7.0] - 2026-04-30
 
-### Added
+### 新增
 
-- Multi-language support with v2 API (`/api/v2/words`) and `words_v2` table.
-- German word support with full etymological analysis: `morphological_analysis`, `historical_phonology` (Grimm/Verner laws, OHG/MHG), `historical_semantics`, `dialectal_notes`, `observations`, `genus`, `kasus`.
-- Language-specific Zod validation schemas (`EnglishWordSchema`, `GermanWordSchema`) in `web/schemas/word/`.
-- Language detection: auto-detects language from YAML content (`contextual_meaning.de` presence, `yield.language` field).
-- Language switcher in Header (flag dropdown, localStorage persistence, list auto-refresh).
-- Language-adaptive preview rendering (card HTML + Markdown) in `generator.ts` for both English and German YAML structures.
-- `WordServiceV2`, `WordRepositoryV2`, `WordAssemblerV2` — single-table JSONB backend pipeline.
-- Database migration `20260429_language_decoupling.up.sql` with 321-word data migration.
-- 14 integration tests for v2 API (`tests/words-v2-api.test.ts`).
+- 多语言支持：v2 API (`/api/v2/words`) + `words_v2` 表单表 JSONB 架构，`language` 字段区分语种。
+- 德语单词完整支持：`morphological_analysis`（形态分析）、`historical_phonology`（Grimm/Verner 定律、OHG/MHG 音变链）、`historical_semantics`（历史语义）、`dialectal_notes`（方言注释）、`observations`（语体观察），以及 `genus`（词性）、`kasus`（格位）。
+- 语言感知的 Zod 校验 Schema：`EnglishWordSchema` / `GermanWordSchema`，拆分到 `web/schemas/word/` 目录。
+- 语言自动检测：根据 YAML 内容中的 `contextual_meaning.de` 或 `yield.language` 字段判定语种。
+- Header 全局语言切换：国旗下拉菜单，localStorage 持久化记忆，切换后列表自动刷新。
+- 预览自适应渲染：`generator.ts` 重写，Card HTML 和 Markdown 均能根据语种渲染对应的词源结构（德语：组件表格、音韵链、方言注释等）。
+- `WordServiceV2`、`WordRepositoryV2`、`WordAssemblerV2`：单表 JSONB 后端管线，代码量比旧 6 表方案减少 58%。
+- 数据库迁移 `20260429_language_decoupling.up.sql`：321 条英语数据从 6 张旧表迁移至 `words_v2`。
+- `POST /api/v2/words/validate`：客户端实时校验端点，不保存数据只返回 Schema 错误。
+- YAML 编辑器实时 Schema 校验：输入时 300ms 防抖调用校验 API，红色错误列表显示层级错位或字段缺失。
+- `strictObject()`：Zod 严格对象工具，拒绝任意层级的未知字段，防止字段错放。
+- 14 个 v2 API 集成测试 (`tests/words-v2-api.test.ts`)。
 
-### Changed
+### 变更
 
-- Frontend fully migrated to v2 API for all word operations (list, save, delete, preview, Anki export).
-- `WordValidator.validate()` now accepts optional `language` parameter.
-- `generator.ts` rewritten with language detection — renders German-specific fields (components table, phonology chain, dialect notes, etc.).
-- `appStore` extended with `currentLanguage` state, persisted to localStorage.
-- API docs updated with full v2 endpoint reference.
+- 前端全线迁移至 v2 API：列表、保存、删除、预览、Anki 导出全部走 `/api/v2/words`。
+- `WordValidator.validate()` 新增 `language` 可选参数，按语种选择校验 Schema。
+- `WordServiceV2.saveWord()` 补上 Zod 校验环节（此前仅 `addWord` 校验，`saveWord` 绕过）。
+- 英语和德语 Zod Schema 顶层启用 `.strict()`，所有嵌套对象改用 `strictObject()`，拒绝多余字段。
+- 德语 Schema：`genus` 和 `kasus` 改为必填；`historical_phonology` 和 `historical_semantics` 作为合法词源子段。
+- `appStore` 新增 `currentLanguage` 状态，localStorage 持久化。
+- `defaultDbListMeta` 移除硬编码 `language: 'en'`。
 
-### Database
+### 修复
 
-- New `words_v2` table: `id`, `lemma`, `language`, `part_of_speech`, `content` (JSONB).
-- `UNIQUE(lemma, language)` constraint — same lemma can exist in multiple languages.
-- Old 6 tables (`words`, `etymologies`, `cognates`, `examples`, `synonyms`, `user_requests`) preserved for backward compatibility.
+- YAML 字段层级错位（如 `visual_imagery_zh` 误放在 `historical_origins` 内）现在被前后端双重拦截。
+- 启动时德语模式下显示英语数据的问题（`fetchDbRecords` 语言回退链修复）。
+- Docker 健康检查 URL 修正（`/api/core/health` → `/api/health`）。
+
+### 文档
+
+- `docs/DEVELOPMENT.md`：新增「多语言支持」章节，含 4 步添加新语言指南。
+- `docs/DATABASE.md`：新增 `words_v2` 表文档（ER 图、列定义、JSONB 结构示例、迁移说明）。
+- `docs/API.md`：重写为完整 v2 API 参考（list/details/add/save/delete/validate/check）。
+- `AGENTS.md`：新增多语言架构、v2 管线、德语 YAML 格式、测试命令等章节。
 
 ## [1.6.0] - 2026-03-28
 
