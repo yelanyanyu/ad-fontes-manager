@@ -77,10 +77,7 @@ const ConfigSchema = z
         .string()
         .trim()
         .min(1)
-        .refine(
-          isValidHost,
-          'anki.host must be localhost, 0.0.0.0, an IP, or a domain'
-        ),
+        .refine(isValidHost, 'anki.host must be localhost, 0.0.0.0, an IP, or a domain'),
       port: z.number().int().min(1).max(65535),
     }),
     storage: z.object({

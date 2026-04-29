@@ -1,13 +1,6 @@
 import { createHash } from 'node:crypto';
 
-type AnkiTargetFields = {
-  Word: string;
-  Context: string;
-  notes: string;
-  Back: string;
-  'Add Reverse': string;
-  Media: string;
-};
+type AnkiTargetFields = Record<string, string>;
 
 type AnkiExportPayload = {
   fields: AnkiTargetFields;
@@ -21,6 +14,18 @@ type AnkiExportPayload = {
   sourceLemma?: string;
 };
 
+type SelectedTemplate = {
+  name: string;
+  front: string;
+  back: string;
+};
+
+type BuildApkgInput = {
+  payloads: AnkiExportPayload[];
+  modelFields: string[];
+  selectedTemplate: SelectedTemplate;
+};
+
 type TemplateConfig = {
   questionFormat?: string;
   answerFormat?: string;
@@ -30,14 +35,14 @@ type TemplateConfig = {
 type AnkiExportInstance = {
   topDeckId: number;
   topModelId: number;
+  separator: string;
   db: {
     prepare: (query: string) => { getAsObject: (params?: Record<string, unknown>) => unknown };
     exec: (query: string) => Array<{ values: unknown[][] }>;
   };
   _getInitialRowValue: (table: string, column: string) => Record<string, Record<string, unknown>>;
   _update: (query: string, params: Record<string, unknown>) => void;
-  _getNoteGuid: (topDeckId: number, front: string, back: string) => string;
-  addCard: (front: string, back: string, options?: { tags?: string[] | string }) => void;
+  _getId: (table: string, col: string, ts: number) => number;
   save: () => Promise<Buffer>;
 };
 
@@ -46,7 +51,6 @@ const { default: createAnkiExport } = require('anki-apkg-export') as {
 };
 
 const DEFAULT_FILE_NAME = 'ad-fontes-export.apkg';
-const FIELD_SEPARATOR = '<hr>';
 const DEFAULT_CARD_CSS =
   '.card { font-family: Arial; font-size: 18px; text-align: left; color: black; }';
 
@@ -64,32 +68,22 @@ const toStableIdentifier = (key: string): number => {
 
 const normalizeField = (value: string | undefined): string => String(value || '').trim();
 
-const buildGuidKey = (payload: AnkiExportPayload, deckName: string): string => {
+const buildGuidKey = (
+  payload: AnkiExportPayload,
+  deckName: string,
+  primaryFieldName = ''
+): string => {
   const sourceWordId = normalizeField(payload.sourceWordId);
   if (sourceWordId) return sourceWordId;
 
-  const sourceLemma = normalizeField(payload.sourceLemma) || normalizeField(payload.fields.Word);
-  return `${sourceLemma || 'unknown'}::${deckName}`;
-};
+  const sourceLemma = normalizeField(payload.sourceLemma);
+  if (sourceLemma) return `${sourceLemma}::${deckName}`;
 
-const addGuidMarker = (content: string, guidKey: string, suffix: 'f' | 'r'): string => {
-  return `<!--adf-guid:${guidKey}:${suffix}-->${content}`;
-};
+  const primaryFieldValue = normalizeField(payload.fields[primaryFieldName]);
+  if (primaryFieldValue) return `${primaryFieldValue}::${deckName}`;
 
-const toForwardCard = (payload: AnkiExportPayload, guidKey: string): { front: string; back: string } => {
-  const front = addGuidMarker(
-    `${payload.fields.Word}${FIELD_SEPARATOR}${payload.fields.Context}`,
-    guidKey,
-    'f'
-  );
-  const back = `${payload.fields.Back}${FIELD_SEPARATOR}${payload.fields.notes}`;
-  return { front, back };
-};
-
-const toReverseCard = (payload: AnkiExportPayload, guidKey: string): { front: string; back: string } => {
-  const front = addGuidMarker(payload.fields.Back, guidKey, 'r');
-  const back = `${payload.fields.Word}${FIELD_SEPARATOR}${payload.fields.Context}${FIELD_SEPARATOR}${payload.fields.notes}`;
-  return { front, back };
+  const fallbackValue = Object.values(payload.fields).map(normalizeField).find(Boolean);
+  return `${fallbackValue || 'unknown'}::${deckName}`;
 };
 
 const shouldIncludeReverse = (payload: AnkiExportPayload): boolean => {
@@ -97,12 +91,34 @@ const shouldIncludeReverse = (payload: AnkiExportPayload): boolean => {
   return REVERSE_FIELD_TOKEN.test(marker);
 };
 
+const createFieldDefinition = (name: string, ord: number): Record<string, unknown> => ({
+  name,
+  media: [],
+  sticky: false,
+  rtl: false,
+  ord,
+  font: 'Arial',
+  size: 20,
+});
+
+const createTemplateDefinition = (selectedTemplate: SelectedTemplate): Record<string, unknown> => ({
+  name: selectedTemplate.name,
+  qfmt: selectedTemplate.front,
+  did: null,
+  bafmt: '',
+  afmt: selectedTemplate.back,
+  ord: 0,
+  bqfmt: '',
+});
+
 const patchDeckAndModelIdentifiers = (
   exporter: AnkiExportInstance,
   deckId: number,
   modelId: number,
   deckName: string,
-  modelName: string
+  modelName: string,
+  modelFields: string[],
+  selectedTemplate: SelectedTemplate
 ): void => {
   exporter.topDeckId = deckId;
   exporter.topModelId = modelId;
@@ -128,22 +144,16 @@ const patchDeckAndModelIdentifiers = (
       id: modelId,
       did: deckId,
       name: modelName,
+      sortf: 0,
+      css: String(model.css || DEFAULT_CARD_CSS),
+      flds: modelFields.map((fieldName, index) => createFieldDefinition(fieldName, index)),
+      tmpls: [createTemplateDefinition(selectedTemplate)],
+      req: [[0, 'all', [0]]],
     },
   };
   exporter._update('update col set models=:models where id=1', {
     ':models': JSON.stringify(nextModels),
   });
-};
-
-const patchGuidGeneration = (exporter: AnkiExportInstance, deckId: number): void => {
-  exporter._getNoteGuid = (_deckId: number, front: string, back: string): string => {
-    const marker = /<!--adf-guid:([^:>]+):([fr])-->/.exec(front);
-    if (marker?.[1]) {
-      return createHash('sha1').update(`${deckId}:${marker[1]}:${marker[2]}`).digest('hex');
-    }
-
-    return createHash('sha1').update(`${deckId}:${front}:${back}`).digest('hex');
-  };
 };
 
 const createExporter = (deckName: string): AnkiExportInstance => {
@@ -169,29 +179,136 @@ const normalizeFileName = (value: string): string => {
   return safe.toLowerCase().endsWith('.apkg') ? safe : `${safe}.apkg`;
 };
 
-const buildApkgBuffer = async (payloads: AnkiExportPayload[]): Promise<Buffer> => {
+const checksum = (value: string): number => {
+  return parseInt(createHash('sha1').update(value).digest('hex').slice(0, 8), 16);
+};
+
+const toTagsString = (tags: string[]): string => {
+  if (!tags.length) return '';
+  return ` ${tags.map(tag => tag.replace(/ /g, '_')).join(' ')} `;
+};
+
+const getObjectIdValue = (row: unknown, key: string): number | null => {
+  if (!row || typeof row !== 'object') return null;
+  const value = (row as Record<string, unknown>)[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const findExistingNoteId = (exporter: AnkiExportInstance, guid: string): number | null => {
+  const row = exporter.db
+    .prepare('SELECT id from notes WHERE guid = :guid ORDER BY id DESC LIMIT 1')
+    .getAsObject({ ':guid': guid });
+  return getObjectIdValue(row, 'id');
+};
+
+const findExistingCardId = (exporter: AnkiExportInstance, noteId: number): number | null => {
+  const row = exporter.db
+    .prepare('SELECT id from cards WHERE nid = :nid AND ord = 0 ORDER BY id DESC LIMIT 1')
+    .getAsObject({ ':nid': noteId });
+  return getObjectIdValue(row, 'id');
+};
+
+const toNoteFieldPayload = (
+  payload: AnkiExportPayload,
+  modelFields: string[],
+  separator: string
+): { flds: string; sfld: string } => {
+  const fieldValues = modelFields.map(fieldName => String(payload.fields[fieldName] || ''));
+  const sfld = fieldValues[0] || '';
+  return {
+    flds: fieldValues.join(separator),
+    sfld,
+  };
+};
+
+const upsertNoteAndCard = (
+  exporter: AnkiExportInstance,
+  payload: AnkiExportPayload,
+  modelFields: string[],
+  deckId: number,
+  modelId: number,
+  guidKey: string
+): void => {
+  const now = Date.now();
+  const guid = createHash('sha1').update(`${deckId}:${guidKey}`).digest('hex');
+  const existingNoteId = findExistingNoteId(exporter, guid);
+  const noteId = existingNoteId ?? exporter._getId('notes', 'id', now);
+  const { flds, sfld } = toNoteFieldPayload(payload, modelFields, exporter.separator);
+  const tags = toTagsString(normalizeTags(payload.options.tags));
+
+  exporter._update(
+    'insert or replace into notes values(:id,:guid,:mid,:mod,:usn,:tags,:flds,:sfld,:csum,:flags,:data)',
+    {
+      ':id': noteId,
+      ':guid': guid,
+      ':mid': modelId,
+      ':mod': exporter._getId('notes', 'mod', now),
+      ':usn': -1,
+      ':tags': tags,
+      ':flds': flds,
+      ':sfld': sfld,
+      ':csum': checksum(flds),
+      ':flags': 0,
+      ':data': '',
+    }
+  );
+
+  const existingCardId = findExistingCardId(exporter, noteId);
+  const cardId = existingCardId ?? exporter._getId('cards', 'id', now);
+  exporter._update(
+    'insert or replace into cards values(:id,:nid,:did,:ord,:mod,:usn,:type,:queue,:due,:ivl,:factor,:reps,:lapses,:left,:odue,:odid,:flags,:data)',
+    {
+      ':id': cardId,
+      ':nid': noteId,
+      ':did': deckId,
+      ':ord': 0,
+      ':mod': exporter._getId('cards', 'mod', now),
+      ':usn': -1,
+      ':type': 0,
+      ':queue': 0,
+      ':due': 179,
+      ':ivl': 0,
+      ':factor': 0,
+      ':reps': 0,
+      ':lapses': 0,
+      ':left': 0,
+      ':odue': 0,
+      ':odid': 0,
+      ':flags': 0,
+      ':data': '',
+    }
+  );
+};
+
+const buildApkgBuffer = async (input: BuildApkgInput): Promise<Buffer> => {
+  const { payloads, modelFields, selectedTemplate } = input;
   const first = payloads[0];
   const deckName = first.options.deckName.trim();
   const modelName = first.options.modelName.trim();
   const deckId = toStableIdentifier(`deck:${deckName}`);
   const modelId = toStableIdentifier(
-    `model:${modelName}|fields:Word,Context,notes,Back,Add Reverse,Media|templates:forward+reverse`
+    `model:${modelName}|fields:${modelFields.join(',')}|template:${selectedTemplate.name}|${selectedTemplate.front}|${selectedTemplate.back}`
   );
 
   const exporter = createExporter(deckName);
-  patchDeckAndModelIdentifiers(exporter, deckId, modelId, deckName, modelName);
-  patchGuidGeneration(exporter, deckId);
+  patchDeckAndModelIdentifiers(
+    exporter,
+    deckId,
+    modelId,
+    deckName,
+    modelName,
+    modelFields,
+    selectedTemplate
+  );
 
   for (const payload of payloads) {
-    const guidKey = buildGuidKey(payload, deckName);
-    const tags = normalizeTags(payload.options.tags);
-    const forwardCard = toForwardCard(payload, guidKey);
-    exporter.addCard(forwardCard.front, forwardCard.back, { tags });
-
-    if (shouldIncludeReverse(payload)) {
-      const reverseCard = toReverseCard(payload, guidKey);
-      exporter.addCard(reverseCard.front, reverseCard.back, { tags });
-    }
+    const guidKey = buildGuidKey(payload, deckName, modelFields[0] || '');
+    upsertNoteAndCard(exporter, payload, modelFields, deckId, modelId, guidKey);
   }
 
   return exporter.save();
@@ -204,4 +321,3 @@ module.exports = {
   shouldIncludeReverse,
   buildGuidKey,
 };
-

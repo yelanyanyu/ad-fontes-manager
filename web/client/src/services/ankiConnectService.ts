@@ -1,4 +1,5 @@
 import type {
+  AnkiApkgExportRequest,
   AnkiConflictAction,
   AnkiDuplicateConflict,
   AnkiDuplicateState,
@@ -7,6 +8,7 @@ import type {
   AnkiConnectInvokeResult,
   AnkiExportPayload,
   AnkiImportStrategy,
+  AnkiModelTemplate,
 } from '@/types/anki';
 import { DEFAULT_ANKI_FIELD_MAPPING } from '@/services/ankiFieldMapper';
 import request from '@/utils/request';
@@ -243,6 +245,27 @@ export const getModelNames = async (): Promise<string[]> =>
     version: ANKI_CONNECT_VERSION,
   });
 
+export const getModelFieldNames = async (modelName: string): Promise<string[]> =>
+  invoke<string[]>({
+    action: 'modelFieldNames',
+    version: ANKI_CONNECT_VERSION,
+    params: { modelName },
+  });
+
+export const getModelTemplates = async (modelName: string): Promise<AnkiModelTemplate[]> => {
+  const templates = await invoke<Record<string, { Front?: string; Back?: string }>>({
+    action: 'modelTemplates',
+    version: ANKI_CONNECT_VERSION,
+    params: { modelName },
+  });
+
+  return Object.entries(templates).map(([name, template]) => ({
+    name,
+    front: template?.Front || '',
+    back: template?.Back || '',
+  }));
+};
+
 export const importPayloadToAnki = async (
   payload: AnkiExportPayload
 ): Promise<{ noteId: number }> => {
@@ -396,19 +419,15 @@ export const applyDuplicateResolution = async (
 };
 
 export const downloadPayloadsAsApkg = async (
-  payloads: AnkiExportPayload[],
-  fileName: string
+  requestPayload: AnkiApkgExportRequest
 ): Promise<Blob> => {
-  if (!payloads.length) {
+  if (!requestPayload.payloads.length) {
     throw new Error('At least one payload is required for .apkg export');
   }
 
   return request.post<Blob>(
     '/anki/export-apkg',
-    {
-      fileName,
-      payloads,
-    },
+    requestPayload,
     {
       responseType: 'blob',
       skipErrorToast: true,

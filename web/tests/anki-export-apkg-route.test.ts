@@ -16,12 +16,10 @@ function freshRequire(modulePath: string): any {
   return require(modulePath);
 }
 
-function loadCoreRouterWithApkgMock(
-  apkgService: {
-    buildApkgBuffer: (payloads: unknown[]) => Promise<Buffer>;
-    normalizeApkgFileName: (value: string) => string;
-  }
-): any {
+function loadCoreRouterWithApkgMock(apkgService: {
+  buildApkgBuffer: (payloads: unknown[]) => Promise<Buffer>;
+  normalizeApkgFileName: (value: string) => string;
+}): any {
   const originalCore = require.cache[coreRoutePath];
   const originalApkgService = require.cache[apkgServicePath];
 
@@ -237,10 +235,7 @@ test('POST /anki/export-apkg should return binary apkg with download headers', a
   assert.equal(result.error, null);
   assert.equal(result.statusCode, 200);
   assert.equal(result.headers['Content-Type'], 'application/octet-stream');
-  assert.equal(
-    result.headers['Content-Disposition'],
-    'attachment; filename="english_words.apkg"'
-  );
+  assert.equal(result.headers['Content-Disposition'], 'attachment; filename="english_words.apkg"');
   assert.ok(Buffer.isBuffer(result.payload));
   assert.equal((result.payload as Buffer).subarray(0, 2).toString(), 'PK');
 });

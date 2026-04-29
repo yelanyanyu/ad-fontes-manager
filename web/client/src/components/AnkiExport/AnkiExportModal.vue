@@ -1,26 +1,12 @@
 <script setup lang="ts">
-import type { AnkiDuplicateConflict, AnkiExportPayload } from '@/types/anki';
-
-defineProps<{
-  open: boolean;
-  busy: boolean;
-  error: string;
-  payload: AnkiExportPayload | null;
-  duplicateConflict: AnkiDuplicateConflict | null;
-  ankiConnected: boolean;
-  deckOptions: string[];
-  modelOptions: string[];
-  deckName: string;
-  modelName: string;
-  addReverse: boolean;
-  tagsInput: string;
-  apkgPath: string;
-}>();
+import { computed, toRefs } from 'vue';
+import type { AnkiDuplicateConflict, AnkiExportPayload, AnkiModelTemplate } from '@/types/anki';
 
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'update:deckName', value: string): void;
   (e: 'update:modelName', value: string): void;
+  (e: 'update:templateName', value: string): void;
   (e: 'update:addReverse', value: boolean): void;
   (e: 'update:tagsInput', value: string): void;
   (e: 'update:apkgPath', value: string): void;
@@ -32,6 +18,32 @@ const emit = defineEmits<{
 }>();
 
 const onOverlayClick = (): void => emit('close');
+
+const props = defineProps<{
+  open: boolean;
+  busy: boolean;
+  error: string;
+  payload: AnkiExportPayload | null;
+  duplicateConflict: AnkiDuplicateConflict | null;
+  ankiConnected: boolean;
+  deckOptions: string[];
+  modelOptions: string[];
+  modelFieldNames: string[];
+  templateOptions: AnkiModelTemplate[];
+  deckName: string;
+  modelName: string;
+  templateName: string;
+  addReverse: boolean;
+  tagsInput: string;
+  apkgPath: string;
+}>();
+const { open, busy, error, payload, duplicateConflict, ankiConnected } = toRefs(props);
+
+const previewFieldNames = computed(() => {
+  if (!props.payload) return [];
+  if (props.modelFieldNames.length > 0) return props.modelFieldNames;
+  return Object.keys(props.payload.fields);
+});
 </script>
 
 <template>
@@ -65,18 +77,18 @@ const onOverlayClick = (): void => emit('close');
           </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <label class="text-sm text-slate-700 font-medium">
             Deck Name
             <select
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              :value="deckName"
+              :value="props.deckName"
               @change="emit('update:deckName', ($event.target as HTMLSelectElement).value)"
             >
-              <option v-if="!deckOptions.length" :value="deckName">
-                {{ deckName || '(empty)' }}
+              <option v-if="!props.deckOptions.length" :value="props.deckName">
+                {{ props.deckName || '(empty)' }}
               </option>
-              <option v-for="deck in deckOptions" :key="deck" :value="deck">{{ deck }}</option>
+              <option v-for="deck in props.deckOptions" :key="deck" :value="deck">{{ deck }}</option>
             </select>
           </label>
 
@@ -84,13 +96,29 @@ const onOverlayClick = (): void => emit('close');
             Model Name
             <select
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              :value="modelName"
+              :value="props.modelName"
               @change="emit('update:modelName', ($event.target as HTMLSelectElement).value)"
             >
-              <option v-if="!modelOptions.length" :value="modelName">
-                {{ modelName || '(empty)' }}
+              <option v-if="!props.modelOptions.length" :value="props.modelName">
+                {{ props.modelName || '(empty)' }}
               </option>
-              <option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option>
+              <option v-for="model in props.modelOptions" :key="model" :value="model">
+                {{ model }}
+              </option>
+            </select>
+          </label>
+
+          <label class="text-sm text-slate-700 font-medium">
+            Card Template
+            <select
+              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              :value="props.templateName"
+              @change="emit('update:templateName', ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">Select template</option>
+              <option v-for="template in props.templateOptions" :key="template.name" :value="template.name">
+                {{ template.name }}
+              </option>
             </select>
           </label>
         </div>
@@ -100,7 +128,7 @@ const onOverlayClick = (): void => emit('close');
             Tags (comma separated)
             <input
               class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              :value="tagsInput"
+              :value="props.tagsInput"
               @input="emit('update:tagsInput', ($event.target as HTMLInputElement).value)"
             />
           </label>
@@ -108,7 +136,7 @@ const onOverlayClick = (): void => emit('close');
             <input
               type="checkbox"
               class="rounded border-slate-300"
-              :checked="addReverse"
+              :checked="props.addReverse"
               @change="emit('update:addReverse', ($event.target as HTMLInputElement).checked)"
             />
             <span>Add Reverse Card</span>
@@ -120,7 +148,7 @@ const onOverlayClick = (): void => emit('close');
           <div class="mt-1 flex gap-2">
             <input
               class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              :value="apkgPath"
+              :value="props.apkgPath"
               @input="emit('update:apkgPath', ($event.target as HTMLInputElement).value)"
             />
             <button
@@ -174,26 +202,20 @@ const onOverlayClick = (): void => emit('close');
           </div>
         </div>
 
-        <div v-if="payload" class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div v-if="props.payload" class="rounded-lg border border-slate-200 bg-slate-50 p-4">
           <h4 class="font-bold text-slate-700 text-sm mb-3">Target Fields Preview</h4>
           <div class="grid grid-cols-1 gap-2 text-xs">
-            <div class="bg-white border border-slate-200 rounded p-2">
-              <strong>Word:</strong> {{ payload.fields.Word }}
-            </div>
-            <div class="bg-white border border-slate-200 rounded p-2">
-              <strong>Context:</strong> {{ payload.fields.Context }}
-            </div>
-            <div class="bg-white border border-slate-200 rounded p-2">
-              <strong>notes:</strong> {{ payload.fields.notes }}
-            </div>
-            <div class="bg-white border border-slate-200 rounded p-2 break-all">
-              <strong>Back:</strong> {{ payload.fields.Back.slice(0, 240) }}...
-            </div>
-            <div class="bg-white border border-slate-200 rounded p-2">
-              <strong>Add Reverse:</strong> {{ payload.fields['Add Reverse'] || '(empty)' }}
-            </div>
-            <div class="bg-white border border-slate-200 rounded p-2">
-              <strong>Media:</strong> {{ payload.fields.Media || '(empty)' }}
+            <div
+              v-for="fieldName in previewFieldNames"
+              :key="fieldName"
+              class="bg-white border border-slate-200 rounded p-2 break-all"
+            >
+              <strong>{{ fieldName }}:</strong>
+              {{
+                (props.payload.fields[fieldName] || '').length > 240
+                  ? `${props.payload.fields[fieldName].slice(0, 240)}...`
+                  : props.payload.fields[fieldName] || '(empty)'
+              }}
             </div>
           </div>
         </div>

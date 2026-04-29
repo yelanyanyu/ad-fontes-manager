@@ -23,6 +23,19 @@ export interface AnkiExportPayload {
   fieldMapping?: AnkiFieldMapping;
 }
 
+export interface AnkiModelTemplate {
+  name: string;
+  front: string;
+  back: string;
+}
+
+export interface AnkiApkgExportRequest {
+  fileName: string;
+  payloads: AnkiExportPayload[];
+  modelFields: string[];
+  selectedTemplate: AnkiModelTemplate;
+}
+
 export interface AnkiConnectInvokePayload {
   action: string;
   version: number;

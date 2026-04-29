@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { BatchAnkiExportItem, BatchAnkiProgress } from '@/types/anki';
+import type { AnkiModelTemplate, BatchAnkiExportItem, BatchAnkiProgress } from '@/types/anki';
 
 defineProps<{
   open: boolean;
@@ -11,8 +11,10 @@ defineProps<{
   ankiConnected: boolean;
   deckOptions: string[];
   modelOptions: string[];
+  templateOptions: AnkiModelTemplate[];
   deckName: string;
   modelName: string;
+  templateName: string;
   addReverse: boolean;
   tagsInput: string;
   canEditConfig: boolean;
@@ -26,6 +28,7 @@ const emit = defineEmits<{
   (e: 'return'): void;
   (e: 'update:deckName', value: string): void;
   (e: 'update:modelName', value: string): void;
+  (e: 'update:templateName', value: string): void;
   (e: 'update:addReverse', value: boolean): void;
   (e: 'update:tagsInput', value: string): void;
   (e: 'connect-anki'): void;
@@ -93,7 +96,7 @@ const statusClassMap: Record<string, string> = {
           </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
           <label class="text-sm text-slate-700 font-medium">
             Deck Name
             <select
@@ -116,6 +119,20 @@ const statusClassMap: Record<string, string> = {
             >
               <option v-if="!modelOptions.length" :value="modelName">{{ modelName || '(empty)' }}</option>
               <option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option>
+            </select>
+          </label>
+          <label class="text-sm text-slate-700 font-medium">
+            Card Template
+            <select
+              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              :value="templateName"
+              :disabled="!canEditConfig"
+              @change="emit('update:templateName', ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">Select template</option>
+              <option v-for="template in templateOptions" :key="template.name" :value="template.name">
+                {{ template.name }}
+              </option>
             </select>
           </label>
           <label class="text-sm text-slate-700 font-medium">

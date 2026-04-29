@@ -68,7 +68,9 @@ test('.env.example lists the supported runtime env vars and excludes deprecated 
     'LOG_ROTATION_MAX_FILES',
   ];
 
-  expectedKeys.forEach(key => assert.equal(declaredKeys.has(key), true, `${key} missing from .env.example`));
+  expectedKeys.forEach(key =>
+    assert.equal(declaredKeys.has(key), true, `${key} missing from .env.example`)
+  );
   ['LOG_ENABLE_FILE', 'LOG_FILE_PATH', 'LOG_AUDIT'].forEach(key =>
     assert.equal(declaredKeys.has(key), false, `${key} should not appear in .env.example`)
   );
@@ -78,11 +80,11 @@ test('server and config modules consume the documented env-backed options', () =
   const serverSource = fs.readFileSync(serverPath, 'utf8');
   const configSource = fs.readFileSync(configModulePath, 'utf8');
 
-  assert.equal(serverSource.includes("server.cors_origins"), true);
-  assert.equal(serverSource.includes("server.rate_limit"), true);
-  assert.equal(serverSource.includes("server.timeout_ms"), true);
-  assert.equal(serverSource.includes("security.helmet"), true);
-  assert.equal(serverSource.includes("security.hsts"), true);
+  assert.equal(serverSource.includes('server.cors_origins'), true);
+  assert.equal(serverSource.includes('server.rate_limit'), true);
+  assert.equal(serverSource.includes('server.timeout_ms'), true);
+  assert.equal(serverSource.includes('security.helmet'), true);
+  assert.equal(serverSource.includes('security.hsts'), true);
 
   assert.equal(configSource.includes('LOG_ROTATION_INTERVAL'), true);
   assert.equal(configSource.includes('LOG_ROTATION_MAX_SIZE'), true);

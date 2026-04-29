@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { getDefaultAnkiOptions } from '@/services/ankiExportService';
 import { getInitialAnkiExportOptions } from '@/services/ankiExportOptionsStore';
-import type { BatchAnkiExportItem, BatchAnkiProgress } from '@/types/anki';
+import type { AnkiModelTemplate, BatchAnkiExportItem, BatchAnkiProgress } from '@/types/anki';
 
 interface BatchAnkiState {
   isOpen: boolean;
@@ -17,8 +17,11 @@ interface BatchAnkiState {
   ankiConnected: boolean;
   deckOptions: string[];
   modelOptions: string[];
+  modelFieldNames: string[];
+  templateOptions: AnkiModelTemplate[];
   deckName: string;
   modelName: string;
+  templateName: string;
   addReverse: boolean;
   tagsInput: string;
   summaryVisible: boolean;
@@ -49,8 +52,11 @@ export const useBatchAnkiStore = defineStore('batchAnki', {
     ankiConnected: false,
     deckOptions: [],
     modelOptions: [],
+    modelFieldNames: [],
+    templateOptions: [],
     deckName: initial.deckName || defaults.deckName,
     modelName: initial.modelName || defaults.modelName,
+    templateName: initial.templateName || '',
     addReverse:
       typeof initial.addReverse === 'boolean' ? initial.addReverse : defaults.addReverse,
     tagsInput: initial.tagsInput || defaults.tags.join(', '),

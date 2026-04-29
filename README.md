@@ -66,6 +66,70 @@ npm run dev
 - 前端：`http://localhost:5173`
 - 后端 API：`http://localhost:8080/api`
 
+## Docker 构建与运行
+
+推荐优先使用仓库自带脚本 [scripts/start-docker-prod.ps1](/d:/myCode/formal-projects/ad-fontes-manager/scripts/start-docker-prod.ps1)，它会校验生产环境变量、停止旧容器、按当前项目代码重新构建 `app` 服务，然后再启动容器。
+
+先检查 `.env.production`，至少确认下面几项已经按你的环境填写：
+
+- `ADMIN_TOKEN`
+- `VITE_ADMIN_TOKEN`（应与 `ADMIN_TOKEN` 保持一致）
+- `DATABASE_URL`
+- `SERVER_HOST=0.0.0.0`
+
+然后在仓库根目录执行脚本：
+
+```powershell
+./scripts/start-docker-prod.ps1
+```
+
+常用参数：
+
+```powershell
+# 完整重建，不复用旧缓存
+./scripts/start-docker-prod.ps1 -NoCache
+
+# 保留当前容器，不先执行 docker compose down
+./scripts/start-docker-prod.ps1 -SkipDown
+
+# 如需同时拉取较新的基础镜像，再显式开启
+./scripts/start-docker-prod.ps1 -PullBaseImages
+
+# 指定环境文件
+./scripts/start-docker-prod.ps1 -EnvFile .env.production
+```
+
+如果你想直接执行底层 Docker 命令，对应关系如下：
+
+```bash
+# 按当前项目代码重新构建 app 镜像
+docker compose --env-file .env.production build app
+
+# 启动 app 容器
+docker compose --env-file .env.production up -d --force-recreate app
+```
+
+如果你需要完整重建但不复用缓存：
+
+```bash
+docker compose --env-file .env.production build --no-cache app
+```
+
+如果你确实还想连基础镜像也一起更新，再额外加上 `--pull`：
+
+```bash
+docker compose --env-file .env.production build --pull app
+```
+
+如果你的环境仍然使用旧版命令，也可以把 `docker compose` 替换成 `docker-compose`。
+
+执行完成后，可用下面的命令查看镜像和容器状态：
+
+```bash
+docker compose --env-file .env.production images
+docker compose --env-file .env.production ps
+```
+
 ## 常用命令
 
 ```bash

@@ -1,4 +1,4 @@
-﻿import type { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 
 const wordService = require('../services/wordService') as {
   listWords: (req: Request) => Promise<unknown>;

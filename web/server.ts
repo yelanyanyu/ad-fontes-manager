@@ -25,8 +25,8 @@ const { httpLogger, loggers } = require('./utils/logger.ts') as {
 
 const app = express();
 const corsOrigins = config.get<string[] | string>('server.cors_origins', ['*']);
-const normalizedCorsOrigins = (Array.isArray(corsOrigins) ? corsOrigins : [corsOrigins]).map(origin =>
-  String(origin).trim()
+const normalizedCorsOrigins = (Array.isArray(corsOrigins) ? corsOrigins : [corsOrigins]).map(
+  origin => String(origin).trim()
 );
 const isCorsWildcard = normalizedCorsOrigins.includes('*');
 const requestLimitPerMinute = Number(config.get<number>('server.rate_limit', 0));
@@ -61,7 +61,10 @@ app.use(
     isCorsWildcard
       ? undefined
       : {
-          origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {
+          origin: (
+            origin: string | undefined,
+            callback: (error: Error | null, allow?: boolean) => void
+          ) => {
             if (!origin || normalizedCorsOrigins.includes(origin)) {
               callback(null, true);
               return;

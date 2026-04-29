@@ -6,7 +6,8 @@ const coreRoutePath = path.resolve(__dirname, '../routes/core.ts');
 const dbModulePath = path.resolve(__dirname, '../db/index.ts');
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
-process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://test:test@127.0.0.1:5432/test_db';
+process.env.DATABASE_URL =
+  process.env.DATABASE_URL || 'postgresql://test:test@127.0.0.1:5432/test_db';
 process.env.ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'test-admin-token';
 
 function loadCoreRouterWithUnavailableDb(): any {

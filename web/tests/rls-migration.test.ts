@@ -46,4 +46,3 @@ test('phase0 RLS migration down restores public write policy', () => {
     true
   );
 });
-

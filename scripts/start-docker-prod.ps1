@@ -1,7 +1,8 @@
 param(
   [string]$EnvFile = ".env.production",
   [switch]$NoCache,
-  [switch]$SkipDown
+  [switch]$SkipDown,
+  [switch]$PullBaseImages
 )
 
 Set-StrictMode -Version Latest
@@ -93,11 +94,20 @@ if (-not $SkipDown) {
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-Write-Host "[3/4] Building app image..." -ForegroundColor Cyan
-$buildArgs = @("build", "app")
+if ($PullBaseImages) {
+  Write-Host "[3/4] Pulling newer base images and rebuilding app image..." -ForegroundColor Cyan
+} else {
+  Write-Host "[3/4] Rebuilding app image from the current project state..." -ForegroundColor Cyan
+}
+
+$buildArgs = @("build")
+if ($PullBaseImages) {
+  $buildArgs += "--pull"
+}
 if ($NoCache) {
   $buildArgs += "--no-cache"
 }
+$buildArgs += "app"
 & docker @composeBase @buildArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -109,6 +119,10 @@ Write-Host ""
 Write-Host "Deployment completed." -ForegroundColor Green
 Write-Host "Service status:" -ForegroundColor Green
 & docker @composeBase ps
+
+Write-Host ""
+Write-Host "Built image list:" -ForegroundColor Green
+& docker @composeBase images
 
 Write-Host ""
 Write-Host "If frontend still returns 403, clear browser local token:" -ForegroundColor Yellow

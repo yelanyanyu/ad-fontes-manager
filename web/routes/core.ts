@@ -12,14 +12,16 @@ const { AnkiExportApkgBodySchema } = require('../schemas/requests/anki.ts') as {
   AnkiExportApkgBodySchema: unknown;
 };
 const { buildApkgBuffer, normalizeApkgFileName } = require('../services/anki/apkgService.ts') as {
-  buildApkgBuffer: (
+  buildApkgBuffer: (input: {
     payloads: Array<{
       options: { deckName: string; modelName: string };
       fields: Record<string, string>;
       sourceWordId?: string;
       sourceLemma?: string;
-    }>
-  ) => Promise<Buffer>;
+    }>;
+    modelFields: string[];
+    selectedTemplate: { name: string; front: string; back: string };
+  }) => Promise<Buffer>;
   normalizeApkgFileName: (value: string) => string;
 };
 
@@ -214,10 +216,16 @@ router.post(
         sourceWordId?: string;
         sourceLemma?: string;
       }>;
+      modelFields: string[];
+      selectedTemplate: { name: string; front: string; back: string };
     };
     const deckName = body.payloads[0]?.options.deckName || 'ad-fontes-export';
     const finalFileName = normalizeApkgFileName(body.fileName || `${deckName}.apkg`);
-    const apkgBuffer = await buildApkgBuffer(body.payloads);
+    const apkgBuffer = await buildApkgBuffer({
+      payloads: body.payloads,
+      modelFields: body.modelFields,
+      selectedTemplate: body.selectedTemplate,
+    });
 
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${finalFileName}"`);

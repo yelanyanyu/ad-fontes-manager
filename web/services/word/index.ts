@@ -1,4 +1,4 @@
-﻿const WordService = require('./WordService');
+const WordService = require('./WordService');
 const WordValidator = require('./WordValidator');
 const WordRepository = require('./WordRepository');
 const WordAssembler = require('./WordAssembler');

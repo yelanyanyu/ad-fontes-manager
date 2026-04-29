@@ -3,7 +3,9 @@ import { storeToRefs } from 'pinia';
 import {
   checkDuplicateConflict,
   getDeckNames,
+  getModelFieldNames,
   getModelNames,
+  getModelTemplates,
   importPayloadWithStrategy,
   isAnkiDuplicateConflictError,
   pingAnkiConnect,
@@ -21,7 +23,12 @@ import { buildExportPayload } from '@/services/ankiPayloadBuilder';
 import { exportBatchApkgViaAnkiConnect } from '@/services/apkgExportService';
 import { useBatchAnkiStore } from '@/stores/batchAnkiStore';
 import { makeWordSelectionKey } from '@/utils/wordSelection';
-import type { BatchAnkiExportItem, AnkiConflictAction, BatchAnkiProgressPhase } from '@/types/anki';
+import type {
+  AnkiConflictAction,
+  AnkiModelTemplate,
+  BatchAnkiExportItem,
+  BatchAnkiProgressPhase,
+} from '@/types/anki';
 import type { WordRecord } from '@/types/word-list';
 
 const ankiSessionCache: {
@@ -50,8 +57,11 @@ export const useBatchAnkiExport = () => {
     ankiConnected,
     deckOptions,
     modelOptions,
+    modelFieldNames,
+    templateOptions,
     deckName,
     modelName,
+    templateName,
     addReverse,
     tagsInput,
     summaryVisible,
@@ -99,9 +109,32 @@ export const useBatchAnkiExport = () => {
     saveStoredAnkiExportOptions({
       deckName: deckName.value,
       modelName: modelName.value,
+      templateName: templateName.value,
       addReverse: addReverse.value,
       tags: tags.value,
     });
+  };
+
+  const loadModelMetadata = async (): Promise<void> => {
+    if (!ankiConnected.value || !modelName.value.trim()) {
+      modelFieldNames.value = [];
+      templateOptions.value = [];
+      templateName.value = '';
+      return;
+    }
+
+    const [fields, templates] = await Promise.all([
+      getModelFieldNames(modelName.value),
+      getModelTemplates(modelName.value),
+    ]);
+    modelFieldNames.value = fields;
+    templateOptions.value = templates;
+
+    const hasSelectedTemplate = templates.some(template => template.name === templateName.value);
+    if (!hasSelectedTemplate) {
+      templateName.value = templates[0]?.name || '';
+    }
+    persistOptions();
   };
 
   const connectAnki = async (force = false): Promise<void> => {
@@ -135,6 +168,7 @@ export const useBatchAnkiExport = () => {
       if (models.length > 0 && !models.includes(modelName.value)) {
         modelName.value = models[0];
       }
+      await loadModelMetadata();
       persistOptions();
     } catch (err) {
       const e = err as { message?: string };
@@ -178,6 +212,12 @@ export const useBatchAnkiExport = () => {
         await connectAnki();
       } catch {
         // Keep modal open; user can retry connect manually.
+      }
+    } else {
+      try {
+        await loadModelMetadata();
+      } catch {
+        // Keep modal open and let user retry connect manually.
       }
     }
   };
@@ -343,10 +383,24 @@ export const useBatchAnkiExport = () => {
           });
         })
       );
+      if (!ankiConnected.value) {
+        throw new Error('Anki is not connected. Please connect Anki to load model fields/templates.');
+      }
+      if (!modelFieldNames.value.length) {
+        throw new Error('No model fields loaded for selected model. Please refresh Anki data.');
+      }
+      const selectedTemplate: AnkiModelTemplate | undefined = templateOptions.value.find(
+        template => template.name === templateName.value
+      );
+      if (!selectedTemplate) {
+        throw new Error('Please select a card template for .apkg export.');
+      }
 
       await exportBatchApkgViaAnkiConnect(
         payloads,
-        normalizeExportFileName(`${deckName.value || 'ad-fontes-export'}-batch.apkg`)
+        normalizeExportFileName(`${deckName.value || 'ad-fontes-export'}-batch.apkg`),
+        modelFieldNames.value,
+        selectedTemplate
       );
     } catch (err) {
       const e = err as { message?: string };
@@ -466,10 +520,30 @@ export const useBatchAnkiExport = () => {
     }
   };
 
-  watch([deckName, modelName, addReverse, tagsInput], () => {
+  watch([deckName, addReverse, tagsInput], () => {
     persistOptions();
     if (!isOpen.value || configLocked.value) return;
     resetCheckState();
+  });
+
+  watch(modelName, () => {
+    persistOptions();
+    if (!ankiConnected.value) {
+      modelFieldNames.value = [];
+      templateOptions.value = [];
+      templateName.value = '';
+      return;
+    }
+    void loadModelMetadata().catch(err => {
+      const e = err as { message?: string };
+      error.value = e.message || 'Failed to load model template metadata';
+    });
+    if (!isOpen.value || configLocked.value) return;
+    resetCheckState();
+  });
+
+  watch(templateName, () => {
+    persistOptions();
   });
 
   const progressLabel = computed(() => {
@@ -529,11 +603,14 @@ export const useBatchAnkiExport = () => {
     items,
     deckName,
     modelName,
+    templateName,
     addReverse,
     tagsInput,
     ankiConnected,
     deckOptions,
     modelOptions,
+    modelFieldNames,
+    templateOptions,
     progress,
     progressLabel,
     stageLabel,

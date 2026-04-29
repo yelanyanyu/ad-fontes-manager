@@ -318,8 +318,11 @@ const {
   ankiConnected: ankiConnected,
   deckOptions: ankiDeckOptions,
   modelOptions: ankiModelOptions,
+  modelFieldNames: ankiModelFieldNames,
+  templateOptions: ankiTemplateOptions,
   deckName: ankiDeckName,
   modelName: ankiModelName,
+  templateName: ankiTemplateName,
   addReverse: ankiAddReverse,
   tagsInput: ankiTagsInput,
   apkgPath: ankiApkgPath,
@@ -383,6 +386,10 @@ const setAnkiModelName = (value: string): void => {
   ankiModelName.value = value;
 };
 
+const setAnkiTemplateName = (value: string): void => {
+  ankiTemplateName.value = value;
+};
+
 const setAnkiAddReverse = (value: boolean): void => {
   ankiAddReverse.value = value;
 };
@@ -413,8 +420,10 @@ const {
   ankiConnected: batchAnkiConnected,
   deckOptions: batchAnkiDeckOptions,
   modelOptions: batchAnkiModelOptions,
+  templateOptions: batchAnkiTemplateOptions,
   deckName: batchAnkiDeckName,
   modelName: batchAnkiModelName,
+  templateName: batchAnkiTemplateName,
   addReverse: batchAnkiAddReverse,
   tagsInput: batchAnkiTagsInput,
   open: openBatchAnkiExportModal,
@@ -454,6 +463,10 @@ const setBatchDeckName = (value: string): void => {
 
 const setBatchModelName = (value: string): void => {
   batchAnkiModelName.value = value;
+};
+
+const setBatchTemplateName = (value: string): void => {
+  batchAnkiTemplateName.value = value;
 };
 
 const setBatchAddReverse = (value: boolean): void => {
@@ -774,8 +787,11 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :anki-connected="ankiConnected"
       :deck-options="ankiDeckOptions"
       :model-options="ankiModelOptions"
+      :model-field-names="ankiModelFieldNames"
+      :template-options="ankiTemplateOptions"
       :deck-name="ankiDeckName"
       :model-name="ankiModelName"
+      :template-name="ankiTemplateName"
       :add-reverse="ankiAddReverse"
       :tags-input="ankiTagsInput"
       :apkg-path="ankiApkgPath"
@@ -784,6 +800,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @browse-apkg-path="browseAnkiApkgPath"
       @update:deck-name="setAnkiDeckName"
       @update:model-name="setAnkiModelName"
+      @update:template-name="setAnkiTemplateName"
       @update:add-reverse="setAnkiAddReverse"
       @update:tags-input="setAnkiTagsInput"
       @update:apkg-path="setAnkiApkgPath"
@@ -801,8 +818,10 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :anki-connected="batchAnkiConnected"
       :deck-options="batchAnkiDeckOptions"
       :model-options="batchAnkiModelOptions"
+      :template-options="batchAnkiTemplateOptions"
       :deck-name="batchAnkiDeckName"
       :model-name="batchAnkiModelName"
+      :template-name="batchAnkiTemplateName"
       :add-reverse="batchAnkiAddReverse"
       :tags-input="batchAnkiTagsInput"
       :can-edit-config="batchAnkiCanEditConfig"
@@ -814,6 +833,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @connect-anki="connectBatchAnki(true)"
       @update:deck-name="setBatchDeckName"
       @update:model-name="setBatchModelName"
+      @update:template-name="setBatchTemplateName"
       @update:add-reverse="setBatchAddReverse"
       @update:tags-input="setBatchTagsInput"
       @check-duplicates="checkBatchDuplicates"

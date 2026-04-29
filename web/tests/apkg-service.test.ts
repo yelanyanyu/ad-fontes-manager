@@ -4,12 +4,9 @@ const path = require('node:path');
 
 const apkgServicePath = path.resolve(__dirname, '../services/anki/apkgService.ts');
 
-const {
-  buildApkgBuffer,
-  buildGuidKey,
-  shouldIncludeReverse,
-  toStableIdentifier,
-} = require(apkgServicePath) as {
+const { buildApkgBuffer, buildGuidKey, shouldIncludeReverse, toStableIdentifier } = require(
+  apkgServicePath
+) as {
   buildApkgBuffer: (
     payloads: Array<{
       fields: {
@@ -117,4 +114,3 @@ test('buildApkgBuffer should create a zip-like apkg for single and multi payload
   assert.equal(one.subarray(0, 2).toString(), 'PK');
   assert.equal(two.subarray(0, 2).toString(), 'PK');
 });
-
