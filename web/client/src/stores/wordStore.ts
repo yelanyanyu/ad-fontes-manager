@@ -101,7 +101,9 @@ export const useWordStore = defineStore('word', {
 
     async fetchDbRecords(params: Partial<DbListMeta> = {}): Promise<void> {
       this.loading = true;
-      wordLogger.debug('Fetching database records...', params);
+      const appStore = useAppStore();
+      const currentLang = appStore.currentLanguage;
+      wordLogger.debug('Fetching database records...', { ...params, language: currentLang });
       try {
         const p = { ...this.dbListMeta, ...params };
         const res = await request.get('/v2/words', {
@@ -110,7 +112,7 @@ export const useWordStore = defineStore('word', {
             limit: p.limit,
             search: p.search,
             sort: p.sort,
-            language: p.language || 'en',
+            language: p.language || currentLang,
           },
           skipErrorToast: true,
         });

@@ -318,6 +318,89 @@ export const useExampleStore = defineStore('example', () => {
 });
 ```
 
+### 多语言支持
+
+项目通过 v2 API (`/api/v2/words`) 支持多语言词源数据。添加新语言只需修改 **4 个位置**，前端 UI 自动适配。
+
+#### 1. 注册语言（前端下拉菜单）
+
+`web/client/src/stores/appStore.ts`：
+
+```typescript
+// 1. 扩展类型联合
+export type LanguageCode = 'en' | 'de' | 'fr';  // 新增 'fr'
+
+// 2. 在 SUPPORTED_LANGUAGES 数组中添加一项
+export const SUPPORTED_LANGUAGES: { code: LanguageCode; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'de', label: 'Deutsch' },
+  { code: 'fr', label: 'Français' },  // ← 加这一行即可
+];
+```
+
+Header 下拉菜单、语言持久化存储（localStorage）、列表自动刷新——全部基于此数组动态渲染，**无需修改任何 Vue 组件**。
+
+#### 2. 添加 Zod 校验 Schema
+
+`web/schemas/word/` 目录下新建语言文件（如 `french.ts`），参考 `german.ts` 的结构：
+
+```typescript
+// web/schemas/word/french.ts
+const { createBaseWordSchema } = require('./base');
+const base = createBaseWordSchema({ meaningLang: 'fr' });
+
+const FrenchWordSchema = z.object({
+  yield: base.yieldSchema,
+  etymology: /* 法语特有的词源结构 */,
+  // ...
+}).passthrough();
+
+module.exports = { FrenchWordSchema };
+```
+
+然后在 `web/schemas/word/index.ts` 中导出：
+
+```typescript
+const { FrenchWordSchema } = require('./french');
+module.exports = { EnglishWordSchema, GermanWordSchema, FrenchWordSchema };
+```
+
+#### 3. 更新 TypeScript 类型
+
+`node/types/word-yaml.ts` — 添加新语言的 YAML 文档接口（参考 `GermanWordYamlDocument`）。
+
+#### 4. 注册语言检测
+
+`web/services/word/WordServiceV2.ts` — 在 `detectLanguage()` 方法中添加检测规则：
+
+```typescript
+detectLanguage(data: Record<string, any>): string {
+  if (data?.yield?.language === 'fr') return 'fr';
+  if (data?.yield?.contextual_meaning?.fr && !data?.yield?.contextual_meaning?.en) return 'fr';
+  // ... 其他语言检测
+  return 'en';
+}
+```
+
+同时更新 `WordValidator.ts` 中的 Schema 选择逻辑：
+
+```typescript
+const schema = language === 'de' ? GermanWordSchema
+  : language === 'fr' ? FrenchWordSchema
+  : EnglishWordSchema;
+```
+
+#### 关键文件索引
+
+| 关注点 | 文件 |
+|--------|------|
+| 前端语言配置 | `web/client/src/stores/appStore.ts` |
+| Zod Schema | `web/schemas/word/*.ts` |
+| TypeScript 类型 | `node/types/word-yaml.ts` |
+| 语言检测 + 业务逻辑 | `web/services/word/WordServiceV2.ts` |
+| 校验路由 | `web/services/word/WordValidator.ts` |
+| 数据库 | `words_v2` 表——无需修改，`language` 列接受任意字符串 |
+
 ## 调试技巧
 
 ### 后端调试

@@ -87,6 +87,7 @@ interface WordStoreLike {
 }
 
 interface AppStoreLike {
+  currentLanguage: string;
   addToast: (message: string, type: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
@@ -652,6 +653,11 @@ onActivated(() => {
 });
 watch(searchMode, value => {
   localStorage.setItem(searchModeStorageKey, value);
+});
+
+// Auto-refresh list when language changes
+watch(() => appStore.currentLanguage, () => {
+  wordStore.fetchDbRecords({ page: 1, language: appStore.currentLanguage });
 });
 const canSearch = computed(() => {
   return !loading.value;
