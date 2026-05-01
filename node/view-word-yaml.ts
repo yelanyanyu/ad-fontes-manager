@@ -1,96 +1,83 @@
 /**
- * 查看数据库中词条的原始 YAML 数据
- * 使用方法: tsx view-word-yaml.ts <word_lemma>
- * 示例: tsx view-word-yaml.ts interrogate
+ * 查看数据库中词条的内容 (YAML 格式输出)
+ * 使用方法: npx tsx view-word-yaml.ts <word_lemma> [language]
+ * 示例: npx tsx view-word-yaml.ts interrogate
+ *       npx tsx view-word-yaml.ts See de
  */
-
-import { Pool } from 'pg';
+import Database from 'better-sqlite3';
 import yaml from 'js-yaml';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
 
-// 读取 .env 文件
-function loadEnv() {
-  const envPath = path.resolve(__dirname, '../.env');
-  if (fs.existsSync(envPath)) {
-    const content = fs.readFileSync(envPath, 'utf-8');
-    content.split('\n').forEach(line => {
-      const match = line.match(/^([^#=]+)=(.*)$/);
-      if (match) {
-        process.env[match[1].trim()] = match[2].trim();
-      }
-    });
-  }
-}
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-loadEnv();
+const rootDir = path.resolve(__dirname, '..');
+const rawPath = process.env.DATABASE_URL || path.resolve(rootDir, 'web/data/ad_fontes.db');
+const resolvedPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(rootDir, rawPath);
 
 const wordLemma = process.argv[2];
+const language = process.argv[3] || 'en';
 
 if (!wordLemma) {
   console.error('请提供要查询的词条名称');
-  console.error('用法: tsx view-word-yaml.ts <word_lemma>');
+  console.error('用法: npx tsx view-word-yaml.ts <word_lemma> [language]');
   process.exit(1);
 }
 
-// 解析 DATABASE_URL
-function parseDatabaseUrl(url: string) {
-  const match = url.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
-  if (!match) {
-    throw new Error('无法解析 DATABASE_URL');
-  }
-  return {
-    user: match[1],
-    password: match[2],
-    host: match[3],
-    port: parseInt(match[4]),
-    database: match[5],
-  };
+interface WordRow {
+  id: string;
+  lemma: string;
+  language: string;
+  part_of_speech: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  revision_count: number;
 }
 
-async function viewWordYaml(lemma: string) {
-  const dbConfig = process.env.DATABASE_URL 
-    ? parseDatabaseUrl(process.env.DATABASE_URL)
-    : {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432'),
-        database: process.env.DB_NAME || 'ad_fontes',
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '',
-      };
+function viewWordYaml(lemma: string, lang: string): void {
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`SQLite database not found: ${resolvedPath}`);
+    process.exit(1);
+  }
 
-  const pool = new Pool(dbConfig);
+  const db = new Database(resolvedPath);
+  db.pragma('journal_mode = WAL');
 
   try {
-    // 查询数据库中的词条
-    const dbResult = await pool.query(
-      'SELECT id, lemma, original_yaml FROM words WHERE lower(lemma) = $1',
-      [lemma.toLowerCase()]
-    );
+    const rows = db
+      .prepare('SELECT * FROM words_v2 WHERE lower(lemma) = ? AND language = ?')
+      .all(lemma.toLowerCase(), lang) as WordRow[];
 
-    if (dbResult.rows.length === 0) {
-      console.log(`❌ 数据库中未找到词条: ${lemma}`);
+    if (rows.length === 0) {
+      console.log(`❌ 数据库中未找到词条: ${lemma} (language: ${lang})`);
       return;
     }
 
-    const dbRecord = dbResult.rows[0];
-    console.log(`\n📋 词条: ${dbRecord.lemma}`);
-    console.log(`🆔 ID: ${dbRecord.id}`);
-    console.log('\n' + '═'.repeat(60));
-    console.log('📄 原始 YAML 数据:');
-    console.log('═'.repeat(60) + '\n');
-    
-    if (dbRecord.original_yaml) {
-      console.log(yaml.dump(dbRecord.original_yaml));
-    } else {
-      console.log('❌ 没有原始 YAML 数据');
-    }
+    for (const row of rows) {
+      let content: unknown;
+      try {
+        content = JSON.parse(row.content);
+      } catch {
+        content = row.content;
+      }
 
+      console.log(`\n📋 词条: ${row.lemma}`);
+      console.log(`🆔 ID: ${row.id}`);
+      console.log(`🌐 Language: ${row.language}`);
+      console.log(`📝 Revision: ${row.revision_count}`);
+      console.log(`📅 Updated: ${row.updated_at}`);
+      console.log('\n' + '═'.repeat(60));
+      console.log('📄 内容 (YAML):');
+      console.log('═'.repeat(60) + '\n');
+      console.log(yaml.dump(content));
+    }
   } catch (error) {
     console.error('查询出错:', error);
   } finally {
-    await pool.end();
+    db.close();
   }
 }
 
-viewWordYaml(wordLemma);
+viewWordYaml(wordLemma, language);

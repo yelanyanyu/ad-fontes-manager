@@ -995,13 +995,23 @@ git commit -m "refactor(db): remove postgres legacy data layer"
   - `web/routes/sync.ts`：`/sync/check`、`/sync/execute` 从旧 `wordService`（v1，依赖 PG）切到 `WordServiceV2`。
   - `web/localStore.ts`：从 JSON 文件存储迁移到 SQLite `_local_words` / `_local_config` 表，保留旧 JSON 自动导入和 `.json.migrated` 重命名逻辑。
   - 测试：新增 `web/tests/localStore-sqlite.test.ts`（8 个用例），更新 `web/tests/core-status.test.ts` 适配 SQLite mock。
-  - `.env`：`DATABASE_URL` 改为 SQLite 路径，旧 PG 连接串保留为 `PG_DATABASE_URL` 供 M5 迁移脚本使用。
+  - `.env`：`DATABASE_URL` 删除，web 和 node 各自使用正确的默认路径；旧 PG 连接串保留为 `PG_DATABASE_URL`。
   - 验证通过：`type-check`、`lint`、15 个测试（core-status 2 + localStore 8 + wordRepositoryV2 3 + wordServiceV2 2）全部通过。
+- M5：数据迁移校验补充。
+  - 新增 `node/verify-sqlite-migration.ts`：校验行数、语言分布、唯一约束、内容完整性、空字段。支持 `--pg-check` 跨库比对。
+  - 校验结果：331 行，en=324，de=7，0 重复，20 条抽样 JSON 内容有效，唯一约束通过，0 error，0 warning。
+- M6：迁移 `node/` CLI 工具到 SQLite。
+  - `node/utils/db-config.ts`：新增 `resolveDbPath()`、`openSqliteDb()`，PG 连接抛错。
+  - `node/init_db.ts`：从 PG `CREATE DATABASE` + `schema.sql` 改为 SQLite drizzle migration 应用 + 表检查。
+  - `node/loader.ts`：从旧 6 表 PG loader 改为 `words_v2` SQLite loader，支持 `--force` 覆盖。
+  - `node/check-word-diff.ts`：从 PG `words` 表改为 SQLite `words_v2`，可选 YAML 文件对比。
+  - `node/view-word-yaml.ts`：从 PG `words` 表改为 SQLite `words_v2`，支持 language 过滤。
+  - `node/migrate_v2.ts`：废弃，输出迁移指引。
+  - `node/package.json`：删除 `migrate-v2`，新增 `verify-sqlite-migration`、`export-pg-to-sqlite`，添加 `@types/better-sqlite3`、`@types/js-yaml`、`@types/deep-diff`。
+  - 验证通过：`type-check`、`lint`、`init_db`、`view-word-yaml`、`check-word-diff` smoke 全部通过。
 
 ### 尚未完成
 
-- M5：补充更完整的数据迁移校验（抽样内容一致性、重复冲突报告、可选回滚/重跑说明）。
-- M6：迁移 `node/` CLI 工具到 SQLite。
 - M7：切换主入口、清理 v1/PG 旧代码、更新 Docker 和文档。
 
 ### 当前可测试范围
@@ -1010,3 +1020,4 @@ git commit -m "refactor(db): remove postgres legacy data layer"
 - `/api/local`、`/api/sync/check`、`/api/sync/execute` 已切换至 SQLite + WordServiceV2。
 - `LocalStore` 已从 JSON 文件迁到 SQLite，旧 JSON 自动导入。
 - 默认 SQLite 文件已有真实词库数据：`web/data/ad_fontes.db`（331 条，en=324，de=7）。
+- Node CLI 工具全部迁移到 SQLite，PG 依赖仅保留在 `verify-sqlite-migration.ts` 的可选 PG 交叉校验路径和 `pg` npm 包中。

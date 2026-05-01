@@ -22,7 +22,10 @@
       "Bash(node -e \"const Database = require\\('better-sqlite3'\\); const db = new Database\\('./data/ad_fontes.db'\\); const tables = db.prepare\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\"\\).all\\(\\); console.log\\('Tables:', JSON.stringify\\(tables.map\\(t=>t.name\\)\\)\\); db.close\\(\\);\")",
       "Bash(npx tsx *)",
       "Bash(npm run *)",
-      "Bash(npx eslint *)"
+      "Bash(npx eslint *)",
+      "Bash(npm install *)",
+      "Bash(node -e \"const Database=require\\('better-sqlite3'\\);const db=new Database\\('../web/data/ad_fontes.db'\\);const rows=db.prepare\\('SELECT lemma,language FROM words_v2 LIMIT 5'\\).all\\(\\);console.log\\(JSON.stringify\\(rows,null,2\\)\\);db.close\\(\\)\")",
+      "Bash(echo \"exit: $?\")"
     ]
   }
 }

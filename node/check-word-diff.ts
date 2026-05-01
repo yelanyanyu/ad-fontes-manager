@@ -1,161 +1,122 @@
 /**
- * 查询指定词条的缓存与数据库原始 YAML 是否有差别
- * 使用方法: tsx check-word-diff.ts <word_lemma>
- * 示例: tsx check-word-diff.ts interrogate
+ * 查询指定词条内容，可选与 YAML 文件对比
+ * 使用方法: npx tsx check-word-diff.ts <word_lemma> [yaml_file]
+ * 示例: npx tsx check-word-diff.ts interrogate
+ *       npx tsx check-word-diff.ts interrogate ../example.yml
  */
-
-import { Pool } from 'pg';
+import Database from 'better-sqlite3';
 import yaml from 'js-yaml';
 import { diff } from 'deep-diff';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as dotenv from 'dotenv';
 
-// 读取 .env 文件
-function loadEnv() {
-  const envPath = path.resolve(__dirname, '../.env');
-  if (fs.existsSync(envPath)) {
-    const content = fs.readFileSync(envPath, 'utf-8');
-    content.split('\n').forEach(line => {
-      const match = line.match(/^([^#=]+)=(.*)$/);
-      if (match) {
-        process.env[match[1].trim()] = match[2].trim();
-      }
-    });
-  }
-}
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-loadEnv();
+const rootDir = path.resolve(__dirname, '..');
+const rawPath = process.env.DATABASE_URL || path.resolve(rootDir, 'web/data/ad_fontes.db');
+const resolvedPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(rootDir, rawPath);
 
 const wordLemma = process.argv[2];
+const yamlFile = process.argv[3];
 
 if (!wordLemma) {
   console.error('请提供要查询的词条名称');
-  console.error('用法: tsx check-word-diff.ts <word_lemma>');
+  console.error('用法: npx tsx check-word-diff.ts <word_lemma> [yaml_file]');
   process.exit(1);
 }
 
-// 解析 DATABASE_URL
-function parseDatabaseUrl(url: string) {
-  const match = url.match(/postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
-  if (!match) {
-    throw new Error('无法解析 DATABASE_URL');
-  }
-  return {
-    user: match[1],
-    password: match[2],
-    host: match[3],
-    port: parseInt(match[4]),
-    database: match[5],
-  };
+interface WordRow {
+  id: string;
+  lemma: string;
+  language: string;
+  part_of_speech: string | null;
+  content: string;
+  created_at: string;
+  updated_at: string;
+  revision_count: number;
 }
 
-async function checkWordDiff(lemma: string) {
-  const dbConfig = process.env.DATABASE_URL 
-    ? parseDatabaseUrl(process.env.DATABASE_URL)
-    : {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432'),
-        database: process.env.DB_NAME || 'ad_fontes',
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '',
-      };
+function checkWordDiff(lemma: string): void {
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`SQLite database not found: ${resolvedPath}`);
+    process.exit(1);
+  }
 
-  const pool = new Pool(dbConfig);
+  const db = new Database(resolvedPath);
+  db.pragma('journal_mode = WAL');
 
   try {
-    // 1. 查询数据库中的词条
-    const dbResult = await pool.query(
-      'SELECT id, lemma, original_yaml FROM words WHERE lower(lemma) = $1',
-      [lemma.toLowerCase()]
-    );
+    const row = db
+      .prepare('SELECT * FROM words_v2 WHERE lower(lemma) = ?')
+      .get(lemma.toLowerCase()) as WordRow | undefined;
 
-    if (dbResult.rows.length === 0) {
+    if (!row) {
       console.log(`❌ 数据库中未找到词条: ${lemma}`);
       return;
     }
 
-    const dbRecord = dbResult.rows[0];
+    let content: unknown;
+    try {
+      content = JSON.parse(row.content);
+    } catch {
+      content = row.content;
+    }
+
     console.log(`\n📋 数据库记录:`);
-    console.log(`   ID: ${dbRecord.id}`);
-    console.log(`   Lemma: ${dbRecord.lemma}`);
-    console.log(`   Original YAML 存在: ${dbRecord.original_yaml ? '✅' : '❌'}`);
+    console.log(`   ID: ${row.id}`);
+    console.log(`   Lemma: ${row.lemma}`);
+    console.log(`   Language: ${row.language}`);
+    console.log(`   Part of Speech: ${row.part_of_speech || 'N/A'}`);
+    console.log(`   Revision: ${row.revision_count}`);
+    console.log(`   Updated: ${row.updated_at}`);
 
-    // 2. 检查本地存储（如果存在）
-    const localStoragePath = path.resolve(__dirname, '../web/client/public/local-storage/words.json');
-    let localRecord = null;
+    if (yamlFile) {
+      const yamlPath = path.resolve(yamlFile);
+      if (!fs.existsSync(yamlPath)) {
+        console.log(`\n❌ YAML file not found: ${yamlPath}`);
+        return;
+      }
 
-    if (fs.existsSync(localStoragePath)) {
-      const localData = JSON.parse(fs.readFileSync(localStoragePath, 'utf-8'));
-      localRecord = localData.records?.find(
-        (r: any) => r.lemma?.toLowerCase() === lemma.toLowerCase()
-      );
-    }
+      const yamlStr = fs.readFileSync(yamlPath, 'utf8');
+      const yamlData = yaml.load(yamlStr);
 
-    if (localRecord) {
-      console.log(`\n💾 本地存储记录:`);
-      console.log(`   ID: ${localRecord.id}`);
-      console.log(`   Lemma: ${localRecord.lemma}`);
-      console.log(`   Raw YAML 存在: ${localRecord.raw_yaml ? '✅' : '❌'}`);
-    } else {
-      console.log(`\n💾 本地存储: 未找到记录`);
-    }
+      console.log(`\n🔍 对比数据库内容 vs YAML 文件...`);
 
-    // 3. 对比数据
-    if (dbRecord.original_yaml && localRecord?.raw_yaml) {
-      const dbYaml = dbRecord.original_yaml;
-      const localYaml = yaml.load(localRecord.raw_yaml);
-
-      console.log(`\n🔍 开始对比数据...`);
-
-      // 清理数据（移除用户相关字段）
-      const cleanData = (data: any) => {
-        if (!data || typeof data !== 'object') return data;
-        const cleaned = { ...data };
-        delete cleaned.user_word;
-        delete cleaned.user_context_sentence;
-        return cleaned;
-      };
-
-      const cleanDb = cleanData(dbYaml);
-      const cleanLocal = cleanData(localYaml);
-
-      const differences = diff(cleanLocal, cleanDb);
+      const differences = diff(yamlData, content);
 
       if (differences) {
         console.log(`\n⚠️  发现差异 (${differences.length} 处):\n`);
-        differences.forEach((d: any, index: number) => {
-          console.log(`   [${index + 1}] 路径: ${d.path?.join('.') || 'root'}`);
-          console.log(`       类型: ${d.kind}`);
-          if (d.lhs !== undefined) console.log(`       本地值: ${JSON.stringify(d.lhs)}`);
-          if (d.rhs !== undefined) console.log(`       数据库值: ${JSON.stringify(d.rhs)}`);
+        for (const d of differences.slice(0, 30)) {
+          console.log(`   路径: ${(d as { path?: string[] }).path?.join('.') || 'root'}`);
+          console.log(`   类型: ${(d as { kind: string }).kind}`);
+          if ((d as { lhs?: unknown }).lhs !== undefined) {
+            console.log(`   文件值: ${JSON.stringify((d as { lhs?: unknown }).lhs)}`);
+          }
+          if ((d as { rhs?: unknown }).rhs !== undefined) {
+            console.log(`   数据库值: ${JSON.stringify((d as { rhs?: unknown }).rhs)}`);
+          }
           console.log('');
-        });
+        }
+        if (differences.length > 30) {
+          console.log(`   ... 和 ${differences.length - 30} 处更多差异`);
+        }
       } else {
-        console.log(`\n✅ 数据完全一致（清理后）`);
+        console.log(`\n✅ 数据完全一致`);
       }
 
-      // 4. 显示完整数据对比
-      console.log(`\n📊 完整数据对比:`);
-      console.log('─'.repeat(60));
-      console.log('本地存储 YAML:');
-      console.log(yaml.dump(localYaml).substring(0, 500) + '...');
-      console.log('─'.repeat(60));
-      console.log('数据库 Original YAML:');
-      console.log(yaml.dump(dbYaml).substring(0, 500) + '...');
+      console.log('\n─'.repeat(60));
+      console.log('文件 YAML (前500字符):');
+      console.log(yamlStr.substring(0, 500) + (yamlStr.length > 500 ? '...' : ''));
     } else {
-      console.log(`\n⚠️  缺少对比数据，无法进行比较`);
-      if (!dbRecord.original_yaml) {
-        console.log(`   - 数据库中没有 original_yaml`);
-      }
-      if (!localRecord?.raw_yaml) {
-        console.log(`   - 本地存储中没有 raw_yaml`);
-      }
+      console.log('\n─'.repeat(60));
+      console.log('数据库内容 (YAML):');
+      console.log(yaml.dump(content));
     }
-
   } catch (error) {
     console.error('查询出错:', error);
   } finally {
-    await pool.end();
+    db.close();
   }
 }
 

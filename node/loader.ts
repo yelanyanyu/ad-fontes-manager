@@ -1,180 +1,132 @@
-const yaml = require('js-yaml') as {
-  load: (content: string) => unknown;
-};
+/**
+ * YAML to SQLite words_v2 loader
+ * 使用方法: npx tsx loader.ts <yaml_file> [--force]
+ *   --force  覆盖已存在的 (lemma, language) 词条
+ */
+import Database from 'better-sqlite3';
+import yaml from 'js-yaml';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
+import * as dotenv from 'dotenv';
 
-const { Pool } = require('pg') as {
-  Pool: new (config: { connectionString?: string }) => {
-    connect: () => Promise<DbPoolClient>;
-    end: () => Promise<void>;
-  };
-};
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-require('dotenv').config();
+const rootDir = path.resolve(__dirname, '..');
+const rawPath = process.env.DATABASE_URL || path.resolve(rootDir, 'web/data/ad_fontes.db');
+const resolvedPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(rootDir, rawPath);
 
-type DbPoolClient = import('./utils/db-config').DbPoolClient;
-type DbQueryResult<T extends Record<string, unknown> = Record<string, unknown>> =
-  import('./utils/db-config').DbQueryResult<T>;
-type WordYamlDocument = import('./types/word-yaml').WordYamlDocument;
+const yamlFile = process.argv[2];
+const forceUpdate = process.argv.includes('--force');
 
-const SAMPLE_YAML = `
-yield:
-  user_word: "household"
-  lemma: "household"
-  syllabification: "house-hold"
-  user_context_sentence: "The entire household gathered in the living room to celebrate their grandfather's birthday."
-  part_of_speech: "Noun (Collective)"
-  contextual_meaning:
-    en: "A group of people, often a family, who live together in the same dwelling and share meals or living space."
-    zh: "A family or people living together."
-  other_common_meanings:
-    - "Domestic management or affairs (e.g., household expenses)."
-    - "Familiar or common (adj), as in 'a household name'."
+if (!yamlFile) {
+  console.error('用法: npx tsx loader.ts <yaml_file> [--force]');
+  console.error('  --force  覆盖已存在的 (lemma, language) 词条');
+  process.exit(1);
+}
 
-etymology:
-  root_and_affixes:
-    prefix: "N/A"
-    root: "Compound Word: House + Hold"
-    suffix: "N/A"
-    structure_analysis: "Composite of 'House' (dwelling) + 'Hold' (possession/custody)."
-  historical_origins:
-    history_myth: "In Medieval England, a 'household' was an economic unit including servants and apprentices."
-    source_word: "Middle English 'houshold' (14c.)"
-    pie_root: "House: *(s)keu-; Hold: *haldan"
-  visual_imagery_zh: "Imagine building and maintaining a shelter."
-  meaning_evolution_zh: "From managing a house to people living together in one house."
+if (!fs.existsSync(yamlFile)) {
+  console.error(`File not found: ${yamlFile}`);
+  process.exit(1);
+}
 
-cognate_family:
-  instruction: "Use Chinese in this section."
-  cognates:
-    - word: "Husband"
-      logic: "House + bond"
-    - word: "Behold"
-      logic: "Be + hold"
+interface WordRow {
+  id: string;
+  lemma: string;
+  language: string;
+  revision_count: number;
+}
 
-application:
-  selected_examples:
-    - type: "Literal"
-      sentence: "She manages the household accounts with great care."
-      translation_zh: "She manages home accounts carefully."
+function detectLanguage(data: Record<string, unknown>): string {
+  if ((data as { yield?: { language?: string } }).yield?.language === 'de') return 'de';
+  if ((data as { yield?: { language?: string } }).yield?.language === 'en') return 'en';
+  const cm = (data as { yield?: { contextual_meaning?: Record<string, unknown> } }).yield
+    ?.contextual_meaning;
+  if (cm?.de && !cm?.en) return 'de';
+  return 'en';
+}
 
-nuance:
-  synonyms:
-    - word: "Family"
-      meaning_zh: "Blood relation focus"
-  image_differentiation_zh: "Household focuses on shared living unit."
-`;
+function loadYamlToDb(): void {
+  if (!fs.existsSync(resolvedPath)) {
+    console.error(`SQLite database not found: ${resolvedPath}`);
+    console.error('Run "npx tsx init_db.ts" first.');
+    process.exit(1);
+  }
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+  const yamlStr = fs.readFileSync(path.resolve(yamlFile), 'utf8');
 
-async function insertData(yamlStr: string): Promise<void> {
-  const client = await pool.connect();
+  let data: Record<string, unknown>;
+  try {
+    data = yaml.load(yamlStr) as Record<string, unknown>;
+  } catch (err) {
+    console.error('YAML parse error:', (err as { message?: string }).message);
+    process.exit(1);
+  }
+
+  if (!data || typeof data !== 'object') {
+    console.error('YAML must be an object at the root level');
+    process.exit(1);
+  }
+
+  const yieldData = (data as { yield?: Record<string, unknown> }).yield || {};
+  const lemma = String(yieldData.lemma || '').trim();
+  if (!lemma) {
+    console.error('YAML missing yield.lemma');
+    process.exit(1);
+  }
+
+  const language = detectLanguage(data);
+
+  const db = new Database(resolvedPath);
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
 
   try {
-    const parsed = yaml.load(yamlStr);
-    const data =
-      parsed && typeof parsed === 'object'
-        ? (parsed as WordYamlDocument)
-        : ({} as WordYamlDocument);
-    await client.query('BEGIN');
+    const existing = db
+      .prepare(
+        'SELECT id, lemma, language, revision_count FROM words_v2 WHERE lower(lemma) = ? AND language = ?'
+      )
+      .get(lemma.toLowerCase(), language) as WordRow | undefined;
 
-    const yieldData = data.yield || {};
-    const nuanceData = data.nuance || {};
-
-    const wordQuery = `
-      INSERT INTO words (
-        user_word, lemma, syllabification, part_of_speech,
-        user_context_sentence, contextual_meaning_en, contextual_meaning_zh,
-        other_common_meanings, image_differentiation_zh, original_yaml
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING id
-    `;
-
-    const wordValues = [
-      yieldData.user_word,
-      yieldData.lemma,
-      yieldData.syllabification,
-      yieldData.part_of_speech,
-      yieldData.user_context_sentence,
-      yieldData.contextual_meaning?.en,
-      yieldData.contextual_meaning?.zh,
-      yieldData.other_common_meanings || [],
-      nuanceData.image_differentiation_zh,
-      data,
-    ];
-
-    const wordRes = (await client.query(wordQuery, wordValues)) as DbQueryResult<{ id: number }>;
-    const wordId = wordRes.rows[0]?.id;
-    if (!wordId) {
-      throw new Error('Failed to retrieve inserted word id.');
-    }
-
-    const etymData = data.etymology || {};
-    const roots = etymData.root_and_affixes || {};
-    const origins = etymData.historical_origins || {};
-
-    const etymQuery = `
-      INSERT INTO etymologies (
-        word_id, prefix, root, suffix, structure_analysis,
-        history_myth, source_word, pie_root,
-        visual_imagery_zh, meaning_evolution_zh
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    `;
-
-    await client.query(etymQuery, [
-      wordId,
-      roots.prefix,
-      roots.root,
-      roots.suffix,
-      roots.structure_analysis,
-      origins.history_myth,
-      origins.source_word,
-      origins.pie_root,
-      etymData.visual_imagery_zh,
-      etymData.meaning_evolution_zh,
-    ]);
-
-    const cognates = data.cognate_family?.cognates || [];
-    for (const cog of cognates) {
-      await client.query(
-        'INSERT INTO cognates (word_id, cognate_word, logic) VALUES ($1, $2, $3)',
-        [wordId, cog.word, cog.logic]
+    if (existing && !forceUpdate) {
+      console.log(
+        `词条已存在: ${existing.lemma} (${existing.language}) ID=${existing.id} rev=${existing.revision_count}`
       );
+      console.log('使用 --force 覆盖已存在的词条');
+      return;
     }
 
-    const examples = data.application?.selected_examples || [];
-    for (const ex of examples) {
-      await client.query(
-        'INSERT INTO examples (word_id, example_type, sentence, translation_zh) VALUES ($1, $2, $3, $4)',
-        [wordId, ex.type, ex.sentence, ex.translation_zh]
-      );
-    }
-
-    const synonyms = nuanceData.synonyms || [];
-    for (const syn of synonyms) {
-      await client.query(
-        'INSERT INTO synonyms (word_id, synonym_word, meaning_zh) VALUES ($1, $2, $3)',
-        [wordId, syn.word, syn.meaning_zh]
-      );
-    }
-
-    await client.query('COMMIT');
-    console.log(`Successfully inserted word: ${yieldData.lemma} (ID: ${wordId})`);
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Error occurred:', error);
-    throw error;
+    const now = new Date().toISOString();
+    db.transaction(() => {
+      if (existing) {
+        db.prepare(
+          `UPDATE words_v2
+           SET part_of_speech = ?, content = ?, updated_at = ?, revision_count = revision_count + 1
+           WHERE id = ?`
+        ).run((yieldData.part_of_speech as string) || null, JSON.stringify(data), now, existing.id);
+        console.log(
+          `Updated: ${lemma} (${language}) ID=${existing.id} rev=${existing.revision_count + 1}`
+        );
+      } else {
+        const id = crypto.randomUUID();
+        db.prepare(
+          `INSERT INTO words_v2 (id, lemma, language, part_of_speech, content, created_at, updated_at, revision_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1)`
+        ).run(
+          id,
+          lemma,
+          language,
+          (yieldData.part_of_speech as string) || null,
+          JSON.stringify(data),
+          now,
+          now
+        );
+        console.log(`Created: ${lemma} (${language}) ID=${id}`);
+      }
+    })();
   } finally {
-    client.release();
+    db.close();
   }
 }
 
-(async () => {
-  console.log('Starting import...');
-  // await insertData(SAMPLE_YAML);
-  void SAMPLE_YAML;
-  void insertData;
-  console.log('Import logic ready. Configure DATABASE_URL to run.');
-  await pool.end();
-})();
+loadYamlToDb();

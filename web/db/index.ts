@@ -67,12 +67,4 @@ const closeDb = (): void => {
   currentDbPath = null;
 };
 
-const getPool = (): never => {
-  throw new Error('getPool() has been removed. Use getDb() with Drizzle.');
-};
-
-const resetPool = (): never => {
-  throw new Error('resetPool() has been removed. Use closeDb() instead.');
-};
-
-module.exports = { getDb, getSqlite, closeDb, getPool, resetPool };
+module.exports = { getDb, getSqlite, closeDb };

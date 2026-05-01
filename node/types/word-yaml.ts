@@ -75,9 +75,9 @@ export interface WordYamlDocument {
 export interface GermanWordYieldSection {
   user_word?: string;
   lemma?: string;
-  genus?: string;            // der/die/das/N/A
+  genus?: string; // der/die/das/N/A
   syllabification?: string;
-  kasus?: string;            // Nominativ/Akkusativ/Dativ/Genitiv/N/A
+  kasus?: string; // Nominativ/Akkusativ/Dativ/Genitiv/N/A
   user_context_sentence?: string;
   part_of_speech?: string;
   contextual_meaning?: {
@@ -89,14 +89,14 @@ export interface GermanWordYieldSection {
 
 export interface MorphologicalComponent {
   element: string;
-  type: string;              // Präfix / Wortstamm/Grundwort / Suffix
+  type: string; // Präfix / Wortstamm/Grundwort / Suffix
   de_meaning: string;
   trennbar?: boolean;
   ablaut_grade?: string;
 }
 
 export interface MorphologicalAnalysis {
-  word_formation: string;    // Kompositum / Derivatum / Ablautreihe / Conversion
+  word_formation: string; // Kompositum / Derivatum / Ablautreihe / Conversion
   components: MorphologicalComponent[];
   structure_analysis: string;
 }

@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const authModulePath = path.resolve(__dirname, '../middleware/writeAuth.ts');
-const wordsRoutePath = path.resolve(__dirname, '../routes/words.ts');
+const wordsV2RoutePath = path.resolve(__dirname, '../routes/wordsV2.ts');
 const syncRoutePath = path.resolve(__dirname, '../routes/sync.ts');
 const coreRoutePath = path.resolve(__dirname, '../routes/core.ts');
 
