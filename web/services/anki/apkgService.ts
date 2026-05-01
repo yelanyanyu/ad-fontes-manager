@@ -171,6 +171,7 @@ const normalizeTags = (tags: string[] | undefined): string[] => {
 
 const normalizeFileName = (value: string): string => {
   const safe = String(value || '')
+    // eslint-disable-next-line no-control-regex
     .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
     .replace(/\s+/g, ' ')
     .trim();

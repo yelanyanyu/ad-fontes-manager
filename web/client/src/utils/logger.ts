@@ -1,4 +1,4 @@
-﻿import { createConsola, type ConsolaInstance } from 'consola';
+import { createConsola, type ConsolaInstance } from 'consola';
 
 const isDev = import.meta.env.DEV;
 

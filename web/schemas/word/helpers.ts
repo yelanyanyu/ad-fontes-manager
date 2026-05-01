@@ -12,7 +12,7 @@ const requiredString = (fieldPath: string) =>
     z.string().min(1, `${fieldPath} is required`)
   );
 
-const optionalString = (fieldPath: string) =>
+const optionalString = (_fieldPath: string) =>
   z.preprocess(
     value => (value == null || value === '' ? undefined : String(value).trim()),
     z.string().optional()
@@ -22,7 +22,7 @@ const requiredObject = <T extends z.ZodRawShape>(shape: T, _fieldPath: string) =
   z.object(shape).passthrough();
 
 /** Like requiredObject but rejects unknown keys — use for inner objects where hierarchy matters. */
-const strictObject = <T extends z.ZodRawShape>(shape: T, fieldPath: string) =>
+const strictObject = <T extends z.ZodRawShape>(shape: T, _fieldPath: string) =>
   z.object(shape).strict();
 
 const nonEmptyArray = (fieldPath: string) =>

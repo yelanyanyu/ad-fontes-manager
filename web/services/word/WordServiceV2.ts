@@ -4,7 +4,7 @@ const nlp = require('compromise') as (text: string) => {
   nouns: () => { toSingular: () => void };
   text: () => string;
 };
-const { getPool } = require('../../db') as { getPool: () => Promise<DbPoolLike> };
+const { getDb } = require('../../db') as { getDb: () => DbOrTxLike };
 const conflictService = require('../conflictService') as {
   analyze: (
     oldData: unknown,
@@ -12,7 +12,11 @@ const conflictService = require('../conflictService') as {
   ) => { hasConflict: boolean; diff: unknown[] | undefined };
 };
 const validator = require('./WordValidator') as {
-  validate: (data: unknown, wordLower: string, language?: string) => { valid: boolean; errors: string[] };
+  validate: (
+    data: unknown,
+    wordLower: string,
+    language?: string
+  ) => { valid: boolean; errors: string[] };
 };
 const repositoryV2 = require('./WordRepositoryV2') as WordRepositoryV2Like;
 const assemblerV2 = require('./WordAssemblerV2') as WordAssemblerV2Like;
@@ -33,24 +37,35 @@ interface RequestLike {
   validatedQuery?: Record<string, unknown>;
 }
 
-interface DbClientLike {
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
-  release: () => void;
-}
-
-interface DbPoolLike {
-  connect: () => Promise<DbClientLike>;
-}
+type DbOrTxLike = any;
 
 interface WordRepositoryV2Like {
-  findByLemma: (lemma: string, language: string, client?: DbClientLike | null) => Promise<Record<string, any> | null>;
-  findById: (id: string, client?: DbClientLike | null) => Promise<Record<string, unknown> | null>;
-  create: (wordData: Record<string, unknown>, client: DbClientLike) => Promise<{ id: string; lemma: string; language: string }>;
-  update: (id: string, wordData: Record<string, unknown>, client: DbClientLike) => Promise<void>;
-  delete: (id: string, client?: DbClientLike | null) => Promise<void>;
-  listAll: (language: string) => Promise<Record<string, unknown>[]>;
-  listPaged: (options: { page: number; limit: number; search: string; sort: string; language: string }) => Promise<Record<string, unknown>>;
+  findByLemma: (
+    lemma: string,
+    language: string,
+    client?: DbOrTxLike | null
+  ) => Record<string, any> | null;
+  findById: (id: string, client?: DbOrTxLike | null) => Record<string, unknown> | null;
+  create: (
+    wordData: Record<string, unknown>,
+    client?: DbOrTxLike | null
+  ) => { id: string; lemma: string; language: string };
+  update: (id: string, wordData: Record<string, unknown>, client?: DbOrTxLike | null) => void;
+  delete: (id: string, client?: DbOrTxLike | null) => void;
+  listAll: (language: string) => Record<string, unknown>[];
+  listPaged: (options: {
+    page: number;
+    limit: number;
+    search: string;
+    sort: string;
+    language: string;
+  }) => Record<string, unknown>;
 }
+
+const isUniqueConstraintError = (error: { code?: string; message?: string }): boolean =>
+  error.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
+  error.code === 'SQLITE_CONSTRAINT' ||
+  String(error.message || '').includes('UNIQUE constraint failed');
 
 interface WordAssemblerV2Like {
   extractWordData: (data: Record<string, any>, language: string) => Record<string, unknown>;
@@ -92,7 +107,9 @@ class WordServiceV2 {
     const requestId = req.id || 'unknown';
     const logger = createContextLogger({ requestId, operation: 'addWordV2', word: wordText });
 
-    const wordLower = String(wordText || '').trim().toLowerCase();
+    const wordLower = String(wordText || '')
+      .trim()
+      .toLowerCase();
     if (!wordLower) {
       logger.warn({ word: wordText }, 'Add word failed: word is required');
       return { status: 'invalid', errors: ['word is required'] };
@@ -121,51 +138,39 @@ class WordServiceV2 {
     const wordData = assemblerV2.extractWordData(data, language);
     logger.debug({ lemma: wordData.lemma, language }, 'Extracted word data');
 
-    const pool = await getPool();
-    const client = await pool.connect();
-
     try {
-      await client.query('BEGIN');
+      const db = getDb();
       logger.debug('Transaction started');
 
-      const existing = await repositoryV2.findByLemma(wordLower, language, client);
-      if (existing) {
-        await client.query('ROLLBACK');
-        logger.warn({ lemma: existing.lemma, id: existing.id }, 'Word already exists');
-        return { status: 'duplicate', lemma: existing.lemma, id: existing.id };
-      }
+      return db.transaction((tx: DbOrTxLike) => {
+        const existing = repositoryV2.findByLemma(wordLower, language, tx);
+        if (existing) {
+          logger.warn({ lemma: existing.lemma, id: existing.id }, 'Word already exists');
+          return { status: 'duplicate', lemma: existing.lemma, id: existing.id };
+        }
 
-      const insertResult = await repositoryV2.create(wordData, client);
-      await client.query('COMMIT');
+        const insertResult = repositoryV2.create(wordData, tx);
 
-      logger.info(
-        { id: insertResult.id, lemma: insertResult.lemma, language },
-        'Word created successfully (v2)'
-      );
+        logger.info(
+          { id: insertResult.id, lemma: insertResult.lemma, language },
+          'Word created successfully (v2)'
+        );
 
-      return { status: 'created', id: insertResult.id, lemma: insertResult.lemma, language };
+        return { status: 'created', id: insertResult.id, lemma: insertResult.lemma, language };
+      });
     } catch (error) {
       const err = error as { message?: string; code?: string; stack?: string };
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        const rollbackErr = rollbackError as { message?: string };
-        logger.error({ error: rollbackErr.message }, 'Rollback failed');
-      }
 
       logger.error(
         { error: err.message, code: err.code, stack: err.stack },
         'Database error during addWord (v2)'
       );
 
-      if (err && err.code === '23505') {
+      if (isUniqueConstraintError(err)) {
         return { status: 'duplicate', lemma: wordLower };
       }
 
       return { status: 'error', error: err.message };
-    } finally {
-      client.release();
-      logger.debug('Database connection released');
     }
   }
 
@@ -193,7 +198,7 @@ class WordServiceV2 {
 
   async getWordById(req: RequestLike, id: string): Promise<Record<string, unknown>> {
     if (!id) throw new Error('Missing id');
-    const word = await repositoryV2.findById(id);
+    const word = repositoryV2.findById(id);
     if (!word) throw new Error('Not found');
     return word;
   }
@@ -203,7 +208,7 @@ class WordServiceV2 {
     wordText: string,
     language: string = 'en'
   ): Promise<Record<string, unknown>> {
-    const result = await repositoryV2.findByLemma(wordText, language);
+    const result = repositoryV2.findByLemma(wordText, language);
     if (!result) throw new Error('Not found');
 
     // Return content JSONB directly — it's the full YAML document
@@ -236,7 +241,9 @@ class WordServiceV2 {
 
     const language = this.detectLanguage(data);
     const lemma = data?.yield?.lemma;
-    const wordLower = String(lemma || '').trim().toLowerCase();
+    const wordLower = String(lemma || '')
+      .trim()
+      .toLowerCase();
 
     if (!wordLower) {
       return { valid: false, errors: ['yield.lemma is required'] };
@@ -255,12 +262,9 @@ class WordServiceV2 {
     userWord: string,
     language: string = 'en'
   ): Promise<Record<string, unknown>> {
-    const lemma =
-      language === 'de'
-        ? this._lemmatizeDe(userWord)
-        : this._lemmatizeEn(userWord);
+    const lemma = language === 'de' ? this._lemmatizeDe(userWord) : this._lemmatizeEn(userWord);
 
-    const existing = await repositoryV2.findByLemma(lemma, language);
+    const existing = repositoryV2.findByLemma(lemma, language);
 
     if (existing) {
       return { found: true, lemma, language, data: existing };
@@ -275,7 +279,7 @@ class WordServiceV2 {
     const lemma = data?.yield?.lemma?.toLowerCase();
     if (!lemma) throw new Error('Missing lemma');
 
-    const existing = await repositoryV2.findByLemma(lemma, language);
+    const existing = repositoryV2.findByLemma(lemma, language);
     if (!existing) return { status: 'created', lemma, language };
 
     const analysis = conflictService.analyze(existing.content, data);
@@ -335,67 +339,54 @@ class WordServiceV2 {
 
     logger.debug({ lemma, language, contentLength: yamlStr.length }, 'Saving word (v2)');
 
-    const pool = await getPool();
-    const client = await pool.connect();
-
     try {
-      await client.query('BEGIN');
+      const db = getDb();
       logger.debug('Transaction started');
 
-      const existing = await repositoryV2.findByLemma(lemma, language, client);
-      const analysisRes = existing
-        ? conflictService.analyze(existing.content, data)
-        : null;
+      return db.transaction((tx: DbOrTxLike) => {
+        const existing = repositoryV2.findByLemma(lemma, language, tx);
+        const analysisRes = existing ? conflictService.analyze(existing.content, data) : null;
 
-      if (existing && !forceUpdate && analysisRes?.hasConflict) {
-        await client.query('ROLLBACK');
-        logger.warn({ lemma, language, diff: analysisRes.diff }, 'Conflict detected');
-        return {
-          status: 'conflict',
-          diff: analysisRes.diff,
-          oldData: existing.content,
-          newData: data,
-        };
-      }
-
-      let wordId: string;
-      let status: string;
-
-      if (existing) {
-        wordId = existing.id as string;
-        const shouldUpdate = Boolean(forceUpdate) || Boolean(analysisRes?.hasConflict);
-
-        if (shouldUpdate) {
-          logger.debug({ wordId, lemma, language, forceUpdate }, 'Updating existing word (v2)');
-          const wordData = assemblerV2.extractWordData(data, language);
-          await repositoryV2.update(wordId, wordData, client);
-          status = 'updated';
-        } else {
-          logger.debug({ wordId, lemma }, 'No changes detected (v2)');
-          status = 'logged';
+        if (existing && !forceUpdate && analysisRes?.hasConflict) {
+          logger.warn({ lemma, language, diff: analysisRes.diff }, 'Conflict detected');
+          return {
+            status: 'conflict',
+            diff: analysisRes.diff,
+            oldData: existing.content,
+            newData: data,
+          };
         }
-      } else {
-        logger.debug({ lemma, language }, 'Creating new word (v2)');
-        const wordData = assemblerV2.extractWordData(data, language);
-        const insertResult = await repositoryV2.create(wordData, client);
-        wordId = insertResult.id;
-        status = 'created';
-      }
 
-      await client.query('COMMIT');
+        let wordId: string;
+        let status: string;
 
-      logger.info({ id: wordId, lemma, language, status }, 'Word saved successfully (v2)');
+        if (existing) {
+          wordId = existing.id as string;
+          const shouldUpdate = Boolean(forceUpdate) || Boolean(analysisRes?.hasConflict);
 
-      return { success: true, id: wordId, lemma, language, status };
+          if (shouldUpdate) {
+            logger.debug({ wordId, lemma, language, forceUpdate }, 'Updating existing word (v2)');
+            const wordData = assemblerV2.extractWordData(data, language);
+            repositoryV2.update(wordId, wordData, tx);
+            status = 'updated';
+          } else {
+            logger.debug({ wordId, lemma }, 'No changes detected (v2)');
+            status = 'logged';
+          }
+        } else {
+          logger.debug({ lemma, language }, 'Creating new word (v2)');
+          const wordData = assemblerV2.extractWordData(data, language);
+          const insertResult = repositoryV2.create(wordData, tx);
+          wordId = insertResult.id;
+          status = 'created';
+        }
+
+        logger.info({ id: wordId, lemma, language, status }, 'Word saved successfully (v2)');
+
+        return { success: true, id: wordId, lemma, language, status };
+      });
     } catch (error) {
       const err = error as { message?: string; code?: string; stack?: string };
-
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        const rollbackErr = rollbackError as { message?: string };
-        logger.error({ error: rollbackErr.message }, 'Rollback failed');
-      }
 
       logger.error({ yaml: yamlStr }, 'Yaml input');
 
@@ -405,9 +396,6 @@ class WordServiceV2 {
       );
 
       return { success: false, error: err.message };
-    } finally {
-      client.release();
-      logger.debug('Database connection released');
     }
   }
 
@@ -418,7 +406,7 @@ class WordServiceV2 {
     logger.debug({ wordId: id }, 'Deleting word (v2)');
 
     try {
-      await repositoryV2.delete(id);
+      repositoryV2.delete(id);
       logger.info({ wordId: id }, 'Word deleted successfully (v2)');
       return { success: true };
     } catch (error) {

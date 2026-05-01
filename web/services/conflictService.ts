@@ -1,4 +1,4 @@
-﻿const diff = require('deep-diff') as (lhs: unknown, rhs: unknown) => unknown[] | undefined;
+const diff = require('deep-diff') as (lhs: unknown, rhs: unknown) => unknown[] | undefined;
 
 interface ConflictAnalysisResult {
   hasConflict: boolean;

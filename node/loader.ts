@@ -1,4 +1,4 @@
-﻿const yaml = require('js-yaml') as {
+const yaml = require('js-yaml') as {
   load: (content: string) => unknown;
 };
 

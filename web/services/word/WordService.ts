@@ -1,4 +1,4 @@
-﻿const yaml = require('js-yaml') as { load: (content: string) => unknown };
+const yaml = require('js-yaml') as { load: (content: string) => unknown };
 const nlp = require('compromise') as (text: string) => {
   verbs: () => { toInfinitive: () => void };
   nouns: () => { toSingular: () => void };

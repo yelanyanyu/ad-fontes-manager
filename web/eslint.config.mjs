@@ -37,6 +37,10 @@ export default [
         clearTimeout: 'readonly',
         setInterval: 'readonly',
         clearInterval: 'readonly',
+        fetch: 'readonly',
+        URL: 'readonly',
+        RequestInit: 'readonly',
+        NodeModule: 'readonly',
       },
     },
     plugins: {

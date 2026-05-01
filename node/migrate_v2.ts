@@ -1,4 +1,4 @@
-﻿const { Client } = require('pg') as {
+const { Client } = require('pg') as {
   Client: new (config: { connectionString?: string }) => {
     connect: () => Promise<void>;
     query: (sql: string, params?: unknown[]) => Promise<DbQueryResult>;

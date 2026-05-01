@@ -12,16 +12,6 @@ const {
 
 const base = createBaseWordSchema({ meaningLang: 'de' });
 
-// Strict component object — rejects unexpected keys like 'trennbar' if not listed
-const componentSchema = strictObject(
-  {
-    element: requiredString('etymology.morphological_analysis.components[].element'),
-    type: requiredString('etymology.morphological_analysis.components[].type'),
-    de_meaning: requiredString('etymology.morphological_analysis.components[].de_meaning'),
-  },
-  'etymology.morphological_analysis.components[]'
-);
-
 // Optional etymology sub-sections (strict when present)
 const historicalPhonologySchema = strictObject(
   {

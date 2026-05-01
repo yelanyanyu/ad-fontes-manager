@@ -20,9 +20,15 @@ const { requireWriteAccess } = require('../middleware/writeAuth.ts') as {
 };
 
 const { validateBody, validateQuery, validateParams } = require('../middleware/validate.ts') as {
-  validateBody: (schema: ZodType<unknown>) => (req: Request, res: Response, next: () => void) => void;
-  validateQuery: (schema: ZodType<unknown>) => (req: Request, res: Response, next: () => void) => void;
-  validateParams: (schema: ZodType<unknown>) => (req: Request, res: Response, next: () => void) => void;
+  validateBody: (
+    schema: ZodType<unknown>
+  ) => (req: Request, res: Response, next: () => void) => void;
+  validateQuery: (
+    schema: ZodType<unknown>
+  ) => (req: Request, res: Response, next: () => void) => void;
+  validateParams: (
+    schema: ZodType<unknown>
+  ) => (req: Request, res: Response, next: () => void) => void;
 };
 
 const {
@@ -46,12 +52,8 @@ router.get('/', validateQuery(WordListQuerySchemaV2), (req: Request, res: Respon
 router.get('/details', validateQuery(WordDetailsQuerySchemaV2), (req: Request, res: Response) =>
   wordControllerV2.getDetails(req, res)
 );
-router.get('/check', (req: Request, res: Response) =>
-  wordControllerV2.check(req, res)
-);
-router.post('/validate', (req: Request, res: Response) =>
-  wordControllerV2.validate(req, res)
-);
+router.get('/check', (req: Request, res: Response) => wordControllerV2.check(req, res));
+router.post('/validate', (req: Request, res: Response) => wordControllerV2.validate(req, res));
 router.get('/:id', validateParams(WordIdParamsSchema), (req: Request, res: Response) =>
   wordControllerV2.get(req, res)
 );

@@ -1,4 +1,4 @@
-﻿export type SearchMode = 'partial' | 'exact';
+export type SearchMode = 'partial' | 'exact';
 
 type SearchableRecord = {
   lemma?: unknown;

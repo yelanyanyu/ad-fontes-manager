@@ -56,17 +56,20 @@ const EnglishWordSchema = z
     ),
     application: requiredObject(
       {
-        selected_examples: nonEmptyArray('application.selected_examples').refine((rows: unknown[]) => {
-          return rows.every((item: unknown) => {
-            if (!isRecord(item)) return false;
-            const rec = item as Record<string, unknown>;
-            return (
-              isNonEmptyString(rec.type) &&
-              isNonEmptyString(rec.sentence) &&
-              isNonEmptyString(rec.translation_zh)
-            );
-          });
-        }, 'application.selected_examples items must have type, sentence, translation_zh'),
+        selected_examples: nonEmptyArray('application.selected_examples').refine(
+          (rows: unknown[]) => {
+            return rows.every((item: unknown) => {
+              if (!isRecord(item)) return false;
+              const rec = item as Record<string, unknown>;
+              return (
+                isNonEmptyString(rec.type) &&
+                isNonEmptyString(rec.sentence) &&
+                isNonEmptyString(rec.translation_zh)
+              );
+            });
+          },
+          'application.selected_examples items must have type, sentence, translation_zh'
+        ),
       },
       'application'
     ),

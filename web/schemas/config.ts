@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 const net = require('net') as typeof import('net');
-const { URL } = require('node:url') as typeof import('node:url');
 
 const SupportedEnvSchema = z.enum(['development', 'test', 'production']);
 
@@ -34,18 +33,7 @@ const CorsOriginsSchema = z.preprocess(
     .min(1, 'at least one CORS origin is required')
 );
 
-const DatabaseUrlSchema = z
-  .string()
-  .trim()
-  .url('DATABASE_URL must be a valid URL')
-  .refine(value => {
-    try {
-      const protocol = new URL(value).protocol;
-      return protocol === 'postgres:' || protocol === 'postgresql:';
-    } catch {
-      return false;
-    }
-  }, 'DATABASE_URL protocol must be postgres or postgresql');
+const DatabaseUrlSchema = z.string().trim().min(1, 'DATABASE_URL must be a SQLite file path');
 
 const ConfigSchema = z
   .object({

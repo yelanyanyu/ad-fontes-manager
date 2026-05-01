@@ -1,4 +1,3 @@
-import { z } from 'zod';
 const { requiredString, requiredObject, nonEmptyArray } = require('./helpers');
 
 function createBaseWordSchema(config: { meaningLang: 'en' | 'de' }) {

@@ -1,74 +1,78 @@
-﻿const { Pool } = require('pg') as {
-  Pool: new (config: Record<string, unknown>) => {
-    query: (sql: string, params?: unknown[]) => Promise<unknown>;
-    end: () => Promise<void>;
-    on: (event: string, listener: (...args: unknown[]) => void) => void;
-  };
-};
+import path from 'node:path';
+import fs from 'node:fs';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+import * as schema from './schema';
 
 const config = require('../utils/config.ts') as {
   get: <T = unknown>(path: string, defaultValue?: T) => T;
 };
 
-type PoolLike = {
-  query: (sql: string, params?: unknown[]) => Promise<unknown>;
-  end: () => Promise<void>;
-  on: (event: string, listener: (...args: unknown[]) => void) => void;
+type SqliteDatabase = Database.Database;
+type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
+
+let sqlite: SqliteDatabase | null = null;
+let db: DrizzleDb | null = null;
+let currentDbPath: string | null = null;
+
+const resolveDbPath = (): string => {
+  const configuredPath = config.get<string>('database.url', './data/ad_fontes.db');
+  return path.isAbsolute(configuredPath)
+    ? configuredPath
+    : path.resolve(__dirname, '..', configuredPath);
 };
 
-let globalPool: PoolLike | null = null;
-let currentDbUrl: string | null = null;
+const openSqlite = (): SqliteDatabase => {
+  const targetPath = resolveDbPath();
 
-const getPoolConfig = (): Record<string, unknown> => {
-  const poolSize = config.get<number | null>('database.pool_size');
-  return {
-    max: poolSize || (config.get<string>('core.env') === 'production' ? 20 : 10),
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-  };
+  if (sqlite && currentDbPath === targetPath) {
+    return sqlite;
+  }
+
+  if (sqlite) {
+    sqlite.close();
+  }
+
+  const dbDir = path.dirname(targetPath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
+
+  sqlite = new Database(targetPath);
+  currentDbPath = targetPath;
+
+  sqlite.pragma('journal_mode = WAL');
+  sqlite.pragma('foreign_keys = ON');
+  sqlite.pragma('busy_timeout = 5000');
+
+  return sqlite;
 };
 
-const getPool = async (): Promise<PoolLike> => {
-  const targetUrl = config.get<string | null>('database.url');
+const getSqlite = (): SqliteDatabase => openSqlite();
 
-  if (!targetUrl) {
-    throw new Error(
-      'No database URL configured. Please set DATABASE_URL in the environment or .env file.'
-    );
+const getDb = (): DrizzleDb => {
+  const sqliteDb = openSqlite();
+  if (!db || currentDbPath !== resolveDbPath()) {
+    db = drizzle(sqliteDb, { schema });
   }
-
-  if (globalPool && currentDbUrl === targetUrl) {
-    return globalPool;
-  }
-
-  if (globalPool) {
-    await globalPool.end();
-  }
-
-  console.log('Initializing new DB Pool...');
-  const poolConfig = getPoolConfig();
-
-  globalPool = new Pool({
-    connectionString: targetUrl,
-    ...poolConfig,
-    ssl: config.get<boolean>('database.ssl') ? { rejectUnauthorized: false } : false,
-  }) as unknown as PoolLike;
-
-  currentDbUrl = targetUrl;
-
-  globalPool.on('error', err => {
-    console.error('Unexpected error on idle client', err);
-  });
-
-  return globalPool;
+  return db;
 };
 
-const resetPool = async (): Promise<void> => {
-  if (globalPool) {
-    await globalPool.end();
-    globalPool = null;
-    currentDbUrl = null;
+const closeDb = (): void => {
+  if (sqlite) {
+    sqlite.close();
   }
+  sqlite = null;
+  db = null;
+  currentDbPath = null;
 };
 
-module.exports = { getPool, resetPool };
+const getPool = (): never => {
+  throw new Error('getPool() has been removed. Use getDb() with Drizzle.');
+};
+
+const resetPool = (): never => {
+  throw new Error('resetPool() has been removed. Use closeDb() instead.');
+};
+
+module.exports = { getDb, getSqlite, closeDb, getPool, resetPool };

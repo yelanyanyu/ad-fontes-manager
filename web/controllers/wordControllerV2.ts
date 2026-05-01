@@ -8,16 +8,16 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
   saveWord: (req: Request, yamlStr: string, forceUpdate?: boolean) => Promise<unknown>;
   addWord: (req: Request, word: string, yamlStr: string) => Promise<Record<string, unknown>>;
   deleteWord: (req: Request, id: string) => Promise<unknown>;
-  validateYaml: (req: Request, yamlStr: string) => Promise<{ valid: boolean; errors: string[]; language?: string }>;
+  validateYaml: (
+    req: Request,
+    yamlStr: string
+  ) => Promise<{ valid: boolean; errors: string[]; language?: string }>;
 };
 
-const { asyncHandler, BadRequest, Conflict, UnprocessableEntity } =
-  require('../utils/errors.ts') as {
-    asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
-    BadRequest: (message: string, data?: unknown) => Error;
-    Conflict: (message: string, data?: unknown) => Error;
-    UnprocessableEntity: (message: string, data?: unknown) => Error;
-  };
+const { asyncHandler, BadRequest } = require('../utils/errors.ts') as {
+  asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
+  BadRequest: (message: string, data?: unknown) => Error;
+};
 
 const { logger } = require('../utils/logger.ts') as {
   logger: { debug: (obj: unknown, msg?: string) => void };
@@ -76,10 +76,7 @@ class WordControllerV2 {
       forceUpdate?: boolean;
     };
 
-    logger.debug(
-      { forceUpdate, yamlStr: String(yamlStr).substring(0, 50) },
-      'saveV2 asyncHandler'
-    );
+    logger.debug({ forceUpdate, yamlStr: String(yamlStr).substring(0, 50) }, 'saveV2 asyncHandler');
 
     const result = await wordServiceV2.saveWord(req, yamlStr as string, forceUpdate);
     res.json(result);
@@ -97,18 +94,30 @@ class WordControllerV2 {
     const result = await wordServiceV2.addWord(req, word, yamlStr);
 
     if (result.status === 'duplicate') {
-      res.status(409).json({ success: false, code: 409, message: 'Duplicate word', data: { lemma: result.lemma } });
+      res.status(409).json({
+        success: false,
+        code: 409,
+        message: 'Duplicate word',
+        data: { lemma: result.lemma },
+      });
       return;
     }
 
     if (result.status === 'invalid') {
-      res.status(422).json({ success: false, code: 422, message: 'Invalid YAML', data: { errors: result.errors || [] } });
+      res.status(422).json({
+        success: false,
+        code: 422,
+        message: 'Invalid YAML',
+        data: { errors: result.errors || [] },
+      });
       return;
     }
 
-    res
-      .status(201)
-      .json({ code: 201, message: 'created', data: { id: result.id, lemma: result.lemma, language: result.language } });
+    res.status(201).json({
+      code: 201,
+      message: 'created',
+      data: { id: result.id, lemma: result.lemma, language: result.language },
+    });
   });
 
   delete = asyncHandler(async (req: Request, res: Response) => {

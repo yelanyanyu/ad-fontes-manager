@@ -1,4 +1,4 @@
-﻿import type { NextFunction, Request, Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 const { StatusCodes, ReasonPhrases } = require('http-status-codes') as {
   StatusCodes: {

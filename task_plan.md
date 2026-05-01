@@ -1,307 +1,1004 @@
-# WordList 多选功能实施计划（结合当前项目实际情况优化）
+# PostgreSQL → SQLite + Drizzle 可执行迁移计划
 
-## 任务目标
+> **执行原则**：先建立可回滚的 SQLite/Drizzle 数据层，再迁移 v2 查询，再切换运行入口，最后删除旧 v1/PG 代码。不要把“换数据库、删旧系统、改路由、迁数据”塞进同一个提交里。
 
-在单词列表中增加基础多选能力，允许用户勾选当前列表里的多个词条，并通过工具栏按钮触发一个临时测试动作：
+## 目标
 
-- 点击按钮后，在浏览器控制台输出当前选中词条的 `lemma`
-- 第一阶段仅验证列表层的数据流、交互和组件边界
-- 不在本次实现中引入批量删除、批量导出、跨页持久选择等扩展能力
+把 Ad Fontes Manager 从 PostgreSQL + `pg` + 手写 SQL 迁移到 SQLite + Drizzle ORM，为后续 Windows 桌面端和移动端打包降低部署成本。
 
-这个计划基于当前仓库的真实实现来制定，而不是从零设计：
+### 已确认约束
 
-- 列表组件是 [`web/client/src/components/WordList/WordList.vue`](web/client/src/components/WordList/WordList.vue)
-- 工具栏组件是 [`web/client/src/components/WordList/WordListToolbar.vue`](web/client/src/components/WordList/WordListToolbar.vue)
-- 当前列表数据来自“本地记录 + 当前页数据库记录”的合并结果，而不是单一数组
-- 当前数据库列表带分页，且搜索、排序、页大小切换都会重新请求数据
+1. 数据模型最终只保留 `words_v2`。
+2. 现有 PostgreSQL 中有生产/开发数据，必须提供可验证的数据迁移路径。
+3. 新数据访问层使用 Drizzle ORM，不做 `pg.Pool` 兼容适配层。
+4. 前端已主要使用 `/api/v2/words`，迁移应优先保证 v2 行为不变。
 
-## 当前实现现状
+### 非目标
 
-### 已有基础
+- 不在第一轮迁移中重做 UI、编辑器或 YAML 格式。
+- 不引入 Prisma、TypeORM 等重量级 ORM。
+- 不在数据迁移验证完成前删除 PostgreSQL 数据库。
+- 不把 v1 API 作为新功能入口继续扩展。
 
-- `WordList.vue` 已负责列表展示、搜索、排序、分页、同步、删除、导出等主流程
-- `WordListToolbar.vue` 已经承担顶部工具栏的按钮和筛选交互
-- `displayedRecords` 是前端最终渲染用的数据源，已经把 `localRecords` 与 `dbRecords` 合并
-- 每行当前已有查看、编辑、更多操作按钮，说明行级操作入口已经存在
+## 当前代码事实
 
-### 需要特别注意的现实约束
+| 区域 | 当前状态 | 迁移策略 |
+|---|---|---|
+| `web/db/index.ts` | 导出 `getPool()` / `resetPool()`，内部使用 `pg.Pool` | 替换为 `getDb()` / `closeDb()`，返回 Drizzle SQLite 实例 |
+| `web/services/word/WordRepositoryV2.ts` | v2 查询集中在 `words_v2`，仍使用原始 SQL | 第一优先级改为 Drizzle |
+| `web/services/word/WordServiceV2.ts` | 事务使用 `pool.connect()` + `BEGIN` | 改为 `db.transaction()`，Repository 支持传入 `tx` |
+| `web/routes/wordsV2.ts` | v2 API 主路由 | 迁移后先保持 `/api/v2/words` 兼容 |
+| `web/routes/words.ts` | v1 旧路由 | v2 验证稳定后再删除或改为兼容转发 |
+| `web/routes/core.ts` / `web/routes/sync.ts` | 健康检查和同步仍依赖 `getPool()` | 改为轻量 Drizzle 查询 |
+| `web/localStore.ts` | JSON 文件本地存储 | 第二阶段迁到 SQLite `_local_words` 表 |
+| `node/` 工具 | 仍用 `pg` 读取/写入 | 先保留 PG 只用于导出脚本，其他工具再逐个迁移 |
+| `schema.sql` / `migrations/` | PG schema 和历史迁移 | SQLite 验证完成后再归档/删除 |
 
-1. 列表是混合数据源
-本地词条和数据库词条可能同时存在于同一列表中，选中状态不能简单假设“`id` 全局唯一且不冲突”。
+## 关键设计决策
 
-2. 数据库列表是分页数据
-当前 `dbRecords` 只代表当前页，不是全量数据，因此“全选”只能定义为“全选当前屏幕可见列表项”，不能定义为全库全选。
+### 1. 分两层数据库 API
 
-3. 列表会频繁刷新
-搜索、排序、分页、刷新、同步、删除都会触发列表变化。如果不定义清楚，选中状态会出现“选中了看不见的项”或者“按钮计数与页面不一致”的问题。
+新增 Drizzle 数据层时，不要让业务层直接处理 SQLite driver：
 
-4. 当前功能目标只是测试版
-用户要求的动作是“打印选中 lemma 到控制台”，因此第一阶段应优先做到低侵入、可验证、可扩展，而不是提前抽象成全局批量操作系统。
+- `web/db/schema.ts`：Drizzle 表结构，唯一 schema source of truth。
+- `web/db/index.ts`：打开/关闭 SQLite、执行 PRAGMA、导出 `getDb()`。
+- `web/db/json.ts`：集中处理 JSON 字符串列的 parse/stringify。
+- `web/services/word/WordRepositoryV2.ts`：唯一负责 `words_v2` CRUD 和查询条件转换。
 
-## 设计结论
+这样 `content` 的 JSON 文本化不会散落到各个 route/service。
 
-### 第一版范围
+### 2. `content` 字段用 SQLite `text` 存 JSON 字符串
 
-- 在表格第一列加入复选框列
-- 支持单行选择
-- 支持表头“全选当前可见项”
-- 在工具栏中增加一个“打印选中项”的测试按钮
-- 按钮文案展示当前选中数量
-- 点击按钮后输出选中项的 `lemma` 数组
-
-### 第一版明确不做
-
-- 不做跨页保留选择
-- 不做搜索条件变化后的隐式保留选择
-- 不做 Pinia 持久化
-- 不做批量删除、批量同步、批量导出
-- 不做 Shift 连选
-
-### 推荐的状态策略
-
-选中状态保留在 `WordList.vue` 本地，而不是放进 `wordStore`。
-
-原因：
-
-- 这是纯列表交互状态，不属于全局业务数据
-- 当前需求只是测试动作，放进 store 会增加复杂度
-- 后续如果演进为批量操作，再决定是否抽到 composable 或 store 更合理
-
-## 实施方案
-
-### 1. 在 `WordList.vue` 增加本地选中状态
-
-建议新增：
-
-- `selectedKeys: Ref<Set<string>>`
-- `makeSelectionKey(item: WordRecord): string`
-- `isSelected(item: WordRecord): boolean`
-- `toggleSelection(item: WordRecord): void`
-- `toggleSelectAllVisible(): void`
-- `clearSelection(): void`
-
-### 2. 选中键不要直接使用 `id`
-
-由于当前列表来自本地和数据库两类来源，建议使用组合键：
+SQLite 没有 PostgreSQL `JSONB`。Drizzle schema 中：
 
 ```ts
-const makeSelectionKey = (item: WordRecord) => `${item.isLocal ? 'local' : 'db'}:${item.id}`;
+content: text('content', { mode: 'json' }).$type<WordContent>().notNull()
 ```
 
-这样可以避免本地记录和数据库记录恰好出现相同 `id` 时互相污染选中状态。
-
-### 3. 基于 `displayedRecords` 计算选中结果
-
-建议增加以下计算属性：
-
-- `selectedRecords`
-- `selectedCount`
-- `selectedLemmas`
-- `isAllVisibleSelected`
-- `hasSelection`
-
-`selectedLemmas` 推荐继续复用当前列表里的 fallback 逻辑：
+如果当前 Drizzle 版本/driver 对 `mode: 'json'` 支持不稳定，则退回：
 
 ```ts
-item.lemma || item.yield?.lemma
+content: text('content').notNull()
 ```
 
-并在输出前过滤空值，避免控制台出现无意义项。
+并在 Repository 层使用 helper：
 
-### 4. 明确定义“全选”的作用域
+- 写入：`serializeWordContent(content)`
+- 读取：`deserializeWordRow(row)`
 
-表头复选框的语义应为：
+### 3. 路由兼容期先保留 `/api/v2/words`
 
-- 全选当前 `displayedRecords` 中的可见项
-- 取消全选当前 `displayedRecords` 中的可见项
+不要第一轮就把 `/api/v2/words` 改成 `/api/words`。推荐顺序：
 
-不要把它实现成“全库全选”或“跨页累计全选”，因为当前项目没有对应的数据模型和交互提示。
+1. SQLite 后端继续服务 `/api/v2/words`。
+2. v2 API 测试和前端手动验证通过。
+3. 再决定是否把 `/api/words` 映射到 v2。
+4. 最后删除 v1 路由和相关测试。
 
-### 5. 在列表变化时主动清理选中状态
+这能把“数据库迁移”和“API 路径迁移”解耦。
 
-第一版推荐采用“保守清理”策略：
+### 4. PG 依赖先降级为迁移脚本依赖，不要立刻全删
 
-- 搜索执行后清空选中
-- 排序变化后清空选中
-- 页大小变化后清空选中
-- 翻页后清空选中
-- 手动刷新后清空选中
-- 删除成功后清空选中
-- 批量同步完成后清空选中
+`pg` 在迁移窗口中仍需要用于 `node/export-pg-to-sqlite.ts`。推荐：
 
-原因：
+- `web/package.json`：迁移完成后删除 `pg`。
+- `node/package.json`：先保留 `pg`，仅供导出脚本使用；最终清理阶段再删除。
 
-- 当前页面没有“已选中但不可见”的提示区域
-- 数据是动态合并的，刷新后保留旧选中容易制造误操作
-- 这是测试版，优先保证行为可理解
+### 5. 删除旧代码必须放到最后
 
-如果希望体验更丝滑，也可以改成“仅保留当前仍然可见的 key”，但第一版不建议增加额外复杂度。
+以下文件不要在 Drizzle 查询刚跑通时立即删除：
 
-### 6. 工具栏按钮放在 `WordListToolbar.vue`
+- `web/services/word/WordService.ts`
+- `web/services/word/WordRepository.ts`
+- `web/services/word/WordAssembler.ts`
+- `web/controllers/wordController.ts`
+- `web/routes/words.ts`
+- `schema.sql`
+- `migrations/`
 
-建议在工具栏右侧操作区增加一个临时测试按钮，而不是放到每行 action menu。
+等到 v2 API、同步、本地存储、CLI、数据迁移都验证通过后，再做单独 cleanup 提交。
 
-原因：
+## 里程碑总览
 
-- 这是针对“多选集合”的动作，不是单条记录动作
-- 工具栏本身已经承载 `Sync All` 和 `Refresh`，语义上更统一
-- 当前页面结构能容纳一个轻量按钮，不需要新增弹窗
+| 里程碑 | 目标 | 可验证产物 | 是否可回滚 |
+|---|---|---|---|
+| M0 盘点与安全网 | 明确查询点、测试基线、备份方式 | baseline 测试结果、PG 导出命令 | 是 |
+| M1 Drizzle 基础设施 | SQLite schema 和 DB 初始化可用 | `drizzle` 迁移、空库启动 | 是 |
+| M2 v2 Repository 迁移 | `words_v2` CRUD/list/details 走 Drizzle | Repository 单元测试通过 | 是 |
+| M3 v2 Service + Route 迁移 | `/api/v2/words` 行为保持不变 | v2 API 集成测试通过 | 是 |
+| M4 Core/Sync/LocalStore 迁移 | 健康检查、同步、本地缓存走 SQLite | sync/core 测试和手动验证 | 是 |
+| M5 数据迁移 | PG `words_v2` 数据导入 SQLite | 行数、抽样、唯一约束验证 | 是 |
+| M6 Node CLI 迁移 | 维护脚本使用 SQLite | CLI smoke 通过 | 是 |
+| M7 切主入口与清理 | v1/PG 代码移除，文档更新 | lint/type-check/build 通过 | 否，需确认 |
 
-推荐新增 props：
+## M0：盘点与安全网
 
-- `selectedCount: number`
-- `hasSelection: boolean`
+### Task 0.1：确认当前工作区
 
-推荐新增 emits：
+运行：
 
-- `print-selected`
-
-按钮建议：
-
-- 仅在 `hasSelection === true` 时显示，避免空操作
-- 文案类似 `Print Selected (3)`
-- 保持现有页面风格，沿用当前工具栏的 `slate / blue` 设计语言，不额外做风格重构
-
-### 7. 表格结构调整
-
-建议在现有表格中增加一列选择列：
-
-- 表头第一列：全选复选框
-- 每行第一列：单项复选框
-- 列宽控制在 `w-10` 或相近窄列
-
-选中行建议增加轻量高亮：
-
-- 维持当前 `hover:bg-slate-50/60` 逻辑
-- 叠加选中态，比如 `bg-blue-50/60`
-
-注意不要破坏当前右侧操作按钮区域宽度和对齐。
-
-## 组件级改动清单
-
-### 必改文件
-
-[`web/client/src/components/WordList/WordList.vue`](web/client/src/components/WordList/WordList.vue)
-
-- 增加本地选中状态和相关计算属性
-- 在表格中加入复选框列
-- 将 `selectedCount` / `hasSelection` 透传给工具栏
-- 响应工具栏的 `print-selected` 事件
-- 在合适的列表刷新节点调用 `clearSelection`
-
-[`web/client/src/components/WordList/WordListToolbar.vue`](web/client/src/components/WordList/WordListToolbar.vue)
-
-- 扩展 props 与 emits
-- 增加测试按钮
-- 保持现有工具栏布局稳定
-
-### 当前阶段不建议修改
-
-[`web/client/src/stores/wordStore.ts`](web/client/src/stores/wordStore.ts)
-
-- 这个需求不需要把选中状态放入 store
-- 除非实现过程中发现必须和批量业务动作共享，否则不动 store
-
-## 推荐实施顺序
-
-### Phase 1：最小可运行版本
-
-1. 在 `WordList.vue` 建立本地选中状态和组合 key 逻辑
-2. 为表格加入复选框列
-3. 加入 `selectedCount` / `selectedLemmas` / `isAllVisibleSelected`
-4. 在 `WordListToolbar.vue` 增加 `print-selected` 按钮
-5. 点击按钮后输出选中的 lemma
-
-### Phase 2：交互收口
-
-1. 给选中行增加高亮样式
-2. 在搜索、分页、排序、刷新等动作后统一清空选择
-3. 检查“全选”和“局部取消”在混合数据源下是否正常
-
-### Phase 3：验证与回归
-
-1. 手动验证交互链路
-2. 补一个前端单元测试，至少覆盖选中数量或工具栏按钮显示逻辑
-3. 运行前端类型检查
-
-## 测试与验证计划
-
-### 手动验证
-
-1. 进入首页词条列表，确认表格新增复选框列
-2. 勾选单条记录，确认行高亮与按钮出现
-3. 勾选多条记录，确认按钮数量同步更新
-4. 点击工具栏按钮，确认控制台输出所选 lemma 数组
-5. 点击表头复选框，确认只影响当前可见列表项
-6. 执行搜索、翻页、排序、刷新，确认选中状态被清空
-7. 本地词条与数据库词条混合存在时，确认选中计数准确
-
-### 自动化验证
-
-建议新增一个贴近组件行为的前端测试，优先级如下：
-
-1. `WordListToolbar.vue`：`selectedCount > 0` 时显示按钮，否则隐藏
-2. 或者 `WordList.vue`：选择若干项后，向工具栏传递正确计数
-
-当前仓库前端测试基础较弱，因此这次至少补一个聚焦测试即可，不建议一次性引入复杂挂载测试矩阵。
-
-### 命令验证
-
-建议执行：
-
-```bash
-cd web/client && npm run type-check
-cd web/client && npm run test
+```powershell
+git status --short
 ```
 
-如果本次只新增了很轻的组件逻辑，至少也要完成 `type-check`。
+预期：
 
-## 风险与规避
+- 只看到本次计划文件变更，或明确记录其他未提交文件。
+- 若有其他人的修改，先不要覆盖。
 
-### 风险 1：混合数据源导致选中冲突
+### Task 0.2：建立查询迁移清单
 
-规避方式：
+运行：
 
-- 使用 `local:${id}` / `db:${id}` 组合 key
+```powershell
+Get-ChildItem -Path web,node -Recurse -File -Include *.ts,*.js |
+  Where-Object { $_.FullName -notmatch '\\node_modules\\|\\dist\\|\\.vite\\' } |
+  Select-String -Pattern 'getPool|resetPool|pool\.query|words_v2|/api/v2/words|routes/words' |
+  ForEach-Object { "$($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
+```
 
-### 风险 2：分页后保留旧选中造成误解
+输出保存到开发记录中。重点确认这些文件：
 
-规避方式：
+- `web/db/index.ts`
+- `web/services/word/WordRepositoryV2.ts`
+- `web/services/word/WordServiceV2.ts`
+- `web/routes/wordsV2.ts`
+- `web/routes/core.ts`
+- `web/routes/sync.ts`
+- `web/localStore.ts`
+- `node/loader.ts`
+- `node/check-word-diff.ts`
+- `node/view-word-yaml.ts`
 
-- 第一版统一清空选择，而不是跨页保留
+### Task 0.3：跑迁移前基线
 
-### 风险 3：工具栏布局被挤压
+在 `web` 中运行：
 
-规避方式：
+```powershell
+npm run type-check
+npm run lint
+npx tsx --test --test-concurrency=1 tests/words-v2-api.test.ts
+npx tsx tests/word-validator.test.ts
+```
 
-- 将新按钮做成轻量按钮
-- 保持与 `Sync All`、`Reload All` 同一视觉等级
+如果 API 测试需要运行服务，先启动：
 
-### 风险 4：实现过度扩张
+```powershell
+npm run dev:server
+```
 
-规避方式：
+记录：
 
-- 第一版只做“多选 + 打印”
-- 不提前接入批量删除/导出/同步
+- 哪些命令通过。
+- 哪些命令因环境缺失失败。
+- 失败是否与本次迁移无关。
 
-## 验收标准
+### Task 0.4：备份 PostgreSQL 数据
 
-- 用户可以在 `WordList` 中勾选多个词条
-- 工具栏会显示当前选中数量
-- 点击测试按钮后，控制台能输出选中项 lemma 数组
-- 表头全选仅作用于当前可见列表
-- 搜索、排序、翻页、刷新后不会留下难以理解的历史选中状态
-- 不修改全局 store 结构，不引入与当前需求无关的复杂抽象
+在迁移前导出 PG 数据，至少保留 `words_v2`：
 
-## 后续可扩展方向
+```powershell
+pg_dump $env:DATABASE_URL --table=words_v2 --data-only --file=backup/words_v2_before_sqlite.sql
+```
 
-如果第一版验证通过，后续可以基于同一套选中模型继续扩展：
+如果没有 `pg_dump`，至少执行行数和抽样导出：
 
-- 批量同步
-- 批量导出到 Anki
-- 批量删除
-- 跨页保留选择
-- 顶部显示“已选中 X 项，可清空”
-- 将多选逻辑抽为 `useWordSelection` composable
+```sql
+SELECT COUNT(*) FROM words_v2;
+SELECT id, lemma, language, part_of_speech, revision_count FROM words_v2 ORDER BY created_at DESC LIMIT 20;
+```
 
-但这些都应在第一版稳定后再推进，而不是和当前测试目标一起打包。
+验收：
+
+- 有可恢复的备份文件，或有明确的数据导出替代方案。
+
+## M1：Drizzle 基础设施
+
+### Task 1.1：安装依赖
+
+修改 `web/package.json`：
+
+- 添加运行依赖：`drizzle-orm`、`better-sqlite3`
+- 添加开发依赖：`drizzle-kit`、`@types/better-sqlite3`
+- 暂时保留 `pg`，直到 M7 清理
+
+修改 `node/package.json`：
+
+- 添加运行依赖：`drizzle-orm`、`better-sqlite3`
+- 暂时保留 `pg`，用于 M5 导出脚本
+
+运行：
+
+```powershell
+cd web
+npm install
+cd ../node
+npm install
+```
+
+验收：
+
+- `web/package-lock.json` 和 `node/package-lock.json` 更新。
+- Windows 上 `better-sqlite3` 安装成功；若失败，先解决 native build 工具链，不继续迁移。
+
+### Task 1.2：新增 Drizzle schema
+
+创建 `web/db/schema.ts`。
+
+表结构至少包含：
+
+- `words_v2`
+  - `id`
+  - `lemma`
+  - `language`
+  - `part_of_speech`
+  - `content`
+  - `created_at`
+  - `updated_at`
+  - `revision_count`
+- `_local_words`
+  - `id`
+  - `raw_yaml`
+  - `lemma_preview`
+  - `updated_at`
+- `_local_config`
+  - `key`
+  - `value`
+
+索引：
+
+- `UNIQUE (lemma, language)`
+- `idx_words_v2_language`
+- `idx_words_v2_created_at`
+- `idx_words_v2_updated_at`
+- 可选：`idx_words_v2_lemma`
+
+注意：
+
+- SQLite 中 `created_at` / `updated_at` 用 ISO string 或 `datetime('now')`，全项目保持一种格式。
+- `part_of_speech` 在代码里映射成 `partOfSpeech`，DB 列仍是 `part_of_speech`。
+
+### Task 1.3：新增 Drizzle 配置
+
+创建 `drizzle.config.ts`：
+
+```ts
+import { defineConfig } from 'drizzle-kit';
+
+export default defineConfig({
+  schema: './web/db/schema.ts',
+  out: './drizzle',
+  dialect: 'sqlite',
+  dbCredentials: {
+    url: './data/ad_fontes.db',
+  },
+});
+```
+
+运行：
+
+```powershell
+cd web
+npx drizzle-kit generate
+```
+
+如果从仓库根运行更方便，确保 `drizzle.config.ts` 的 `schema` 和 `out` 路径一致。
+
+验收：
+
+- 生成 `drizzle/` 迁移文件。
+- 迁移文件中只包含 SQLite DDL，不包含 PG 语法。
+
+### Task 1.4：重写 `web/db/index.ts`
+
+目标 API：
+
+```ts
+const { getDb, getSqlite, closeDb } = require('../db');
+```
+
+要求：
+
+- `getDb()` 同步返回 Drizzle 实例。
+- `getSqlite()` 仅在必须执行原始 SQLite PRAGMA/迁移时使用。
+- `closeDb()` 关闭连接并清空单例。
+- 初始化时创建数据库目录。
+- 初始化时执行：
+  - `PRAGMA journal_mode = WAL`
+  - `PRAGMA foreign_keys = ON`
+  - `PRAGMA busy_timeout = 5000`
+- 不再导出 `getPool()` / `resetPool()`，但可以在 M1 临时保留 deprecated wrapper，方便分阶段改调用点。
+
+建议先临时保留：
+
+```ts
+const getPool = () => {
+  throw new Error('getPool() has been removed. Use getDb() with Drizzle.');
+};
+```
+
+这样遗漏调用点会快速暴露。
+
+### Task 1.5：更新配置默认值
+
+修改 `web/schemas/config.ts`：
+
+- `database.url` 从 PG URL 校验改为非空字符串。
+- 增加路径字符串说明，避免把相对路径误判为非法 URL。
+
+修改 `web/utils/config.ts`：
+
+- 默认 `database.url` 改为 `./data/ad_fontes.db`。
+- 移除或忽略 PG-only 配置，例如 SSL、pool size。
+
+修改 `.env.example`：
+
+```env
+DATABASE_URL=./data/ad_fontes.db
+```
+
+保留注释说明：
+
+- `PG_DATABASE_URL` 仅用于一次性迁移脚本。
+
+### M1 验证
+
+运行：
+
+```powershell
+cd web
+npm run type-check
+npm run lint
+```
+
+如果 `getPool()` 调用尚未迁完，允许 type-check 失败，但必须只失败在已知调用点。
+
+建议提交：
+
+```powershell
+git add web/package.json web/package-lock.json node/package.json node/package-lock.json web/db/schema.ts web/db/index.ts drizzle.config.ts drizzle web/schemas/config.ts web/utils/config.ts .env.example
+git commit -m "feat(db): add sqlite drizzle foundation"
+```
+
+## M2：迁移 `WordRepositoryV2`
+
+### Task 2.1：定义 Repository 行类型
+
+在 `web/services/word/WordRepositoryV2.ts` 或相邻类型文件中定义：
+
+- `WordRowV2`
+- `InsertWordV2`
+- `UpdateWordV2`
+- `ListWordsParams`
+- `ListWordsResult`
+
+类型来源优先使用 Drizzle：
+
+```ts
+type WordRow = typeof wordsV2.$inferSelect;
+type NewWordRow = typeof wordsV2.$inferInsert;
+```
+
+### Task 2.2：封装 row/content 转换
+
+新增 helper，建议文件：
+
+- `web/services/word/wordRowMapper.ts`
+
+职责：
+
+- `toDbContent(content)`
+- `fromDbRow(row)`
+- `normalizeLemma(lemma)`
+- `toIsoTimestamp(value?)`
+
+验收：
+
+- JSON parse/stringify 只出现在 mapper/repository 层。
+- route/service 不直接碰 SQLite JSON 字符串细节。
+
+### Task 2.3：改写读取方法
+
+按这个顺序改：
+
+1. `findById(id)`
+2. `findByLemma(lemma, language)`
+3. `findDetailsByLemma(lemma, language)`
+4. `list(params)`
+
+Drizzle 查询注意点：
+
+- PG `lower(lemma) = $1` 改为 Drizzle `sql` 或保存时统一小写比较。
+- PG `ILIKE` 改为 SQLite `LIKE`；需要大小写无关时用 `lower(lemma) LIKE lower(...)`。
+- PG `COUNT(*)::int` 改为 Drizzle `count()` 或手动 `Number(row.count)`.
+- `and(...conditions)` 在 conditions 为空时要避免生成非法 where；封装 `buildWhere()`.
+
+### Task 2.4：改写写入方法
+
+按这个顺序改：
+
+1. `create(data, tx?)`
+2. `update(id, data, tx?)`
+3. `delete(id, tx?)`
+4. `upsert` 或 service 所需组合方法
+
+要求：
+
+- `create` 设置 `id = crypto.randomUUID()`，除非调用方已有 id。
+- `update` 必须更新 `updated_at`，并递增 `revision_count`。
+- 唯一冲突统一转换为业务层可识别错误，例如 `code = 'WORD_CONFLICT'`。
+- 所有方法接受可选 `dbOrTx`，方便事务内复用。
+
+### Task 2.5：新增 Repository 单元测试
+
+创建 `web/tests/wordRepositoryV2.test.ts`。
+
+测试使用临时 SQLite 文件或 `:memory:`：
+
+- 创建英文词条。
+- 创建同 lemma 不同 language 的德文词条。
+- 同 lemma + language 冲突。
+- 按 language 列表过滤。
+- 搜索 lemma。
+- 更新后 `revision_count` 增加。
+- 删除后查不到。
+
+运行：
+
+```powershell
+cd web
+npx tsx --test tests/wordRepositoryV2.test.ts
+```
+
+### M2 验证
+
+运行：
+
+```powershell
+cd web
+npx tsx --test tests/wordRepositoryV2.test.ts
+npm run type-check
+```
+
+建议提交：
+
+```powershell
+git add web/services/word/WordRepositoryV2.ts web/services/word/wordRowMapper.ts web/tests/wordRepositoryV2.test.ts
+git commit -m "refactor(word): migrate v2 repository to drizzle"
+```
+
+## M3：迁移 `WordServiceV2` 和 v2 路由
+
+### Task 3.1：改写事务边界
+
+修改 `web/services/word/WordServiceV2.ts`：
+
+- `const pool = await getPool()` → `const db = getDb()`
+- `pool.connect()` / `BEGIN` / `COMMIT` / `ROLLBACK` → `db.transaction((tx) => { ... })`
+- 在事务内调用 Repository 时传入 `tx`
+
+注意：
+
+- `better-sqlite3` 是同步 driver。Service 可以保留 async 方法签名，但内部不要假装 await SQLite 查询。
+- 如果 route 已经 `await service.method()`，保留 async 签名可降低改动面。
+
+### Task 3.2：更新冲突和错误处理
+
+确认这些行为不变：
+
+- 创建同 language + lemma 返回冲突。
+- 同 lemma 不同 language 可共存。
+- YAML 内容冲突仍使用现有 deep-diff 逻辑。
+- validation 仍通过 `WordValidator.validate(data, wordLower, language)`。
+
+SQLite 唯一约束错误可能包含：
+
+- `SQLITE_CONSTRAINT_UNIQUE`
+- `UNIQUE constraint failed`
+
+统一转换成当前 API 使用的 HTTP 409 响应。
+
+### Task 3.3：确认 `wordsV2` route 不改 contract
+
+修改 `web/routes/wordsV2.ts` 时只做必要适配：
+
+- 保持路径不变：`/api/v2/words`
+- 保持响应 shape 不变。
+- 保持 query 参数 `language=en|de`。
+- 保持 `details?word=<lemma>&language=<lang>`。
+
+不要在本阶段改前端 API 路径。
+
+### Task 3.4：更新 v2 API 测试
+
+修改 `web/tests/words-v2-api.test.ts`：
+
+- 测试启动前使用临时 SQLite DB。
+- 每个测试清理 `words_v2`。
+- 不依赖 PG dev server。
+- 保留 `--test-concurrency=1`，避免服务端口和 SQLite 文件竞争。
+
+运行：
+
+```powershell
+cd web
+npx tsx --test --test-concurrency=1 tests/words-v2-api.test.ts
+npx tsx tests/word-validator.test.ts
+```
+
+### M3 验证
+
+运行：
+
+```powershell
+cd web
+npm run dev:server
+```
+
+手动验证：
+
+- `GET http://localhost:8080/api/v2/words?language=en`
+- `GET http://localhost:8080/api/v2/words?language=de`
+- `POST http://localhost:8080/api/v2/words/add`
+- `GET http://localhost:8080/api/v2/words/details?word=<lemma>&language=<lang>`
+
+建议提交：
+
+```powershell
+git add web/services/word/WordServiceV2.ts web/routes/wordsV2.ts web/tests/words-v2-api.test.ts
+git commit -m "refactor(word): run v2 service on sqlite"
+```
+
+## M4：迁移 Core、Sync、LocalStore
+
+### Task 4.1：更新 core 健康检查
+
+修改 `web/routes/core.ts`：
+
+- `getPool()` → `getDb()`
+- `SELECT 1` → `db.run(sql\`select 1\`)` 或查询 `words_v2` limit 1
+- `resetPool()` → `closeDb()`
+
+配置接口返回 SQLite 路径时，不要泄露绝对敏感路径给前端；可返回 basename 或标记。
+
+更新 `web/tests/core-status.test.ts`：
+
+- Mock `getDb()` / `closeDb()`。
+- 保持 status 响应断言。
+
+### Task 4.2：更新 sync 路由
+
+修改 `web/routes/sync.ts`：
+
+- 健康检查走 Drizzle。
+- 批量同步调用 `WordServiceV2`。
+- 删除本地项仍通过 LocalStore API，不直接操作表。
+
+本阶段先保持 LocalStore 公开 API 不变：
+
+- `getAll()`
+- `findByLemma()`
+- `save()`
+- `delete()`
+- `clear()`
+- `getConfig()`
+- `saveConfig()`
+
+### Task 4.3：把 LocalStore 迁到 SQLite
+
+修改 `web/localStore.ts`：
+
+- `_local_words` 保存离线 YAML。
+- `_local_config` 保存本地配置。
+- 构造时确保表存在，或依赖 M1 migrations。
+- 如果旧 `web/data/local_words.json` 存在且 `_local_words` 为空，自动导入一次。
+
+迁移规则：
+
+1. 读取旧 JSON。
+2. 插入 `_local_words`。
+3. 验证插入行数。
+4. 不立即删除旧 JSON，改名为 `local_words.json.migrated` 或保留并记录日志。
+
+### Task 4.4：补 LocalStore 测试
+
+创建 `web/tests/localStore-sqlite.test.ts`：
+
+- 保存 YAML 后能读取。
+- 同 lemma 查找能命中。
+- 删除后不存在。
+- config 保存/读取正常。
+- 旧 JSON 导入逻辑只执行一次。
+
+运行：
+
+```powershell
+cd web
+npx tsx --test tests/core-status.test.ts tests/localStore-sqlite.test.ts
+```
+
+### M4 验证
+
+运行：
+
+```powershell
+cd web
+npm run type-check
+npm run lint
+npx tsx --test tests/core-status.test.ts tests/localStore-sqlite.test.ts
+```
+
+手动验证：
+
+- 保存一个本地词条。
+- 刷新页面后本地词条仍存在。
+- 执行同步后本地词条从 `_local_words` 删除并进入 `words_v2`。
+
+建议提交：
+
+```powershell
+git add web/routes/core.ts web/routes/sync.ts web/localStore.ts web/tests/core-status.test.ts web/tests/localStore-sqlite.test.ts
+git commit -m "refactor(sync): move core and local store to sqlite"
+```
+
+## M5：PG → SQLite 数据迁移
+
+### Task 5.1：新增导出脚本
+
+创建 `node/export-pg-to-sqlite.ts`。
+
+输入：
+
+- `PG_DATABASE_URL`：源 PostgreSQL。
+- `DATABASE_URL`：目标 SQLite 文件路径。
+- 可选 `--dry-run`：只读 PG 并输出统计。
+- 可选 `--force`：目标表非空时允许覆盖或 upsert。
+
+脚本流程：
+
+1. 连接 PG。
+2. 连接 SQLite。
+3. 确认 SQLite schema 已存在。
+4. 读取 `SELECT * FROM words_v2 ORDER BY created_at ASC`。
+5. 将 PG `content` JSONB 转成 SQLite JSON 字符串。
+6. 插入 SQLite `words_v2`。
+7. 输出统计：
+   - PG count
+   - SQLite inserted count
+   - skipped count
+   - conflict count
+   - language breakdown
+
+### Task 5.2：新增验证脚本
+
+创建 `node/verify-sqlite-migration.ts`。
+
+检查：
+
+- PG `words_v2` 总行数 = SQLite `words_v2` 总行数。
+- 按 language 分组计数一致。
+- 随机抽样 20 条，比对：
+  - `id`
+  - `lemma`
+  - `language`
+  - `part_of_speech`
+  - `revision_count`
+  - `content.yield.lemma`
+- SQLite 唯一约束能阻止重复 `(lemma, language)`。
+
+### Task 5.3：执行迁移
+
+运行：
+
+```powershell
+cd node
+$env:PG_DATABASE_URL="postgres://..."
+$env:DATABASE_URL="../web/data/ad_fontes.db"
+npx tsx export-pg-to-sqlite.ts --dry-run
+npx tsx export-pg-to-sqlite.ts
+npx tsx verify-sqlite-migration.ts
+```
+
+验收：
+
+- 行数一致。
+- language 分布一致。
+- 抽样内容一致。
+- 没有未解释的 skipped/conflict。
+
+建议提交：
+
+```powershell
+git add node/export-pg-to-sqlite.ts node/verify-sqlite-migration.ts node/package.json node/package-lock.json
+git commit -m "feat(db): add postgres to sqlite migration scripts"
+```
+
+## M6：迁移 Node CLI 工具
+
+### Task 6.1：更新 `node/utils/db-config.ts`
+
+目标：
+
+- 从 `DATABASE_URL` 读取 SQLite 文件路径。
+- 提供 `openSqliteDb()` 或 `getNodeDb()`。
+- 不再默认读取 PG URL。
+
+### Task 6.2：更新 `node/init_db.ts`
+
+目标：
+
+- 创建 SQLite 文件目录。
+- 应用 Drizzle migration 或执行 schema 初始化。
+- 输出数据库路径和表检查结果。
+
+### Task 6.3：更新数据工具
+
+逐个迁移：
+
+- `node/loader.ts`
+- `node/check-word-diff.ts`
+- `node/view-word-yaml.ts`
+
+要求：
+
+- 只写入/读取 `words_v2`。
+- `content` JSON 处理复用同类 helper，避免每个脚本手写 parse/stringify。
+- 不再引用旧 6 表。
+
+### Task 6.4：更新脚本命令
+
+修改 `node/package.json`：
+
+- 删除或替换 `migrate-v2`。
+- 新增：
+  - `export-pg-to-sqlite`
+  - `verify-sqlite-migration`
+
+### M6 验证
+
+运行：
+
+```powershell
+cd node
+npm run type-check
+npm run lint
+npm run init-db
+npm run loader -- ../example.yml
+npx tsx view-word-yaml.ts <lemma>
+npx tsx check-word-diff.ts <lemma> ../example.yml
+```
+
+建议提交：
+
+```powershell
+git add node
+git commit -m "refactor(cli): migrate node tools to sqlite"
+```
+
+## M7：切换主入口、清理旧代码、更新文档
+
+### Task 7.1：决定 API 路径策略
+
+推荐兼容策略：
+
+- 保留 `/api/v2/words`。
+- 将 `/api/words` 临时映射到 v2 route，或返回明确 deprecation。
+- 前端当前若仍有 v1 fallback，保留一轮 release 后再删除。
+
+修改 `web/server.ts`：
+
+```ts
+app.use('/api/v2/words', require('./routes/wordsV2.ts'));
+app.use('/api/words', require('./routes/wordsV2.ts'));
+```
+
+如果选择直接删除 v1，必须同步更新这些测试：
+
+- `web/tests/route-validation-wiring.test.ts`
+- `web/tests/words-query-runtime.test.ts`
+- `web/tests/write-auth.test.ts`
+- `web/scripts/smoke-query-getter.ts`
+
+### Task 7.2：删除旧 v1 代码
+
+删除前再次搜索引用：
+
+```powershell
+Get-ChildItem -Path web,node -Recurse -File -Include *.ts,*.js |
+  Where-Object { $_.FullName -notmatch '\\node_modules\\|\\dist\\|\\.vite\\' } |
+  Select-String -Pattern 'WordService\.ts|WordRepository\.ts|WordAssembler\.ts|routes/words\.ts|controllers/wordController|getPool|resetPool'
+```
+
+确认无引用后删除：
+
+- `web/services/word/WordService.ts`
+- `web/services/word/WordRepository.ts`
+- `web/services/word/WordAssembler.ts`
+- `web/controllers/wordController.ts`
+- `web/routes/words.ts`
+
+同时更新：
+
+- `web/services/word/index.ts`
+- route 相关测试
+- smoke scripts
+
+### Task 7.3：清理 PG schema 和迁移
+
+在确认 SQLite 数据迁移和应用验证通过后：
+
+- 删除或归档 `schema.sql`
+- 删除或归档 `migrations/`
+- 删除 `node/migrate_v2.ts`
+- 从 `web/package.json` 删除 `pg`
+- 从 `node/package.json` 删除 `pg`，除非仍需要保留 PG 导出脚本
+
+推荐不要直接丢失历史：
+
+- 如果仓库仍需要记录 PG 迁移历史，移动到 `docs/archive/postgres/`。
+- 如果确认 git 历史足够，直接删除。
+
+### Task 7.4：更新 Docker
+
+修改 `docker-compose.yml`：
+
+- 移除 PostgreSQL service。
+- 增加 SQLite 数据 volume，例如挂载 `./web/data:/app/data`。
+- 更新环境变量：
+  - `DATABASE_URL=/app/data/ad_fontes.db`
+
+### Task 7.5：更新文档
+
+至少更新：
+
+- `README.md`
+- `docs/DEVELOPMENT.md`（如果不存在则创建）
+- `.env.example`
+
+文档必须说明：
+
+- SQLite 数据文件位置。
+- 如何初始化数据库。
+- 如何从 PG 导入旧数据。
+- 如何运行 Drizzle migration。
+- 常用验证命令。
+- 旧 PG 环境变量只用于迁移窗口。
+
+### M7 验证
+
+运行完整验证：
+
+```powershell
+cd web
+npm run type-check
+npm run lint
+npx tsx --test tests/wordRepositoryV2.test.ts tests/core-status.test.ts tests/localStore-sqlite.test.ts
+npx tsx --test --test-concurrency=1 tests/words-v2-api.test.ts
+npm run build
+```
+
+如果前端测试需要：
+
+```powershell
+cd web/client
+npm run type-check
+npm run lint
+npm run test
+```
+
+手动验证：
+
+1. 启动 `cd web && npm run dev`。
+2. 打开词表，确认按语言过滤正常。
+3. 创建英文词条。
+4. 创建同 lemma 德文词条。
+5. 编辑词条并确认 revision 增加。
+6. 删除词条。
+7. 保存本地 YAML。
+8. 同步本地 YAML 到数据库。
+9. 重启服务后数据仍存在。
+
+建议提交：
+
+```powershell
+git add .
+git commit -m "refactor(db): remove postgres legacy data layer"
+```
+
+## 风险清单与缓解
+
+### 风险 1：`better-sqlite3` native 安装失败
+
+缓解：
+
+- 先在 M1 单独安装验证。
+- Windows 环境确认 Node 版本和构建工具链。
+- 不要在安装失败时继续改业务代码。
+
+### 风险 2：SQLite 同步写导致请求阻塞
+
+缓解：
+
+- 当前项目数据规模较小，`better-sqlite3` 可接受。
+- 设置 WAL 和 busy timeout。
+- 大批量导入只在 CLI 脚本中执行，不在请求路径执行。
+
+### 风险 3：JSON 字段行为与 PG JSONB 不一致
+
+缓解：
+
+- Repository 层统一 parse/stringify。
+- 增加内容抽样验证。
+- 不在 SQLite 中做复杂 JSON 查询；必要时后续加 generated column 或 FTS。
+
+### 风险 4：大小写搜索/唯一约束行为变化
+
+缓解：
+
+- 明确 `(lemma, language)` 的唯一约束是否大小写敏感。
+- 如果要求大小写不敏感，schema 中使用 normalized lemma 列或 `COLLATE NOCASE`。
+- Repository 测试覆盖 `See` / `see` 这类大小写样例。
+
+### 风险 5：一次性删除 v1 导致前端 fallback 断裂
+
+缓解：
+
+- M7 前保留 v1 route 或将 `/api/words` 映射到 v2。
+- 搜索并更新 `useWordEditorLoader.ts` 中的 v1 fallback。
+- 删除 v1 放到最后单独提交。
+
+### 风险 6：迁移脚本覆盖现有 SQLite 数据
+
+缓解：
+
+- 默认目标表非空时拒绝执行。
+- 只有 `--force` 才允许覆盖/upsert。
+- 迁移前备份 SQLite 文件。
+
+## 最终验收标准
+
+- `web` 不再依赖运行中的 PostgreSQL。
+- `/api/v2/words` 所有现有行为保持兼容。
+- `words_v2` 数据从 PG 迁移到 SQLite 后行数和抽样内容一致。
+- `LocalStore` 从 JSON 文件迁到 SQLite，旧 JSON 不会静默丢失。
+- Node CLI 工具可针对 SQLite 正常运行。
+- `npm run type-check`、`npm run lint`、相关测试、`npm run build` 通过，或有明确记录的环境性失败。
+- 文档能指导新开发者从零启动 SQLite 版本。
+
+## 推荐执行顺序
+
+1. M0：盘点和备份。
+2. M1：Drizzle/SQLite 基础设施。
+3. M2：Repository + 单元测试。
+4. M3：Service/Route + v2 API 测试。
+5. M4：Core/Sync/LocalStore。
+6. M5：数据迁移脚本和真实迁移。
+7. M6：Node CLI 工具。
+8. M7：路由切换、旧代码清理、Docker/文档。
+
+如果时间有限，第一天只做 M0-M3。做到这里时应用已经可以用 SQLite 服务核心 v2 API，风险最大的一段已经被单元测试和 API 测试夹住。后续 M4-M7 再稳稳推进，别让这头迁移小兽一口吞掉整个仓库。
+
+## 当前执行状态（2026-05-01）
+
+### 已完成
+
+- M0：确认 worktree 基于最新 `origin/master`；旧 `task_plan.md` 出现的原因是计划曾只存在于主工作区未提交修改中，`git worktree add` 不会带入未提交内容。
+- M0：修复迁移前基线问题，`web` 的 `type-check`、`lint`、`word-validator` 已通过。
+- M1：新增 SQLite/Drizzle 基础设施、schema、`drizzle.config.ts` 和初始 migration。
+- M2：`WordRepositoryV2` 已迁移到 Drizzle，并新增 `web/tests/wordRepositoryV2.test.ts` 覆盖 CRUD、语言隔离、分页搜索、更新 revision、删除。
+- M3：迁移 `WordServiceV2` 事务边界，从 `getPool()` / `client.query('BEGIN')` 切到 `getDb().transaction()`。
+- M3：`web/tests/words-v2-api.test.ts` 已改为临时 SQLite + 临时 Express server 自举运行；覆盖 v2 API CRUD、重复检测、语言隔离、详情、强制更新和删除。
+- M3：验证已通过：`web` 的 `type-check`、`lint`、`wordRepositoryV2`、`wordServiceV2-sqlite`、`words-v2-api`。
+
+### 尚未完成
+
+- M4：迁移 `core` / `sync` 路由和 `LocalStore` 到 SQLite。
+- M5：新增并执行 PG → SQLite 数据迁移脚本及验证脚本。
+- M6：迁移 `node/` CLI 工具到 SQLite。
+- M7：切换主入口、清理 v1/PG 旧代码、更新 Docker 和文档。
+
+### 当前可测试范围
+
+- Repository 层 SQLite 行为已可测。
+- `/api/v2/words` 已可在 SQLite 上进行 API 级自动/手动测试。
+- 手动测试前仍需执行 M4 或避开尚未迁移的 `core` / `sync` 路由能力。

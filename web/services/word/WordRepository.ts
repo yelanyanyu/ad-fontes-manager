@@ -1,4 +1,4 @@
-﻿const { getPool } = require('../../db') as {
+const { getPool } = require('../../db') as {
   getPool: () => Promise<DbPoolLike>;
 };
 

@@ -1,4 +1,4 @@
-﻿type Context = Record<string, unknown> & { this?: unknown; '@root'?: unknown };
+type Context = Record<string, unknown> & { this?: unknown; '@root'?: unknown };
 
 const MAX_LOOPS = 10000;
 

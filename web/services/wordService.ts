@@ -1,1 +1,1 @@
-﻿module.exports = require('./word');
+module.exports = require('./word');

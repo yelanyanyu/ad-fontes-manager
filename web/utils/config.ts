@@ -66,7 +66,7 @@ const defaultConfig: ConfigObject = {
     timeout_ms: 10000,
   },
   database: {
-    url: null,
+    url: './data/ad_fontes.db',
     ssl: false,
     pool_size: null,
   },

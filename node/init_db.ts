@@ -1,4 +1,4 @@
-﻿const { Client } = require('pg') as {
+const { Client } = require('pg') as {
   Client: new (config: {
     user?: string;
     password?: string;
