@@ -6,8 +6,7 @@ const coreRoutePath = path.resolve(__dirname, '../routes/core.ts');
 const dbModulePath = path.resolve(__dirname, '../db/index.ts');
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
-process.env.DATABASE_URL =
-  process.env.DATABASE_URL || 'postgresql://test:test@127.0.0.1:5432/test_db';
+process.env.DATABASE_URL = process.env.DATABASE_URL || './data/ad_fontes_test.db';
 process.env.ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'test-admin-token';
 
 function loadCoreRouterWithUnavailableDb(): any {
@@ -23,10 +22,15 @@ function loadCoreRouterWithUnavailableDb(): any {
     filename: dbModulePath,
     loaded: true,
     exports: {
-      getPool: async () => {
+      getDb: () => {
         throw dbDownError;
       },
-      resetPool: async () => undefined,
+      getSqlite: () => {
+        throw dbDownError;
+      },
+      closeDb: () => {
+        throw dbDownError;
+      },
     },
   } as NodeModule;
 
@@ -83,7 +87,7 @@ function invokeExpressHandler(handler: (...args: any[]) => void): Promise<Record
   });
 }
 
-test('GET /status propagates ServiceUnavailable when DB dependency is down', async () => {
+test('GET /status propagates ServiceUnavailable when DB is down', async () => {
   const coreRouter = loadCoreRouterWithUnavailableDb();
 
   const statusLayer = coreRouter.stack.find(
@@ -96,4 +100,40 @@ test('GET /status propagates ServiceUnavailable when DB dependency is down', asy
 
   assert.equal(result.type, 'next');
   assert.equal((result.error as any)?.statusCode, 503);
+});
+
+test('GET /health returns ok when DB is up', async () => {
+  const dbModule = require.cache[dbModulePath];
+  const coreModule = require.cache[coreRoutePath];
+
+  delete require.cache[coreRoutePath];
+  delete require.cache[dbModulePath];
+
+  require.cache[dbModulePath] = {
+    id: dbModulePath,
+    filename: dbModulePath,
+    loaded: true,
+    exports: {
+      getDb: () => ({}),
+      getSqlite: () => ({ prepare: () => ({ get: () => ({ '1': 1 }) }) }),
+      closeDb: () => undefined,
+    },
+  } as NodeModule;
+
+  const coreRouter = require(coreRoutePath);
+  const healthLayer = coreRouter.stack.find(
+    (layer: any) => layer.route && layer.route.path === '/health' && layer.route.methods?.get
+  );
+  assert.ok(healthLayer, 'missing GET /health route');
+
+  const result = await invokeExpressHandler(healthLayer.route.stack[0].handle);
+
+  assert.equal(result.type, 'response');
+  assert.equal((result.payload as any).status, 'ok');
+
+  delete require.cache[coreRoutePath];
+  delete require.cache[dbModulePath];
+
+  if (coreModule) require.cache[coreRoutePath] = coreModule;
+  if (dbModule) require.cache[dbModulePath] = dbModule;
 });

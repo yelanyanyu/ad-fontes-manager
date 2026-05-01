@@ -989,16 +989,24 @@ git commit -m "refactor(db): remove postgres legacy data layer"
 - M3：迁移 `WordServiceV2` 事务边界，从 `getPool()` / `client.query('BEGIN')` 切到 `getDb().transaction()`。
 - M3：`web/tests/words-v2-api.test.ts` 已改为临时 SQLite + 临时 Express server 自举运行；覆盖 v2 API CRUD、重复检测、语言隔离、详情、强制更新和删除。
 - M3：验证已通过：`web` 的 `type-check`、`lint`、`wordRepositoryV2`、`wordServiceV2-sqlite`、`words-v2-api`。
+- M5：新增 `web/scripts/import-pg-words-v2-to-sqlite.ts`，已从 PostgreSQL `words_v2` 导入默认 SQLite：共 331 条，其中 `en=324`、`de=7`。
+- M4：迁移 `core` / `sync` 路由和 `LocalStore` 到 SQLite。
+  - `web/routes/core.ts`：`/status`、`/health`、`POST /config` 从 `getPool()` / `resetPool()` 切到 `getSqlite()` / `closeDb()`；`/check` 从旧 `wordController` 切到 `WordServiceV2.checkWord`。
+  - `web/routes/sync.ts`：`/sync/check`、`/sync/execute` 从旧 `wordService`（v1，依赖 PG）切到 `WordServiceV2`。
+  - `web/localStore.ts`：从 JSON 文件存储迁移到 SQLite `_local_words` / `_local_config` 表，保留旧 JSON 自动导入和 `.json.migrated` 重命名逻辑。
+  - 测试：新增 `web/tests/localStore-sqlite.test.ts`（8 个用例），更新 `web/tests/core-status.test.ts` 适配 SQLite mock。
+  - `.env`：`DATABASE_URL` 改为 SQLite 路径，旧 PG 连接串保留为 `PG_DATABASE_URL` 供 M5 迁移脚本使用。
+  - 验证通过：`type-check`、`lint`、15 个测试（core-status 2 + localStore 8 + wordRepositoryV2 3 + wordServiceV2 2）全部通过。
 
 ### 尚未完成
 
-- M4：迁移 `core` / `sync` 路由和 `LocalStore` 到 SQLite。
-- M5：新增并执行 PG → SQLite 数据迁移脚本及验证脚本。
+- M5：补充更完整的数据迁移校验（抽样内容一致性、重复冲突报告、可选回滚/重跑说明）。
 - M6：迁移 `node/` CLI 工具到 SQLite。
 - M7：切换主入口、清理 v1/PG 旧代码、更新 Docker 和文档。
 
 ### 当前可测试范围
 
-- Repository 层 SQLite 行为已可测。
-- `/api/v2/words` 已可在 SQLite 上进行 API 级自动/手动测试。
-- 手动测试前仍需执行 M4 或避开尚未迁移的 `core` / `sync` 路由能力。
+- `/api/v2/words`、`/api/status`、`/api/health`、`/api/config`、`/api/check` 均已在 SQLite 上可测。
+- `/api/local`、`/api/sync/check`、`/api/sync/execute` 已切换至 SQLite + WordServiceV2。
+- `LocalStore` 已从 JSON 文件迁到 SQLite，旧 JSON 自动导入。
+- 默认 SQLite 文件已有真实词库数据：`web/data/ad_fontes.db`（331 条，en=324，de=7）。

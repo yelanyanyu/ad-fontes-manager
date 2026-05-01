@@ -13,13 +13,17 @@ const localStore = require('../localStore.ts') as {
 
 const yaml = require('js-yaml') as { load: (content: string) => unknown };
 
-const { getPool } = require('../db') as {
-  getPool: () => Promise<{ query: (sql: string, params?: unknown[]) => Promise<unknown> }>;
+const { getSqlite } = require('../db') as {
+  getSqlite: () => { prepare: (sql: string) => { get: () => unknown } };
 };
 
-const wordService = require('../services/wordService') as {
+const wordServiceV2 = require('../services/word/WordServiceV2') as {
   checkConflict: (req: Request, yamlStr: string) => Promise<Record<string, unknown>>;
-  saveWord: (req: Request, yamlStr: string, forceUpdate?: boolean) => Promise<unknown>;
+  saveWord: (
+    req: Request,
+    yamlStr: string,
+    forceUpdate?: boolean
+  ) => Promise<Record<string, unknown>>;
 };
 
 const { asyncHandler, BadRequest } = require('../utils/errors.ts') as {
@@ -142,12 +146,11 @@ router.post(
     const { items } = req.body as { items: Array<{ id: string; raw_yaml: string }> };
 
     const results: Array<Record<string, unknown>> = [];
-    const pool = await getPool();
-    await pool.query('SELECT 1');
+    getSqlite().prepare('SELECT 1').get();
 
     for (const item of items) {
       try {
-        const check = await wordService.checkConflict(req, item.raw_yaml);
+        const check = await wordServiceV2.checkConflict(req, item.raw_yaml);
         results.push({ id: item.id, ...check });
       } catch (error) {
         const err = error as { message?: string };
@@ -179,12 +182,11 @@ router.post(
       errors: [],
     };
 
-    const pool = await getPool();
-    await pool.query('SELECT 1');
+    getSqlite().prepare('SELECT 1').get();
 
     for (const item of items) {
       try {
-        await wordService.saveWord(req, item.raw_yaml, forceUpdate);
+        await wordServiceV2.saveWord(req, item.raw_yaml, forceUpdate);
         localStore.delete(item.id);
         results.success++;
       } catch (error) {

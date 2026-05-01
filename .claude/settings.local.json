@@ -8,7 +8,21 @@
       "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c \"SELECT COUNT\\(*\\), language FROM words_v2 GROUP BY language;\")",
       "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c \"SELECT lemma, language, jsonb_pretty\\(content\\)->'yield'->'lemma' AS yaml_lemma, jsonb_pretty\\(content\\)->'etymology' IS NOT NULL AS has_etymology, jsonb_pretty\\(content\\)->'cognate_family' IS NOT NULL AS has_cognates FROM words_v2 LIMIT 3;\")",
       "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c \"SELECT lemma, language, content->'yield'->>'lemma' AS yaml_lemma, \\(content->'etymology'\\) IS NOT NULL AS has_etymology, \\(content->'cognate_family'\\) IS NOT NULL AS has_cognates FROM words_v2 LIMIT 3;\")",
-      "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c ' *)"
+      "Bash(psql postgresql://postgres:zouqingshan2017@localhost:5432/ad_fontes-test -c ' *)",
+      "Bash(where nvm *)",
+      "Bash(nvm -v)",
+      "Bash(where node *)",
+      "Read(//c/Program Files/nodejs/**)",
+      "Bash(cmd.exe /c \"where npm\")",
+      "Bash(nvm uninstall *)",
+      "Bash(nvm install *)",
+      "Bash(nvm use *)",
+      "Bash(npm -v)",
+      "Bash(node -e \"const Database = require\\('better-sqlite3'\\); const db = new Database\\('./data/ad_fontes.db'\\); const count = db.prepare\\('SELECT COUNT\\(*\\) as cnt FROM words_v2'\\).get\\(\\); console.log\\('words_v2 row count:', count.cnt\\); const byLang = db.prepare\\('SELECT language, COUNT\\(*\\) as cnt FROM words_v2 GROUP BY language'\\).all\\(\\); console.log\\('by language:', JSON.stringify\\(byLang\\)\\); db.close\\(\\);\")",
+      "Bash(node -e \"const Database = require\\('better-sqlite3'\\); const db = new Database\\('./data/ad_fontes.db'\\); const tables = db.prepare\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\"\\).all\\(\\); console.log\\('Tables:', JSON.stringify\\(tables.map\\(t=>t.name\\)\\)\\); db.close\\(\\);\")",
+      "Bash(npx tsx *)",
+      "Bash(npm run *)",
+      "Bash(npx eslint *)"
     ]
   }
 }

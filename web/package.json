@@ -12,6 +12,7 @@
     "test-api": "tsx test-api.ts",
     "smoke:query-getter": "tsx scripts/smoke-query-getter.ts",
     "smoke:anki-relay": "tsx scripts/smoke-anki-relay.ts",
+    "import:pg-v2": "tsx scripts/import-pg-words-v2-to-sqlite.ts",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

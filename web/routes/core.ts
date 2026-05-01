@@ -30,9 +30,17 @@ const localStore = require('../localStore.ts') as {
   getConfig: () => Record<string, unknown>;
 };
 
-const { getPool, resetPool } = require('../db') as {
-  getPool: () => Promise<{ query: (sql: string, params?: unknown[]) => Promise<unknown> }>;
-  resetPool: () => Promise<void>;
+const { getSqlite, closeDb } = require('../db') as {
+  getSqlite: () => { prepare: (sql: string) => { get: () => unknown } };
+  closeDb: () => void;
+};
+
+const wordServiceV2 = require('../services/word/WordServiceV2') as {
+  checkWord: (
+    req: Request,
+    userWord: string,
+    language?: string
+  ) => Promise<Record<string, unknown>>;
 };
 
 const { asyncHandler, ServiceUnavailable } = require('../utils/errors.ts') as {
@@ -63,12 +71,16 @@ const { requireWriteAccess } = require('../middleware/writeAuth.ts') as {
   requireWriteAccess: (req: Request, res: Response, next: NextFunction) => void;
 };
 
+const checkDbConnection = (): void => {
+  const sqlite = getSqlite();
+  sqlite.prepare('SELECT 1').get();
+};
+
 router.get(
   '/status',
   asyncHandler(async (req: Request, res: Response) => {
     try {
-      const pool = await getPool();
-      await pool.query('SELECT 1');
+      checkDbConnection();
       res.json({ connected: true });
     } catch (error) {
       const err = error as { message?: string };
@@ -95,7 +107,7 @@ router.post(
       MAX_LOCAL_ITEMS: body.MAX_LOCAL_ITEMS,
     });
 
-    await resetPool();
+    closeDb();
     loggers.system.info('Database configuration updated');
 
     res.json({ success: true });
@@ -117,16 +129,23 @@ router.get(
   })
 );
 
-const wordController = require('../controllers/wordController') as {
-  check: (req: Request, res: Response) => Promise<void>;
-};
-router.get('/check', (req: Request, res: Response) => wordController.check(req, res));
+router.get(
+  '/check',
+  asyncHandler(async (req: Request, res: Response) => {
+    const word = String((req.query as Record<string, unknown>).word || '');
+    const language = String((req.query as Record<string, unknown>).language || 'en');
+    if (!word) {
+      return res.json({ found: false, error: 'word query parameter is required' });
+    }
+    const result = await wordServiceV2.checkWord(req, word, language);
+    res.json(result);
+  })
+);
 
 router.get(
   '/health',
   asyncHandler(async (_req: Request, res: Response) => {
-    const pool = await getPool();
-    await pool.query('SELECT 1');
+    checkDbConnection();
     res.json({ status: 'ok' });
   })
 );

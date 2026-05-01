@@ -1,6 +1,15 @@
 const fs = require('fs') as typeof import('fs');
 const path = require('path') as typeof import('path');
 const crypto = require('crypto') as typeof import('crypto');
+const { eq, desc, sql } = require('drizzle-orm') as typeof import('drizzle-orm');
+const { getDb, getSqlite } = require('./db') as {
+  getDb: () => any;
+  getSqlite: () => {
+    prepare: (sql: string) => { get: () => unknown };
+    exec: (sql: string) => void;
+  };
+};
+const { localWords, localConfig } = require('./db/schema') as typeof import('./db/schema');
 const config = require('./utils/config.ts') as {
   get: <T = unknown>(lookupPath: string, defaultValue?: T) => T;
   reload: () => Record<string, unknown>;
@@ -21,30 +30,135 @@ type LocalConfig = {
   [key: string]: unknown;
 };
 
+type DrizzleLocalWordRow = {
+  id: string;
+  rawYaml: string;
+  lemmaPreview: string | null;
+  updatedAt: number;
+};
+
+type DrizzleConfigRow = {
+  key: string;
+  value: string;
+};
+
+const ensureTablesExist = (): void => {
+  const sqlite = getSqlite();
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS local_words (
+      id TEXT PRIMARY KEY NOT NULL,
+      raw_yaml TEXT NOT NULL,
+      lemma_preview TEXT,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS local_config (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
+    );
+  `);
+};
+
+const toLocalWordItem = (row: DrizzleLocalWordRow): LocalWordItem => ({
+  id: row.id,
+  raw_yaml: row.rawYaml,
+  lemma_preview: row.lemmaPreview,
+  updated_at: row.updatedAt,
+});
+
+const migrateOldJsonIfNeeded = (dataFile: string): void => {
+  if (!fs.existsSync(dataFile)) return;
+
+  const db = getDb();
+  const countRow = db
+    .select({ cnt: sql`count(*)` })
+    .from(localWords)
+    .get();
+  if (Number(countRow?.cnt || 0) > 0) return;
+
+  try {
+    const raw = fs.readFileSync(dataFile, 'utf8');
+    const items = JSON.parse(raw) as LocalWordItem[];
+
+    if (!Array.isArray(items) || items.length === 0) return;
+
+    const insertCount = items.reduce((n, item) => {
+      try {
+        db.insert(localWords)
+          .values({
+            id: item.id || crypto.randomUUID(),
+            rawYaml: item.raw_yaml || '',
+            lemmaPreview: item.lemma_preview || null,
+            updatedAt: item.updated_at || Date.now(),
+          })
+          .run();
+        return n + 1;
+      } catch {
+        return n;
+      }
+    }, 0);
+
+    if (insertCount > 0) {
+      const migratedPath = dataFile.replace(/\.json$/, '.json.migrated');
+      fs.renameSync(dataFile, migratedPath);
+      console.log(
+        `[LocalStore] Migrated ${insertCount}/${items.length} items from ${path.basename(dataFile)} to SQLite. Old file: ${path.basename(migratedPath)}`
+      );
+    }
+  } catch (error) {
+    console.error('[LocalStore] JSON migration error:', error);
+  }
+};
+
 class LocalStore {
   private dataFile: string;
   private limit: number;
+  private migrated: boolean;
 
   constructor() {
     this.dataFile = path.join(__dirname, 'data', 'local_words.json');
     this.limit = Number(config.get<number>('storage.max_items', 100)) || 100;
+    this.migrated = false;
+  }
 
-    const dataDir = path.dirname(this.dataFile);
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
+  private _ensureReady(): void {
+    ensureTablesExist();
+    if (!this.migrated) {
+      migrateOldJsonIfNeeded(this.dataFile);
+      this.migrated = true;
     }
   }
 
   getConfig(): LocalConfig {
+    this._ensureReady();
+    const db = getDb();
+    const rows = db.select().from(localConfig).all() as DrizzleConfigRow[];
+    const stored: Record<string, unknown> = {};
+    for (const row of rows) {
+      try {
+        stored[row.key] = JSON.parse(row.value);
+      } catch {
+        stored[row.key] = row.value;
+      }
+    }
+
     return {
-      DATABASE_URL: config.get<string | null>('database.url', null) || undefined,
-      API_PORT: Number(config.get<number>('server.port', 8080)),
-      CLIENT_DEV_PORT: Number(config.get<number>('client.dev_port', 5173)),
-      MAX_LOCAL_ITEMS: Number(config.get<number>('storage.max_items', 100)),
+      DATABASE_URL:
+        (stored.DATABASE_URL as string) ||
+        config.get<string | null>('database.url', null) ||
+        undefined,
+      API_PORT: Number(stored.API_PORT || config.get<number>('server.port', 8080)),
+      CLIENT_DEV_PORT: Number(
+        stored.CLIENT_DEV_PORT || config.get<number>('client.dev_port', 5173)
+      ),
+      MAX_LOCAL_ITEMS: Number(stored.MAX_LOCAL_ITEMS || this.limit),
+      ...stored,
     };
   }
 
   saveConfig(nextConfig: Record<string, unknown>): void {
+    this._ensureReady();
+    const db = getDb();
+
     if (typeof nextConfig.DATABASE_URL === 'string' && nextConfig.DATABASE_URL.trim()) {
       process.env.DATABASE_URL = nextConfig.DATABASE_URL.trim();
     }
@@ -55,31 +169,35 @@ class LocalStore {
       this.limit = Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
     }
 
+    for (const [key, value] of Object.entries(nextConfig)) {
+      if (value !== undefined && value !== null) {
+        db.insert(localConfig)
+          .values({ key, value: JSON.stringify(value) })
+          .onConflictDoUpdate({ target: localConfig.key, set: { value: JSON.stringify(value) } })
+          .run();
+      }
+    }
+
     config.reload();
   }
 
-  private readData(): LocalWordItem[] {
-    if (!fs.existsSync(this.dataFile)) return [];
-    try {
-      return JSON.parse(fs.readFileSync(this.dataFile, 'utf8')) as LocalWordItem[];
-    } catch (error) {
-      console.error('Local data read error:', error);
-      return [];
-    }
-  }
-
-  private writeData(data: LocalWordItem[]): void {
-    fs.writeFileSync(this.dataFile, JSON.stringify(data, null, 2));
-  }
-
   getAll(): LocalWordItem[] {
-    return this.readData().sort((a, b) => b.updated_at - a.updated_at);
+    this._ensureReady();
+    const db = getDb();
+    const rows = db
+      .select()
+      .from(localWords)
+      .orderBy(desc(localWords.updatedAt))
+      .all() as DrizzleLocalWordRow[];
+
+    return rows.map(toLocalWordItem);
   }
 
   findByLemma(lemma: string): LocalWordItem | null {
     if (!lemma) return null;
+    this._ensureReady();
 
-    const items = this.readData();
+    const items = this.getAll();
     const target = lemma.toLowerCase();
 
     return (
@@ -97,7 +215,8 @@ class LocalStore {
   }
 
   save(rawYaml: string, id: string | null = null): string {
-    const items = this.readData();
+    this._ensureReady();
+    const db = getDb();
 
     let lemma: string | null = null;
     try {
@@ -108,45 +227,54 @@ class LocalStore {
     }
 
     if (id) {
-      const index = items.findIndex(item => item.id === id);
-      if (index !== -1) {
-        const updated: LocalWordItem = {
-          ...items[index],
-          raw_yaml: rawYaml,
-          lemma_preview: lemma,
-          updated_at: Date.now(),
-        };
-        items.splice(index, 1);
-        items.unshift(updated);
-        this.writeData(items);
+      const existing = db.select().from(localWords).where(eq(localWords.id, id)).get() as
+        | DrizzleLocalWordRow
+        | undefined;
+
+      if (existing) {
+        db.update(localWords)
+          .set({
+            rawYaml: rawYaml,
+            lemmaPreview: lemma,
+            updatedAt: Date.now(),
+          })
+          .where(eq(localWords.id, id))
+          .run();
         return id;
       }
     }
 
-    if (items.length >= this.limit) {
+    const countRow = db
+      .select({ cnt: sql`count(*)` })
+      .from(localWords)
+      .get();
+    if (Number(countRow?.cnt || 0) >= this.limit) {
       throw new Error(`Local storage limit reached (${this.limit}). Please sync or delete items.`);
     }
 
     const newId = crypto.randomUUID();
-    const newItem: LocalWordItem = {
-      id: newId,
-      raw_yaml: rawYaml,
-      lemma_preview: lemma,
-      updated_at: Date.now(),
-    };
+    db.insert(localWords)
+      .values({
+        id: newId,
+        rawYaml: rawYaml,
+        lemmaPreview: lemma,
+        updatedAt: Date.now(),
+      })
+      .run();
 
-    items.unshift(newItem);
-    this.writeData(items);
     return newId;
   }
 
   delete(id: string): void {
-    const items = this.readData().filter(item => item.id !== id);
-    this.writeData(items);
+    this._ensureReady();
+    const db = getDb();
+    db.delete(localWords).where(eq(localWords.id, id)).run();
   }
 
   clear(): void {
-    this.writeData([]);
+    this._ensureReady();
+    const db = getDb();
+    db.delete(localWords).run();
   }
 }
 
