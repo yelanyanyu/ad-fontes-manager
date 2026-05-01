@@ -2,7 +2,8 @@
 
 Ad Fontes Manager 是 Ad Fontes 英语学习体系里的词条管理工具。它负责几件事：保存词条、编辑 YAML、预览卡片、同步本地和数据库的数据，以及把词条导出到 Anki。
 
-这个项目是一个前后端分离的 Web 应用。前端用 Vue 3，后端用 Express 5，数据库是 SQLite (better-sqlite3 + Drizzle ORM)。后端断开时，前端还能先把词条存到本地 _local_words 表，等恢复连接后再同步。
+这个项目是一个前后端分离的 Web 应用。前端用 Vue 3，后端用 Express 5，数据库是 SQLite (better-sqlite3 + Drizzle ORM)。
+<img width="2560" height="1410" alt="image" src="https://github.com/user-attachments/assets/97ea07fc-f1be-455f-91a2-4360efde1634" />
 
 ## 这个项目现在能做什么
 
