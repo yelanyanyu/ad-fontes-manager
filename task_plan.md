@@ -1009,15 +1009,25 @@ git commit -m "refactor(db): remove postgres legacy data layer"
   - `node/migrate_v2.ts`：废弃，输出迁移指引。
   - `node/package.json`：删除 `migrate-v2`，新增 `verify-sqlite-migration`、`export-pg-to-sqlite`，添加 `@types/better-sqlite3`、`@types/js-yaml`、`@types/deep-diff`。
   - 验证通过：`type-check`、`lint`、`init_db`、`view-word-yaml`、`check-word-diff` smoke 全部通过。
+- M7：清理 v1/PG 旧代码、更新 Docker 和文档。
+  - API 路径：`/api/words` 映射到 `wordsV2.ts`，与 `/api/v2/words` 等价。
+  - 删除旧 v1 代码：`WordService.ts`、`WordRepository.ts`、`WordAssembler.ts`、`wordController.ts`、`routes/words.ts`。
+  - 删除 v1 测试：`words-query-runtime.test.ts`、`route-validation-wiring.test.ts`。
+  - 删除 v1 脚本：`smoke-query-getter.ts`。
+  - 更新：`services/word/index.ts`（导出 V2）、`server.ts`（路由映射）、`write-auth.test.ts`（适配 V2 路由）。
+  - 清理 PG 产物：`schema.sql`、`migrations/`、`web/db/index.ts` 中 `getPool`/`resetPool` 存根、`web/package.json` 中 `pg` 依赖。
+  - Docker：`docker-compose.yml` 添加 SQLite 数据 volume `./web/data:/app/data`。
+  - 文档：重写 `docs/DATABASE.md`（SQLite/Drizzle）、更新 `docs/DEVELOPMENT.md`（移除 PG 引用）、更新 `.env.example`（SQLite 路径）。
+  - 验证通过：`web` type-check、lint、24 个测试（23 unit + 1 API）、`npm run build` 全部通过。
 
-### 尚未完成
+### 迁移完成
 
-- M7：切换主入口、清理 v1/PG 旧代码、更新 Docker 和文档。
+全部 8 个里程碑（M0-M7）均已完成。Ad Fontes Manager 已从 PostgreSQL + `pg` + 手写 SQL 完全迁移到 SQLite + Drizzle ORM。
 
 ### 当前可测试范围
 
-- `/api/v2/words`、`/api/status`、`/api/health`、`/api/config`、`/api/check` 均已在 SQLite 上可测。
-- `/api/local`、`/api/sync/check`、`/api/sync/execute` 已切换至 SQLite + WordServiceV2。
-- `LocalStore` 已从 JSON 文件迁到 SQLite，旧 JSON 自动导入。
-- 默认 SQLite 文件已有真实词库数据：`web/data/ad_fontes.db`（331 条，en=324，de=7）。
-- Node CLI 工具全部迁移到 SQLite，PG 依赖仅保留在 `verify-sqlite-migration.ts` 的可选 PG 交叉校验路径和 `pg` npm 包中。
+- 全部 API 端点均在 SQLite 上运行：`/api/v2/words`、`/api/words`、`/api/status`、`/api/health`、`/api/config`、`/api/check`、`/api/local`、`/api/sync/*`、`/api/anki/*`。
+- `LocalStore` 使用 SQLite `_local_words` / `_local_config` 表，旧 JSON 自动导入。
+- Node CLI 工具全部使用 SQLite：`init_db`、`loader`、`view-word-yaml`、`check-word-diff`、`verify-sqlite-migration`。
+- 默认数据库：`web/data/ad_fontes.db`（331 条，en=324，de=7）。
+- PG 仅保留在 `node/package.json` 中供可选的跨库校验（`verify-sqlite-migration --pg-check`）使用。

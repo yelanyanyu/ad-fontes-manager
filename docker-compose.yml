@@ -25,6 +25,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 15s
+    volumes:
+      - ./web/data:/app/data
     networks:
       - ad-fontes-network
     deploy:

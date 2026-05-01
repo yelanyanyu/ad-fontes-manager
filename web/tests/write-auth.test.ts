@@ -111,7 +111,7 @@ test('write auth middleware allows request with valid admin token', () => {
 
 test('all write routes are protected by requireWriteAccess middleware', () => {
   const authModule = freshRequire(authModulePath);
-  const wordsRouter = freshRequire(wordsRoutePath);
+  const wordsRouter = freshRequire(wordsV2RoutePath);
   const syncRouter = freshRequire(syncRoutePath);
   const coreRouter = freshRequire(coreRoutePath);
   const middleware = authModule.requireWriteAccess;

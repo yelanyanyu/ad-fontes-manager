@@ -10,8 +10,6 @@
     "dev:client": "cd client && npm run dev",
     "build": "cd client && npm run build",
     "test-api": "tsx test-api.ts",
-    "smoke:query-getter": "tsx scripts/smoke-query-getter.ts",
-    "smoke:anki-relay": "tsx scripts/smoke-anki-relay.ts",
     "import:pg-v2": "tsx scripts/import-pg-words-v2-to-sqlite.ts",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
@@ -35,7 +33,7 @@
     "http-errors": "^2.0.1",
     "http-status-codes": "^2.3.0",
     "js-yaml": "^4.1.0",
-    "pg": "^8.11.3",
+
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "pino-pretty": "^13.1.3",

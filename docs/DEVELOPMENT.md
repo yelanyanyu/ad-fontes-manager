@@ -8,7 +8,6 @@ Ad Fontes Manager 开发者指南
 
 - Node.js 22 LTS+
 - npm 10.0.0+
-- PostgreSQL 14+ (可选)
 - Git
 
 ### 安装步骤
@@ -68,8 +67,8 @@ web/
 | 构建工具 | Vite | 快速开发构建 |
 | 样式 | Tailwind CSS | 原子化 CSS |
 | 后端框架 | Express 5 | REST API |
-| 数据库 | PostgreSQL | 主存储 |
-| 本地存储 | LocalStorage | 离线缓存 |
+| 数据库 | SQLite (better-sqlite3 + Drizzle ORM) | 主存储 |
+| 离线缓存 | SQLite _local_words 表 | 草稿暂存 |
 | 错误处理 | http-errors + http-status-codes | HTTP 错误创建和状态码管理 |
 
 ### 错误处理
@@ -238,33 +237,28 @@ export default exampleController;
 
 ### Schema 定义
 
-数据库 Schema 定义在 `schema.sql`：
+Drizzle ORM schema 定义在 `web/db/schema.ts`，迁移文件在 `drizzle/` 目录。
 
-```sql
--- 新增表示例
-CREATE TABLE IF NOT EXISTS examples (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  word_id UUID REFERENCES words(id) ON DELETE CASCADE,
-  content TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+```bash
+# 更新 schema 后生成迁移
+cd web && npx drizzle-kit generate
+
+# 初始化新数据库
+cd node && npm run init-db
 ```
 
-### 连接池配置
+### 数据库连接
 
 ```typescript
 // db/index.ts
-import { Pool } from 'pg';
+import { getDb, getSqlite, closeDb } from './db';
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 20,                    // 最大连接数
-  idleTimeoutMillis: 30000,   // 空闲超时
-  connectionTimeoutMillis: 5000  // 连接超时
-});
-
-export default pool;
+const db = getDb();           // Drizzle ORM 实例
+const sqlite = getSqlite();   // 底层 better-sqlite3（用于 PRAGMA/原始 SQL）
+closeDb();                    // 关闭连接并清理缓存
 ```
+
+数据库文件位置：`web/data/ad_fontes.db`（开发）或 `/app/data/ad_fontes.db`（Docker）。
 
 ## 前端开发
 
@@ -488,9 +482,9 @@ export CLIENT_DEV_PORT=5174
 
 ### 数据库连接失败
 
-1. 检查 PostgreSQL 服务是否运行
-2. 验证 DATABASE_URL 格式
-3. 检查防火墙设置
+1. 确认 `web/data/ad_fontes.db` 文件存在
+2. 运行 `cd node && npm run init-db` 初始化数据库
+3. 检查文件权限（需可读写）
 
 ### 前端代理错误
 
