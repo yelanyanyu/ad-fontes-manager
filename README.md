@@ -2,14 +2,13 @@
 
 Ad Fontes Manager 是 Ad Fontes 英语学习体系里的词条管理工具。它负责几件事：保存词条、编辑 YAML、预览卡片、同步本地和数据库的数据，以及把词条导出到 Anki。
 
-这个项目是一个前后端分离的 Web 应用。前端用 Vue 3，后端用 Express 5，数据库是 PostgreSQL。后端断开时，前端还能先把词条存到本地，等恢复连接后再同步。
+这个项目是一个前后端分离的 Web 应用。前端用 Vue 3，后端用 Express 5，数据库是 SQLite (better-sqlite3 + Drizzle ORM)。后端断开时，前端还能先把词条存到本地 _local_words 表，等恢复连接后再同步。
 
 ## 这个项目现在能做什么
 
-- 管理本地词条和数据库词条
+- 管理词条（搜索、排序、分页、多语言支持）
 - 用 YAML 编辑词条内容，并做基本校验
-- 搜索、排序、分页查看词条
-- 比较本地和数据库的差异，再决定是否覆盖
+- 保存时自动冲突检测，可选强制覆盖
 - 预览单词卡片的 HTML 效果
 - 导出单个词条到 AnkiConnect 或 `.apkg`
 - 跨页保留选择结果
@@ -19,7 +18,6 @@ Ad Fontes Manager 是 Ad Fontes 英语学习体系里的词条管理工具。它
 
 ## 适合什么场景
 
-- 你平时先离线整理词条，之后再统一同步到数据库
 - 你需要反复调整 YAML，并随时看预览结果
 - 你会把词条做成 Anki 卡片，而且希望单条导出和批量导出保持同一套样式
 - 你一次要处理很多词条，不想因为翻页或临时离开界面丢掉选择和任务状态
@@ -28,9 +26,9 @@ Ad Fontes Manager 是 Ad Fontes 英语学习体系里的词条管理工具。它
 
 - Node.js 22 LTS 或更高版本
 - npm 10 或更高版本
-- PostgreSQL 14 或更高版本
+- 无需额外安装数据库（SQLite 内嵌于应用）
 
-如果你只想先跑前端和本地存储流程，没有数据库也能启动一部分功能。
+SQLite 数据库文件会自动创建在 `web/data/` 目录下。
 
 ## 快速开始
 
@@ -165,13 +163,13 @@ ad-fontes-manager/
 |   |-- routes/              # 路由
 |   |-- services/            # 业务逻辑
 |   |-- middleware/          # 中间件
-|   |-- db/                  # 数据库访问
+|   |-- db/                  # 数据库访问 (Drizzle ORM)
+|   |-- data/                # SQLite 数据文件目录
 |   |-- utils/               # 工具函数
 |   `-- server.ts            # 后端入口
-|-- node/                    # 维护脚本
-|-- migrations/              # 数据库迁移
+|-- node/                    # 维护脚本 (CLI 工具)
+|-- drizzle/                 # Drizzle 迁移文件
 |-- docs/                    # 项目文档
-|-- schema.sql               # 数据库结构
 |-- README.md
 `-- CHANGELOG.md
 ```
@@ -216,7 +214,7 @@ ad-fontes-manager/
 
 | 变量 | 说明 |
 | --- | --- |
-| `DATABASE_URL` | PostgreSQL 连接串 |
+| `DATABASE_URL` | SQLite 数据库文件路径 |
 | `ADMIN_TOKEN` | 管理接口令牌 |
 | `NODE_ENV` | `development`、`production` 或 `test` |
 

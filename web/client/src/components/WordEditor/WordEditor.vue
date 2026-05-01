@@ -31,19 +31,16 @@ import { useAppStore } from '@/stores/appStore';
 import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
-import type { ConflictData, EditorStatus, SaveTarget } from '@/types/word-editor';
+import type { ConflictData, EditorStatus } from '@/types/word-editor';
 import request from '@/utils/request';
 
 interface WordStoreLike {
   editorYaml: string;
-  connectionStatus: string;
-  currentEditingIsLocal: boolean;
   saveWord: (
     yamlContent: string,
-    force?: boolean,
-    target?: 'local' | 'db' | 'auto'
+    force?: boolean
   ) => Promise<boolean | ConflictData>;
-  setEditingContext: (context: { id: string | null; isLocal: boolean }) => void;
+  setEditingContext: (context: { id: string | null }) => void;
 }
 
 interface AppStoreLike {
@@ -56,13 +53,9 @@ const appStore = useAppStore() as unknown as AppStoreLike;
 /**
  * @description 从 wordStore 解构的响应式引用
  * @property {Ref<string>} editorYaml - 编辑器中的 YAML 内容
- * @property {Ref<string>} connectionStatus - 连接状态（'connected' | 'disconnected'）
- * @property {Ref<boolean>} currentEditingIsLocal - 当前编辑的是否为本地词条
  */
-const { editorYaml, connectionStatus, currentEditingIsLocal } = storeToRefs(wordStore as any) as {
+const { editorYaml } = storeToRefs(wordStore as any) as {
   editorYaml: Ref<string>;
-  connectionStatus: Ref<string>;
-  currentEditingIsLocal: Ref<boolean>;
 };
 
 /**
@@ -102,12 +95,7 @@ const conflictData = ref<ConflictData | null>(null);
  * @returns {'Save Locally (Offline)'} 当编辑本地词条或连接断开时
  * @returns {'Save to Database'} 当连接正常且编辑非本地词条时
  */
-const saveLabel = computed(() => {
-  // 根据编辑状态和连接状态决定保存标签
-  if (currentEditingIsLocal.value) return 'Save Locally (Offline)';
-  if (connectionStatus.value === 'connected') return 'Save to Database';
-  return 'Save Locally (Offline)';
-});
+const saveLabel = 'Save';
 
 /**
  * @description 判断输入是否为空
@@ -261,7 +249,7 @@ const useExisting = () => {
     input.value = yaml.dump(conflictData.value.oldData || {}, { lineWidth: -1, noRefs: true });
   }
   if (conflictData.value.source === 'local' && conflictData.value.id) {
-    wordStore.setEditingContext({ id: conflictData.value.id, isLocal: true });
+    wordStore.setEditingContext({ id: conflictData.value.id });
   }
   handleInput();
   closeConflict();
@@ -275,13 +263,7 @@ const useExisting = () => {
  * @returns {Promise<void>}
  */
 const overwrite = async () => {
-  const target: SaveTarget | 'auto' =
-    conflictData.value?.source === 'local'
-      ? 'local'
-      : conflictData.value?.source === 'db'
-        ? 'db'
-        : 'auto';
-  const ok = await wordStore.saveWord(input.value, true, target);
+  const ok = await wordStore.saveWord(input.value, true);
   if (ok) closeConflict();
 };
 </script>

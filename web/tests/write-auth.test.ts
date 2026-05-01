@@ -4,7 +4,6 @@ const path = require('node:path');
 
 const authModulePath = path.resolve(__dirname, '../middleware/writeAuth.ts');
 const wordsV2RoutePath = path.resolve(__dirname, '../routes/wordsV2.ts');
-const syncRoutePath = path.resolve(__dirname, '../routes/sync.ts');
 const coreRoutePath = path.resolve(__dirname, '../routes/core.ts');
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
@@ -112,17 +111,12 @@ test('write auth middleware allows request with valid admin token', () => {
 test('all write routes are protected by requireWriteAccess middleware', () => {
   const authModule = freshRequire(authModulePath);
   const wordsRouter = freshRequire(wordsV2RoutePath);
-  const syncRouter = freshRequire(syncRoutePath);
   const coreRouter = freshRequire(coreRoutePath);
   const middleware = authModule.requireWriteAccess;
 
   assert.equal(hasRouteMiddleware(wordsRouter, 'post', '/', middleware), true);
   assert.equal(hasRouteMiddleware(wordsRouter, 'post', '/add', middleware), true);
   assert.equal(hasRouteMiddleware(wordsRouter, 'delete', '/:id', middleware), true);
-
-  assert.equal(hasRouteMiddleware(syncRouter, 'post', '/local', middleware), true);
-  assert.equal(hasRouteMiddleware(syncRouter, 'delete', '/local/:id', middleware), true);
-  assert.equal(hasRouteMiddleware(syncRouter, 'post', '/sync/execute', middleware), true);
 
   assert.equal(hasRouteMiddleware(coreRouter, 'post', '/config', middleware), true);
 });

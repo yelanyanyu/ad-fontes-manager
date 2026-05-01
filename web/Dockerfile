@@ -2,59 +2,41 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-# Build-time token for frontend write auth header injection.
-# This value is baked into frontend assets by Vite.
 ARG VITE_ADMIN_TOKEN
 ENV VITE_ADMIN_TOKEN=${VITE_ADMIN_TOKEN}
 
-# Copy root package.json and client package.json to leverage cache
 COPY package*.json ./
 COPY client/package*.json ./client/
 
-# Install all dependencies
-RUN npm ci
-RUN cd client && npm ci
+RUN npm ci && cd client && npm ci
 
-# Copy source code
 COPY . .
-
-# Build Vue frontend (outputs to /app/client/dist)
 RUN npm run build
 
 # Stage 2: Production Runtime
 FROM node:22-alpine
 
-# Create non-root user for security
 RUN addgroup -g 1001 -S appgroup && \
     adduser -S appuser -u 1001 -G appgroup
 
 WORKDIR /app
 
-# Install backend production dependencies
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force && \
+    chown -R appuser:appgroup /app
 
-# Copy backend source code
-COPY server.ts .
-COPY localStore.ts .
-COPY db ./db
-COPY routes ./routes
-COPY controllers ./controllers
-COPY services ./services
-COPY utils ./utils
-COPY middleware ./middleware
-COPY schemas ./schemas
+COPY --chown=appuser:appgroup server.ts .
+COPY --chown=appuser:appgroup db ./db
+COPY --chown=appuser:appgroup routes ./routes
+COPY --chown=appuser:appgroup controllers ./controllers
+COPY --chown=appuser:appgroup services ./services
+COPY --chown=appuser:appgroup utils ./utils
+COPY --chown=appuser:appgroup middleware ./middleware
+COPY --chown=appuser:appgroup schemas ./schemas
+COPY --chown=appuser:appgroup --from=builder /app/dist ./dist
 
-# Copy built frontend assets from builder stage
-COPY --from=builder /app/dist ./dist
-
-# Set ownership to non-root user
-RUN chown -R appuser:appgroup /app
-
-# Switch to non-root user
 USER appuser
 
-# Environment variables should be passed at runtime
 ENV NODE_ENV=production
 ENV PORT=8080
 ENV HEALTHCHECK_HOST=127.0.0.1
@@ -62,7 +44,6 @@ ENV HEALTHCHECK_PORT=8080
 
 EXPOSE 8080
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
   CMD sh -c "wget -q -O /dev/null http://${HEALTHCHECK_HOST}:${HEALTHCHECK_PORT}/api/health || exit 1"
 

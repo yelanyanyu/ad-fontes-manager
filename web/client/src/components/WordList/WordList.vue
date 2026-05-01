@@ -49,7 +49,6 @@ import {
   removeVisibleSelections,
 } from '@/utils/wordSelection';
 import { useWordEditorLoader } from '@/composables/useWordEditorLoader';
-import { useWordSync } from '@/composables/useWordSync';
 import { useAnkiExport } from '@/composables/useAnkiExport';
 import { useBatchAnkiExport } from '@/composables/useBatchAnkiExport';
 import {
@@ -61,29 +60,19 @@ import {
 import type {
   DbListMeta,
   DiffBadge,
-  LocalSyncItem,
   SearchMode,
   SortMode,
   WordRecord,
 } from '@/types/word-list';
 
 interface WordStoreLike {
-  connectionStatus: string;
   dbRecords: WordRecord[];
-  localRecords: WordRecord[];
   dbListMeta: DbListMeta;
   loading: boolean;
-  fetchLocalRecords: () => Promise<void>;
   fetchDbRecords: (params?: Partial<DbListMeta>) => Promise<void>;
-  deleteWord: (id: string, isLocal: boolean) => Promise<void>;
-  syncCheck: (items: LocalSyncItem[]) => Promise<any[]>;
-  syncExecute: (
-    items: LocalSyncItem[],
-    forceUpdate: boolean
-  ) => Promise<{ success?: number; failed?: number }>;
-  checkConnection: () => Promise<void>;
+  deleteWord: (id: string) => Promise<void>;
   setEditorYaml: (yaml: string) => void;
-  setEditingContext: (context: { id: string | null; isLocal: boolean }) => void;
+  setEditingContext: (context: { id: string | null }) => void;
 }
 
 interface AppStoreLike {
@@ -99,18 +88,13 @@ interface WordListApiResponse {
 
 const wordStore = useWordStore() as unknown as WordStoreLike;
 const appStore = useAppStore() as unknown as AppStoreLike;
-const { connectionStatus, dbRecords, localRecords, dbListMeta, loading } = storeToRefs(
+const { dbRecords, dbListMeta, loading } = storeToRefs(
   wordStore as any
 ) as {
-  connectionStatus: Ref<string>;
   dbRecords: Ref<WordRecord[]>;
-  localRecords: Ref<WordRecord[]>;
   dbListMeta: Ref<DbListMeta>;
   loading: Ref<boolean>;
 };
-
-// 计算属性：后端是否连通
-const isBackendConnected = computed(() => connectionStatus.value === 'connected');
 
 /**
  * @description 搜索关键词
@@ -160,7 +144,7 @@ watch(dbListMeta, (meta: DbListMeta) => {
  * - 后端断开时：返回本地记录数量
  */
 const totalCount = computed(() => {
-  return isBackendConnected.value ? dbListMeta.value.total || 0 : localRecords.value.length;
+  return dbListMeta.value.total || 0;
 });
 
 /**
@@ -172,20 +156,51 @@ const totalCount = computed(() => {
  * - 使用 filterRecordsBySearch 函数根据搜索模式和关键词过滤
  */
 const displayedRecords = computed<WordRecord[]>(() => {
-  const mappedLocal = (localRecords.value || []).map(r => ({
-    ...r,
-    isLocal: true,
-    lemma: r.lemma || r.lemma_preview,
-    original_yaml: r.original_yaml || r.raw_yaml,
-  }));
-
-  const merged = [...mappedLocal, ...(dbRecords.value || [])];
-  return filterRecordsBySearch(merged, search.value, searchMode.value);
+  return filterRecordsBySearch(dbRecords.value || [], search.value, searchMode.value);
 });
 
 const selectedKeys = ref<Set<string>>(new Set());
 const selectedItemsByKey = ref<Map<string, WordRecord>>(new Map());
 const selectingAllMatching = ref(false);
+
+// ----- Column visibility -----
+type ColumnKey = 'language' | 'partOfSpeech' | 'revisionCount' | 'createdAt' | 'updatedAt';
+const columnLabels: Record<ColumnKey, string> = {
+  language: 'Lang',
+  partOfSpeech: 'PoS',
+  revisionCount: 'Rev',
+  createdAt: 'Created',
+  updatedAt: 'Updated',
+};
+const visibleColumns = ref<Record<ColumnKey, boolean>>({
+  language: false,
+  partOfSpeech: false,
+  revisionCount: false,
+  createdAt: false,
+  updatedAt: false,
+});
+const columnMenuOpen = ref(false);
+const allColumnKeys: ColumnKey[] = ['language', 'partOfSpeech', 'revisionCount', 'createdAt', 'updatedAt'];
+const shownColumns = computed<ColumnKey[]>(() =>
+  allColumnKeys.filter(k => visibleColumns.value[k])
+);
+const toggleColumn = (key: ColumnKey) => {
+  visibleColumns.value[key] = !visibleColumns.value[key];
+};
+const formatColValue = (item: WordRecord, key: ColumnKey): string => {
+  switch (key) {
+    case 'language':
+      return (item as any).language || '';
+    case 'partOfSpeech':
+      return (item as any).part_of_speech || '';
+    case 'revisionCount':
+      return String((item as any).revision_count ?? '');
+    case 'createdAt':
+      return (item as any).created_at?.substring(0, 10) || '';
+    case 'updatedAt':
+      return (item as any).updated_at?.substring(0, 10) || '';
+  }
+};
 const selectedCount = computed<number>(() => selectedKeys.value.size);
 const hasSelection = computed<boolean>(() => selectedCount.value > 0);
 const selectedExportRecords = computed<WordRecord[]>(() => [...selectedItemsByKey.value.values()]);
@@ -273,7 +288,7 @@ const handleEdit = (id: string): void => {
 };
 
 const showMenuId = ref<string | null>(null);
-const pendingDelete = ref<{ id: string; isLocal: boolean } | null>(null);
+const pendingDelete = ref<{ id: string } | null>(null);
 
 const getDiffBadges = (diffs: unknown[] | undefined): DiffBadge[] =>
   deepDiffAdapter.getBadges(diffs as any) as DiffBadge[];
@@ -294,8 +309,8 @@ const selectedMenuItem = computed<WordRecord | null>(() => {
   return displayedRecords.value.find(r => r.id === showMenuId.value) || null;
 });
 
-const openDelete = (id: string, isLocal: boolean): void => {
-  pendingDelete.value = { id, isLocal };
+const openDelete = (id: string | { id: string }): void => {
+  pendingDelete.value = { id: typeof id === 'string' ? id : id.id };
   showMenuId.value = null;
 };
 
@@ -305,7 +320,7 @@ const cancelDelete = (): void => {
 
 const confirmDelete = async () => {
   if (!pendingDelete.value) return;
-  await wordStore.deleteWord(pendingDelete.value.id, pendingDelete.value.isLocal);
+  await wordStore.deleteWord(pendingDelete.value.id);
   pendingDelete.value = null;
   clearSelection();
 };
@@ -550,14 +565,8 @@ const selectAllMatching = async (): Promise<void> => {
   selectingAllMatching.value = true;
 
   try {
-    const currentSearch = isBackendConnected.value ? dbListMeta.value.search || '' : search.value;
-    const localMatched = filterRecordsBySearch(
-      localRecords.value || [],
-      currentSearch,
-      searchMode.value
-    );
-    const dbTotal = isBackendConnected.value ? dbListMeta.value.total || 0 : 0;
-    const decision = buildSelectAllMatchingDecision(dbTotal, localMatched.length);
+    const dbTotal = dbListMeta.value.total || 0;
+    const decision = buildSelectAllMatchingDecision(dbTotal, 0);
 
     if (decision.total <= 0) {
       appStore.addToast('No matching words found', 'info');
@@ -572,11 +581,10 @@ const selectAllMatching = async (): Promise<void> => {
     }
 
     const dbMatched =
-      isBackendConnected.value && dbTotal > 0
+      dbTotal > 0
         ? await collectAllDbMatchingRecords(fetchDbPageForSelection, 200)
         : [];
     const mergedMap = mergeRecordsIntoSelectionMap(selectedItemsByKey.value, [
-      ...localMatched,
       ...dbMatched,
     ]);
     selectedItemsByKey.value = mergedMap;
@@ -595,16 +603,9 @@ const previewBatchWord = (wordId: string): void => {
   handlePreview(wordId);
 };
 
-const localSyncItems = computed<LocalSyncItem[]>(() => {
-  return (localRecords.value || []).map(r => ({
-    id: String(r.id),
-    raw_yaml: String(r.raw_yaml || ''),
-  }));
-});
-
 const refresh = async () => {
   clearSelection();
-  await Promise.all([wordStore.fetchLocalRecords(), wordStore.fetchDbRecords()]);
+  await wordStore.fetchDbRecords();
 };
 
 const { formatYamlForEditor, loadDbRecordByLemma, loadIntoEditor } = useWordEditorLoader({
@@ -627,18 +628,22 @@ const {
   closeSyncConflict,
   editLocalFromSyncConflict,
   overwriteSyncConflict,
-} = useWordSync({
-  wordStore,
-  appStore,
-  isBackendConnected,
-  localSyncItems,
-  refresh,
-  closeMenu: () => {
-    showMenuId.value = null;
-  },
-  formatYamlForEditor,
-  loadDbRecordByLemma,
-});
+} = {
+  syncAllOpen: ref(false),
+  syncAllLoading: ref(false),
+  syncChecks: ref([]),
+  syncActions: ref(new Map()),
+  syncConflict: ref(null),
+  syncConflictTitle: 'Sync Conflict',
+  openSyncAll: () => undefined,
+  closeSyncAll: () => undefined,
+  setBatchAction: (_: string, __: string) => undefined,
+  executeBatchSync: async () => undefined,
+  syncOne: async (_: any) => undefined,
+  closeSyncConflict: () => undefined,
+  editLocalFromSyncConflict: () => undefined,
+  overwriteSyncConflict: async () => undefined,
+};
 
 onMounted(() => {
   const storedMode = localStorage.getItem(searchModeStorageKey);
@@ -898,8 +903,8 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :search-mode-label="searchModeLabel"
       :sort="sort"
       :page-size="pageSize"
-      :is-backend-connected="isBackendConnected"
-      :local-sync-count="localSyncItems.length"
+      :is-backend-connected="true"
+      :local-sync-count="0"
       :total-count="totalCount"
       :sync-all-loading="syncAllLoading"
       :selected-count="selectedCount"
@@ -1010,20 +1015,47 @@ const paginationRange = computed<Array<number | '...'>>(() => {
                 </th>
                 <th
                   scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left w-24"
-                >
-                  Src
-                </th>
-                <th
-                  scope="col"
                   class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left min-w-[220px]"
                 >
                   Lemma
                 </th>
                 <th
+                  v-for="col in shownColumns"
+                  :key="col"
                   scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right w-[160px]"
-                />
+                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left whitespace-nowrap"
+                >
+                  {{ columnLabels[col] }}
+                </th>
+                <th scope="col" class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right w-[200px]">
+                  <div class="flex items-center justify-end gap-1 relative">
+                    <button
+                      class="text-slate-400 hover:text-slate-600 text-[11px] font-normal normal-case inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-200 hover:border-slate-300 transition-colors"
+                      @click.stop="columnMenuOpen = !columnMenuOpen"
+                    >
+                      <i class="fa-solid fa-columns text-[9px]" /> Columns
+                    </button>
+                    <div
+                      v-if="columnMenuOpen"
+                      class="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-2 min-w-[140px]"
+                      @click.stop
+                    >
+                      <label
+                        v-for="col in allColumnKeys"
+                        :key="col"
+                        class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50 rounded cursor-pointer whitespace-nowrap"
+                      >
+                        <input
+                          type="checkbox"
+                          :checked="visibleColumns[col]"
+                          class="h-3.5 w-3.5 rounded border-slate-300 text-blue-600"
+                          @change="toggleColumn(col)"
+                        />
+                        {{ columnLabels[col] }}
+                      </label>
+                    </div>
+                  </div>
+                </th>
               </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -1041,20 +1073,15 @@ const paginationRange = computed<Array<number | '...'>>(() => {
                     @change="toggleSelection(item)"
                   />
                 </td>
-                <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
-                  <span
-                    v-if="item.isLocal"
-                    class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[11px] font-bold"
-                    ><i class="fa-solid fa-laptop" />Local</span
-                  >
-                  <span
-                    v-else
-                    class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold"
-                    ><i class="fa-solid fa-cloud" />DB</span
-                  >
-                </td>
                 <td class="px-4 py-3 text-sm text-slate-700 font-bold text-slate-900">
                   {{ item.lemma || item.yield?.lemma }}
+                </td>
+                <td
+                  v-for="col in shownColumns"
+                  :key="col"
+                  class="px-4 py-3 text-sm text-slate-600 whitespace-nowrap"
+                >
+                  {{ formatColValue(item, col) }}
                 </td>
                 <td class="px-4 py-3 text-sm text-slate-700 text-right">
                   <div class="flex items-center justify-end gap-2 w-[140px]">

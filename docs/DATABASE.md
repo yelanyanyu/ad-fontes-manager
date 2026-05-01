@@ -46,26 +46,6 @@ erDiagram
 - `idx_words_v2_created_at` on `created_at`
 - `idx_words_v2_updated_at` on `updated_at`
 
-### _local_words
-
-Draft/offline word storage. Items are deleted after sync to `words_v2`.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | TEXT PK | UUID |
-| `raw_yaml` | TEXT | Raw YAML string |
-| `lemma_preview` | TEXT | Extracted lemma for search |
-| `updated_at` | INTEGER | Unix ms timestamp |
-
-### _local_config
-
-Key-value configuration store.
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `key` | TEXT PK | Config key |
-| `value` | TEXT | JSON-encoded value |
-
 ## Schema Management
 
 ```bash

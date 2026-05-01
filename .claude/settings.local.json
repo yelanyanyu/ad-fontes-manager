@@ -25,7 +25,15 @@
       "Bash(npx eslint *)",
       "Bash(npm install *)",
       "Bash(node -e \"const Database=require\\('better-sqlite3'\\);const db=new Database\\('../web/data/ad_fontes.db'\\);const rows=db.prepare\\('SELECT lemma,language FROM words_v2 LIMIT 5'\\).all\\(\\);console.log\\(JSON.stringify\\(rows,null,2\\)\\);db.close\\(\\)\")",
-      "Bash(echo \"exit: $?\")"
+      "Bash(echo \"exit: $?\")",
+      "Bash(npx drizzle-kit *)",
+      "Bash(node -e \"const Database=require\\('better-sqlite3'\\);const db=new Database\\('./web/data/ad_fontes.db'\\);db.pragma\\('journal_mode=WAL'\\);const fs=require\\('fs'\\);const mig=fs.readFileSync\\('./drizzle/0001_drop_local_tables.sql','utf8'\\).replaceAll\\('--> statement-breakpoint',''\\);db.exec\\(mig\\);const tables=db.prepare\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\"\\).all\\(\\);console.log\\('Tables:',tables.map\\(t=>t.name\\)\\);db.close\\(\\)\")",
+      "Bash(node -e \"const Database=require\\('better-sqlite3'\\);const db=new Database\\('./data/ad_fontes.db'\\);db.pragma\\('journal_mode=WAL'\\);const fs=require\\('fs'\\);const mig=fs.readFileSync\\('../../drizzle/0001_drop_local_tables.sql','utf8'\\).replaceAll\\('--> statement-breakpoint',''\\);db.exec\\(mig\\);const tables=db.prepare\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\"\\).all\\(\\);console.log\\('Tables:',tables.map\\(t=>t.name\\)\\);db.close\\(\\)\")",
+      "Bash(node -e \"const Database=require\\('better-sqlite3'\\);const db=new Database\\('./data/ad_fontes.db'\\);const fs=require\\('fs'\\);const path=require\\('path'\\);const migPath=path.resolve\\(__dirname,'../drizzle/0001_drop_local_tables.sql'\\);const mig=fs.readFileSync\\(migPath,'utf8'\\).replaceAll\\('--> statement-breakpoint',''\\);db.exec\\(mig\\);const tables=db.prepare\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\"\\).all\\(\\);console.log\\('Tables:',tables.map\\(t=>t.name\\)\\);db.close\\(\\)\")",
+      "Bash(docker compose *)",
+      "Bash(curl -s http://localhost:8080/api/health)",
+      "Bash(curl -s \"http://localhost:8080/api/v2/words?language=en&limit=3\")",
+      "Bash(docker history *)"
     ]
   }
 }

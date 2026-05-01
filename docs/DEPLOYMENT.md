@@ -42,9 +42,8 @@ cat > .env.production << EOF
 NODE_ENV=production
 ADMIN_TOKEN=${ADMIN_TOKEN}
 
-# 数据库配置 (替换为实际值)
-DATABASE_URL=postgresql://user:password@localhost:5432/ad_fontes?sslmode=require
-DATABASE_SSL=true
+# 数据库配置
+DATABASE_URL=/app/data/ad_fontes.db
 
 # 服务器配置
 PORT=8080
@@ -117,8 +116,7 @@ sudo npm install -g pm2
 # 编辑 /etc/environment 或使用 export
 export NODE_ENV=production
 export ADMIN_TOKEN="$(openssl rand -hex 32)"
-export DATABASE_URL="postgresql://user:password@localhost:5432/ad_fontes?sslmode=require"
-export DATABASE_SSL="true"
+export DATABASE_URL="/app/data/ad_fontes.db"
 export SERVER_CORS_ORIGINS='["https://yourdomain.com"]'
 export SERVER_RATE_LIMIT="100"
 export SECURITY_HSTS="true"
@@ -143,8 +141,7 @@ pm2 startup
 部署前请确认:
 
 - [ ] `ADMIN_TOKEN` 已设置为强密码 (≥32 字符)
-- [ ] `DATABASE_URL` 指向正确的数据库
-- [ ] `DATABASE_SSL` 在生产环境已启用
+- [ ] `DATABASE_URL` 指向正确的 SQLite 文件路径
 - [ ] `SERVER_CORS_ORIGINS` 已限制为实际域名
 - [ ] `SERVER_RATE_LIMIT` 已设置 (建议 100-300)
 - [ ] `LOG_LEVEL` 设置为 `warn` 或 `error`
@@ -170,10 +167,10 @@ pm2 startup
 
 ```bash
 # 检查健康端点
-curl http://localhost:8080/api/core/health
+curl http://localhost:8080/api/health
 
 # 预期响应
-{"status":"ok","timestamp":"2026-03-05T..."}
+{"status":"ok"}
 ```
 
 ## 日志管理
@@ -205,12 +202,14 @@ pm2 flush
 
 ### 数据库备份
 
+SQLite 数据库是单文件，直接复制即可：
+
 ```bash
-# 使用 pg_dump 备份
-pg_dump $DATABASE_URL > backup_$(date +%Y%m%d).sql
+# 备份数据库文件
+cp /app/data/ad_fontes.db /backup/ad_fontes_$(date +%Y%m%d).db
 
 # 自动备份脚本 (添加到 crontab)
-0 2 * * * pg_dump $DATABASE_URL > /backup/ad_fontes_$(date +\%Y\%m\%d).sql
+0 2 * * * cp /app/data/ad_fontes.db /backup/ad_fontes_$(date +\%Y\%m\%d).db
 ```
 
 ### 配置备份

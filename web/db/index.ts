@@ -41,7 +41,11 @@ const openSqlite = (): SqliteDatabase => {
   sqlite = new Database(targetPath);
   currentDbPath = targetPath;
 
-  sqlite.pragma('journal_mode = WAL');
+  try {
+    sqlite.pragma('journal_mode = WAL');
+  } catch {
+    sqlite.pragma('journal_mode = DELETE');
+  }
   sqlite.pragma('foreign_keys = ON');
   sqlite.pragma('busy_timeout = 5000');
 

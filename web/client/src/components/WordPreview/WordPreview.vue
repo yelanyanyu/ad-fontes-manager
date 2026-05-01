@@ -131,7 +131,7 @@ const loadWord = async (): Promise<void> => {
   if (!props.wordId) return;
   loading.value = true;
   try {
-    const record = [...(wordStore.localRecords || []), ...(wordStore.dbRecords || [])].find(
+    const record = (wordStore.dbRecords || []).find(
       r => r.id === props.wordId
     );
 

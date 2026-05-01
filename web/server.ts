@@ -112,7 +112,6 @@ if (Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0) {
 app.use(httpLogger);
 
 app.use('/api', require('./routes/core.ts'));
-app.use('/api', require('./routes/sync.ts'));
 app.use('/api/words', require('./routes/wordsV2.ts'));
 app.use('/api/v2/words', require('./routes/wordsV2.ts'));
 

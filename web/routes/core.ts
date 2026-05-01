@@ -25,11 +25,6 @@ const { buildApkgBuffer, normalizeApkgFileName } = require('../services/anki/apk
   normalizeApkgFileName: (value: string) => string;
 };
 
-const localStore = require('../localStore.ts') as {
-  saveConfig: (config: Record<string, unknown>) => void;
-  getConfig: () => Record<string, unknown>;
-};
-
 const { getSqlite, closeDb } = require('../db') as {
   getSqlite: () => { prepare: (sql: string) => { get: () => unknown } };
   closeDb: () => void;
@@ -102,10 +97,12 @@ router.post(
       MAX_LOCAL_ITEMS?: number;
     };
 
-    localStore.saveConfig({
-      DATABASE_URL: body.database_url,
-      MAX_LOCAL_ITEMS: body.MAX_LOCAL_ITEMS,
-    });
+    if (typeof body.database_url === 'string' && body.database_url.trim()) {
+      process.env.DATABASE_URL = body.database_url.trim();
+    }
+    if (body.MAX_LOCAL_ITEMS !== undefined && body.MAX_LOCAL_ITEMS !== null) {
+      process.env.MAX_LOCAL_ITEMS = String(body.MAX_LOCAL_ITEMS);
+    }
 
     closeDb();
     loggers.system.info('Database configuration updated');
@@ -117,11 +114,10 @@ router.post(
 router.get(
   '/config',
   asyncHandler(async (_req: Request, res: Response) => {
-    const localConfig = localStore.getConfig();
     const safeConfig = {
-      MAX_LOCAL_ITEMS: localConfig.MAX_LOCAL_ITEMS,
-      API_PORT: localConfig.API_PORT,
-      CLIENT_DEV_PORT: localConfig.CLIENT_DEV_PORT,
+      MAX_LOCAL_ITEMS: Number(appConfig.get<number>('storage.max_items', 100)),
+      API_PORT: Number(appConfig.get<number>('server.port', 8080)),
+      CLIENT_DEV_PORT: Number(appConfig.get<number>('client.dev_port', 5173)),
       hasDatabaseUrl: !!appConfig.get<string | null>('database.url', null),
       rateLimitPerMinute: Number(appConfig.get<number>('server.rate_limit', 0)),
     };

@@ -22,7 +22,7 @@
 2. 使用真实值编辑 `.env`：
    ```bash
    NODE_ENV=development
-   DATABASE_URL=postgresql://your_user:your_password@localhost:5432/your_db
+   DATABASE_URL=./data/ad_fontes.db
    ADMIN_TOKEN=your-secure-random-token
    PORT=8080
    CLIENT_DEV_PORT=5173
@@ -69,7 +69,7 @@
 ```bash
 # 必需
 export NODE_ENV=production
-export DATABASE_URL=postgresql://user:pass@host:5432/db
+export DATABASE_URL=/app/data/ad_fontes.db
 export ADMIN_TOKEN=$(openssl rand -hex 32)
 
 # 可选
@@ -105,9 +105,9 @@ export CLIENT_DEV_PORT=5173
 ### 数据库安全
 
 - 使用 UUID 作为主键
-- 启用行级安全 (RLS)
-- 连接池限制最大连接数
-- 使用参数化查询防止 SQL 注入
+- SQLite 数据库文件权限限制为运行用户可读写
+- Drizzle ORM 参数化查询，防止 SQL 注入
+- 数据库文件置于应用数据目录内，不对外暴露
 
 ## 预防措施
 

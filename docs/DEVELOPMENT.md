@@ -68,7 +68,6 @@ web/
 | 样式 | Tailwind CSS | 原子化 CSS |
 | 后端框架 | Express 5 | REST API |
 | 数据库 | SQLite (better-sqlite3 + Drizzle ORM) | 主存储 |
-| 离线缓存 | SQLite _local_words 表 | 草稿暂存 |
 | 错误处理 | http-errors + http-status-codes | HTTP 错误创建和状态码管理 |
 
 ### 错误处理
@@ -150,27 +149,6 @@ git commit -m "docs(api): update endpoint documentation"
 
 ## 核心功能实现
 
-### 离线优先架构
-
-```mermaid
-flowchart LR
-    A[用户操作] --> B{在线?}
-    B -->|是| C[同步到数据库]
-    B -->|否| D[保存到 LocalStorage]
-    C --> E[更新本地缓存]
-    D --> F[标记待同步]
-    G[网络恢复] --> H[批量同步]
-    H --> I[冲突检测]
-    I --> J[用户解决冲突]
-```
-
-### 冲突检测流程
-
-1. **保存时检测**: 比较本地版本与数据库版本
-2. **Diff 生成**: 使用 deep-diff 库生成差异
-3. **用户决策**: 展示冲突界面，选择覆盖或保留
-4. **强制更新**: 支持 forceUpdate 参数跳过检测
-
 ### 数据流
 
 ```
@@ -178,9 +156,11 @@ flowchart LR
     ↓
 YAML 解析 (js-yaml)
     ↓
-数据验证
+数据验证 (WordValidator)
     ↓
-本地存储 / 数据库存储
+冲突检测 (deep-diff, 可选 forceUpdate)
+    ↓
+直接写入 words_v2 (Drizzle ORM + better-sqlite3)
     ↓
 响应返回
 ```

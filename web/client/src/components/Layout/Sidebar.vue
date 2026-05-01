@@ -4,8 +4,7 @@
  * @description 应用侧边导航栏组件
  *
  * @component Sidebar
- * @description 应用侧边导航栏，包含导航链接和设置入口。支持展开/收起状态切换，
- *              显示 Word 后端连接状态指示器。
+ * @description 应用侧边导航栏，包含导航链接和设置入口。支持展开/收起状态切换。
  *
  * @example
  * <template>
@@ -18,24 +17,12 @@
  *
  * @dependencies
  * - {@link useAppStore} - 应用状态管理，提供侧边栏展开/收起状态
- * - {@link useWordStore} - Word 模块状态管理，提供后端连接状态
- */
+ *  */
 
 import { useAppStore } from '@/stores/appStore';
-import { useWordStore } from '@/stores/wordStore';
 import { storeToRefs } from 'pinia';
 
-/**
- * 应用状态管理实例
- * @description 使用 useAppStore 获取的应用状态管理实例
- */
 const appStore = useAppStore();
-
-/**
- * Word 模块状态管理实例
- * @description 使用 useWordStore 获取的 Word 模块状态管理实例
- */
-const wordStore = useWordStore();
 
 /**
  * 侧边栏展开状态
@@ -43,12 +30,6 @@ const wordStore = useWordStore();
  */
 const { sidebarOpen } = storeToRefs(appStore);
 
-/**
- * 后端连接状态
- * @description 从 wordStore 获取的响应式连接状态，用于显示设置图标旁的状态指示器
- * 可能的值：'connected' | 'disconnected' | 'testing'
- */
-const { connectionStatus } = storeToRefs(wordStore);
 
 /**
  * 切换侧边栏展开/收起状态
@@ -112,16 +93,6 @@ const toggle = () => {
       >
         <div class="relative flex-none">
           <i class="fa-solid fa-gear w-5 text-center group-hover:text-white transition-colors" />
-          <!-- 后端连通状态指示器 -->
-          <span
-            id="connStatusDot"
-            class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-slate-900 transition-colors"
-            :class="{
-              'bg-green-500': connectionStatus === 'connected',
-              'bg-red-500': connectionStatus === 'disconnected',
-              'bg-yellow-500': connectionStatus === 'testing',
-            }"
-          />
         </div>
         <span class="sidebar-text font-medium whitespace-nowrap" :class="{ hidden: !sidebarOpen }"
           >Settings</span

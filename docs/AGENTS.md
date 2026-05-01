@@ -14,7 +14,7 @@ This project uses a **skill-based documentation system** to avoid context pollut
 ├── getting-started.md    # First-time setup
 ├── backend-patterns.md   # Express/API development
 ├── frontend-patterns.md  # Vue 3/frontend development
-├── database-guide.md     # PostgreSQL/SQL patterns
+├── database-guide.md     # SQLite/Drizzle patterns
 ├── security-guide.md     # Authentication/security
 └── troubleshooting.md    # Debugging common issues
 ```
@@ -45,7 +45,7 @@ This project uses a **skill-based documentation system** to avoid context pollut
 
 **Configuration:**
 - `.env.example` - Environment template
-- `schema.sql` - Database schema
+- `drizzle/` - Database migration files
 
 ## 🚀 Development Commands
 
@@ -82,7 +82,7 @@ cd client && npm run test
 - Vue 3: https://vuejs.org/
 - Express: https://expressjs.com/
 - Pinia: https://pinia.vuejs.org/
-- PostgreSQL: https://www.postgresql.org/docs/
+- SQLite: https://www.sqlite.org/docs.html
 
 ---
 

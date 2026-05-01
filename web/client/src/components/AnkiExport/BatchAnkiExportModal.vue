@@ -269,8 +269,8 @@ const statusClassMap: Record<string, string> = {
                       : 'inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200'
                   "
                 >
-                  <i :class="item.record.isLocal ? 'fa-solid fa-laptop' : 'fa-solid fa-cloud'" />
-                  {{ item.record.isLocal ? 'Local' : 'DB' }}
+                  <i class="fa-solid fa-cloud" />
+                  DB
                 </span>
               </td>
               <td class="px-4 py-3 text-xs">

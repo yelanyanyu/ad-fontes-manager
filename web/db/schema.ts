@@ -25,15 +25,3 @@ export const wordsV2 = sqliteTable(
     index('idx_words_v2_updated_at').on(table.updatedAt),
   ]
 );
-
-export const localWords = sqliteTable('local_words', {
-  id: text('id').primaryKey().notNull(),
-  rawYaml: text('raw_yaml').notNull(),
-  lemmaPreview: text('lemma_preview'),
-  updatedAt: integer('updated_at').notNull(),
-});
-
-export const localConfig = sqliteTable('local_config', {
-  key: text('key').primaryKey().notNull(),
-  value: text('value').notNull(),
-});
