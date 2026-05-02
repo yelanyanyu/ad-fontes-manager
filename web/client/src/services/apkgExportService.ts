@@ -1,5 +1,13 @@
-import type { AnkiApkgExportRequest, AnkiExportPayload, AnkiModelTemplate } from '@/types/anki';
+import type {
+  AnkiApkgExportByIdsRequest,
+  AnkiApkgExportRequest,
+  AnkiExportOptions,
+  AnkiExportPayload,
+  AnkiModelTemplate,
+  FieldMappingConfig,
+} from '@/types/anki';
 import { downloadPayloadsAsApkg } from '@/services/ankiConnectService';
+import request from '@/utils/request';
 
 const DEFAULT_FILE_NAME = 'ad-fontes-export.apkg';
 
@@ -85,4 +93,43 @@ export const exportBatchApkgViaAnkiConnect = async (
   css: string
 ): Promise<{ ok: boolean; fileName: string }> => {
   return downloadApkgViaBackend(payloads, outputFileName, modelFields, selectedTemplate, css);
+};
+
+export const exportApkgByIds = async (
+  wordIds: string[],
+  fieldMapping: FieldMappingConfig,
+  options: AnkiExportOptions,
+  modelFields: string[],
+  selectedTemplate: AnkiModelTemplate,
+  css: string,
+  outputFileName: string
+): Promise<{ ok: boolean; fileName: string }> => {
+  if (!wordIds.length) {
+    throw new Error('At least one word id is required for .apkg export');
+  }
+
+  if (!css.trim()) {
+    console.warn('Model CSS is empty. The exported .apkg will use Anki default styling.');
+  }
+
+  const normalizedFileName = sanitizeFileName(outputFileName);
+  const requestPayload: AnkiApkgExportByIdsRequest = {
+    wordIds,
+    fieldMapping,
+    options,
+    modelFields,
+    selectedTemplate,
+    css,
+    fileName: normalizedFileName,
+  };
+  const apkgBlob = await request.post<Blob>('/anki/export-apkg-by-ids', requestPayload, {
+    responseType: 'blob',
+    skipErrorToast: true,
+  });
+  const validZip = await hasZipEocdSignature(apkgBlob);
+  if (!validZip) {
+    throw new Error('Downloaded .apkg is invalid (missing ZIP EOCD). Please retry export.');
+  }
+  triggerBrowserDownload(apkgBlob, normalizedFileName);
+  return { ok: true, fileName: normalizedFileName };
 };

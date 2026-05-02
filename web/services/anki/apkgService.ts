@@ -46,9 +46,22 @@ type AnkiExportInstance = {
   save: () => Promise<Buffer>;
 };
 
+// anki-apkg-export loads sql.js with a 16 MB WASM heap limit by default.
+// Redirect to the memory-growth build so large exports (300+ cards) don't OOM.
+const Module = require('module') as typeof import('module');
+const _sqlResolveOrig = Module._resolveFilename;
+Module._resolveFilename = function (request: string, parent: NodeModule, isMain: boolean, options?: { paths?: string[] }) {
+  if (request === 'sql.js') {
+    return _sqlResolveOrig.call(this, 'sql.js/js/sql-memory-growth.js', parent, isMain, options);
+  }
+  return _sqlResolveOrig.apply(this, arguments as unknown as [string, NodeModule, boolean, { paths?: string[] } | undefined]);
+};
+
 const { default: createAnkiExport } = require('anki-apkg-export') as {
   default: (deckName: string, template?: TemplateConfig) => AnkiExportInstance;
 };
+
+Module._resolveFilename = _sqlResolveOrig;
 
 const DEFAULT_FILE_NAME = 'ad-fontes-export.apkg';
 

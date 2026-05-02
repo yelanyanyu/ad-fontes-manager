@@ -1,15 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AnkiExportPayload, AnkiModelTemplate } from '@/types/anki';
 
-const { downloadPayloadsAsApkgMock } = vi.hoisted(() => ({
+const { downloadPayloadsAsApkgMock, requestPostMock } = vi.hoisted(() => ({
   downloadPayloadsAsApkgMock: vi.fn(),
+  requestPostMock: vi.fn(),
 }));
 
 vi.mock('@/services/ankiConnectService', () => ({
   downloadPayloadsAsApkg: downloadPayloadsAsApkgMock,
 }));
 
+vi.mock('@/utils/request', () => ({
+  default: {
+    post: requestPostMock,
+  },
+}));
+
 import {
+  exportApkgByIds,
   exportApkgViaAnkiConnect,
   exportBatchApkgViaAnkiConnect,
 } from '@/services/apkgExportService';
@@ -51,6 +59,7 @@ describe('apkgExportService', () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    requestPostMock.mockReset();
     vi.stubGlobal('document', {
       createElement: () => ({
         href: '',
@@ -99,6 +108,38 @@ describe('apkgExportService', () => {
     expect(downloadPayloadsAsApkgMock).toHaveBeenCalledWith(
       expect.objectContaining({
         css: '',
+      })
+    );
+  });
+
+  it('posts word ids to the backend by-ids APKG endpoint', async () => {
+    downloadPayloadsAsApkgMock.mockClear();
+    requestPostMock.mockResolvedValueOnce(makeApkgBlob());
+
+    await exportApkgByIds(
+      ['word-1', 'word-2'],
+      [{ source: 'lemma', target: 'Word' }],
+      payload.options,
+      ['Word', 'Back'],
+      selectedTemplate,
+      '.card { color: #222; }',
+      'all words.apkg'
+    );
+
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/anki/export-apkg-by-ids',
+      {
+        wordIds: ['word-1', 'word-2'],
+        fieldMapping: [{ source: 'lemma', target: 'Word' }],
+        options: payload.options,
+        modelFields: ['Word', 'Back'],
+        selectedTemplate,
+        css: '.card { color: #222; }',
+        fileName: 'all words.apkg',
+      },
+      expect.objectContaining({
+        responseType: 'blob',
+        skipErrorToast: true,
       })
     );
   });

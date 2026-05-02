@@ -27,7 +27,7 @@ import {
   saveFieldMapping,
 } from '@/services/ankiFieldMappingStore';
 import { buildExportPayload } from '@/services/ankiPayloadBuilder';
-import { exportBatchApkgViaAnkiConnect } from '@/services/apkgExportService';
+import { exportApkgByIds, exportBatchApkgViaAnkiConnect } from '@/services/apkgExportService';
 import { useBatchAnkiStore } from '@/stores/batchAnkiStore';
 import { makeWordSelectionKey } from '@/utils/wordSelection';
 import type {
@@ -48,6 +48,8 @@ const ankiSessionCache: {
   deckOptions: [],
   modelOptions: [],
 };
+
+const BACKEND_BY_IDS_EXPORT_THRESHOLD = 100;
 
 export const useBatchAnkiExport = () => {
   const batchStore = useBatchAnkiStore();
@@ -394,20 +396,6 @@ export const useBatchAnkiExport = () => {
     summaryVisible.value = true;
 
     try {
-      const payloads = await Promise.all(
-        items.value.map(async item => {
-          if (item.payload) return item.payload;
-          return buildExportPayload(
-            item.record,
-            {
-              deckName: deckName.value,
-              modelName: modelName.value,
-              tags: tags.value,
-            },
-            fieldMapping.value
-          );
-        })
-      );
       if (!ankiConnected.value) {
         throw new Error(
           'Anki is not connected. Please connect Anki to load model fields/templates.'
@@ -426,9 +414,45 @@ export const useBatchAnkiExport = () => {
         throw new Error('Please select a card template for .apkg export.');
       }
 
+      const outputFileName = normalizeExportFileName(
+        `${deckName.value || 'ad-fontes-export'}-batch.apkg`
+      );
+
+      if (items.value.length > BACKEND_BY_IDS_EXPORT_THRESHOLD) {
+        await exportApkgByIds(
+          items.value.map(item => item.id),
+          fieldMapping.value,
+          {
+            deckName: deckName.value,
+            modelName: modelName.value,
+            tags: tags.value,
+          },
+          modelFieldNames.value,
+          selectedTemplate,
+          modelCss.value,
+          outputFileName
+        );
+        return;
+      }
+
+      const payloads = await Promise.all(
+        items.value.map(async item => {
+          if (item.payload) return item.payload;
+          return buildExportPayload(
+            item.record,
+            {
+              deckName: deckName.value,
+              modelName: modelName.value,
+              tags: tags.value,
+            },
+            fieldMapping.value
+          );
+        })
+      );
+
       await exportBatchApkgViaAnkiConnect(
         payloads,
-        normalizeExportFileName(`${deckName.value || 'ad-fontes-export'}-batch.apkg`),
+        outputFileName,
         modelFieldNames.value,
         selectedTemplate,
         modelCss.value

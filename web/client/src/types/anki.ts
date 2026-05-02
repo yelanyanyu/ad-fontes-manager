@@ -49,6 +49,16 @@ export interface AnkiApkgExportRequest {
   css: string;
 }
 
+export interface AnkiApkgExportByIdsRequest {
+  wordIds: string[];
+  fieldMapping: FieldMappingConfig;
+  options: AnkiExportOptions;
+  modelFields: string[];
+  selectedTemplate: AnkiModelTemplate;
+  css: string;
+  fileName?: string;
+}
+
 export interface AnkiConnectInvokePayload {
   action: string;
   version: number;

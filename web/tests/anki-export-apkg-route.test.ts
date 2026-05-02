@@ -5,6 +5,8 @@ const path = require('node:path');
 const coreRoutePath = path.resolve(__dirname, '../routes/core.ts');
 const configModulePath = path.resolve(__dirname, '../utils/config.ts');
 const apkgServicePath = path.resolve(__dirname, '../services/anki/apkgService.ts');
+const dbModulePath = path.resolve(__dirname, '../db/index.ts');
+const fieldExtractorPath = path.resolve(__dirname, '../services/anki/fieldExtractor.ts');
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
 process.env.DATABASE_URL =
@@ -23,12 +25,20 @@ type BuildApkgInput = {
   css: string;
 };
 
-function loadCoreRouterWithApkgMock(apkgService: {
-  buildApkgBuffer: (input: BuildApkgInput) => Promise<Buffer>;
-  normalizeApkgFileName: (value: string) => string;
-}): any {
+function loadCoreRouterWithApkgMock(
+  apkgService: {
+    buildApkgBuffer: (input: BuildApkgInput) => Promise<Buffer>;
+    normalizeApkgFileName: (value: string) => string;
+  },
+  extraMocks?: {
+    db?: unknown;
+    fieldExtractor?: unknown;
+  }
+): any {
   const originalCore = require.cache[coreRoutePath];
   const originalApkgService = require.cache[apkgServicePath];
+  const originalDb = require.cache[dbModulePath];
+  const originalFieldExtractor = require.cache[fieldExtractorPath];
 
   delete require.cache[coreRoutePath];
   require.cache[apkgServicePath] = {
@@ -37,6 +47,24 @@ function loadCoreRouterWithApkgMock(apkgService: {
     loaded: true,
     exports: apkgService,
   } as NodeModule;
+
+  if (extraMocks?.db) {
+    require.cache[dbModulePath] = {
+      id: dbModulePath,
+      filename: dbModulePath,
+      loaded: true,
+      exports: extraMocks.db,
+    } as NodeModule;
+  }
+
+  if (extraMocks?.fieldExtractor) {
+    require.cache[fieldExtractorPath] = {
+      id: fieldExtractorPath,
+      filename: fieldExtractorPath,
+      loaded: true,
+      exports: extraMocks.fieldExtractor,
+    } as NodeModule;
+  }
 
   delete require.cache[configModulePath];
   const router = freshRequire(coreRoutePath);
@@ -50,6 +78,18 @@ function loadCoreRouterWithApkgMock(apkgService: {
     require.cache[apkgServicePath] = originalApkgService;
   } else {
     delete require.cache[apkgServicePath];
+  }
+
+  if (originalDb) {
+    require.cache[dbModulePath] = originalDb;
+  } else {
+    delete require.cache[dbModulePath];
+  }
+
+  if (originalFieldExtractor) {
+    require.cache[fieldExtractorPath] = originalFieldExtractor;
+  } else {
+    delete require.cache[fieldExtractorPath];
   }
 
   return router;
@@ -280,4 +320,99 @@ test('POST /anki/export-apkg should pass css to the APKG builder and return bina
     throw new Error('Expected APKG builder input to be captured');
   }
   assert.equal(input.css, validBody.css);
+});
+
+test('POST /anki/export-apkg-by-ids should build APKG payloads from SQLite word content', async () => {
+  let capturedInput: BuildApkgInput | null = null;
+  let capturedIds: unknown[] | null = null;
+  const router = loadCoreRouterWithApkgMock(
+    {
+      buildApkgBuffer: async (input: BuildApkgInput) => {
+        capturedInput = input;
+        return Buffer.from('PK\x03\x04fake-apkg');
+      },
+      normalizeApkgFileName: (value: string) => value.trim() || 'ad-fontes-export.apkg',
+    },
+    {
+      db: {
+        getSqlite: () => ({
+          prepare: (sql: string) => {
+            assert.match(sql, /FROM words_v2/);
+            return {
+              all: (...ids: unknown[]) => {
+                capturedIds = ids;
+                return [
+                  {
+                    id: 'word-1',
+                    lemma: 'craft',
+                    content: JSON.stringify({
+                      yield: {
+                        lemma: 'craft',
+                        user_context_sentence: 'She honed her craft.',
+                      },
+                    }),
+                  },
+                  {
+                    id: 'word-2',
+                    lemma: 'forge',
+                    content: {
+                      yield: {
+                        lemma: 'forge',
+                        user_context_sentence: 'They forge steel.',
+                      },
+                    },
+                  },
+                ];
+              },
+            };
+          },
+        }),
+        closeDb: () => undefined,
+      },
+      fieldExtractor: {
+        buildAnkiFields: (content: Record<string, unknown>) => ({
+          Word: String((content.yield as Record<string, unknown>).lemma),
+          Back: '<p>rendered</p>',
+        }),
+      },
+    }
+  );
+  const layer = getRouteLayer(router, 'post', '/anki/export-apkg-by-ids');
+
+  const result = await invokeRouteStack(layer, {
+    fileName: '  all_words.apkg  ',
+    wordIds: ['word-1', 'word-2'],
+    fieldMapping: [
+      { source: 'lemma', target: 'Word' },
+      { source: 'rendered_html', target: 'Back' },
+    ],
+    options: validPayload.options,
+    modelFields: ['Word', 'Back'],
+    selectedTemplate,
+    css: '.card { color: #222; }',
+  });
+
+  assert.equal(result.error, null);
+  assert.equal(result.statusCode, 200);
+  assert.equal(result.headers['Content-Disposition'], 'attachment; filename="all_words.apkg"');
+  assert.deepEqual(capturedIds, ['word-1', 'word-2']);
+  const input = capturedInput as BuildApkgInput | null;
+  if (!input) {
+    throw new Error('Expected APKG builder input to be captured');
+  }
+  assert.equal(input.css, '.card { color: #222; }');
+  assert.deepEqual(input.payloads, [
+    {
+      fields: { Word: 'craft', Back: '<p>rendered</p>' },
+      options: validPayload.options,
+      sourceWordId: 'word-1',
+      sourceLemma: 'craft',
+    },
+    {
+      fields: { Word: 'forge', Back: '<p>rendered</p>' },
+      options: validPayload.options,
+      sourceWordId: 'word-2',
+      sourceLemma: 'forge',
+    },
+  ]);
 });

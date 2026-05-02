@@ -5,6 +5,7 @@ import type { WordRecord } from '@/types/word-list';
 
 const {
   buildExportPayloadMock,
+  exportApkgByIdsMock,
   exportBatchApkgViaAnkiConnectMock,
   getDeckNamesMock,
   getDefaultAnkiOptionsMock,
@@ -20,6 +21,7 @@ const {
   saveStoredAnkiExportOptionsMock,
 } = vi.hoisted(() => ({
   buildExportPayloadMock: vi.fn(),
+  exportApkgByIdsMock: vi.fn(),
   exportBatchApkgViaAnkiConnectMock: vi.fn(),
   getDeckNamesMock: vi.fn(),
   getDefaultAnkiOptionsMock: vi.fn(),
@@ -40,6 +42,7 @@ vi.mock('@/services/ankiPayloadBuilder', () => ({
 }));
 
 vi.mock('@/services/apkgExportService', () => ({
+  exportApkgByIds: exportApkgByIdsMock,
   exportBatchApkgViaAnkiConnect: exportBatchApkgViaAnkiConnectMock,
 }));
 
@@ -109,6 +112,7 @@ describe('useBatchAnkiExport', () => {
     setActivePinia(createPinia());
     vi.resetModules();
     buildExportPayloadMock.mockReset();
+    exportApkgByIdsMock.mockReset();
     exportBatchApkgViaAnkiConnectMock.mockReset();
     getDeckNamesMock.mockReset();
     getModelFieldNamesMock.mockReset();
@@ -152,6 +156,10 @@ describe('useBatchAnkiExport', () => {
       ok: true,
       fileName: 'english-words-batch.apkg',
     });
+    exportApkgByIdsMock.mockResolvedValue({
+      ok: true,
+      fileName: 'english-words-batch.apkg',
+    });
 
     ({ useBatchAnkiExport } = await import('@/composables/useBatchAnkiExport'));
   });
@@ -166,5 +174,29 @@ describe('useBatchAnkiExport', () => {
     expect(exportBatchApkgViaAnkiConnectMock).toHaveBeenCalledTimes(1);
     expect(exportBatchApkgViaAnkiConnectMock.mock.calls[0][0]).toHaveLength(2);
     expect(exportBatchApkgViaAnkiConnectMock.mock.calls[0][4]).toBe('.card { color: #222; }');
+  });
+
+  it('uses backend by-ids export for large batches', async () => {
+    const largeRecords = Array.from({ length: 101 }, (_, index) => ({
+      id: `word-${index + 1}`,
+      lemma: `word${index + 1}`,
+      isLocal: true,
+    })) as WordRecord[];
+    const batch = useBatchAnkiExport();
+    await batch.open(largeRecords);
+
+    await batch.exportApkg();
+
+    expect(buildExportPayloadMock).not.toHaveBeenCalled();
+    expect(exportBatchApkgViaAnkiConnectMock).not.toHaveBeenCalled();
+    expect(exportApkgByIdsMock).toHaveBeenCalledWith(
+      largeRecords.map(record => String(record.id)),
+      payload.fieldMapping,
+      payload.options,
+      ['Word', 'Context', 'Back'],
+      { name: 'Forward', front: '{{Word}}', back: '{{Back}}' },
+      '.card { color: #222; }',
+      'English::Words-batch.apkg'
+    );
   });
 });

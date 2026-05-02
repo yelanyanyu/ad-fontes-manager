@@ -24,6 +24,22 @@ const AnkiExportPayloadSchema = z.object({
   sourceLemma: OptionalTrimmedString.default(''),
 });
 
+const AnkiDataSourceSchema = z.enum([
+  'lemma',
+  'user_context_sentence',
+  'other_common_meanings',
+  'selected_examples_sentence',
+  'selected_examples_translation',
+  'synonyms_word',
+  'synonyms_meaning',
+  'rendered_html',
+]);
+
+const AnkiFieldMappingEntrySchema = z.object({
+  source: AnkiDataSourceSchema,
+  target: NonEmptyString,
+});
+
 const AnkiSelectedTemplateSchema = z.object({
   name: NonEmptyString,
   front: z.string(),
@@ -141,9 +157,46 @@ const AnkiExportApkgBodySchema = z
     });
   });
 
+const AnkiExportApkgByIdsBodySchema = z
+  .object({
+    fileName: OptionalTrimmedString.default('ad-fontes-export.apkg'),
+    wordIds: z.array(NonEmptyString).min(1, 'wordIds must contain at least one id'),
+    fieldMapping: z.array(AnkiFieldMappingEntrySchema),
+    options: AnkiExportOptionsSchema,
+    modelFields: z.array(NonEmptyString).min(1, 'modelFields must contain at least one field'),
+    selectedTemplate: AnkiSelectedTemplateSchema,
+    css: z.string().min(1, 'CSS must not be empty when AnkiConnect is available'),
+  })
+  .superRefine((input, ctx) => {
+    const modelFieldSet = new Set(input.modelFields);
+    if (modelFieldSet.size !== input.modelFields.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'modelFields must be unique',
+        path: ['modelFields'],
+      });
+    }
+
+    const referencedTemplateFields = new Set([
+      ...extractTemplateFields(input.selectedTemplate.front),
+      ...extractTemplateFields(input.selectedTemplate.back),
+    ]);
+
+    referencedTemplateFields.forEach(fieldName => {
+      if (!modelFieldSet.has(fieldName)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `selectedTemplate references unknown field "${fieldName}"`,
+          path: ['selectedTemplate'],
+        });
+      }
+    });
+  });
+
 module.exports = {
   AnkiTargetFieldsSchema,
   AnkiExportOptionsSchema,
   AnkiExportPayloadSchema,
   AnkiExportApkgBodySchema,
+  AnkiExportApkgByIdsBodySchema,
 };

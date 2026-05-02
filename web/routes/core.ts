@@ -11,6 +11,9 @@ const { validateBody } = require('../middleware/validate.ts') as {
 const { AnkiExportApkgBodySchema } = require('../schemas/requests/anki.ts') as {
   AnkiExportApkgBodySchema: unknown;
 };
+const { AnkiExportApkgByIdsBodySchema } = require('../schemas/requests/anki.ts') as {
+  AnkiExportApkgByIdsBodySchema: unknown;
+};
 const { buildApkgBuffer, normalizeApkgFileName } = require('../services/anki/apkgService.ts') as {
   buildApkgBuffer: (input: {
     payloads: Array<{
@@ -27,8 +30,20 @@ const { buildApkgBuffer, normalizeApkgFileName } = require('../services/anki/apk
 };
 
 const { getSqlite, closeDb } = require('../db') as {
-  getSqlite: () => { prepare: (sql: string) => { get: () => unknown } };
+  getSqlite: () => {
+    prepare: (sql: string) => {
+      get: () => unknown;
+      all: (...params: unknown[]) => unknown[];
+    };
+  };
   closeDb: () => void;
+};
+
+const { buildAnkiFields } = require('../services/anki/fieldExtractor.ts') as {
+  buildAnkiFields: (
+    data: Record<string, unknown>,
+    mapping: Array<{ source: string; target: string }>
+  ) => Record<string, string>;
 };
 
 const wordServiceV2 = require('../services/word/WordServiceV2') as {
@@ -39,8 +54,9 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
   ) => Promise<Record<string, unknown>>;
 };
 
-const { asyncHandler, ServiceUnavailable } = require('../utils/errors.ts') as {
+const { asyncHandler, BadRequest, ServiceUnavailable } = require('../utils/errors.ts') as {
   asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
+  BadRequest: (message: string, data?: unknown) => Error;
   ServiceUnavailable: (message: string, data?: unknown) => Error;
 };
 
@@ -240,6 +256,93 @@ router.post(
     const finalFileName = normalizeApkgFileName(body.fileName || `${deckName}.apkg`);
     const apkgBuffer = await buildApkgBuffer({
       payloads: body.payloads,
+      modelFields: body.modelFields,
+      selectedTemplate: body.selectedTemplate,
+      css: body.css,
+    });
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${finalFileName}"`);
+    res.setHeader('Content-Length', String(apkgBuffer.byteLength));
+    res.status(200).send(apkgBuffer);
+  })
+);
+
+type WordV2ExportRow = {
+  id: string;
+  lemma?: string;
+  content: string | Record<string, unknown>;
+};
+
+const parseWordContent = (value: string | Record<string, unknown>): Record<string, unknown> => {
+  if (typeof value !== 'string') return value;
+  const parsed = JSON.parse(value) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Invalid words_v2 content JSON');
+  }
+  return parsed as Record<string, unknown>;
+};
+
+const queryWordsV2ByIds = (wordIds: string[]): WordV2ExportRow[] => {
+  const sqlite = getSqlite();
+  const rows: WordV2ExportRow[] = [];
+  const chunkSize = 500;
+
+  for (let start = 0; start < wordIds.length; start += chunkSize) {
+    const chunk = wordIds.slice(start, start + chunkSize);
+    const placeholders = chunk.map(() => '?').join(', ');
+    const chunkRows = sqlite
+      .prepare(`SELECT id, lemma, content FROM words_v2 WHERE id IN (${placeholders})`)
+      .all(...chunk) as WordV2ExportRow[];
+    rows.push(...chunkRows);
+  }
+
+  const rowsById = new Map(rows.map(row => [String(row.id), row]));
+  return wordIds.map(id => rowsById.get(id)).filter((row): row is WordV2ExportRow => Boolean(row));
+};
+
+router.post(
+  '/anki/export-apkg-by-ids',
+  validateBody(AnkiExportApkgByIdsBodySchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = (req.body || {}) as {
+      fileName?: string;
+      wordIds: string[];
+      fieldMapping: Array<{ source: string; target: string }>;
+      options: { deckName: string; modelName: string; tags: string[] };
+      modelFields: string[];
+      selectedTemplate: { name: string; front: string; back: string };
+      css: string;
+    };
+
+    const rows = queryWordsV2ByIds(body.wordIds);
+    if (rows.length !== body.wordIds.length) {
+      const foundIds = new Set(rows.map(row => String(row.id)));
+      const missingIds = body.wordIds.filter(id => !foundIds.has(id));
+      throw BadRequest('Some requested words were not found', {
+        code: 'WORDS_NOT_FOUND',
+        missingIds,
+      });
+    }
+
+    const payloads = rows.map(row => {
+      const content = parseWordContent(row.content);
+      const yieldRecord = content.yield as Record<string, unknown> | undefined;
+      const sourceLemma = String(yieldRecord?.lemma || row.lemma || row.id);
+
+      return {
+        fields: buildAnkiFields(content, body.fieldMapping),
+        options: body.options,
+        sourceWordId: row.id,
+        sourceLemma,
+      };
+    });
+
+    const finalFileName = normalizeApkgFileName(
+      body.fileName || `${body.options.deckName || 'ad-fontes-export'}.apkg`
+    );
+    const apkgBuffer = await buildApkgBuffer({
+      payloads,
       modelFields: body.modelFields,
       selectedTemplate: body.selectedTemplate,
       css: body.css,
