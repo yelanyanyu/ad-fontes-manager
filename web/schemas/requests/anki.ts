@@ -14,7 +14,6 @@ const AnkiTargetFieldsSchema = z
 const AnkiExportOptionsSchema = z.object({
   deckName: NonEmptyString,
   modelName: NonEmptyString,
-  addReverse: z.boolean(),
   tags: z.array(NonEmptyString).default([]),
 });
 
@@ -59,6 +58,7 @@ const AnkiExportApkgBodySchema = z
     payloads: z.array(AnkiExportPayloadSchema).min(1, 'payloads must contain at least one item'),
     modelFields: z.array(NonEmptyString).min(1, 'modelFields must contain at least one field'),
     selectedTemplate: AnkiSelectedTemplateSchema,
+    css: z.string().min(1, 'CSS must not be empty when AnkiConnect is available'),
   })
   .superRefine((input, ctx) => {
     if (!input.payloads.length) return;

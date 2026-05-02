@@ -4,29 +4,28 @@ const path = require('node:path');
 
 const apkgServicePath = path.resolve(__dirname, '../services/anki/apkgService.ts');
 
-const { buildApkgBuffer, buildGuidKey, shouldIncludeReverse, toStableIdentifier } = require(
-  apkgServicePath
-) as {
-  buildApkgBuffer: (
+const { buildApkgBuffer, buildGuidKey, toStableIdentifier } = require(apkgServicePath) as {
+  buildApkgBuffer: (input: {
     payloads: Array<{
       fields: {
         Word: string;
         Context: string;
         notes: string;
         Back: string;
-        'Add Reverse': string;
         Media: string;
       };
-      options: { deckName: string; modelName: string; addReverse: boolean; tags: string[] };
+      options: { deckName: string; modelName: string; tags: string[] };
       sourceWordId?: string;
       sourceLemma?: string;
-    }>
-  ) => Promise<Buffer>;
+    }>;
+    modelFields: string[];
+    selectedTemplate: { name: string; front: string; back: string };
+    css: string;
+  }) => Promise<Buffer>;
   buildGuidKey: (
     payload: { sourceWordId?: string; sourceLemma?: string; fields: { Word: string } },
     deckName: string
   ) => string;
-  shouldIncludeReverse: (payload: { fields: { 'Add Reverse': string } }) => boolean;
   toStableIdentifier: (key: string) => number;
 };
 
@@ -36,17 +35,26 @@ const basePayload = {
     Context: 'She honed her craft.',
     notes: 'n.',
     Back: '<p>Detailed explanation</p>',
-    'Add Reverse': 'true',
     Media: '',
   },
   options: {
     deckName: 'English::Words',
     modelName: 'AdFontesWord',
-    addReverse: true,
     tags: ['English::type::word'],
   },
   sourceWordId: 'word-1',
   sourceLemma: 'craft',
+};
+
+const buildInput = {
+  payloads: [basePayload],
+  modelFields: ['Word', 'Context', 'notes', 'Back', 'Media'],
+  selectedTemplate: {
+    name: 'Forward',
+    front: '{{Word}}',
+    back: '{{FrontSide}}\n\n<hr id="answer">\n\n{{Back}}',
+  },
+  css: '.card { font-family: serif; }',
 };
 
 test('toStableIdentifier should be deterministic and positive', () => {
@@ -85,27 +93,24 @@ test('buildGuidKey should prefer sourceWordId then fallback to sourceLemma and d
   );
 });
 
-test('shouldIncludeReverse should honor Add Reverse marker', () => {
-  assert.equal(shouldIncludeReverse({ fields: { 'Add Reverse': 'true' } }), true);
-  assert.equal(shouldIncludeReverse({ fields: { 'Add Reverse': 'yes' } }), true);
-  assert.equal(shouldIncludeReverse({ fields: { 'Add Reverse': '' } }), false);
-});
-
 test('buildApkgBuffer should create a zip-like apkg for single and multi payloads', async () => {
-  const one = await buildApkgBuffer([basePayload]);
-  const two = await buildApkgBuffer([
-    basePayload,
-    {
-      ...basePayload,
-      fields: {
-        ...basePayload.fields,
-        Word: 'forge',
-        Context: 'They forge steel.',
+  const one = await buildApkgBuffer(buildInput);
+  const two = await buildApkgBuffer({
+    ...buildInput,
+    payloads: [
+      basePayload,
+      {
+        ...basePayload,
+        fields: {
+          ...basePayload.fields,
+          Word: 'forge',
+          Context: 'They forge steel.',
+        },
+        sourceWordId: 'word-2',
+        sourceLemma: 'forge',
       },
-      sourceWordId: 'word-2',
-      sourceLemma: 'forge',
-    },
-  ]);
+    ],
+  });
 
   assert.ok(Buffer.isBuffer(one));
   assert.ok(Buffer.isBuffer(two));

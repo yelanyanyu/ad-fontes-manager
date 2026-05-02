@@ -11,6 +11,7 @@ const {
   getInitialAnkiExportOptionsMock,
   getModelFieldNamesMock,
   getModelNamesMock,
+  getModelStylingMock,
   getModelTemplatesMock,
   hasStoredFieldMappingMock,
   loadFieldMappingMock,
@@ -48,6 +49,7 @@ const {
     getInitialAnkiExportOptionsMock: vi.fn(),
     getModelFieldNamesMock: vi.fn(),
     getModelNamesMock: vi.fn(),
+    getModelStylingMock: vi.fn(),
     getModelTemplatesMock: vi.fn(),
     hasStoredFieldMappingMock: vi.fn(),
     loadFieldMappingMock: vi.fn(),
@@ -89,6 +91,7 @@ vi.mock('@/services/ankiConnectService', () => ({
   getDeckNames: getDeckNamesMock,
   getModelFieldNames: getModelFieldNamesMock,
   getModelNames: getModelNamesMock,
+  getModelStyling: getModelStylingMock,
   getModelTemplates: getModelTemplatesMock,
   importPayloadWithStrategy: importPayloadWithStrategyMock,
   isAnkiDuplicateConflictError: (error: unknown) => error instanceof mockDuplicateConflictError,
@@ -107,7 +110,6 @@ const payload: AnkiExportPayload = {
     Context: 'updated context',
     notes: '',
     Back: '<p>updated back</p>',
-    'Add Reverse': '',
     Media: '',
   },
   options: {
@@ -142,6 +144,7 @@ describe('useAnkiExport', () => {
     getInitialAnkiExportOptionsMock.mockReset();
     getModelFieldNamesMock.mockReset();
     getModelNamesMock.mockReset();
+    getModelStylingMock.mockReset();
     getModelTemplatesMock.mockReset();
     hasStoredFieldMappingMock.mockReset();
     loadFieldMappingMock.mockReset();
@@ -161,6 +164,7 @@ describe('useAnkiExport', () => {
     getDeckNamesMock.mockResolvedValue([payload.options.deckName]);
     getModelNamesMock.mockResolvedValue([payload.options.modelName]);
     getModelFieldNamesMock.mockResolvedValue(['Word', 'Context', 'Back']);
+    getModelStylingMock.mockResolvedValue('.card { color: #222; }');
     getModelTemplatesMock.mockResolvedValue([
       { name: 'Forward', front: '{{Word}}', back: '{{Back}}' },
     ]);
@@ -235,5 +239,34 @@ describe('useAnkiExport', () => {
     await expect(exportState.importToAnki()).rejects.toThrow('mismatch');
     expect(exportState.duplicateState.value).toBe('duplicate');
     expect(exportState.duplicateConflict.value).toEqual(duplicateConflict);
+  });
+
+  it('passes eagerly loaded model CSS into .apkg export', async () => {
+    checkDuplicateConflictMock.mockResolvedValue(null);
+
+    const exportState = useAnkiExport();
+    await exportState.open(record);
+    await exportState.exportApkg();
+
+    expect(getModelStylingMock).toHaveBeenCalledWith(payload.options.modelName);
+    expect(exportApkgViaAnkiConnectMock).toHaveBeenCalledWith(
+      expect.any(Object),
+      'ad-fontes-export.apkg',
+      ['Word', 'Context', 'Back'],
+      { name: 'Forward', front: '{{Word}}', back: '{{Back}}' },
+      '.card { color: #222; }'
+    );
+  });
+
+  it('blocks .apkg export when model CSS failed to load', async () => {
+    getModelStylingMock.mockRejectedValue(new Error('AnkiConnect is unavailable'));
+    checkDuplicateConflictMock.mockResolvedValue(null);
+
+    const exportState = useAnkiExport();
+    await exportState.open(record);
+
+    expect(exportState.error.value).toBe('AnkiConnect is unavailable');
+    await expect(exportState.exportApkg()).rejects.toThrow(/Anki is not connected|Model CSS/);
+    expect(exportApkgViaAnkiConnectMock).not.toHaveBeenCalled();
   });
 });

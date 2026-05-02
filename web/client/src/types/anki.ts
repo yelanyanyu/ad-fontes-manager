@@ -46,6 +46,7 @@ export interface AnkiApkgExportRequest {
   payloads: AnkiExportPayload[];
   modelFields: string[];
   selectedTemplate: AnkiModelTemplate;
+  css: string;
 }
 
 export interface AnkiConnectInvokePayload {

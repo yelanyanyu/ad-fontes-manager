@@ -7,7 +7,6 @@ type AnkiExportPayload = {
   options: {
     deckName: string;
     modelName: string;
-    addReverse: boolean;
     tags: string[];
   };
   sourceWordId?: string;
@@ -24,6 +23,7 @@ type BuildApkgInput = {
   payloads: AnkiExportPayload[];
   modelFields: string[];
   selectedTemplate: SelectedTemplate;
+  css: string;
 };
 
 type TemplateConfig = {
@@ -51,10 +51,6 @@ const { default: createAnkiExport } = require('anki-apkg-export') as {
 };
 
 const DEFAULT_FILE_NAME = 'ad-fontes-export.apkg';
-const DEFAULT_CARD_CSS =
-  '.card { font-family: Arial; font-size: 18px; text-align: left; color: black; }';
-
-const REVERSE_FIELD_TOKEN = /(?:true|yes|1)/i;
 
 const toPositive32Int = (key: string): number => {
   const digest = createHash('sha1').update(key).digest();
@@ -86,11 +82,6 @@ const buildGuidKey = (
   return `${fallbackValue || 'unknown'}::${deckName}`;
 };
 
-const shouldIncludeReverse = (payload: AnkiExportPayload): boolean => {
-  const marker = normalizeField(payload.fields['Add Reverse']);
-  return REVERSE_FIELD_TOKEN.test(marker);
-};
-
 const createFieldDefinition = (name: string, ord: number): Record<string, unknown> => ({
   name,
   media: [],
@@ -118,7 +109,8 @@ const patchDeckAndModelIdentifiers = (
   deckName: string,
   modelName: string,
   modelFields: string[],
-  selectedTemplate: SelectedTemplate
+  selectedTemplate: SelectedTemplate,
+  css: string
 ): void => {
   exporter.topDeckId = deckId;
   exporter.topModelId = modelId;
@@ -145,7 +137,7 @@ const patchDeckAndModelIdentifiers = (
       did: deckId,
       name: modelName,
       sortf: 0,
-      css: String(model.css || DEFAULT_CARD_CSS),
+      css,
       flds: modelFields.map((fieldName, index) => createFieldDefinition(fieldName, index)),
       tmpls: [createTemplateDefinition(selectedTemplate)],
       req: [[0, 'all', [0]]],
@@ -156,11 +148,11 @@ const patchDeckAndModelIdentifiers = (
   });
 };
 
-const createExporter = (deckName: string): AnkiExportInstance => {
+const createExporter = (deckName: string, css: string): AnkiExportInstance => {
   return createAnkiExport(deckName, {
     questionFormat: '{{Front}}',
     answerFormat: '{{FrontSide}}\n\n<hr id="answer">\n\n{{Back}}',
-    css: DEFAULT_CARD_CSS,
+    css,
   });
 };
 
@@ -287,7 +279,7 @@ const upsertNoteAndCard = (
 };
 
 const buildApkgBuffer = async (input: BuildApkgInput): Promise<Buffer> => {
-  const { payloads, modelFields, selectedTemplate } = input;
+  const { payloads, modelFields, selectedTemplate, css } = input;
   const first = payloads[0];
   const deckName = first.options.deckName.trim();
   const modelName = first.options.modelName.trim();
@@ -296,7 +288,7 @@ const buildApkgBuffer = async (input: BuildApkgInput): Promise<Buffer> => {
     `model:${modelName}|fields:${modelFields.join(',')}|template:${selectedTemplate.name}|${selectedTemplate.front}|${selectedTemplate.back}`
   );
 
-  const exporter = createExporter(deckName);
+  const exporter = createExporter(deckName, css);
   patchDeckAndModelIdentifiers(
     exporter,
     deckId,
@@ -304,7 +296,8 @@ const buildApkgBuffer = async (input: BuildApkgInput): Promise<Buffer> => {
     deckName,
     modelName,
     modelFields,
-    selectedTemplate
+    selectedTemplate,
+    css
   );
 
   for (const payload of payloads) {
@@ -319,6 +312,5 @@ module.exports = {
   buildApkgBuffer,
   normalizeApkgFileName: normalizeFileName,
   toStableIdentifier,
-  shouldIncludeReverse,
   buildGuidKey,
 };

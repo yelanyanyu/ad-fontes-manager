@@ -16,6 +16,7 @@ import {
   getDeckNames,
   getModelFieldNames,
   getModelNames,
+  getModelStyling,
   getModelTemplates,
   importPayloadWithStrategy,
   isAnkiDuplicateConflictError,
@@ -64,6 +65,7 @@ export const useAnkiExport = () => {
   const apkgPath = ref(initialOptions.apkgPath || 'ad-fontes-export.apkg');
   const modelFieldNames = ref<string[]>([]);
   const templateOptions = ref<AnkiModelTemplate[]>([]);
+  const modelCss = ref<string | null>(null);
   const fieldMapping = ref<FieldMappingConfig>([]);
 
   const tags = computed(() =>
@@ -114,16 +116,20 @@ export const useAnkiExport = () => {
     if (!ankiConnected.value || !modelName.value.trim()) {
       modelFieldNames.value = [];
       templateOptions.value = [];
+      modelCss.value = null;
       templateName.value = '';
       return;
     }
 
-    const [fields, templates] = await Promise.all([
+    modelCss.value = null;
+    const [fields, templates, css] = await Promise.all([
       getModelFieldNames(modelName.value),
       getModelTemplates(modelName.value),
+      getModelStyling(modelName.value),
     ]);
     modelFieldNames.value = fields;
     templateOptions.value = templates;
+    modelCss.value = css;
     fieldMapping.value = hasStoredFieldMapping(modelName.value)
       ? loadFieldMapping(modelName.value)
       : getRecommendedMapping(fields);
@@ -361,6 +367,9 @@ export const useAnkiExport = () => {
       if (!modelFieldNames.value.length) {
         throw new Error('No model fields loaded for selected model. Please refresh Anki data.');
       }
+      if (modelCss.value === null) {
+        throw new Error('Model CSS is not loaded. Please connect Anki before exporting .apkg.');
+      }
       const selectedTemplate = templateOptions.value.find(
         template => template.name === templateName.value
       );
@@ -371,7 +380,8 @@ export const useAnkiExport = () => {
         payload.value,
         normalizeExportFileName(apkgPath.value),
         modelFieldNames.value,
-        selectedTemplate
+        selectedTemplate,
+        modelCss.value
       );
     } catch (err) {
       const e = err as { message?: string };
@@ -403,6 +413,7 @@ export const useAnkiExport = () => {
     if (!ankiConnected.value) {
       modelFieldNames.value = [];
       templateOptions.value = [];
+      modelCss.value = null;
       templateName.value = '';
       fieldMapping.value = [];
       return;
@@ -438,6 +449,7 @@ export const useAnkiExport = () => {
     apkgPath,
     modelFieldNames,
     templateOptions,
+    modelCss,
     fieldMapping,
     open,
     close,
