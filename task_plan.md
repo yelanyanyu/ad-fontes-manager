@@ -1,351 +1,182 @@
-# Anki 字段映射可配置化
+# Fix: APKG 导出 `addReverse` 校验错误 + CSS 拉取
 
-> **目标**：让用户自定义 YAML 数据源 → Anki 卡片模板字段的映射关系，替代当前硬编码的 `DEFAULT_ANKI_FIELD_MAPPING`。
-
-## 设计决策汇总
-
-### 1. 数据源（8 个）
-
-| Source ID | YAML 路径 | 渲染格式 |
-|-----------|-----------|----------|
-| `lemma` | `yield.lemma` | 纯文本 |
-| `user_context_sentence` | `yield.user_context_sentence` | 纯文本 |
-| `other_common_meanings` | `yield.other_common_meanings` | `\|\|` 连接 |
-| `selected_examples_sentence` | `application.selected_examples[].sentence` | `\|\|` 连接 |
-| `selected_examples_translation` | `application.selected_examples[].translation_zh` | `\|\|` 连接 |
-| `synonyms_word` | `nuance.synonyms[].word` | `\|\|` 连接 |
-| `synonyms_meaning` | `nuance.synonyms[].meaning_zh` | `\|\|` 连接 |
-| `rendered_html` | 完整 YAML → `generateCardHTML(data)` | 完整卡片 HTML |
-
-- YAML 数据缺失/为空时，对应 Anki 字段写空字符串。
-- `addReverse` 功能完全移除（翻转卡片由用户在 Anki 模板中自行处理）。
-
-### 2. 存储 Schema
-
-- 存储位置：localStorage，**新 key** `anki_field_mappings`（不动旧的 `anki_export_options`）。
-- 作用域：**按模型名（modelName）** 存储，key 为用户在 Anki 中选的模型名（动态获取，非硬编码）。
-- 格式：**数组**，兼容 key-value 对象读取。
-
-```json
-{
-  "Basic": [
-    { "source": "lemma", "target": "Front" },
-    { "source": "rendered_html", "target": "Back" }
-  ],
-  "AdFontesWord": [
-    { "source": "lemma", "target": "Word" },
-    { "source": "user_context_sentence", "target": "Context" },
-    { "source": "rendered_html", "target": "Back" },
-    { "source": "synonyms_word", "target": "Synonyms" },
-    { "source": "selected_examples_sentence", "target": "Example" }
-  ]
-}
-```
-
-读取时兼容旧 key-value 对象格式：`{ "lemma": "Word" }` → 自动转为 `[{ "source": "lemma", "target": "Word" }]`。
-
-### 3. 推荐映射（向后兼容）
-
-- 选模型后检测其字段名是否匹配旧预设 `Word`, `Context`, `Back` 中的任意一个。
-- 若匹配，提供一键"使用推荐映射"按钮。
-- 推荐映射规则：
-  - `lemma → Word`（如果模型有 `Word` 字段）
-  - `user_context_sentence → Context`（如果模型有 `Context` 字段）
-  - `rendered_html → Back`（如果模型有 `Back` 字段）
-- 用户可接受或忽略。
-
-### 4. UI 组件
-
-- **共享 Vue 组件** `AnkiFieldMappingEditor.vue`，在 `AnkiExportModal` 和 `BatchAnkiExportModal` 中复用。
-- 交互形态：**表格行** —— 左侧 Anki 字段名（只读标签，来自 `modelFieldNames`），右侧数据源下拉选择器（9 个选项：8 个数据源 + "不映射"）。
-- **滚动要求**：外层容器（弹窗 body）可滚动 → 容纳长页面；内层 table 也可独立滚动 → 字段多时表头固定。
-- 保存时机：**自动保存**（每次下拉改变立即写入 localStorage）+ **重置按钮**（恢复推荐映射或清空）。
-
-### 5. 模型管理
-
-- **删除** `ensureModelExists` 及其全部逻辑（自动创建模型、字段、CSS、卡片模板）。
-- **保留** `ensureDeckExists`（牌组创建无副作用）。
-- 用户必须在 Anki 中自行创建模型和字段，本工具只负责填入数据。
-
-### 6. AnkiConnect 依赖
-
-- 字段映射配置**必须**先连接 AnkiConnect（需要 `modelFieldNames` 获取字段列表）。
-- 未连接时弹窗显示"请先连接 Anki 后再配置字段映射"，**同时保留已有的刷新/重连按钮**。
-
-### 7. .apkg 导出
-
-- .apkg 导出时从 AnkiConnect 实时拉取模型的字段列表、CSS、模板 HTML。
-- **注意**：apkg 模块当前有问题，将在之后单独修复。本期不对 apkg 做改动。
+> **症状**：单次/批量 APKG 导出返回 400 `"Invalid input: expected boolean, received undefined"`（`payloads[].options.addReverse` 缺失）。
+>
+> **根因**：后端 Zod schema 要求 `addReverse: z.boolean()` 为必填，但前端从未发送该字段。`addReverse` 应由 Anki 模板自行处理，不在 APKG 导出系统中维护。
+>
+> **附加**：APKG 导出当前使用硬编码 CSS，应从 AnkiConnect 拉取模型真实的 CSS。
 
 ---
 
-## 实现步骤（自底向上）
+## 设计决策（来自 grill session）
 
-### Step 1：更新类型定义
+| # | 决策 | 选择 |
+|---|------|------|
+| 1 | `addReverse` 去除范围 | 全量清除（前端 + 后端 + 测试 fixtures） |
+| 2 | `shouldIncludeReverse` 死代码 | 删除（无任何调用点） |
+| 3 | CSS 从 AnkiConnect 拉取 | 本期实现 |
+| 4 | CSS 获取方式 | 独立函数 `getModelStyling(modelName)` |
+| 5 | 桌面端下载支持 | 本期不实现（浏览器下载已满足） |
+| 6 | AnkiConnect 不可用时 CSS 处理 | 报错，阻止导出 |
+| 7 | CSS 获取时机 | Eager（用户选模型时拉取，缓存供批量复用） |
+| 8 | 空 CSS 处理 | 接受但 console.warn 提醒用户 |
+| 9 | 测试中 `'Add Reverse'` 字段 | 全部删除 |
+| 10 | `css` 在类型层级中的位置 | `AnkiApkgExportRequest.css`，与 `selectedTemplate` 并列 |
+| 11 | 错误消息格式 | 保留 Zod `flatten()` 结构，额外添加 `message` 摘要 |
+| 12 | 实施顺序 | 后端正则先行，再前端，最后测试 |
+| 13 | 测试策略 | 修复已有测试 + 新增 `getModelStyling` 单测 + CSS 传递集成断言 |
 
-**文件**：`web/client/src/types/anki.ts`
+---
 
-- 删除 `AnkiFieldRole`、`AnkiCanonicalFields`、`AnkiFieldMapping`。
-- 新增：
+## 实施步骤（自底向上）
 
+### Phase 1：后端（unblock 400 错误）
+
+#### Step 1.1：修复后端 schema —— `web/schemas/requests/ansi.ts`
+
+- 删除 `AnkiExportOptionsSchema` 中的 `addReverse: z.boolean()`
+- 删除 `shouldIncludeReverse` 函数及 `extractTemplateFields` 中无关联逻辑
+- 新增 `css` 字段：`css: z.string().min(1, 'CSS must not be empty when AnkiConnect is available').optional()`（在 `superRefine` 中校验若非 optional 场景则需要非空——实际：CSS 由前端传入，前端已在 eager 阶段校验 AnkiConnect 可用性，所以后端使用 `z.string()` 强制要求）
+- `superRefine` 新增校验：
+  - `css` 非空字符串（若前端传了空字符串则拒绝，因为这意味着 AnkiConnect 返回了空但前端没拦截）
+
+**精确变更**：
 ```ts
-export type AnkiDataSource =
-  | 'lemma'
-  | 'user_context_sentence'
-  | 'other_common_meanings'
-  | 'selected_examples_sentence'
-  | 'selected_examples_translation'
-  | 'synonyms_word'
-  | 'synonyms_meaning'
-  | 'rendered_html';
+// 删除 AnkiExportOptionsSchema 中的 addReverse 行
+// 将 addReverse: z.boolean(), 改为（删除该行）
 
-export interface FieldMappingEntry {
-  source: AnkiDataSource;
-  target: string; // Anki 字段名（动态，来自 modelFieldNames）
-}
-
-export type FieldMappingConfig = FieldMappingEntry[];
-
-// 兼容旧格式
-export type LegacyFieldMappingConfig = Record<string, string>;
+// AnkiExportApkgBodySchema 新增 css 字段
+const AnkiExportApkgBodySchema = z.object({
+  fileName: OptionalTrimmedString.default('ad-fontes-export.apkg'),
+  payloads: z.array(AnkiExportPayloadSchema).min(1, 'payloads must contain at least one item'),
+  modelFields: z.array(NonEmptyString).min(1, 'modelFields must contain at least one field'),
+  selectedTemplate: AnkiSelectedTemplateSchema,
+  css: z.string(),  // 新增：来自 AnkiConnect modelStyling
+})
 ```
 
-- `AnkiExportPayload` 中 `fieldMapping?` 类型从 `AnkiFieldMapping` 改为 `FieldMappingConfig`。
-- `AnkiExportOptions` 中删除 `addReverse`。
-- 删除 `AnkiCanonicalFields`。
+#### Step 1.2：修复 apkgService —— `web/services/anki/apkgService.ts`
 
-### Step 2：重写字段提取逻辑
+- 删除 `AnkiExportPayload.options.addReverse` 类型字段
+- 删除 `shouldIncludeReverse` 函数（含 `REVERSE_FIELD_TOKEN` 常量）
+- `BuildApkgInput` 新增 `css: string`
+- `patchDeckAndModelIdentifiers` 接收 `css` 参数，移除 `DEFAULT_CARD_CSS` 回退
+- `buildApkgBuffer` 签名新增 `css` 参数并下传
 
-**文件**：`web/client/src/services/ankiFieldMapper.ts`
+#### Step 1.3：改进校验中间件 —— `web/middleware/validate.ts`
 
-- 删除 `DEFAULT_ANKI_FIELD_MAPPING`、`buildCanonicalAnkiFields`、`mapCanonicalFieldsToAnkiFields`、`mapWordToAnkiFields`。
-- 新增 8 个独立提取函数：
-
+- `parseOrThrow` 中，ZodError 时额外生成 `message` 字段：
 ```ts
-const extractLemma = (data: UnknownRecord): string =>
-  toText(getByPath(data, 'yield.lemma'));
-
-const extractUserContextSentence = (data: UnknownRecord): string =>
-  toText(getByPath(data, 'yield.user_context_sentence'));
-
-const extractOtherCommonMeanings = (data: UnknownRecord): string => {
-  const arr = getByPath(data, 'yield.other_common_meanings');
-  return Array.isArray(arr) ? arr.map(String).join('||') : '';
-};
-
-const extractSelectedExamplesSentence = (data: UnknownRecord): string => {
-  const arr = getByPath(data, 'application.selected_examples');
-  return Array.isArray(arr)
-    ? arr.map(e => toText((e as UnknownRecord)?.sentence)).filter(Boolean).join('||')
-    : '';
-};
-
-const extractSelectedExamplesTranslation = (data: UnknownRecord): string => {
-  const arr = getByPath(data, 'application.selected_examples');
-  return Array.isArray(arr)
-    ? arr.map(e => toText((e as UnknownRecord)?.translation_zh)).filter(Boolean).join('||')
-    : '';
-};
-
-const extractSynonymsWord = (data: UnknownRecord): string => {
-  const arr = getByPath(data, 'nuance.synonyms');
-  return Array.isArray(arr)
-    ? arr.map(s => toText((s as UnknownRecord)?.word)).filter(Boolean).join('||')
-    : '';
-};
-
-const extractSynonymsMeaning = (data: UnknownRecord): string => {
-  const arr = getByPath(data, 'nuance.synonyms');
-  return Array.isArray(arr)
-    ? arr.map(s => toText((s as UnknownRecord)?.meaning_zh)).filter(Boolean).join('||')
-    : '';
-};
-
-const extractRenderedHtml = (data: UnknownRecord): string =>
-  generateCardHTML(data);
+const flattened = result.error.flatten();
+const issueMessages = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`);
+const message = issueMessages.length > 0
+  ? issueMessages.join('; ')
+  : 'Validation failed';
+throw BadRequest(message, {
+  code: 'VALIDATION_ERROR',
+  details: flattened,
+});
 ```
 
-- 新增聚合函数：
+#### Step 1.4：修复路由 —— `web/routes/core.ts`
 
+- `body` 类型新增 `css: string`
+- 将 `body.css` 传入 `buildApkgBuffer`
+
+---
+
+### Phase 2：前端
+
+#### Step 2.1：更新类型 —— `web/client/src/types/ani.ts`
+
+- `AnkiExportOptions` 删除 `addReverse`（整个字段不存在，不需删除）—— 确认当前类型无 `addReverse`（已有类型中无此字段，保持一致）
+- `AnkiApkgExportRequest` 新增 `css: string`
+
+#### Step 2.2：新增 CSS 获取 —— `web/client/src/services/ankiConnectService.ts`
+
+- 新增 `getModelStyling`：
 ```ts
-export const buildAnkiFields = (
-  data: UnknownRecord,
-  mapping: FieldMappingConfig
-): AnkiTargetFields => {
-  const fields: AnkiTargetFields = {};
-  for (const { source, target } of mapping) {
-    fields[target] = extractBySource(source, data);
-  }
-  return fields;
+export const getModelStyling = async (modelName: string): Promise<string> => {
+  const result = await invoke<{ css: string }>({
+    action: 'modelStyling',
+    version: ANKI_CONNECT_VERSION,
+    params: { modelName },
+  });
+  return result.css;
 };
 ```
 
-- `extractBySource(source, data)` 做 source → 提取函数的 dispatch。
-- 保留 `getByPath`、`toText` 工具函数。
+#### Step 2.3：更新导出服务 —— `web/client/src/services/ankiExportService.ts`
 
-### Step 3：更新导出服务
+- 确认 `DEFAULT_OPTIONS` 无 `addReverse`（当前代码已无，确认即可）
+- 确认 `createAnkiPayload` 不涉及 `addReverse`
 
-**文件**：`web/client/src/services/ankiExportService.ts`
+#### Step 2.4：更新 APKG 导出服务 —— `web/client/src/services/apkgExportService.ts`
 
-- 删除 `DEFAULT_ANKI_FIELD_MAPPING` 引用。
-- `createAnkiPayload` 接受 `fieldMapping: FieldMappingConfig` 参数。
-- 删除 `addReverse` 相关逻辑。
-- `sourceLemma` 查找逻辑从 `fields[fieldMapping.word]` 改为在所有已映射的 target 中找 lemma 值（或直接用 `extractLemma`）。
-- 删除 `import { DEFAULT_ANKI_FIELD_MAPPING, mapWordToAnkiFields }`。
+- `downloadApkgViaBackend` 新增 `css: string` 参数
+- `requestPayload` 包含 `css`
+- 空 CSS 检测：若 `!css.trim()`，`console.warn('Model CSS is empty. The exported .apkg will use Anki default styling.')`，但仍允许导出
+- `exportApkgViaAnkiConnect` 新增 `css` 参数并转发
+- `exportBatchApkgViaAnkiConnect` 新增 `css` 参数并转发
 
-### Step 4：更新 AnkiConnect 服务
+#### Step 2.5：Composable eager 加载 CSS —— `web/client/src/composables/useAnkiExport.ts`
 
-**文件**：`web/client/src/services/ankiConnectService.ts`
+- 在模型选择后（`onModelSelected` 或类似生命周期）调用 `getModelStyling(modelName)`
+- 失败时展示错误并阻止后续导出（与 `getModelFieldNames` 同级处理）
+- CSS 存入 composable 状态，导出时传入 `exportApkgViaAnkiConnect`
+- 若未连接 AnkiConnect，提示"请先连接 Anki 后再导出"
 
-- 删除 `DEFAULT_ANKI_FIELD_MAPPING` 引用。
-- 删除 `ensureModelExists` 函数（整个函数 + 调用点）。
-- `resolveFieldMapping` → 不再有默认 fallback，直接读 `payload.fieldMapping`。
-- `getPayloadWordFieldName` → 在 fieldMapping 中找 source 为 `lemma` 的 entry，返回其 target。
-- `prepareAnkiTarget` 中移除 `ensureModelExists` 调用，只保留 `ensureDeckExists`。
+#### Step 2.6：Batch composable —— `web/client/src/composables/useBatchAnkiExport.ts`
 
-### Step 5：更新 Payload Builder
+- 同上，eager 加载 CSS，批量导出时复用
 
-**文件**：`web/client/src/services/ankiPayloadBuilder.ts`
+---
 
-- `buildExportPayload` 接受 `fieldMapping: FieldMappingConfig` 参数并下传给 `createAnkiPayload`。
+### Phase 3：测试
 
-### Step 6：新增映射配置持久化 Store
+#### Step 3.1：修复已有测试 fixtures
 
-**新建文件**：`web/client/src/services/ankiFieldMappingStore.ts`
+以下文件删除所有 `addReverse` 和 `'Add Reverse'` 引用：
+- `web/tests/apkg-service.test.ts` — 删除 `addReverse: true` 和 `'Add Reverse': 'true'`
+- `web/tests/anki-export-apkg-route.test.ts` — 删除 `addReverse: true` 和 `'Add Reverse'`，新增 `css` 字段
+- `web/client/src/composables/useBatchAnkiExport.test.ts` — 删除 `'Add Reverse'`
+- `web/client/src/composables/useAnkiExport.test.ts` — 删除 `'Add Reverse'`
+- `web/client/src/services/ankiConnectService.test.ts` — 删除 `'Add Reverse'` 和 `options.addReverse` 引用
 
-```ts
-const STORAGE_KEY = 'anki_field_mappings';
+#### Step 3.2：新增测试
 
-// 读取（兼容旧格式）
-export const loadFieldMapping = (modelName: string): FieldMappingConfig => { ... }
-
-// 保存（自动触发于每次用户选择）
-export const saveFieldMapping = (modelName: string, mapping: FieldMappingConfig): void => { ... }
-
-// 获取推荐映射（检测字段名匹配旧预设）
-export const getRecommendedMapping = (modelFieldNames: string[]): FieldMappingConfig => { ... }
-
-// 删除某模型的映射
-export const removeFieldMapping = (modelName: string): void => { ... }
-```
-
-- 读取逻辑：先尝试新数组格式，若为对象（旧格式）则自动转换。
-- 推荐映射逻辑：遍历旧预设 `{ lemma: 'Word', user_context_sentence: 'Context', rendered_html: 'Back' }`，只保留 target 在 `modelFieldNames` 中存在的条目。
-
-### Step 7：创建共享字段映射编辑组件
-
-**新建文件**：`web/client/src/components/AnkiExport/AnkiFieldMappingEditor.vue`
-
-Props:
-- `modelName: string`
-- `modelFieldNames: string[]`
-- `modelValue: FieldMappingConfig` (v-model)
-
-Emits:
-- `update:modelValue`
-
-模板结构：
-```html
-<div class="field-mapping-editor"><!-- 外层容器，overflow-y: auto -->
-  <div class="field-mapping-header">
-    <span>字段映射</span>
-    <button @click="resetToRecommended">重置为推荐映射</button>
-    <button @click="clearAll">清空全部</button>
-  </div>
-  <div class="field-mapping-table-wrapper"><!-- 内层 table 容器，overflow-y: auto，max-height -->
-    <table>
-      <thead>
-        <tr><th>Anki 字段</th><th>数据源</th></tr>
-      </thead>
-      <tbody>
-        <tr v-for="fieldName in modelFieldNames" :key="fieldName">
-          <td>{{ fieldName }}</td>
-          <td>
-            <select
-              :value="getMappingFor(fieldName)"
-              @change="setMapping(fieldName, $event.target.value)"
-            >
-              <option value="">不映射</option>
-              <option v-for="source in dataSources" :key="source.id" :value="source.id">
-                {{ source.label }}
-              </option>
-            </select>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-```
-
-- `getMappingFor(fieldName)` 在当前 mapping 中找 target === fieldName 的 entry。
-- `setMapping(fieldName, source)` 自动保存到 localStorage（auto-save）。
-- 下拉改变时 emit `update:modelValue`。
-
-### Step 8：集成到两个弹窗
-
-**文件**：`web/client/src/components/AnkiExport/AnkiExportModal.vue`
-
-- 引入 `AnkiFieldMappingEditor`。
-- 在"目标字段预览"区域替换为映射编辑器。
-- 删除 addReverse 勾选框。
-- 弹窗 body 确保 `overflow-y: auto`。
-
-**文件**：`web/client/src/components/AnkiExport/BatchAnkiExportModal.vue`
-
-- 同上，引入映射编辑器。
-- 删除 addReverse 相关选项。
-
-### Step 9：更新 composables
-
-**文件**：`web/client/src/composables/useAnkiExport.ts`
-
-- `refreshPayload` 中传递 `fieldMapping` 给 `buildExportPayload`。
-- 连接 AnkiConnect 后加载当前模型的字段映射。
-- 如果未连接，提示用户连接（保留刷新按钮）。
-- 删除 `addReverse` 相关逻辑。
-
-**文件**：`web/client/src/composables/useBatchAnkiExport.ts`
-
-- 同上。
-
-### Step 10：更新测试
-
-- `ankiFieldMapper.test.ts`：重写，测试 8 个提取函数 + `buildAnkiFields`。
-- `ankiPayloadBuilder.test.ts`：适配新 fieldMapping 参数。
-- `ankiConnectService.test.ts`：删除 ensureModelExists 相关测试，适配 findNotes query 中 field name 查找。
-- `ankiExportService.test.ts`：删除 addReverse 测试，适配新 fieldMapping。
-- `useAnkiExport.test.ts`、`useBatchAnkiExport.test.ts`：适配。
+- `ankiConnectService.test.ts`：新增 `getModelStyling` 单测（正常返回 CSS、空 CSS、AnkiConnect 不可用）
+- `anki-export-apkg-route.test.ts`：新增 CSS 传递集成断言（验证请求中的 `css` 字段被正确传递到 `buildApkgBuffer` 参数）
 
 ---
 
 ## 变更文件清单
 
-| 操作 | 文件 |
-|------|------|
-| 修改 | `web/client/src/types/anki.ts` |
-| 重写 | `web/client/src/services/ankiFieldMapper.ts` |
-| 修改 | `web/client/src/services/ankiExportService.ts` |
-| 修改 | `web/client/src/services/ankiConnectService.ts` |
-| 修改 | `web/client/src/services/ankiPayloadBuilder.ts` |
-| **新建** | `web/client/src/services/ankiFieldMappingStore.ts` |
-| **新建** | `web/client/src/components/AnkiExport/AnkiFieldMappingEditor.vue` |
-| 修改 | `web/client/src/components/AnkiExport/AnkiExportModal.vue` |
-| 修改 | `web/client/src/components/AnkiExport/BatchAnkiExportModal.vue` |
-| 修改 | `web/client/src/composables/useAnkiExport.ts` |
-| 修改 | `web/client/src/composables/useBatchAnkiExport.ts` |
-| 修改 | `web/client/src/services/ankiFieldMapper.test.ts` |
-| 修改 | `web/client/src/services/ankiPayloadBuilder.test.ts` |
-| 修改 | `web/client/src/services/ankiConnectService.test.ts` |
-| 修改 | `web/client/src/services/ankiExportService.test.ts` |
-| 修改 | `web/client/src/composables/useAnkiExport.test.ts` |
-| 修改 | `web/client/src/composables/useBatchAnkiExport.test.ts` |
+| 操作 | 文件 | 说明 |
+|------|------|------|
+| 修改 | `web/schemas/requests/anki.ts` | 删除 `addReverse`，新增 `css` |
+| 修改 | `web/services/anki/apkgService.ts` | 删除 `addReverse` 类型 + `shouldIncludeReverse`，接收 `css` |
+| 修改 | `web/middleware/validate.ts` | 错误消息增加 `message` 摘要 |
+| 修改 | `web/routes/core.ts` | 传递 `css` 到 `buildApkgBuffer` |
+| 修改 | `web/client/src/types/anki.ts` | `AnkiApkgExportRequest` 新增 `css` |
+| 修改 | `web/client/src/services/ankiConnectService.ts` | 新增 `getModelStyling` |
+| 修改 | `web/client/src/services/ankiExportService.ts` | 确认无 `addReverse` 残留 |
+| 修改 | `web/client/src/services/apkgExportService.ts` | 传递 `css`，空 CSS 警告 |
+| 修改 | `web/client/src/composables/useAnkiExport.ts` | Eager CSS 加载 |
+| 修改 | `web/client/src/composables/useBatchAnkiExport.ts` | Eager CSS 加载 |
+| 修改 | `web/tests/apkg-service.test.ts` | 删除 `addReverse` / `'Add Reverse'` |
+| 修改 | `web/tests/anki-export-apkg-route.test.ts` | 同上 + 新增 CSS 断言 |
+| 修改 | `web/client/src/composables/useBatchAnkiExport.test.ts` | 删除 `'Add Reverse'` |
+| 修改 | `web/client/src/composables/useAnkiExport.test.ts` | 删除 `'Add Reverse'` |
+| 修改 | `web/client/src/services/ankiConnectService.test.ts` | 删除 `'Add Reverse'` + 新增 `getModelStyling` 单测 |
 
 ## 不涉及的文件
 
-- `web/routes/core.ts`（AnkiConnect 中继，不改）
-- `web/services/anki/apkgService.ts`（.apkg 暂不修复）
-- `web/client/src/utils/generator.ts`（generateCardHTML 逻辑不变）
+- `web/client/src/components/AnkiExport/AnkiExportModal.vue`（UI 已无 addReverse 勾选框）
+- `web/client/src/components/AnkiExport/BatchAnkiExportModal.vue`（同上）
+- `web/client/src/services/ankiFieldMapper.ts`（字段映射逻辑不变）
+- `web/client/src/services/ankiFieldMappingStore.ts`（映射存储不变）
+- `web/client/src/services/ankiPayloadBuilder.ts`（payload 构建不变）
+- `web/client/src/stores/batchAnkiStore.ts`（batch 状态不变）
+- `web/client/src/utils/generator.ts`（generateCardHTML 不变）
 - `web/client/src/services/ankiExportOptionsStore.ts`（旧选项存储不动）
-- `web/client/src/stores/batchAnkiStore.ts`（batch 状态管理不动）
-- `web/schemas/requests/anki.ts`（后端校验不动）
