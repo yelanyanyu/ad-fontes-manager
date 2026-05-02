@@ -33,7 +33,32 @@
       "Bash(docker compose *)",
       "Bash(curl -s http://localhost:8080/api/health)",
       "Bash(curl -s \"http://localhost:8080/api/v2/words?language=en&limit=3\")",
-      "Bash(docker history *)"
+      "Bash(docker history *)",
+      "Bash(python -c \"import yaml; data = yaml.safe_load\\(open\\('_test_yaml.yaml', encoding='utf-8'\\)\\); print\\('Parse OK'\\); print\\(data.keys\\(\\)\\)\")",
+      "Bash(node -e \"const yaml = require\\('js-yaml'\\); const fs = require\\('fs'\\); const data = yaml.load\\(fs.readFileSync\\('_test_yaml.yaml', 'utf8'\\)\\); console.log\\('Parse OK'\\); console.log\\(Object.keys\\(data\\)\\)\")",
+      "Bash(npm ls *)",
+      "Bash(node -e \"const YAML = require\\('yaml'\\); const fs = require\\('fs'\\); try { const data = YAML.parse\\(fs.readFileSync\\('_test_yaml.yaml', 'utf8'\\)\\); console.log\\('Parse OK'\\); console.log\\(Object.keys\\(data\\)\\); } catch\\(e\\) { console.log\\('Parse ERROR:', e.message\\); }\")",
+      "Bash(npx --yes js-yaml _test_yaml.yaml)",
+      "Bash(claude plugins *)",
+      "Bash(where claude *)",
+      "Bash(npm list *)",
+      "Bash(npm root *)",
+      "WebFetch(domain:github.com)",
+      "Bash(cmd.exe /c \"where claude 2>&1\")",
+      "Bash(powershell.exe -Command \"Get-Command claude -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(gh search *)",
+      "WebSearch",
+      "Bash(npx skills *)",
+      "Bash(git clone *)",
+      "Bash(git config *)",
+      "Bash(npx skills@latest add mattpocock/skills)",
+      "Bash(npx skills@latest add mattpocock/skills --help)",
+      "Read(//tmp/mattpocock-skills/**)",
+      "Read(//tmp/mattpocock-skills/skills/productivity/grill-me/**)",
+      "Read(//d/tmp/mattpocock-skills/skills/productivity/grill-me/**)"
+    ],
+    "additionalDirectories": [
+      "D:\\myCode\\formal-projects\\ad-fontes-manager\\__TRACKED_VAR__\\.claude\\plugins\\marketplaces"
     ]
   }
 }

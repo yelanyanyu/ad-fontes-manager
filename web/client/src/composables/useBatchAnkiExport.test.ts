@@ -9,7 +9,12 @@ const {
   getDeckNamesMock,
   getDefaultAnkiOptionsMock,
   getInitialAnkiExportOptionsMock,
+  getModelFieldNamesMock,
   getModelNamesMock,
+  getModelTemplatesMock,
+  hasStoredFieldMappingMock,
+  loadFieldMappingMock,
+  saveFieldMappingMock,
   pingAnkiConnectMock,
   saveStoredAnkiExportOptionsMock,
 } = vi.hoisted(() => ({
@@ -18,7 +23,12 @@ const {
   getDeckNamesMock: vi.fn(),
   getDefaultAnkiOptionsMock: vi.fn(),
   getInitialAnkiExportOptionsMock: vi.fn(),
+  getModelFieldNamesMock: vi.fn(),
   getModelNamesMock: vi.fn(),
+  getModelTemplatesMock: vi.fn(),
+  hasStoredFieldMappingMock: vi.fn(),
+  loadFieldMappingMock: vi.fn(),
+  saveFieldMappingMock: vi.fn(),
   pingAnkiConnectMock: vi.fn(),
   saveStoredAnkiExportOptionsMock: vi.fn(),
 }));
@@ -34,7 +44,9 @@ vi.mock('@/services/apkgExportService', () => ({
 vi.mock('@/services/ankiConnectService', () => ({
   checkDuplicateConflict: vi.fn(),
   getDeckNames: getDeckNamesMock,
+  getModelFieldNames: getModelFieldNamesMock,
   getModelNames: getModelNamesMock,
+  getModelTemplates: getModelTemplatesMock,
   importPayloadWithStrategy: vi.fn(),
   isAnkiDuplicateConflictError: () => false,
   pingAnkiConnect: pingAnkiConnectMock,
@@ -47,6 +59,13 @@ vi.mock('@/services/ankiExportService', () => ({
 vi.mock('@/services/ankiExportOptionsStore', () => ({
   getInitialAnkiExportOptions: getInitialAnkiExportOptionsMock,
   saveStoredAnkiExportOptions: saveStoredAnkiExportOptionsMock,
+}));
+
+vi.mock('@/services/ankiFieldMappingStore', () => ({
+  getRecommendedMapping: () => [{ source: 'lemma', target: 'Word' }],
+  hasStoredFieldMapping: hasStoredFieldMappingMock,
+  loadFieldMapping: loadFieldMappingMock,
+  saveFieldMapping: saveFieldMappingMock,
 }));
 
 describe('useBatchAnkiExport', () => {
@@ -64,11 +83,11 @@ describe('useBatchAnkiExport', () => {
     options: {
       deckName: 'English::Words',
       modelName: 'AdFontesWord',
-      addReverse: true,
       tags: ['English::type::word'],
     },
     sourceWordId: 'word-1',
     sourceLemma: 'craft',
+    fieldMapping: [{ source: 'lemma', target: 'Word' }],
   };
 
   const records: WordRecord[] = [
@@ -90,7 +109,12 @@ describe('useBatchAnkiExport', () => {
     buildExportPayloadMock.mockReset();
     exportBatchApkgViaAnkiConnectMock.mockReset();
     getDeckNamesMock.mockReset();
+    getModelFieldNamesMock.mockReset();
     getModelNamesMock.mockReset();
+    getModelTemplatesMock.mockReset();
+    hasStoredFieldMappingMock.mockReset();
+    loadFieldMappingMock.mockReset();
+    saveFieldMappingMock.mockReset();
     pingAnkiConnectMock.mockReset();
     getDefaultAnkiOptionsMock.mockReset();
     getInitialAnkiExportOptionsMock.mockReset();
@@ -99,13 +123,18 @@ describe('useBatchAnkiExport', () => {
     getDefaultAnkiOptionsMock.mockReturnValue({
       deckName: payload.options.deckName,
       modelName: payload.options.modelName,
-      addReverse: true,
       tags: payload.options.tags,
     });
     getInitialAnkiExportOptionsMock.mockReturnValue({});
     pingAnkiConnectMock.mockResolvedValue(6);
     getDeckNamesMock.mockResolvedValue([payload.options.deckName]);
     getModelNamesMock.mockResolvedValue([payload.options.modelName]);
+    getModelFieldNamesMock.mockResolvedValue(['Word', 'Context', 'Back']);
+    getModelTemplatesMock.mockResolvedValue([
+      { name: 'Forward', front: '{{Word}}', back: '{{Back}}' },
+    ]);
+    hasStoredFieldMappingMock.mockReturnValue(true);
+    loadFieldMappingMock.mockReturnValue(payload.fieldMapping);
     buildExportPayloadMock.mockImplementation(async (record: WordRecord) => ({
       ...payload,
       fields: {
@@ -134,4 +163,3 @@ describe('useBatchAnkiExport', () => {
     expect(exportBatchApkgViaAnkiConnectMock.mock.calls[0][0]).toHaveLength(2);
   });
 });
-

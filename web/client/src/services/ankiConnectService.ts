@@ -3,14 +3,12 @@ import type {
   AnkiConflictAction,
   AnkiDuplicateConflict,
   AnkiDuplicateState,
-  AnkiFieldMapping,
   AnkiConnectInvokePayload,
   AnkiConnectInvokeResult,
   AnkiExportPayload,
   AnkiImportStrategy,
   AnkiModelTemplate,
 } from '@/types/anki';
-import { DEFAULT_ANKI_FIELD_MAPPING } from '@/services/ankiFieldMapper';
 import request from '@/utils/request';
 
 const ANKI_CONNECT_VERSION = 6;
@@ -88,11 +86,8 @@ export class AnkiDuplicateNotesAmbiguityError extends Error {
 const normalizeFieldValue = (value: string | undefined): string =>
   (value ?? '').replace(/\r\n/g, '\n').trim();
 
-const resolveFieldMapping = (payload: AnkiExportPayload): AnkiFieldMapping =>
-  payload.fieldMapping || DEFAULT_ANKI_FIELD_MAPPING;
-
 const getPayloadWordFieldName = (payload: AnkiExportPayload): string =>
-  resolveFieldMapping(payload).word;
+  payload.fieldMapping?.find(entry => entry.source === 'lemma')?.target || '';
 
 const getPayloadWordValue = (payload: AnkiExportPayload): string =>
   normalizeFieldValue(payload.fields[getPayloadWordFieldName(payload)]);
@@ -123,37 +118,6 @@ const invoke = async <T>(payload: AnkiConnectInvokePayload): Promise<T> => {
   return data.result;
 };
 
-const ensureModelExists = async (modelName: string): Promise<void> => {
-  const models = await invoke<string[]>({
-    action: 'modelNames',
-    version: ANKI_CONNECT_VERSION,
-  });
-
-  if (models.includes(modelName)) return;
-
-  await invoke({
-    action: 'createModel',
-    version: ANKI_CONNECT_VERSION,
-    params: {
-      modelName,
-      inOrderFields: ['Word', 'Context', 'notes', 'Back', 'Add Reverse', 'Media'],
-      css: '.card { font-family: Arial; font-size: 18px; text-align: left; color: black; }',
-      cardTemplates: [
-        {
-          Name: 'Forward',
-          Front: '{{Word}}<hr>{{Context}}',
-          Back: '{{FrontSide}}<hr>{{Back}}<hr>{{notes}}',
-        },
-        {
-          Name: 'Reverse',
-          Front: '{{#Add Reverse}}{{Back}}{{/Add Reverse}}',
-          Back: '{{#Add Reverse}}{{Word}}<hr>{{Context}}<hr>{{notes}}{{/Add Reverse}}',
-        },
-      ],
-    },
-  });
-};
-
 const ensureDeckExists = async (deckName: string): Promise<void> => {
   const decks = await invoke<string[]>({
     action: 'deckNames',
@@ -170,7 +134,6 @@ const ensureDeckExists = async (deckName: string): Promise<void> => {
 
 const prepareAnkiTarget = async (payload: AnkiExportPayload): Promise<void> => {
   await pingAnkiConnect();
-  await ensureModelExists(payload.options.modelName);
   await ensureDeckExists(payload.options.deckName);
 };
 
@@ -425,12 +388,8 @@ export const downloadPayloadsAsApkg = async (
     throw new Error('At least one payload is required for .apkg export');
   }
 
-  return request.post<Blob>(
-    '/anki/export-apkg',
-    requestPayload,
-    {
-      responseType: 'blob',
-      skipErrorToast: true,
-    }
-  );
+  return request.post<Blob>('/anki/export-apkg', requestPayload, {
+    responseType: 'blob',
+    skipErrorToast: true,
+  });
 };

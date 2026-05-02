@@ -6,6 +6,12 @@ import {
   saveStoredAnkiExportOptions,
 } from '@/services/ankiExportOptionsStore';
 import {
+  getRecommendedMapping,
+  hasStoredFieldMapping,
+  loadFieldMapping,
+  saveFieldMapping,
+} from '@/services/ankiFieldMappingStore';
+import {
   checkDuplicateConflict,
   getDeckNames,
   getModelFieldNames,
@@ -23,6 +29,7 @@ import type {
   AnkiExportPayload,
   AnkiImportResult,
   AnkiModelTemplate,
+  FieldMappingConfig,
 } from '@/types/anki';
 import type { WordRecord } from '@/types/word-list';
 
@@ -53,15 +60,11 @@ export const useAnkiExport = () => {
   const deckName = ref(initialOptions.deckName || defaults.deckName);
   const modelName = ref(initialOptions.modelName || defaults.modelName);
   const templateName = ref(initialOptions.templateName || '');
-  const addReverse = ref(
-    typeof initialOptions.addReverse === 'boolean' ? initialOptions.addReverse : defaults.addReverse
-  );
   const tagsInput = ref(initialOptions.tagsInput || defaults.tags.join(', '));
-  const apkgPath = ref(
-    initialOptions.apkgPath || 'ad-fontes-export.apkg'
-  );
+  const apkgPath = ref(initialOptions.apkgPath || 'ad-fontes-export.apkg');
   const modelFieldNames = ref<string[]>([]);
   const templateOptions = ref<AnkiModelTemplate[]>([]);
+  const fieldMapping = ref<FieldMappingConfig>([]);
 
   const tags = computed(() =>
     tagsInput.value
@@ -75,7 +78,6 @@ export const useAnkiExport = () => {
       deckName: deckName.value,
       modelName: modelName.value,
       templateName: templateName.value,
-      addReverse: addReverse.value,
       tags: tags.value,
       apkgPath: apkgPath.value,
     });
@@ -85,28 +87,27 @@ export const useAnkiExport = () => {
     if (!payload.value) return;
     payload.value = {
       ...payload.value,
-      fields: {
-        ...payload.value.fields,
-        'Add Reverse': addReverse.value ? 'yes' : '',
-      },
       options: {
         ...payload.value.options,
         deckName: deckName.value,
         modelName: modelName.value,
-        addReverse: addReverse.value,
         tags: tags.value,
       },
+      fieldMapping: fieldMapping.value,
     };
   };
 
   const refreshPayload = async (): Promise<void> => {
     if (!currentRecord.value) return;
-    payload.value = await buildExportPayload(currentRecord.value, {
-      deckName: deckName.value,
-      modelName: modelName.value,
-      addReverse: addReverse.value,
-      tags: tags.value,
-    });
+    payload.value = await buildExportPayload(
+      currentRecord.value,
+      {
+        deckName: deckName.value,
+        modelName: modelName.value,
+        tags: tags.value,
+      },
+      fieldMapping.value
+    );
   };
 
   const loadModelMetadata = async (): Promise<void> => {
@@ -123,6 +124,12 @@ export const useAnkiExport = () => {
     ]);
     modelFieldNames.value = fields;
     templateOptions.value = templates;
+    fieldMapping.value = hasStoredFieldMapping(modelName.value)
+      ? loadFieldMapping(modelName.value)
+      : getRecommendedMapping(fields);
+    if (!hasStoredFieldMapping(modelName.value)) {
+      saveFieldMapping(modelName.value, fieldMapping.value);
+    }
 
     const hasSelectedTemplate = templates.some(template => template.name === templateName.value);
     if (!hasSelectedTemplate) {
@@ -347,7 +354,9 @@ export const useAnkiExport = () => {
     error.value = '';
     try {
       if (!ankiConnected.value) {
-        throw new Error('Anki is not connected. Please connect Anki to load model fields/templates.');
+        throw new Error(
+          'Anki is not connected. Please connect Anki to load model fields/templates.'
+        );
       }
       if (!modelFieldNames.value.length) {
         throw new Error('No model fields loaded for selected model. Please refresh Anki data.');
@@ -373,7 +382,13 @@ export const useAnkiExport = () => {
     }
   };
 
-  watch([deckName, addReverse, tagsInput], () => {
+  const updateFieldMapping = async (mapping: FieldMappingConfig): Promise<void> => {
+    fieldMapping.value = mapping;
+    saveFieldMapping(modelName.value, mapping);
+    await updateAndRefresh();
+  };
+
+  watch([deckName, tagsInput], () => {
     persistOptions();
     syncPayloadOptions();
     duplicateConflict.value = null;
@@ -389,6 +404,7 @@ export const useAnkiExport = () => {
       modelFieldNames.value = [];
       templateOptions.value = [];
       templateName.value = '';
+      fieldMapping.value = [];
       return;
     }
     void loadModelMetadata().catch(err => {
@@ -418,15 +434,16 @@ export const useAnkiExport = () => {
     deckName,
     modelName,
     templateName,
-    addReverse,
     tagsInput,
     apkgPath,
     modelFieldNames,
     templateOptions,
+    fieldMapping,
     open,
     close,
     connectAnki,
     browseApkgPath,
+    updateFieldMapping,
     updateAndRefresh,
     importToAnki,
     exportApkg,

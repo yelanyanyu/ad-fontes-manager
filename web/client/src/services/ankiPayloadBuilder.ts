@@ -1,7 +1,7 @@
 import yaml from 'js-yaml';
 import request from '@/utils/request';
 import { createAnkiPayload } from '@/services/ankiExportService';
-import type { AnkiExportPayload, ParsedWordSource } from '@/types/anki';
+import type { AnkiExportPayload, FieldMappingConfig, ParsedWordSource } from '@/types/anki';
 import type { WordRecord } from '@/types/word-list';
 
 type UnknownRecord = Record<string, unknown>;
@@ -52,10 +52,10 @@ export const buildExportPayload = async (
   options: {
     deckName: string;
     modelName: string;
-    addReverse: boolean;
     tags: string[];
-  }
+  },
+  fieldMapping: FieldMappingConfig
 ): Promise<AnkiExportPayload> => {
   const source = await resolveParsedSource(record);
-  return createAnkiPayload(source, options);
+  return createAnkiPayload(source, options, fieldMapping);
 };

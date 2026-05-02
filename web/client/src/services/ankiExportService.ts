@@ -1,10 +1,14 @@
-import type { AnkiExportOptions, AnkiExportPayload, ParsedWordSource } from '@/types/anki';
-import { DEFAULT_ANKI_FIELD_MAPPING, mapWordToAnkiFields } from '@/services/ankiFieldMapper';
+import type {
+  AnkiExportOptions,
+  AnkiExportPayload,
+  FieldMappingConfig,
+  ParsedWordSource,
+} from '@/types/anki';
+import { buildAnkiFields, extractLemma } from '@/services/ankiFieldMapper';
 
 const DEFAULT_OPTIONS: AnkiExportOptions = {
   deckName: 'test',
   modelName: 'AdFontesWord',
-  addReverse: true,
   tags: [],
 };
 
@@ -12,7 +16,8 @@ export const getDefaultAnkiOptions = (): AnkiExportOptions => ({ ...DEFAULT_OPTI
 
 export const createAnkiPayload = (
   source: ParsedWordSource,
-  options: Partial<AnkiExportOptions> = {}
+  options: Partial<AnkiExportOptions> = {},
+  fieldMapping: FieldMappingConfig = []
 ): AnkiExportPayload => {
   const finalOptions: AnkiExportOptions = {
     ...DEFAULT_OPTIONS,
@@ -20,10 +25,9 @@ export const createAnkiPayload = (
     tags: Array.isArray(options.tags) ? options.tags : DEFAULT_OPTIONS.tags,
   };
 
-  const fieldMapping = DEFAULT_ANKI_FIELD_MAPPING;
-  const fields = mapWordToAnkiFields(source.data, finalOptions.addReverse, '', fieldMapping);
+  const fields = buildAnkiFields(source.data, fieldMapping);
   const sourceLemma =
-    fields[fieldMapping.word] || source.record.lemma || source.record.lemma_preview || source.id;
+    extractLemma(source.data) || source.record.lemma || source.record.lemma_preview || source.id;
 
   return {
     fields,

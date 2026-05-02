@@ -6,7 +6,6 @@ export interface StoredAnkiExportOptions {
   deckName?: string;
   modelName?: string;
   templateName?: string;
-  addReverse?: boolean;
   tags?: string[];
   apkgPath?: string;
 }
@@ -34,7 +33,6 @@ export const getInitialAnkiExportOptions = () => {
     deckName: stored.deckName || defaults.deckName,
     modelName: stored.modelName || defaults.modelName,
     templateName: stored.templateName || '',
-    addReverse: typeof stored.addReverse === 'boolean' ? stored.addReverse : defaults.addReverse,
     tagsInput: (stored.tags || defaults.tags).join(', '),
     apkgPath: stored.apkgPath || 'ad-fontes-export.apkg',
   };

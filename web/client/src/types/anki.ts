@@ -2,16 +2,28 @@ import type { WordRecord } from '@/types/word-list';
 
 export type AnkiTargetFields = Record<string, string>;
 
-export type AnkiFieldRole = 'word' | 'context' | 'notes' | 'back' | 'addReverse' | 'media';
+export type AnkiDataSource =
+  | 'lemma'
+  | 'user_context_sentence'
+  | 'other_common_meanings'
+  | 'selected_examples_sentence'
+  | 'selected_examples_translation'
+  | 'synonyms_word'
+  | 'synonyms_meaning'
+  | 'rendered_html';
 
-export type AnkiCanonicalFields = Record<AnkiFieldRole, string>;
+export interface FieldMappingEntry {
+  source: AnkiDataSource;
+  target: string;
+}
 
-export type AnkiFieldMapping = Record<AnkiFieldRole, string>;
+export type FieldMappingConfig = FieldMappingEntry[];
+
+export type LegacyFieldMappingConfig = Record<string, string>;
 
 export interface AnkiExportOptions {
   deckName: string;
   modelName: string;
-  addReverse: boolean;
   tags: string[];
 }
 
@@ -20,7 +32,7 @@ export interface AnkiExportPayload {
   options: AnkiExportOptions;
   sourceWordId: string;
   sourceLemma: string;
-  fieldMapping?: AnkiFieldMapping;
+  fieldMapping?: FieldMappingConfig;
 }
 
 export interface AnkiModelTemplate {

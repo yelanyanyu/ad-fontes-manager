@@ -25,18 +25,19 @@ describe('buildExportPayload', () => {
     const options = {
       deckName: 'test-deck',
       modelName: 'AdFontesWord',
-      addReverse: true,
       tags: ['ad-fontes'],
     };
+    const fieldMapping = [{ source: 'lemma' as const, target: 'Front' }];
 
-    const batchPayload = await buildExportPayload(record, options);
+    const batchPayload = await buildExportPayload(record, options, fieldMapping);
     const singlePayload = createAnkiPayload(
       {
         id: 'local-1',
         data: yamlObject as Record<string, unknown>,
         record,
       },
-      options
+      options,
+      fieldMapping
     );
 
     expect(batchPayload).toEqual(singlePayload);

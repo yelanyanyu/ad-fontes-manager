@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AnkiDuplicateConflict, AnkiExportPayload, AnkiFieldMapping } from '@/types/anki';
+import type { AnkiDuplicateConflict, AnkiExportPayload, FieldMappingConfig } from '@/types/anki';
 
 const { requestPostMock } = vi.hoisted(() => ({
   requestPostMock: vi.fn(),
@@ -23,23 +23,17 @@ import {
   isDuplicateAddNoteError,
 } from '@/services/ankiConnectService';
 
-const DEFAULT_FIELD_MAPPING: AnkiFieldMapping = {
-  word: 'Word',
-  context: 'Context',
-  notes: 'notes',
-  back: 'Back',
-  addReverse: 'Add Reverse',
-  media: 'Media',
-};
+const DEFAULT_FIELD_MAPPING: FieldMappingConfig = [
+  { source: 'lemma', target: 'Word' },
+  { source: 'user_context_sentence', target: 'Context' },
+  { source: 'rendered_html', target: 'Back' },
+];
 
-const ALT_FIELD_MAPPING: AnkiFieldMapping = {
-  word: 'id',
-  context: 'question',
-  notes: 'notes',
-  back: 'answer',
-  addReverse: 'options',
-  media: 'audio',
-};
+const ALT_FIELD_MAPPING: FieldMappingConfig = [
+  { source: 'lemma', target: 'id' },
+  { source: 'user_context_sentence', target: 'question' },
+  { source: 'rendered_html', target: 'answer' },
+];
 
 const payload: AnkiExportPayload = {
   fields: {
@@ -54,7 +48,6 @@ const payload: AnkiExportPayload = {
   options: {
     deckName: 'English::English-word',
     modelName: '单词模板-Quizify',
-    addReverse: false,
     tags: ['English::type::word'],
   },
   sourceWordId: 'word-1',
@@ -72,7 +65,6 @@ const asNoteInfo = (noteId: number, fields: Record<string, string>) => ({
 const mockPrepareTarget = (): void => {
   requestPostMock
     .mockResolvedValueOnce(asAnkiResponse(6))
-    .mockResolvedValueOnce(asAnkiResponse([payload.options.modelName]))
     .mockResolvedValueOnce(asAnkiResponse([payload.options.deckName]));
 };
 
@@ -127,7 +119,7 @@ describe('ankiConnectService duplicate safeguards', () => {
 
     expect(conflict).toBeNull();
     expect(requestPostMock).toHaveBeenNthCalledWith(
-      4,
+      3,
       '/anki/connect',
       expect.objectContaining({
         action: 'findNotes',
@@ -180,13 +172,12 @@ describe('ankiConnectService duplicate safeguards', () => {
     await expect(checkDuplicateConflict(payload)).rejects.toBeInstanceOf(
       AnkiDuplicateNotesAmbiguityError
     );
-    expect(requestPostMock).toHaveBeenCalledTimes(4);
+    expect(requestPostMock).toHaveBeenCalledTimes(3);
   });
 
   it('uses the mapped word field name when a model mapping overrides the default word field', async () => {
     requestPostMock
       .mockResolvedValueOnce(asAnkiResponse(6))
-      .mockResolvedValueOnce(asAnkiResponse(['QuestionAnswerMapped']))
       .mockResolvedValueOnce(asAnkiResponse([payload.options.deckName]));
     requestPostMock.mockResolvedValueOnce(asAnkiResponse([]));
 
@@ -208,7 +199,7 @@ describe('ankiConnectService duplicate safeguards', () => {
     });
 
     expect(requestPostMock).toHaveBeenNthCalledWith(
-      4,
+      3,
       '/anki/connect',
       expect.objectContaining({
         action: 'findNotes',
@@ -309,7 +300,7 @@ describe('ankiConnectService duplicate safeguards', () => {
 
     await expect(importPayloadToAnki(payload)).rejects.toBeInstanceOf(AnkiDuplicateConflictError);
     expect(requestPostMock).toHaveBeenNthCalledWith(
-      5,
+      4,
       '/anki/connect',
       expect.objectContaining({
         action: 'findNotes',

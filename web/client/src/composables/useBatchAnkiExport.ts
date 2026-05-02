@@ -19,6 +19,12 @@ import {
   updateBatchItemsResolution,
 } from '@/services/batchAnkiService';
 import { saveStoredAnkiExportOptions } from '@/services/ankiExportOptionsStore';
+import {
+  getRecommendedMapping,
+  hasStoredFieldMapping,
+  loadFieldMapping,
+  saveFieldMapping,
+} from '@/services/ankiFieldMappingStore';
 import { buildExportPayload } from '@/services/ankiPayloadBuilder';
 import { exportBatchApkgViaAnkiConnect } from '@/services/apkgExportService';
 import { useBatchAnkiStore } from '@/stores/batchAnkiStore';
@@ -28,6 +34,7 @@ import type {
   AnkiModelTemplate,
   BatchAnkiExportItem,
   BatchAnkiProgressPhase,
+  FieldMappingConfig,
 } from '@/types/anki';
 import type { WordRecord } from '@/types/word-list';
 
@@ -62,8 +69,8 @@ export const useBatchAnkiExport = () => {
     deckName,
     modelName,
     templateName,
-    addReverse,
     tagsInput,
+    fieldMapping,
     summaryVisible,
   } = storeToRefs(batchStore);
 
@@ -110,7 +117,6 @@ export const useBatchAnkiExport = () => {
       deckName: deckName.value,
       modelName: modelName.value,
       templateName: templateName.value,
-      addReverse: addReverse.value,
       tags: tags.value,
     });
   };
@@ -120,6 +126,7 @@ export const useBatchAnkiExport = () => {
       modelFieldNames.value = [];
       templateOptions.value = [];
       templateName.value = '';
+      fieldMapping.value = [];
       return;
     }
 
@@ -129,6 +136,12 @@ export const useBatchAnkiExport = () => {
     ]);
     modelFieldNames.value = fields;
     templateOptions.value = templates;
+    fieldMapping.value = hasStoredFieldMapping(modelName.value)
+      ? loadFieldMapping(modelName.value)
+      : getRecommendedMapping(fields);
+    if (!hasStoredFieldMapping(modelName.value)) {
+      saveFieldMapping(modelName.value, fieldMapping.value);
+    }
 
     const hasSelectedTemplate = templates.some(template => template.name === templateName.value);
     if (!hasSelectedTemplate) {
@@ -303,12 +316,15 @@ export const useBatchAnkiExport = () => {
         });
 
         try {
-          const payload = await buildExportPayload(item.record, {
-            deckName: deckName.value,
-            modelName: modelName.value,
-            addReverse: addReverse.value,
-            tags: tags.value,
-          });
+          const payload = await buildExportPayload(
+            item.record,
+            {
+              deckName: deckName.value,
+              modelName: modelName.value,
+              tags: tags.value,
+            },
+            fieldMapping.value
+          );
           const conflict = await checkDuplicateConflict(payload);
           if (conflict) {
             setItem(item.key, {
@@ -375,16 +391,21 @@ export const useBatchAnkiExport = () => {
       const payloads = await Promise.all(
         items.value.map(async item => {
           if (item.payload) return item.payload;
-          return buildExportPayload(item.record, {
-            deckName: deckName.value,
-            modelName: modelName.value,
-            addReverse: addReverse.value,
-            tags: tags.value,
-          });
+          return buildExportPayload(
+            item.record,
+            {
+              deckName: deckName.value,
+              modelName: modelName.value,
+              tags: tags.value,
+            },
+            fieldMapping.value
+          );
         })
       );
       if (!ankiConnected.value) {
-        throw new Error('Anki is not connected. Please connect Anki to load model fields/templates.');
+        throw new Error(
+          'Anki is not connected. Please connect Anki to load model fields/templates.'
+        );
       }
       if (!modelFieldNames.value.length) {
         throw new Error('No model fields loaded for selected model. Please refresh Anki data.');
@@ -520,7 +541,14 @@ export const useBatchAnkiExport = () => {
     }
   };
 
-  watch([deckName, addReverse, tagsInput], () => {
+  const updateFieldMapping = (mapping: FieldMappingConfig): void => {
+    fieldMapping.value = mapping;
+    saveFieldMapping(modelName.value, mapping);
+    if (!isOpen.value || configLocked.value) return;
+    resetCheckState();
+  };
+
+  watch([deckName, tagsInput], () => {
     persistOptions();
     if (!isOpen.value || configLocked.value) return;
     resetCheckState();
@@ -532,6 +560,7 @@ export const useBatchAnkiExport = () => {
       modelFieldNames.value = [];
       templateOptions.value = [];
       templateName.value = '';
+      fieldMapping.value = [];
       return;
     }
     void loadModelMetadata().catch(err => {
@@ -604,8 +633,8 @@ export const useBatchAnkiExport = () => {
     deckName,
     modelName,
     templateName,
-    addReverse,
     tagsInput,
+    fieldMapping,
     ankiConnected,
     deckOptions,
     modelOptions,
@@ -627,6 +656,7 @@ export const useBatchAnkiExport = () => {
     reopenPanel,
     dismissSummary,
     connectAnki,
+    updateFieldMapping,
     cancelBatchOperation,
     checkDuplicates,
     setDuplicatesResolutionAll,

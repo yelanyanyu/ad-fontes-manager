@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import type { AnkiModelTemplate, BatchAnkiExportItem, BatchAnkiProgress } from '@/types/anki';
+import AnkiFieldMappingEditor from '@/components/AnkiExport/AnkiFieldMappingEditor.vue';
+import type {
+  AnkiModelTemplate,
+  BatchAnkiExportItem,
+  BatchAnkiProgress,
+  FieldMappingConfig,
+} from '@/types/anki';
 
 defineProps<{
   open: boolean;
@@ -11,12 +17,13 @@ defineProps<{
   ankiConnected: boolean;
   deckOptions: string[];
   modelOptions: string[];
+  modelFieldNames: string[];
   templateOptions: AnkiModelTemplate[];
   deckName: string;
   modelName: string;
   templateName: string;
-  addReverse: boolean;
   tagsInput: string;
+  fieldMapping: FieldMappingConfig;
   canEditConfig: boolean;
   canCancel: boolean;
   canResume: boolean;
@@ -29,8 +36,8 @@ const emit = defineEmits<{
   (e: 'update:deckName', value: string): void;
   (e: 'update:modelName', value: string): void;
   (e: 'update:templateName', value: string): void;
-  (e: 'update:addReverse', value: boolean): void;
   (e: 'update:tagsInput', value: string): void;
+  (e: 'update:fieldMapping', value: FieldMappingConfig): void;
   (e: 'connect-anki'): void;
   (e: 'check-duplicates'): void;
   (e: 'ignore-all-duplicates'): void;
@@ -61,7 +68,9 @@ const statusClassMap: Record<string, string> = {
 <template>
   <div v-if="open" class="fixed inset-0 z-40 bg-black/40" @click="onOverlayClick" />
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <div class="w-full max-w-6xl h-[90vh] rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden flex flex-col">
+    <div
+      class="w-full max-w-6xl h-[90vh] rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden flex flex-col"
+    >
       <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
         <h3 class="text-slate-800 font-bold text-base">Batch Anki Card Operations</h3>
         <div class="flex items-center gap-2">
@@ -105,7 +114,9 @@ const statusClassMap: Record<string, string> = {
               :disabled="!canEditConfig"
               @change="emit('update:deckName', ($event.target as HTMLSelectElement).value)"
             >
-              <option v-if="!deckOptions.length" :value="deckName">{{ deckName || '(empty)' }}</option>
+              <option v-if="!deckOptions.length" :value="deckName">
+                {{ deckName || '(empty)' }}
+              </option>
               <option v-for="deck in deckOptions" :key="deck" :value="deck">{{ deck }}</option>
             </select>
           </label>
@@ -117,7 +128,9 @@ const statusClassMap: Record<string, string> = {
               :disabled="!canEditConfig"
               @change="emit('update:modelName', ($event.target as HTMLSelectElement).value)"
             >
-              <option v-if="!modelOptions.length" :value="modelName">{{ modelName || '(empty)' }}</option>
+              <option v-if="!modelOptions.length" :value="modelName">
+                {{ modelName || '(empty)' }}
+              </option>
               <option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option>
             </select>
           </label>
@@ -130,7 +143,11 @@ const statusClassMap: Record<string, string> = {
               @change="emit('update:templateName', ($event.target as HTMLSelectElement).value)"
             >
               <option value="">Select template</option>
-              <option v-for="template in templateOptions" :key="template.name" :value="template.name">
+              <option
+                v-for="template in templateOptions"
+                :key="template.name"
+                :value="template.name"
+              >
                 {{ template.name }}
               </option>
             </select>
@@ -146,16 +163,22 @@ const statusClassMap: Record<string, string> = {
           </label>
         </div>
 
-        <label class="flex items-center gap-2 text-sm text-slate-700 font-medium">
-          <input
-            type="checkbox"
-            class="rounded border-slate-300"
-            :checked="addReverse"
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div
+            v-if="!ankiConnected"
+            class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-sm"
+          >
+            Please connect Anki before configuring field mapping.
+          </div>
+          <AnkiFieldMappingEditor
+            v-else
+            :model-name="modelName"
+            :model-field-names="modelFieldNames"
+            :model-value="fieldMapping"
             :disabled="!canEditConfig"
-            @change="emit('update:addReverse', ($event.target as HTMLInputElement).checked)"
+            @update:model-value="emit('update:fieldMapping', $event)"
           />
-          <span>Add Reverse Card</span>
-        </label>
+        </div>
 
         <div class="flex flex-wrap gap-2">
           <button
@@ -232,7 +255,10 @@ const statusClassMap: Record<string, string> = {
           </div>
         </div>
 
-        <div v-if="error" class="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm">
+        <div
+          v-if="error"
+          class="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm"
+        >
           {{ error }}
         </div>
       </div>
@@ -241,19 +267,29 @@ const statusClassMap: Record<string, string> = {
         <table class="min-w-full">
           <thead class="bg-slate-50 sticky top-0">
             <tr>
-              <th class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+              <th
+                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+              >
                 Lemma
               </th>
-              <th class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+              <th
+                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+              >
                 Source
               </th>
-              <th class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+              <th
+                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+              >
                 Status
               </th>
-              <th class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+              <th
+                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+              >
                 Details
               </th>
-              <th class="px-4 py-2 text-right text-[11px] uppercase tracking-wider text-slate-500 font-bold">
+              <th
+                class="px-4 py-2 text-right text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+              >
                 Action
               </th>
             </tr>

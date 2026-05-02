@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { computed, toRefs } from 'vue';
-import type { AnkiDuplicateConflict, AnkiExportPayload, AnkiModelTemplate } from '@/types/anki';
+import AnkiFieldMappingEditor from '@/components/AnkiExport/AnkiFieldMappingEditor.vue';
+import type {
+  AnkiDuplicateConflict,
+  AnkiExportPayload,
+  AnkiModelTemplate,
+  FieldMappingConfig,
+} from '@/types/anki';
 
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'update:deckName', value: string): void;
   (e: 'update:modelName', value: string): void;
   (e: 'update:templateName', value: string): void;
-  (e: 'update:addReverse', value: boolean): void;
   (e: 'update:tagsInput', value: string): void;
   (e: 'update:apkgPath', value: string): void;
+  (e: 'update:fieldMapping', value: FieldMappingConfig): void;
   (e: 'connect-anki'): void;
   (e: 'browse-apkg-path'): void;
   (e: 'refresh'): void;
@@ -33,13 +39,13 @@ const props = defineProps<{
   deckName: string;
   modelName: string;
   templateName: string;
-  addReverse: boolean;
   tagsInput: string;
   apkgPath: string;
+  fieldMapping: FieldMappingConfig;
 }>();
 const { open, busy, error, payload, duplicateConflict, ankiConnected } = toRefs(props);
 
-const previewFieldNames = computed(() => {
+const mappedFieldNames = computed(() => {
   if (!props.payload) return [];
   if (props.modelFieldNames.length > 0) return props.modelFieldNames;
   return Object.keys(props.payload.fields);
@@ -62,7 +68,7 @@ const previewFieldNames = computed(() => {
         </button>
       </div>
 
-      <div class="p-5 space-y-4">
+      <div class="p-5 space-y-4 max-h-[72vh] overflow-y-auto">
         <div class="flex items-center justify-between gap-3">
           <div class="text-sm text-slate-600">
             <span v-if="ankiConnected" class="text-emerald-600 font-semibold">Anki connected</span>
@@ -88,7 +94,9 @@ const previewFieldNames = computed(() => {
               <option v-if="!props.deckOptions.length" :value="props.deckName">
                 {{ props.deckName || '(empty)' }}
               </option>
-              <option v-for="deck in props.deckOptions" :key="deck" :value="deck">{{ deck }}</option>
+              <option v-for="deck in props.deckOptions" :key="deck" :value="deck">
+                {{ deck }}
+              </option>
             </select>
           </label>
 
@@ -116,14 +124,18 @@ const previewFieldNames = computed(() => {
               @change="emit('update:templateName', ($event.target as HTMLSelectElement).value)"
             >
               <option value="">Select template</option>
-              <option v-for="template in props.templateOptions" :key="template.name" :value="template.name">
+              <option
+                v-for="template in props.templateOptions"
+                :key="template.name"
+                :value="template.name"
+              >
                 {{ template.name }}
               </option>
             </select>
           </label>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 gap-4">
           <label class="text-sm text-slate-700 font-medium">
             Tags (comma separated)
             <input
@@ -131,15 +143,6 @@ const previewFieldNames = computed(() => {
               :value="props.tagsInput"
               @input="emit('update:tagsInput', ($event.target as HTMLInputElement).value)"
             />
-          </label>
-          <label class="flex items-center gap-2 text-sm text-slate-700 font-medium pt-7">
-            <input
-              type="checkbox"
-              class="rounded border-slate-300"
-              :checked="props.addReverse"
-              @change="emit('update:addReverse', ($event.target as HTMLInputElement).checked)"
-            />
-            <span>Add Reverse Card</span>
           </label>
         </div>
 
@@ -202,18 +205,31 @@ const previewFieldNames = computed(() => {
           </div>
         </div>
 
-        <div v-if="props.payload" class="rounded-lg border border-slate-200 bg-slate-50 p-4">
-          <h4 class="font-bold text-slate-700 text-sm mb-3">Target Fields Preview</h4>
-          <div class="grid grid-cols-1 gap-2 text-xs">
+        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div
+            v-if="!ankiConnected"
+            class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-sm"
+          >
+            Please connect Anki before configuring field mapping.
+          </div>
+          <AnkiFieldMappingEditor
+            v-else
+            :model-name="props.modelName"
+            :model-field-names="props.modelFieldNames"
+            :model-value="props.fieldMapping"
+            :disabled="busy"
+            @update:model-value="emit('update:fieldMapping', $event)"
+          />
+          <div v-if="props.payload" class="mt-4 grid grid-cols-1 gap-2 text-xs">
             <div
-              v-for="fieldName in previewFieldNames"
+              v-for="fieldName in mappedFieldNames"
               :key="fieldName"
               class="bg-white border border-slate-200 rounded p-2 break-all"
             >
               <strong>{{ fieldName }}:</strong>
               {{
-                (props.payload.fields[fieldName] || '').length > 240
-                  ? `${props.payload.fields[fieldName].slice(0, 240)}...`
+                (props.payload.fields[fieldName] || '').length > 160
+                  ? `${props.payload.fields[fieldName].slice(0, 160)}...`
                   : props.payload.fields[fieldName] || '(empty)'
               }}
             </div>

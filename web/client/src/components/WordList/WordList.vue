@@ -57,13 +57,7 @@ import {
   mergeRecordsIntoSelectionMap,
   type SelectAllMatchingPageResult,
 } from '@/services/selectAllMatchingService';
-import type {
-  DbListMeta,
-  DiffBadge,
-  SearchMode,
-  SortMode,
-  WordRecord,
-} from '@/types/word-list';
+import type { DbListMeta, DiffBadge, SearchMode, SortMode, WordRecord } from '@/types/word-list';
 
 interface WordStoreLike {
   dbRecords: WordRecord[];
@@ -88,9 +82,7 @@ interface WordListApiResponse {
 
 const wordStore = useWordStore() as unknown as WordStoreLike;
 const appStore = useAppStore() as unknown as AppStoreLike;
-const { dbRecords, dbListMeta, loading } = storeToRefs(
-  wordStore as any
-) as {
+const { dbRecords, dbListMeta, loading } = storeToRefs(wordStore as any) as {
   dbRecords: Ref<WordRecord[]>;
   dbListMeta: Ref<DbListMeta>;
   loading: Ref<boolean>;
@@ -180,7 +172,13 @@ const visibleColumns = ref<Record<ColumnKey, boolean>>({
   updatedAt: false,
 });
 const columnMenuOpen = ref(false);
-const allColumnKeys: ColumnKey[] = ['language', 'partOfSpeech', 'revisionCount', 'createdAt', 'updatedAt'];
+const allColumnKeys: ColumnKey[] = [
+  'language',
+  'partOfSpeech',
+  'revisionCount',
+  'createdAt',
+  'updatedAt',
+];
 const shownColumns = computed<ColumnKey[]>(() =>
   allColumnKeys.filter(k => visibleColumns.value[k])
 );
@@ -339,13 +337,14 @@ const {
   deckName: ankiDeckName,
   modelName: ankiModelName,
   templateName: ankiTemplateName,
-  addReverse: ankiAddReverse,
   tagsInput: ankiTagsInput,
   apkgPath: ankiApkgPath,
+  fieldMapping: ankiFieldMapping,
   open: openAnkiExport,
   close: closeAnkiExport,
   connectAnki: connectAnkiExport,
   browseApkgPath: browseAnkiApkgPath,
+  updateFieldMapping: updateAnkiFieldMapping,
   updateAndRefresh: refreshAnkiExportPayload,
   importToAnki,
   exportApkg,
@@ -406,10 +405,6 @@ const setAnkiTemplateName = (value: string): void => {
   ankiTemplateName.value = value;
 };
 
-const setAnkiAddReverse = (value: boolean): void => {
-  ankiAddReverse.value = value;
-};
-
 const setAnkiTagsInput = (value: string): void => {
   ankiTagsInput.value = value;
 };
@@ -436,17 +431,19 @@ const {
   ankiConnected: batchAnkiConnected,
   deckOptions: batchAnkiDeckOptions,
   modelOptions: batchAnkiModelOptions,
+  modelFieldNames: batchAnkiModelFieldNames,
   templateOptions: batchAnkiTemplateOptions,
   deckName: batchAnkiDeckName,
   modelName: batchAnkiModelName,
   templateName: batchAnkiTemplateName,
-  addReverse: batchAnkiAddReverse,
   tagsInput: batchAnkiTagsInput,
+  fieldMapping: batchAnkiFieldMapping,
   open: openBatchAnkiExportModal,
   close: closeBatchAnkiExportModal,
   reopenPanel: reopenBatchAnkiPanel,
   dismissSummary: dismissBatchAnkiSummary,
   connectAnki: connectBatchAnki,
+  updateFieldMapping: updateBatchFieldMapping,
   cancelBatchOperation,
   checkDuplicates: checkBatchDuplicates,
   setDuplicatesResolutionAll,
@@ -483,10 +480,6 @@ const setBatchModelName = (value: string): void => {
 
 const setBatchTemplateName = (value: string): void => {
   batchAnkiTemplateName.value = value;
-};
-
-const setBatchAddReverse = (value: boolean): void => {
-  batchAnkiAddReverse.value = value;
 };
 
 const setBatchTagsInput = (value: string): void => {
@@ -581,12 +574,8 @@ const selectAllMatching = async (): Promise<void> => {
     }
 
     const dbMatched =
-      dbTotal > 0
-        ? await collectAllDbMatchingRecords(fetchDbPageForSelection, 200)
-        : [];
-    const mergedMap = mergeRecordsIntoSelectionMap(selectedItemsByKey.value, [
-      ...dbMatched,
-    ]);
+      dbTotal > 0 ? await collectAllDbMatchingRecords(fetchDbPageForSelection, 200) : [];
+    const mergedMap = mergeRecordsIntoSelectionMap(selectedItemsByKey.value, [...dbMatched]);
     selectedItemsByKey.value = mergedMap;
     selectedKeys.value = new Set(mergedMap.keys());
     appStore.addToast(`Selected ${decision.total} matching words`, 'success');
@@ -661,9 +650,12 @@ watch(searchMode, value => {
 });
 
 // Auto-refresh list when language changes
-watch(() => appStore.currentLanguage, () => {
-  wordStore.fetchDbRecords({ page: 1, language: appStore.currentLanguage });
-});
+watch(
+  () => appStore.currentLanguage,
+  () => {
+    void wordStore.fetchDbRecords({ page: 1, language: appStore.currentLanguage });
+  }
+);
 const canSearch = computed(() => {
   return !loading.value;
 });
@@ -803,18 +795,18 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :deck-name="ankiDeckName"
       :model-name="ankiModelName"
       :template-name="ankiTemplateName"
-      :add-reverse="ankiAddReverse"
       :tags-input="ankiTagsInput"
       :apkg-path="ankiApkgPath"
+      :field-mapping="ankiFieldMapping"
       @close="closeAnkiExport"
       @connect-anki="handleConnectAnkiExport"
       @browse-apkg-path="browseAnkiApkgPath"
       @update:deck-name="setAnkiDeckName"
       @update:model-name="setAnkiModelName"
       @update:template-name="setAnkiTemplateName"
-      @update:add-reverse="setAnkiAddReverse"
       @update:tags-input="setAnkiTagsInput"
       @update:apkg-path="setAnkiApkgPath"
+      @update:field-mapping="updateAnkiFieldMapping"
       @refresh="refreshAnkiExportPayload"
       @import-test="handleImportToAnki"
       @export-apkg="handleExportApkg"
@@ -829,12 +821,13 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :anki-connected="batchAnkiConnected"
       :deck-options="batchAnkiDeckOptions"
       :model-options="batchAnkiModelOptions"
+      :model-field-names="batchAnkiModelFieldNames"
       :template-options="batchAnkiTemplateOptions"
       :deck-name="batchAnkiDeckName"
       :model-name="batchAnkiModelName"
       :template-name="batchAnkiTemplateName"
-      :add-reverse="batchAnkiAddReverse"
       :tags-input="batchAnkiTagsInput"
+      :field-mapping="batchAnkiFieldMapping"
       :can-edit-config="batchAnkiCanEditConfig"
       :can-cancel="batchAnkiCanCancel"
       :can-resume="batchAnkiCanResume"
@@ -845,8 +838,8 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @update:deck-name="setBatchDeckName"
       @update:model-name="setBatchModelName"
       @update:template-name="setBatchTemplateName"
-      @update:add-reverse="setBatchAddReverse"
       @update:tags-input="setBatchTagsInput"
+      @update:field-mapping="updateBatchFieldMapping"
       @check-duplicates="checkBatchDuplicates"
       @ignore-all-duplicates="ignoreAllBatchDuplicates"
       @overwrite-all-duplicates="overwriteAllBatchDuplicates"
@@ -1027,7 +1020,10 @@ const paginationRange = computed<Array<number | '...'>>(() => {
                 >
                   {{ columnLabels[col] }}
                 </th>
-                <th scope="col" class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right w-[200px]">
+                <th
+                  scope="col"
+                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right w-[200px]"
+                >
                   <div class="flex items-center justify-end gap-1 relative">
                     <button
                       class="text-slate-400 hover:text-slate-600 text-[11px] font-normal normal-case inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-200 hover:border-slate-300 transition-colors"
