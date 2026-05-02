@@ -215,6 +215,15 @@ export const getModelFieldNames = async (modelName: string): Promise<string[]> =
     params: { modelName },
   });
 
+export const getModelStyling = async (modelName: string): Promise<string> => {
+  const result = await invoke<{ css: string }>({
+    action: 'modelStyling',
+    version: ANKI_CONNECT_VERSION,
+    params: { modelName },
+  });
+  return result.css;
+};
+
 export const getModelTemplates = async (modelName: string): Promise<AnkiModelTemplate[]> => {
   const templates = await invoke<Record<string, { Front?: string; Back?: string }>>({
     action: 'modelTemplates',

@@ -32,12 +32,7 @@ const hasZipEocdSignature = async (blob: Blob): Promise<boolean> => {
 
   // EOCD signature: 0x50 0x4b 0x05 0x06
   for (let i = tail.length - 4; i >= 0; i -= 1) {
-    if (
-      tail[i] === 0x50 &&
-      tail[i + 1] === 0x4b &&
-      tail[i + 2] === 0x05 &&
-      tail[i + 3] === 0x06
-    ) {
+    if (tail[i] === 0x50 && tail[i + 1] === 0x4b && tail[i + 2] === 0x05 && tail[i + 3] === 0x06) {
       return true;
     }
   }
@@ -49,14 +44,19 @@ const downloadApkgViaBackend = async (
   payloads: AnkiExportPayload[],
   outputFileName: string,
   modelFields: string[],
-  selectedTemplate: AnkiModelTemplate
+  selectedTemplate: AnkiModelTemplate,
+  css: string
 ): Promise<{ ok: boolean; fileName: string }> => {
+  if (!css.trim()) {
+    console.warn('Model CSS is empty. The exported .apkg will use Anki default styling.');
+  }
   const normalizedFileName = sanitizeFileName(outputFileName);
   const requestPayload: AnkiApkgExportRequest = {
     fileName: normalizedFileName,
     payloads,
     modelFields,
     selectedTemplate,
+    css,
   };
   const apkgBlob = await downloadPayloadsAsApkg(requestPayload);
   const validZip = await hasZipEocdSignature(apkgBlob);
@@ -71,16 +71,18 @@ export const exportApkgViaAnkiConnect = async (
   payload: AnkiExportPayload,
   outputFileName: string,
   modelFields: string[],
-  selectedTemplate: AnkiModelTemplate
+  selectedTemplate: AnkiModelTemplate,
+  css: string
 ): Promise<{ ok: boolean; fileName: string }> => {
-  return downloadApkgViaBackend([payload], outputFileName, modelFields, selectedTemplate);
+  return downloadApkgViaBackend([payload], outputFileName, modelFields, selectedTemplate, css);
 };
 
 export const exportBatchApkgViaAnkiConnect = async (
   payloads: AnkiExportPayload[],
   outputFileName: string,
   modelFields: string[],
-  selectedTemplate: AnkiModelTemplate
+  selectedTemplate: AnkiModelTemplate,
+  css: string
 ): Promise<{ ok: boolean; fileName: string }> => {
-  return downloadApkgViaBackend(payloads, outputFileName, modelFields, selectedTemplate);
+  return downloadApkgViaBackend(payloads, outputFileName, modelFields, selectedTemplate, css);
 };

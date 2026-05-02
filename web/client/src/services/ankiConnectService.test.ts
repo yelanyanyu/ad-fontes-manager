@@ -17,6 +17,7 @@ import {
   AnkiImportStateMismatchError,
   applyDuplicateResolution,
   checkDuplicateConflict,
+  getModelStyling,
   importPayloadToAnki,
   isAnkiDuplicateConflictError,
   isAnkiImportStateMismatchError,
@@ -42,7 +43,6 @@ const payload: AnkiExportPayload = {
       "The potter's hands moved with the quiet craft of generations, shaping the spinning clay into a thin-walled bowl.",
     notes: '',
     Back: '<p>updated back</p>',
-    'Add Reverse': '',
     Media: '',
   },
   options: {
@@ -77,6 +77,35 @@ describe('ankiConnectService duplicate safeguards', () => {
     expect(isDuplicateAddNoteError('cannot create note because it is a duplicate')).toBe(true);
     expect(isDuplicateAddNoteError('Duplicate note found')).toBe(true);
     expect(isDuplicateAddNoteError('model was not found: AdFontesWord')).toBe(false);
+  });
+
+  it('loads model styling from AnkiConnect', async () => {
+    requestPostMock.mockResolvedValueOnce(asAnkiResponse({ css: '.card { color: #222; }' }));
+
+    await expect(getModelStyling(payload.options.modelName)).resolves.toBe(
+      '.card { color: #222; }'
+    );
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/anki/connect',
+      {
+        action: 'modelStyling',
+        version: 6,
+        params: { modelName: payload.options.modelName },
+      },
+      expect.objectContaining({ skipErrorToast: true })
+    );
+  });
+
+  it('preserves empty model styling so callers can decide whether to warn', async () => {
+    requestPostMock.mockResolvedValueOnce(asAnkiResponse({ css: '' }));
+
+    await expect(getModelStyling(payload.options.modelName)).resolves.toBe('');
+  });
+
+  it('surfaces AnkiConnect model styling errors', async () => {
+    requestPostMock.mockResolvedValueOnce(asAnkiResponse(null, 'model was not found'));
+
+    await expect(getModelStyling(payload.options.modelName)).rejects.toThrow('model was not found');
   });
 
   it('identifies duplicate conflict error objects with type guard', () => {
@@ -140,7 +169,6 @@ describe('ankiConnectService duplicate safeguards', () => {
           Context: 'existing context',
           notes: 'existing notes',
           Back: '<p>existing back</p>',
-          'Add Reverse': 'true',
           Media: 'craft.mp3',
         }),
       ])
@@ -158,7 +186,6 @@ describe('ankiConnectService duplicate safeguards', () => {
         Context: 'existing context',
         notes: 'existing notes',
         Back: '<p>existing back</p>',
-        'Add Reverse': 'true',
         Media: 'craft.mp3',
       },
       incomingFields: payload.fields,
@@ -192,7 +219,6 @@ describe('ankiConnectService duplicate safeguards', () => {
         question: payload.fields.Context,
         notes: payload.fields.notes,
         answer: payload.fields.Back,
-        options: payload.fields['Add Reverse'],
         audio: payload.fields.Media,
       },
       fieldMapping: ALT_FIELD_MAPPING,
@@ -222,7 +248,6 @@ describe('ankiConnectService duplicate safeguards', () => {
         Context: 'existing context',
         notes: 'keep these notes',
         Back: '<p>old back</p>',
-        'Add Reverse': 'true',
         Media: 'craft.mp3',
       },
       incomingFields: {
@@ -230,7 +255,6 @@ describe('ankiConnectService duplicate safeguards', () => {
         Context: '',
         notes: '   ',
         Back: '<p>updated back</p>',
-        'Add Reverse': '',
         Media: '',
       },
     };
@@ -242,7 +266,6 @@ describe('ankiConnectService duplicate safeguards', () => {
           Context: 'existing context',
           notes: 'keep these notes',
           Back: '<p>updated back</p>',
-          'Add Reverse': 'true',
           Media: 'craft.mp3',
         }),
       ])
@@ -292,7 +315,6 @@ describe('ankiConnectService duplicate safeguards', () => {
             Context: 'existing context',
             notes: '',
             Back: '<p>existing back</p>',
-            'Add Reverse': '',
             Media: '',
           }),
         ])

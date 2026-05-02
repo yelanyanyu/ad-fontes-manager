@@ -16,8 +16,15 @@ function freshRequire(modulePath: string): any {
   return require(modulePath);
 }
 
+type BuildApkgInput = {
+  payloads: unknown[];
+  modelFields: string[];
+  selectedTemplate: { name: string; front: string; back: string };
+  css: string;
+};
+
 function loadCoreRouterWithApkgMock(apkgService: {
-  buildApkgBuffer: (payloads: unknown[]) => Promise<Buffer>;
+  buildApkgBuffer: (input: BuildApkgInput) => Promise<Buffer>;
   normalizeApkgFileName: (value: string) => string;
 }): any {
   const originalCore = require.cache[coreRoutePath];
@@ -144,17 +151,29 @@ const validPayload = {
     Context: 'She honed her craft.',
     notes: '',
     Back: '<p>detail</p>',
-    'Add Reverse': 'true',
     Media: '',
   },
   options: {
     deckName: 'English::Words',
     modelName: 'AdFontesWord',
-    addReverse: true,
     tags: ['English::type::word'],
   },
   sourceWordId: 'word-1',
   sourceLemma: 'craft',
+};
+
+const selectedTemplate = {
+  name: 'Forward',
+  front: '{{Word}}',
+  back: '{{FrontSide}}\n\n<hr id="answer">\n\n{{Back}}',
+};
+
+const validBody = {
+  fileName: 'test.apkg',
+  payloads: [validPayload],
+  modelFields: ['Word', 'Context', 'notes', 'Back', 'Media'],
+  selectedTemplate,
+  css: '.card { font-family: serif; }',
 };
 
 test('POST /anki/export-apkg should reject empty payloads', async () => {
@@ -165,11 +184,25 @@ test('POST /anki/export-apkg should reject empty payloads', async () => {
   const layer = getRouteLayer(router, 'post', '/anki/export-apkg');
 
   const result = await invokeRouteStack(layer, {
-    fileName: 'test.apkg',
+    ...validBody,
     payloads: [],
   });
 
   assert.equal((result.error as any)?.statusCode, 400);
+});
+
+test('POST /anki/export-apkg should reject missing css with a specific message', async () => {
+  const router = loadCoreRouterWithApkgMock({
+    buildApkgBuffer: async () => Buffer.from('PK\x05\x06'),
+    normalizeApkgFileName: (value: string) => value,
+  });
+  const layer = getRouteLayer(router, 'post', '/anki/export-apkg');
+
+  const { css: _css, ...bodyWithoutCss } = validBody;
+  const result = await invokeRouteStack(layer, bodyWithoutCss);
+
+  assert.equal((result.error as any)?.statusCode, 400);
+  assert.match((result.error as any)?.message, /css/);
 });
 
 test('POST /anki/export-apkg should reject mixed deck names', async () => {
@@ -180,7 +213,7 @@ test('POST /anki/export-apkg should reject mixed deck names', async () => {
   const layer = getRouteLayer(router, 'post', '/anki/export-apkg');
 
   const result = await invokeRouteStack(layer, {
-    fileName: 'test.apkg',
+    ...validBody,
     payloads: [
       validPayload,
       {
@@ -204,7 +237,7 @@ test('POST /anki/export-apkg should reject mixed model names', async () => {
   const layer = getRouteLayer(router, 'post', '/anki/export-apkg');
 
   const result = await invokeRouteStack(layer, {
-    fileName: 'test.apkg',
+    ...validBody,
     payloads: [
       validPayload,
       {
@@ -220,16 +253,20 @@ test('POST /anki/export-apkg should reject mixed model names', async () => {
   assert.equal((result.error as any)?.statusCode, 400);
 });
 
-test('POST /anki/export-apkg should return binary apkg with download headers', async () => {
+test('POST /anki/export-apkg should pass css to the APKG builder and return binary', async () => {
+  let capturedInput: BuildApkgInput | null = null;
   const router = loadCoreRouterWithApkgMock({
-    buildApkgBuffer: async () => Buffer.from('PK\x03\x04fake-apkg'),
+    buildApkgBuffer: async (input: BuildApkgInput) => {
+      capturedInput = input;
+      return Buffer.from('PK\x03\x04fake-apkg');
+    },
     normalizeApkgFileName: (value: string) => value.trim() || 'ad-fontes-export.apkg',
   });
   const layer = getRouteLayer(router, 'post', '/anki/export-apkg');
 
   const result = await invokeRouteStack(layer, {
+    ...validBody,
     fileName: '  english_words.apkg  ',
-    payloads: [validPayload],
   });
 
   assert.equal(result.error, null);
@@ -238,4 +275,9 @@ test('POST /anki/export-apkg should return binary apkg with download headers', a
   assert.equal(result.headers['Content-Disposition'], 'attachment; filename="english_words.apkg"');
   assert.ok(Buffer.isBuffer(result.payload));
   assert.equal((result.payload as Buffer).subarray(0, 2).toString(), 'PK');
+  const input = capturedInput as BuildApkgInput | null;
+  if (!input) {
+    throw new Error('Expected APKG builder input to be captured');
+  }
+  assert.equal(input.css, validBody.css);
 });

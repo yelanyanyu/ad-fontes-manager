@@ -9,9 +9,16 @@ const parseOrThrow = (schema: ZodType<unknown>, payload: unknown): unknown => {
   const result = schema.safeParse(payload);
   if (result.success) return result.data;
 
-  throw BadRequest('Validation failed', {
+  const flattened = result.error.flatten();
+  const issueMessages = result.error.issues.map(issue => {
+    const path = issue.path.join('.');
+    return path ? `${path}: ${issue.message}` : issue.message;
+  });
+  const message = issueMessages.length > 0 ? issueMessages.join('; ') : 'Validation failed';
+
+  throw BadRequest(message, {
     code: 'VALIDATION_ERROR',
-    details: result.error.flatten(),
+    details: flattened,
   });
 };
 

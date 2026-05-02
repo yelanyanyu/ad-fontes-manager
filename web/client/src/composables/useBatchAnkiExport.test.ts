@@ -11,6 +11,7 @@ const {
   getInitialAnkiExportOptionsMock,
   getModelFieldNamesMock,
   getModelNamesMock,
+  getModelStylingMock,
   getModelTemplatesMock,
   hasStoredFieldMappingMock,
   loadFieldMappingMock,
@@ -25,6 +26,7 @@ const {
   getInitialAnkiExportOptionsMock: vi.fn(),
   getModelFieldNamesMock: vi.fn(),
   getModelNamesMock: vi.fn(),
+  getModelStylingMock: vi.fn(),
   getModelTemplatesMock: vi.fn(),
   hasStoredFieldMappingMock: vi.fn(),
   loadFieldMappingMock: vi.fn(),
@@ -46,6 +48,7 @@ vi.mock('@/services/ankiConnectService', () => ({
   getDeckNames: getDeckNamesMock,
   getModelFieldNames: getModelFieldNamesMock,
   getModelNames: getModelNamesMock,
+  getModelStyling: getModelStylingMock,
   getModelTemplates: getModelTemplatesMock,
   importPayloadWithStrategy: vi.fn(),
   isAnkiDuplicateConflictError: () => false,
@@ -77,7 +80,6 @@ describe('useBatchAnkiExport', () => {
       Context: 'She honed her craft.',
       notes: '',
       Back: '<p>detail</p>',
-      'Add Reverse': 'true',
       Media: '',
     },
     options: {
@@ -111,6 +113,7 @@ describe('useBatchAnkiExport', () => {
     getDeckNamesMock.mockReset();
     getModelFieldNamesMock.mockReset();
     getModelNamesMock.mockReset();
+    getModelStylingMock.mockReset();
     getModelTemplatesMock.mockReset();
     hasStoredFieldMappingMock.mockReset();
     loadFieldMappingMock.mockReset();
@@ -130,6 +133,7 @@ describe('useBatchAnkiExport', () => {
     getDeckNamesMock.mockResolvedValue([payload.options.deckName]);
     getModelNamesMock.mockResolvedValue([payload.options.modelName]);
     getModelFieldNamesMock.mockResolvedValue(['Word', 'Context', 'Back']);
+    getModelStylingMock.mockResolvedValue('.card { color: #222; }');
     getModelTemplatesMock.mockResolvedValue([
       { name: 'Forward', front: '{{Word}}', back: '{{Back}}' },
     ]);
@@ -161,5 +165,6 @@ describe('useBatchAnkiExport', () => {
     expect(buildExportPayloadMock).toHaveBeenCalledTimes(2);
     expect(exportBatchApkgViaAnkiConnectMock).toHaveBeenCalledTimes(1);
     expect(exportBatchApkgViaAnkiConnectMock.mock.calls[0][0]).toHaveLength(2);
+    expect(exportBatchApkgViaAnkiConnectMock.mock.calls[0][4]).toBe('.card { color: #222; }');
   });
 });

@@ -1,10 +1,11 @@
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   checkDuplicateConflict,
   getDeckNames,
   getModelFieldNames,
   getModelNames,
+  getModelStyling,
   getModelTemplates,
   importPayloadWithStrategy,
   isAnkiDuplicateConflictError,
@@ -82,6 +83,7 @@ export const useBatchAnkiExport = () => {
   );
 
   const statusSummary = computed(() => summarizeBatchStatuses(items.value));
+  const modelCss = ref<string | null>(null);
   const hasActiveTask = computed(() => items.value.length > 0);
   const isRunning = computed(
     () => progress.value.phase === 'check' || progress.value.phase === 'import'
@@ -125,17 +127,21 @@ export const useBatchAnkiExport = () => {
     if (!ankiConnected.value || !modelName.value.trim()) {
       modelFieldNames.value = [];
       templateOptions.value = [];
+      modelCss.value = null;
       templateName.value = '';
       fieldMapping.value = [];
       return;
     }
 
-    const [fields, templates] = await Promise.all([
+    modelCss.value = null;
+    const [fields, templates, css] = await Promise.all([
       getModelFieldNames(modelName.value),
       getModelTemplates(modelName.value),
+      getModelStyling(modelName.value),
     ]);
     modelFieldNames.value = fields;
     templateOptions.value = templates;
+    modelCss.value = css;
     fieldMapping.value = hasStoredFieldMapping(modelName.value)
       ? loadFieldMapping(modelName.value)
       : getRecommendedMapping(fields);
@@ -410,6 +416,9 @@ export const useBatchAnkiExport = () => {
       if (!modelFieldNames.value.length) {
         throw new Error('No model fields loaded for selected model. Please refresh Anki data.');
       }
+      if (modelCss.value === null) {
+        throw new Error('Model CSS is not loaded. Please connect Anki before exporting .apkg.');
+      }
       const selectedTemplate: AnkiModelTemplate | undefined = templateOptions.value.find(
         template => template.name === templateName.value
       );
@@ -421,7 +430,8 @@ export const useBatchAnkiExport = () => {
         payloads,
         normalizeExportFileName(`${deckName.value || 'ad-fontes-export'}-batch.apkg`),
         modelFieldNames.value,
-        selectedTemplate
+        selectedTemplate,
+        modelCss.value
       );
     } catch (err) {
       const e = err as { message?: string };
@@ -559,6 +569,7 @@ export const useBatchAnkiExport = () => {
     if (!ankiConnected.value) {
       modelFieldNames.value = [];
       templateOptions.value = [];
+      modelCss.value = null;
       templateName.value = '';
       fieldMapping.value = [];
       return;
@@ -640,6 +651,7 @@ export const useBatchAnkiExport = () => {
     modelOptions,
     modelFieldNames,
     templateOptions,
+    modelCss,
     progress,
     progressLabel,
     stageLabel,

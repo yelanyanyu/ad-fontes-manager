@@ -21,6 +21,7 @@ const { buildApkgBuffer, normalizeApkgFileName } = require('../services/anki/apk
     }>;
     modelFields: string[];
     selectedTemplate: { name: string; front: string; back: string };
+    css: string;
   }) => Promise<Buffer>;
   normalizeApkgFileName: (value: string) => string;
 };
@@ -233,6 +234,7 @@ router.post(
       }>;
       modelFields: string[];
       selectedTemplate: { name: string; front: string; back: string };
+      css: string;
     };
     const deckName = body.payloads[0]?.options.deckName || 'ad-fontes-export';
     const finalFileName = normalizeApkgFileName(body.fileName || `${deckName}.apkg`);
@@ -240,6 +242,7 @@ router.post(
       payloads: body.payloads,
       modelFields: body.modelFields,
       selectedTemplate: body.selectedTemplate,
+      css: body.css,
     });
 
     res.setHeader('Content-Type', 'application/octet-stream');
