@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-05-03
+
+### 新增
+
+- Electron 桌面应用：Windows (NSIS 安装包) 和 macOS (DMG) 原生构建，支持 `npm run dev:desktop` 开发模式。
+- 桌面模式单例限制：防止同时运行多个桌面实例。
+- 桌面端配置持久化：数据目录可用户自定义，通过 Settings 页面选择。
+- 桌面端自动认证：主进程注入 `ADMIN_TOKEN`，preload 通过 `contextBridge` 暴露给渲染进程，无需手动配置。
+- Anki 配置状态检查：启动时检测 AnkiConnect 可用性，提前发现配置问题。
+- SQLite 数据库 (better-sqlite3 + Drizzle ORM)：替代 PostgreSQL，零依赖部署，WAL 模式启用。
+- 数据库 CLI 工具：`npm run db:init`（初始化）、`db:import`（YAML 导入）、`db:view`（查看词条）、`db:diff`（对比差异）。
+- 可配置化 Anki 字段映射：用户可自定义 Anki 笔记类型字段与导出字段的对应关系。
+- 支持通过 ID 列表批量导出 APKG 文件。
+
+### 变更
+
+- 项目结构重构：移除 `web/` 目录，代码按职责分为 `src/main/`（Electron 主进程）、`src/preload/`（预加载）、`src/renderer/`（Vue 前端）、`src/server/`（Express 后端）。
+- 数据库从 PostgreSQL 迁移至 SQLite，`words_v2` 单表 JSONB 架构不变。
+- 重构 Anki 字段提取器，内联卡片生成逻辑，提升可维护性。
+- 构建脚本优化：新增 `npm run build:desktop:win` / `build:desktop:mac` / `rebuild:electron:native` 等命令。
+- 许可证从 MIT 更改为 AGPL-3.0-only。
+
+### 修复
+
+- 修复 APKG 导出时 model CSS 未包含的问题。
+- 修复桌面端原生模块 ABI 兼容性问题（Node.js vs Electron better-sqlite3 构建）。
+- 移除 `addReverse` 校验，改为从 AnkiConnect 拉取 CSS 配置。
+
+### 文档
+
+- 新增 `docs/ELECTRON_NATIVE_MODULES.md`：Electron 原生模块构建调试文档。
+- 更新 README：补充桌面应用安装说明和项目截图。
+
 ## [1.7.0] - 2026-04-30
 
 ### 新增
