@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Etymos - 生成中</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans antialiased">
+
+<!-- Header -->
+<header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 flex-none">
+  <div class="flex items-center gap-3">
+    <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white font-bold text-sm">E</div>
+    <h1 class="font-bold text-slate-800 tracking-tight text-lg">Etymos</h1>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-50 text-slate-600 border border-slate-200">
+      <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+      生成中 · 3/3
+    </span>
+  </div>
+</header>
+
+<div class="flex h-[calc(100vh-64px)]">
+  <!-- Sidebar -->
+  <aside class="w-56 bg-slate-900 text-slate-300 flex flex-col flex-none">
+    <nav class="flex-1 px-3 py-4 space-y-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/></svg>
+        Words
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm bg-slate-800 text-white transition-colors">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+        Generate
+      </a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors opacity-50">Phrases</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors">Settings</a>
+    </nav>
+  </aside>
+
+  <!-- Main: Progress Dashboard -->
+  <main class="flex-1 overflow-y-auto">
+    <div class="max-w-5xl mx-auto py-8 px-6 space-y-6">
+
+      <!-- Overall progress bar -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold text-slate-800">生成进度</h2>
+          <span class="text-sm text-slate-500">2 / 3 已完成</span>
+        </div>
+        <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full bg-slate-700 rounded-full transition-all" style="width: 66%"></div>
+        </div>
+        <div class="flex justify-between mt-2 text-xs text-slate-400">
+          <span>成功 2</span>
+          <span>进行中 1</span>
+          <span>失败 0</span>
+        </div>
+      </div>
+
+      <!-- Word Cards Grid -->
+      <div class="grid grid-cols-1 gap-4">
+
+        <!-- Card: completed -->
+        <div class="bg-white rounded-xl border border-emerald-200 shadow-sm p-5 transition-all">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
+                <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-slate-800">apple</h3>
+                <p class="text-xs text-slate-400">English · noun</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-medium">评分 8.2</span>
+              <button class="text-sm text-slate-400 hover:text-slate-600 px-2 py-1 rounded hover:bg-slate-50 transition-colors">预览</button>
+              <button class="text-sm text-slate-400 hover:text-slate-600 px-2 py-1 rounded hover:bg-slate-50 transition-colors">编辑</button>
+            </div>
+          </div>
+          <!-- Stage timeline -->
+          <div class="mt-3 flex items-center gap-1.5">
+            <span class="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-600">搜索</span>
+            <svg class="w-3 h-3 text-slate-300" fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.58L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            <span class="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-600">Pass 1</span>
+            <svg class="w-3 h-3 text-slate-300" fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.58L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            <span class="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-600">格式修正</span>
+            <svg class="w-3 h-3 text-slate-300" fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.58L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            <span class="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-600">Pass 2</span>
+            <svg class="w-3 h-3 text-slate-300" fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.58L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            <span class="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-600">审查完成</span>
+          </div>
+        </div>
+
+        <!-- Card: generating (active stage) -->
+        <div class="bg-white rounded-xl border border-blue-200 shadow-sm p-5 ring-1 ring-blue-100 transition-all">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+                <svg class="w-5 h-5 text-blue-600 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M8.25 12.75l3-3 3 3"/></svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-slate-800">serendipity</h3>
+                <p class="text-xs text-slate-400">English</p>
+              </div>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">生成中</span>
+          </div>
+          <!-- Stage timeline: in progress -->
+          <div class="mt-3 flex items-center gap-1.5">
+            <span class="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-600">搜索</span>
+            <svg class="w-3 h-3 text-slate-300" fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.58L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            <span class="text-xs px-2 py-0.5 rounded bg-emerald-50 text-emerald-600">Pass 1</span>
+            <svg class="w-3 h-3 text-slate-300" fill="currentColor" viewBox="0 0 24 24"><path d="M8.59 16.58L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
+            <span class="text-xs px-2 py-0.5 rounded bg-blue-100 text-blue-600 font-medium animate-pulse">Pass 2: 生成 visual_imagery...</span>
+          </div>
+        </div>
+
+        <!-- Card: queued -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 opacity-60 transition-all">
+          <div class="flex items-start justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25"/></svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-slate-800">ephemeral</h3>
+                <p class="text-xs text-slate-400">English</p>
+              </div>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">等待中</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+</body>
+</html>

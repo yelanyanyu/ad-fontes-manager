@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Etymos - 批量生成 YAML</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{}}}</script>
+</head>
+<body class="bg-slate-50 min-h-screen font-sans antialiased">
+
+<!-- Header -->
+<header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 flex-none">
+  <div class="flex items-center gap-3">
+    <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white font-bold text-sm">E</div>
+    <h1 class="font-bold text-slate-800 tracking-tight text-lg">Etymos</h1>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-50 text-slate-600 border border-slate-200">
+      English
+    </span>
+  </div>
+</header>
+
+<div class="flex h-[calc(100vh-64px)]">
+  <!-- Sidebar -->
+  <aside class="w-56 bg-slate-900 text-slate-300 flex flex-col flex-none">
+    <nav class="flex-1 px-3 py-4 space-y-1">
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors">Words</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm bg-slate-800 text-white transition-colors">Generate</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors opacity-50">Phrases</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors">Settings</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 overflow-y-auto">
+    <div class="max-w-4xl mx-auto py-8 px-6 space-y-6">
+
+      <!-- Step 1: Language & Input -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-base font-semibold text-slate-800">步骤 1: 输入单词</h2>
+          <div class="flex items-center gap-3">
+            <label class="text-sm text-slate-500">目标语言</label>
+            <select class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-50 text-slate-700 border border-slate-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-slate-300">
+              <option>English (en)</option>
+              <option>Deutsch (de)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Input textarea -->
+        <div class="relative">
+          <textarea
+            class="w-full h-40 px-4 py-3 text-sm font-mono text-slate-700 bg-slate-50 border border-slate-200 rounded-lg resize-y focus:outline-none focus:ring-2 focus:ring-slate-300 focus:border-slate-300 placeholder-slate-400"
+            placeholder="每行一个单词，用 | 分隔上下文（可选）&#10;&#10;apple | I ate a juicy apple while reading under the tree.&#10;serendipity&#10;ephemeral | The beauty of cherry blossoms is ephemeral."
+          >apple | I ate a juicy apple while reading under the tree.
+serendipity
+ephemeral | The beauty of cherry blossoms is ephemeral.</textarea>
+        </div>
+
+        <div class="flex items-center justify-between mt-3">
+          <div class="flex items-center gap-2 text-xs text-slate-400">
+            <span>格式: <code class="bg-slate-100 px-1 py-0.5 rounded">word | context</code></span>
+            <span>·</span>
+            <span>context 为可选，默认为空</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="text-sm text-slate-500 hover:text-slate-700 flex items-center gap-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+              导入 CSV
+            </button>
+            <button class="px-4 py-1.5 text-sm font-medium text-white bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
+              一键解析
+            </button>
+          </div>
+        </div>
+
+        <!-- Parsed words table -->
+        <div class="mt-4 border border-slate-200 rounded-lg overflow-hidden">
+          <div class="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+            <span class="text-xs font-medium text-slate-600">已解析 <strong>12</strong> 个单词</span>
+            <span class="text-xs text-slate-400">就绪 10 · 问题 2</span>
+          </div>
+          <div class="max-h-48 overflow-y-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-slate-50/50 sticky top-0">
+                <tr class="text-left text-xs text-slate-500">
+                  <th class="px-4 py-2 font-medium w-8">#</th>
+                  <th class="px-4 py-2 font-medium">单词</th>
+                  <th class="px-4 py-2 font-medium">上下文</th>
+                  <th class="px-4 py-2 font-medium w-24">状态</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                <tr class="hover:bg-slate-50/50">
+                  <td class="px-4 py-2 text-xs text-slate-400">1</td>
+                  <td class="px-4 py-2 font-medium text-slate-800">apple</td>
+                  <td class="px-4 py-2 text-xs text-slate-500">I ate a juicy apple while reading under the tree.</td>
+                  <td class="px-4 py-2">
+                    <span class="inline-flex items-center gap-1 text-xs text-emerald-600">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 就绪
+                    </span>
+                  </td>
+                </tr>
+                <tr class="hover:bg-slate-50/50">
+                  <td class="px-4 py-2 text-xs text-slate-400">2</td>
+                  <td class="px-4 py-2 font-medium text-slate-800">serendipity</td>
+                  <td class="px-4 py-2 text-xs text-slate-400 italic">-- 无上下文 --</td>
+                  <td class="px-4 py-2">
+                    <span class="inline-flex items-center gap-1 text-xs text-amber-600">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> 无上下文
+                    </span>
+                  </td>
+                </tr>
+                <tr class="hover:bg-slate-50/50">
+                  <td class="px-4 py-2 text-xs text-slate-400">3</td>
+                  <td class="px-4 py-2 font-medium text-slate-800">ephemeral</td>
+                  <td class="px-4 py-2 text-xs text-slate-500">The beauty of cherry blossoms is ephemeral.</td>
+                  <td class="px-4 py-2">
+                    <span class="inline-flex items-center gap-1 text-xs text-emerald-600">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 就绪
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td class="px-4 py-2 text-xs text-slate-400" colspan="4">
+                    <span class="text-slate-400">... 其余 9 个单词在滚动区域内 ...</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Pipeline Options -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <h2 class="text-base font-semibold text-slate-800 mb-4">步骤 2: 生成选项</h2>
+
+        <div class="grid grid-cols-2 gap-6">
+          <!-- Review mode -->
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-2">生成模式</label>
+            <div class="space-y-2">
+              <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                <input type="radio" name="reviewMode" value="manual" checked class="text-slate-700 focus:ring-slate-400">
+                <div>
+                  <div class="text-sm font-medium text-slate-800">单次生成模式</div>
+                  <div class="text-xs text-slate-400">Pipeline 只运行一次，生成后用户手动查看评分并决定是否修改。不会自动重试提升评分。</div>
+                </div>
+              </label>
+              <label class="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-50 transition-colors">
+                <input type="radio" name="reviewMode" value="auto" class="text-slate-700 focus:ring-slate-400">
+                <div>
+                  <div class="text-sm font-medium text-slate-800">自动优化模式</div>
+                  <div class="text-xs text-slate-400">评分低于阈值时自动重新生成对应字段并重新审核，直到达标或达到最大重试次数后提示用户。</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Auto-review config (shown when auto selected) -->
+          <div class="opacity-40 pointer-events-none">
+            <label class="block text-sm font-medium text-slate-700 mb-2">自动优化参数</label>
+            <div class="space-y-3">
+              <div class="flex items-center gap-3">
+                <label class="text-sm text-slate-500 w-20">通过阈值</label>
+                <input type="number" value="6" min="1" max="10" class="w-16 px-2 py-1 text-sm text-center rounded border border-slate-200 bg-slate-50">
+                <span class="text-xs text-slate-400">/ 10 分</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <label class="text-sm text-slate-500 w-20">最大重试</label>
+                <input type="number" value="3" min="1" max="10" class="w-16 px-2 py-1 text-sm text-center rounded border border-slate-200 bg-slate-50">
+                <span class="text-xs text-slate-400">次</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Concurrency -->
+        <div class="mt-5 pt-4 border-t border-slate-100 flex items-center gap-3">
+          <label class="text-sm font-medium text-slate-700">并发数</label>
+          <select class="px-3 py-1.5 rounded-lg text-sm bg-slate-50 text-slate-700 border border-slate-200">
+            <option>1</option>
+            <option selected>3</option>
+            <option>5</option>
+            <option>10</option>
+          </select>
+          <span class="text-xs text-slate-400">同时处理的单词数，过高可能触发 API 限流</span>
+        </div>
+      </div>
+
+      <!-- Generate Button -->
+      <div class="flex items-center justify-end gap-3">
+        <button class="px-5 py-2.5 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+          重置
+        </button>
+        <button class="px-6 py-2.5 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+          开始生成
+        </button>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+</body>
+</html>
