@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/server/**/*.ts",
+    "src/main/**/*.ts",
+    "src/preload/**/*.ts",
+    "vite.config.mts",
+    "electron.vite.config.mts",
+    "tailwind.config.ts",
+    "drizzle.config.ts",
+    "tsconfig.server-build.json"
+  ],
+  "exclude": ["node_modules", "dist", "out", "release"]
+}

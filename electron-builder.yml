@@ -1,0 +1,36 @@
+appId: com.adfontes.manager
+productName: Ad Fontes Manager
+copyright: MIT
+
+directories:
+  buildResources: assets
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+
+asarUnpack:
+  - "**/*.node"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  signAndEditExecutable: false
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  category: public.app-category.education
+
+linux:
+  target: []

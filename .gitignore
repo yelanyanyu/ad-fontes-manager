@@ -4,6 +4,8 @@ node_modules/
 # Production build
 dist/
 build/
+out/
+release/
 .playwright-cli/
 
 # Environment variables
@@ -42,6 +44,8 @@ CLAUDE.md
 # Project Specific (from README)
 web/data/local_words.json
 web/config.json
+electron-user-data/
+web/dist/
 
 # Configuration files (contain sensitive data)
 config.yml
@@ -51,6 +55,7 @@ config.yml.template
 # Temporary files
 *.tmp
 *.temp
+*.tsbuildinfo
 
 # Local git worktrees
 *worktrees*

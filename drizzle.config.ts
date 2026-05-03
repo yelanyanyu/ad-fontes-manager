@@ -1,5 +1,5 @@
 export default {
-  schema: './web/db/schema.ts',
+  schema: './src/server/db/schema.ts',
   out: './drizzle',
   dialect: 'sqlite',
   dbCredentials: {
