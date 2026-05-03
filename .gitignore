@@ -40,10 +40,10 @@ Desktop.ini
 *.sw?
 skills
 CLAUDE.md
+AGENTS.md
 
 # Project Specific (from README)
-data/ad_fontes.db
-data/local_words.json
+data/
 electron-user-data/
 
 # Configuration files (contain sensitive data)

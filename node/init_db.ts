@@ -83,7 +83,7 @@ async function init(): Promise<void> {
     }
     console.log('');
     console.log('Next steps:');
-    console.log('  1. cd web && npm run dev');
+    console.log('  1. npm run dev:web');
     console.log('  2. Open http://localhost:5173 in your browser');
     console.log('');
   } finally {

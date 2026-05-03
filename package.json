@@ -21,6 +21,10 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test-api": "tsx src/server/test-api.ts",
+    "db:init": "tsx node/init_db.ts",
+    "db:import": "tsx node/loader.ts",
+    "db:view": "tsx node/view-word-yaml.ts",
+    "db:diff": "tsx node/check-word-diff.ts",
     "format": "prettier --write ."
   },
   "engines": {
