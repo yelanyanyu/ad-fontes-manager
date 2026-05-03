@@ -93,7 +93,7 @@ collocations: ...
 example_sentences: ...
 ```
 
-英语和德语词条遵循各自的 Schema 规范（详见 [docs/API.md](./docs/API.md)）。
+英语和德语词条的字段规范由 [ad-fontes-prompts](https://github.com/yelanyanyu/ad-fontes-prompts) 项目定义（不在本项目的 API 文档中），具体字段含义和生成规则请参考该项目的 prompt 模板。
 
 ### 2. 粘贴到 YAML 编辑器
 
