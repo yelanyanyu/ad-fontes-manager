@@ -31,8 +31,10 @@ Desktop.ini
 .idea/
 .vscode/
 .claude/
+.claude/settings.local.json
 .opencode/
 .trae/
+.trae/documents
 *.suo
 *.ntvs*
 *.njsproj

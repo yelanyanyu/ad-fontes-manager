@@ -1,153 +1,98 @@
-# 开发文档
-
-Ad Fontes Manager 开发者指南
+# Ad Fontes Manager 开发指南
 
 ## 开发环境设置
 
 ### 前置要求
 
-- Node.js 22 LTS+
-- npm 10.0.0+
+- Node.js 22 LTS 或更高版本
+- npm 10 或更高版本
 - Git
+- （可选）Windows 桌面构建需要 Visual Studio Build Tools（用于编译 better-sqlite3 等原生模块）
 
-### 安装步骤
+### 安装
 
 ```bash
-# 克隆项目
 git clone <repository-url>
 cd ad-fontes-manager
-
-# 安装后端依赖
-cd web
-npm install
-
-# 安装前端依赖
-cd client
 npm install
 ```
 
-### 启动开发服务器
+项目是 monorepo 结构，根目录 `npm install` 会安装所有依赖（包括 Electron、Vue、Express 等）。`better-sqlite3` 等原生模块由 `electron-builder` 的 `@electron/rebuild` 自动处理。
+
+### 配置环境变量
 
 ```bash
-# 在 web 目录下
-npm run dev
+cp .env.example .env
 ```
 
-这将同时启动：
-- 后端服务: http://localhost:8080
-- 前端服务: http://localhost:5173
+开发环境最小配置：
+
+```bash
+NODE_ENV=development
+ADMIN_TOKEN=dev-token-not-for-production
+DATABASE_URL=./data/ad_fontes.db
+```
+
+## 启动开发环境
+
+### Web 模式
+
+```bash
+npm run dev:web
+```
+
+同时启动：
+- Express 后端：`http://localhost:8080`（`tsx watch` 热重载）
+- Vite 前端：`http://localhost:5173`（HMR）
+
+也可分别启动：
+
+```bash
+npm run dev:server     # 仅后端
+npm run dev:renderer   # 仅前端
+```
+
+### 桌面模式（Electron）
+
+```bash
+npm run dev:desktop
+```
+
+electron-vite 同时构建 main / preload / renderer，然后在 Electron 窗口中加载。Express 后端运行在主进程中，监听随机端口。
 
 ## 项目架构
 
-### 目录结构
+### 依赖层次
 
 ```
-web/
-├── client/                 # Vue 3 前端
-│   ├── src/
-│   │   ├── components/     # UI 组件
-│   │   ├── stores/         # Pinia 状态管理
-│   │   ├── utils/          # 工具函数
-│   │   └── views/          # 页面视图
-│   └── vite.config.ts
-├── controllers/            # Express 控制器
-├── routes/                 # API 路由
-├── services/               # 业务逻辑
-├── db/                     # 数据库连接
-├── data/                   # 本地数据存储
-└── server.ts               # 后端入口
+src/renderer/  (Vue 3 前端)
+      |
+      | HTTP / window.electronAPI
+      |
+src/server/    (Express 5 后端)  ← 被 main 进程和 web 开发服务器共用
+      |
+      | Drizzle ORM
+      |
+web/db/        (SQLite via better-sqlite3)
 ```
 
-### 技术栈
+### 关键目录
 
-| 层级 | 技术 | 用途 |
-|------|------|------|
-| 前端框架 | Vue 3 | 响应式 UI |
-| 状态管理 | Pinia | 全局状态 |
-| 构建工具 | Vite | 快速开发构建 |
-| 样式 | Tailwind CSS | 原子化 CSS |
-| 后端框架 | Express 5 | REST API |
-| 数据库 | SQLite (better-sqlite3 + Drizzle ORM) | 主存储 |
-| 错误处理 | http-errors + http-status-codes | HTTP 错误创建和状态码管理 |
-
-### 错误处理
-
-项目使用分层错误处理架构：
-
-**依赖包：**
-- `http-errors` - 创建标准 HTTP 错误
-- `http-status-codes` - HTTP 状态码常量
-
-**自定义组件：**
-- `utils/errors.ts` - 自定义错误类和错误类型工厂
-  - `AppError` - 基础错误类
-  - `asyncHandler` - 异步错误捕获包装器
-  - `BadRequest`, `NotFound`, `Forbidden` 等 - 错误类型快捷方法
-- `middleware/errorHandler.ts` - 全局错误处理中间件
-
-**使用示例：**
-```typescript
-import { asyncHandler, BadRequest, NotFound } from '../utils/errors.ts';
-
-// 抛出错误
-throw BadRequest('参数错误', { field: 'name' });
-throw NotFound('单词不存在');
-
-// 包装异步路由
-router.get('/', asyncHandler(async (req, res) => {
-  // 错误会自动被捕获并传递给全局错误处理器
-}));
-```
-
-## 开发规范
-
-### 代码风格
-
-项目使用 ESLint + Prettier 进行代码规范检查：
-
-```bash
-# 检查代码
-npm run lint
-
-# 自动修复
-npm run lint:fix
-
-# 格式化代码
-npm run format
-```
-
-### 提交规范
-
-使用 Conventional Commits 规范：
-
-```
-<type>(<scope>): <subject>
-
-<body>
-```
-
-**类型说明:**
-
-| 类型 | 说明 |
+| 目录 | 用途 |
 |------|------|
-| feat | 新功能 |
-| fix | 修复 Bug |
-| docs | 文档更新 |
-| style | 代码格式（不影响功能） |
-| refactor | 重构 |
-| perf | 性能优化 |
-| test | 测试相关 |
-| chore | 构建/工具相关 |
-
-**示例:**
-
-```bash
-git commit -m "feat(words): add batch delete functionality"
-git commit -m "fix(sync): resolve conflict detection edge case"
-git commit -m "docs(api): update endpoint documentation"
-```
-
-## 核心功能实现
+| `src/main/` | Electron 主进程：窗口管理、IPC、Express 生命周期 |
+| `src/preload/` | contextBridge 预加载：暴露受限 API 给渲染进程 |
+| `src/renderer/` | Vue 3 前端：组件、Store、Composable、工具函数 |
+| `src/server/` | Express 后端入口（`createApp()` 工厂函数） |
+| `web/services/` | 业务逻辑层（按领域垂直切片） |
+| `web/routes/` | API 路由定义 |
+| `web/controllers/` | 请求处理控制器 |
+| `web/middleware/` | Express 中间件（错误处理、认证、限流） |
+| `web/db/` | Drizzle ORM Schema + 连接管理 |
+| `web/schemas/` | Zod 校验 Schema（word、config 等） |
+| `web/utils/` | 工具函数、日志、配置加载 |
+| `node/` | CLI 脚本（数据库初始化、YAML 加载等） |
+| `drizzle/` | 数据库迁移文件 |
 
 ### 数据流
 
@@ -156,7 +101,7 @@ git commit -m "docs(api): update endpoint documentation"
     ↓
 YAML 解析 (js-yaml)
     ↓
-数据验证 (WordValidator)
+本地语法校验 → 300ms 防抖 → 服务端 Schema 校验 (Zod)
     ↓
 冲突检测 (deep-diff, 可选 forceUpdate)
     ↓
@@ -165,322 +110,217 @@ YAML 解析 (js-yaml)
 响应返回
 ```
 
-## API 开发
+## 开发规范
 
-### 添加新接口
+### 代码风格
 
-在 `web/routes/` 目录下创建或修改路由文件：
-
-```typescript
-// routes/example.ts
-import { Router, Request, Response } from 'express';
-
-const router = Router();
-
-router.get('/example', (req: Request, res: Response) => {
-  res.json({ message: 'Hello World' });
-});
-
-export default router;
+```bash
+npm run lint        # ESLint 检查
+npm run lint:fix    # 自动修复
+npm run format      # Prettier 格式化
 ```
 
-在 `server.ts` 中注册路由：
+### 提交规范
 
-```typescript
-import exampleRouter from './routes/example';
-app.use('/api/example', exampleRouter);
+使用 Conventional Commits：
+
 ```
+type(scope): subject
+```
+
+| 类型 | 说明 |
+|------|------|
+| feat | 新功能 |
+| fix | Bug 修复 |
+| docs | 文档更新 |
+| style | 代码格式 |
+| refactor | 重构 |
+| perf | 性能优化 |
+| test | 测试相关 |
+| chore | 构建/工具相关 |
+
+示例：
+
+```bash
+git commit -m "feat(anki): add batch duplicate detection"
+git commit -m "fix(editor): reload YAML on re-edit of same word"
+git commit -m "refactor(desktop): use fixed port for localStorage persistence"
+```
+
+## 后端开发
+
+### 添加 API 端点（v2 模式）
+
+1. 在 `web/routes/` 中定义路由
+2. 在 `web/controllers/` 中编写控制器
+3. 在 `web/services/` 中实现业务逻辑
+4. 在 `web/schemas/` 中用 Zod 定义校验规则（如有输入）
+5. 在 `web/server.ts` 的 `createApp()` 中注册路由
 
 ### 控制器模式
 
 ```typescript
-// controllers/exampleController.ts
+// web/controllers/exampleController.ts
 import { Request, Response } from 'express';
-import * as exampleService from '../services/exampleService';
+import { asyncHandler, BadRequest } from '../utils/errors';
 
 export const exampleController = {
-  async list(req: Request, res: Response) {
-    try {
-      const data = await exampleService.getList();
-      res.json({ success: true, data });
-    } catch (e) {
-      const error = e as Error;
-      res.status(500).json({ success: false, message: error.message });
-    }
-  }
+  list: asyncHandler(async (req: Request, res: Response) => {
+    const data = await someService.getList(req.query);
+    res.json({ success: true, data });
+  }),
 };
-
-export default exampleController;
 ```
 
-## 数据库
+### 错误处理
 
-### Schema 定义
+项目使用分层错误处理：
 
-Drizzle ORM schema 定义在 `web/db/schema.ts`，迁移文件在 `drizzle/` 目录。
-
-```bash
-# 更新 schema 后生成迁移
-cd web && npx drizzle-kit generate
-
-# 初始化新数据库
-cd node && npm run init-db
-```
-
-### 数据库连接
+- `web/utils/errors.ts` — `AppError` 基类、`asyncHandler` 包装器、`BadRequest` / `NotFound` 等快捷方法
+- `web/middleware/errorHandler.ts` — 全局错误处理中间件
 
 ```typescript
-// db/index.ts
-import { getDb, getSqlite, closeDb } from './db';
+import { asyncHandler, NotFound } from '../utils/errors';
 
-const db = getDb();           // Drizzle ORM 实例
-const sqlite = getSqlite();   // 底层 better-sqlite3（用于 PRAGMA/原始 SQL）
-closeDb();                    // 关闭连接并清理缓存
+router.get('/:id', asyncHandler(async (req, res) => {
+  const word = await service.getById(req.params.id);
+  if (!word) throw NotFound('单词不存在');
+  res.json(word);
+}));
 ```
-
-数据库文件位置：`web/data/ad_fontes.db`（开发）或 `/app/data/ad_fontes.db`（Docker）。
 
 ## 前端开发
 
 ### 组件结构
 
 ```vue
-<!-- components/Example.vue -->
+<script setup lang="ts">
+import { ref } from 'vue';
+const title = ref<string>('Example');
+</script>
+
 <template>
   <div class="example">
     <h1>{{ title }}</h1>
-    <button @click="handleClick">Click</button>
   </div>
 </template>
-
-<script setup lang="ts">
-import { ref } from 'vue';
-
-const title = ref<string>('Example');
-
-const handleClick = (): void => {
-  console.log('Clicked');
-};
-</script>
 ```
 
-### Store 模式
+### Store 模式（Pinia）
 
 ```typescript
 // stores/exampleStore.ts
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 
-interface Item {
-  id: string;
-  name: string;
-}
-
 export const useExampleStore = defineStore('example', () => {
-  // State
   const items = ref<Item[]>([]);
-  
-  // Getters
-  const itemCount = computed(() => items.value.length);
-  
-  // Actions
-  const addItem = (item: Item): void => {
-    items.value.push(item);
-  };
-  
-  return { items, itemCount, addItem };
+  const count = computed(() => items.value.length);
+  const addItem = (item: Item) => items.value.push(item);
+  return { items, count, addItem };
 });
 ```
 
+### 桌面 API 访问
+
+在桌面模式下，通过 `window.electronAPI` 访问 Electron 功能：
+
+```typescript
+// 获取管理令牌
+const token = window.electronAPI?.adminToken;
+
+// 获取数据目录
+const dataDir = await window.electronAPI?.getDataDir();
+
+// 选择目录
+const dir = await window.electronAPI?.selectDirectory();
+```
+
+始终做好 fallback 处理，确保在 Web 模式下不会报错。
+
 ### 多语言支持
 
-项目通过 v2 API (`/api/v2/words`) 支持多语言词源数据。添加新语言只需修改 **4 个位置**，前端 UI 自动适配。
+通过 v2 API 支持多语言。添加新语言时需修改：
 
-#### 1. 注册语言（前端下拉菜单）
+1. `src/renderer/src/stores/appStore.ts` — 扩展 `LanguageCode` 类型，添加 `SUPPORTED_LANGUAGES` 条目
+2. `web/schemas/word/` — 添加新语言的 Zod Schema
+3. `web/services/word/WordServiceV2.ts` — `detectLanguage()` 添加检测规则
+4. `web/services/word/WordValidator.ts` — Schema 选择逻辑
 
-`web/client/src/stores/appStore.ts`：
+## 数据库
 
-```typescript
-// 1. 扩展类型联合
-export type LanguageCode = 'en' | 'de' | 'fr';  // 新增 'fr'
-
-// 2. 在 SUPPORTED_LANGUAGES 数组中添加一项
-export const SUPPORTED_LANGUAGES: { code: LanguageCode; label: string }[] = [
-  { code: 'en', label: 'English' },
-  { code: 'de', label: 'Deutsch' },
-  { code: 'fr', label: 'Français' },  // ← 加这一行即可
-];
-```
-
-Header 下拉菜单、语言持久化存储（localStorage）、列表自动刷新——全部基于此数组动态渲染，**无需修改任何 Vue 组件**。
-
-#### 2. 添加 Zod 校验 Schema
-
-`web/schemas/word/` 目录下新建语言文件（如 `french.ts`），参考 `german.ts` 的结构：
-
-```typescript
-// web/schemas/word/french.ts
-const { createBaseWordSchema } = require('./base');
-const base = createBaseWordSchema({ meaningLang: 'fr' });
-
-const FrenchWordSchema = z.object({
-  yield: base.yieldSchema,
-  etymology: /* 法语特有的词源结构 */,
-  // ...
-}).passthrough();
-
-module.exports = { FrenchWordSchema };
-```
-
-然后在 `web/schemas/word/index.ts` 中导出：
-
-```typescript
-const { FrenchWordSchema } = require('./french');
-module.exports = { EnglishWordSchema, GermanWordSchema, FrenchWordSchema };
-```
-
-#### 3. 更新 TypeScript 类型
-
-`node/types/word-yaml.ts` — 添加新语言的 YAML 文档接口（参考 `GermanWordYamlDocument`）。
-
-#### 4. 注册语言检测
-
-`web/services/word/WordServiceV2.ts` — 在 `detectLanguage()` 方法中添加检测规则：
-
-```typescript
-detectLanguage(data: Record<string, any>): string {
-  if (data?.yield?.language === 'fr') return 'fr';
-  if (data?.yield?.contextual_meaning?.fr && !data?.yield?.contextual_meaning?.en) return 'fr';
-  // ... 其他语言检测
-  return 'en';
-}
-```
-
-同时更新 `WordValidator.ts` 中的 Schema 选择逻辑：
-
-```typescript
-const schema = language === 'de' ? GermanWordSchema
-  : language === 'fr' ? FrenchWordSchema
-  : EnglishWordSchema;
-```
-
-#### 关键文件索引
-
-| 关注点 | 文件 |
-|--------|------|
-| 前端语言配置 | `web/client/src/stores/appStore.ts` |
-| Zod Schema | `web/schemas/word/*.ts` |
-| TypeScript 类型 | `node/types/word-yaml.ts` |
-| 语言检测 + 业务逻辑 | `web/services/word/WordServiceV2.ts` |
-| 校验路由 | `web/services/word/WordValidator.ts` |
-| 数据库 | `words_v2` 表——无需修改，`language` 列接受任意字符串 |
-
-## 调试技巧
-
-### 后端调试
+### Schema 管理
 
 ```bash
-# 查看详细日志
-DEBUG=* npm run dev
+# 修改 web/db/schema.ts 后生成迁移
+npx drizzle-kit generate
 
-# 仅查看应用日志
-DEBUG=app:* npm run dev
+# 迁移在服务启动时自动执行
 ```
 
-### 前端调试
+### 数据库文件
 
-- 使用 Vue DevTools 浏览器扩展
-- Vite 内置 HMR，修改代码自动刷新
-- 在 `vite.config.js` 中配置代理
+- Web 开发：`web/data/ad_fontes.db`
+- 桌面开发：取决于 `DATABASE_URL` 环境变量或 `config.json`
+- WAL 模式下会有 `-wal` 和 `-shm` 伴随文件，属于正常现象
+
+## 桌面开发注意事项
+
+### 原生模块
+
+`better-sqlite3` 是原生模块，需要针对 Electron 的 Node.js 版本重新编译。`electron-builder` 通过 `@electron/rebuild` 自动处理。如果遇到原生模块加载错误，运行：
+
+```bash
+npx @electron/rebuild
+```
+
+### IPC 通信
+
+渲染进程不能直接访问 Node.js API。所有系统级操作通过 preload 暴露的 IPC 接口完成：
+
+```
+渲染进程 → window.electronAPI → preload (contextBridge) → ipcRenderer.invoke → 主进程 handler
+```
+
+### 调试
+
+- 主进程：在 `src/main/index.ts` 中 `mainWindow.webContents.openDevTools()`
+- 渲染进程：Electron DevTools 或 Vue DevTools
 
 ## 测试
 
-### 运行测试
-
 ```bash
-# 单元测试
-npm test
-
-# 端到端测试
-npm run test:e2e
-```
-
-### 测试结构
-
-```
-__tests__/
-├── unit/
-│   ├── services/
-│   └── utils/
-└── e2e/
-    └── api.test.js
-```
-
-## 部署
-
-### 生产环境构建
-
-```bash
-# 1. 设置环境变量
-export NODE_ENV=production
-export DATABASE_URL=<your-db-url>
-export ADMIN_TOKEN=<secure-token>
-
-# 2. 构建前端
-cd web/client
-npm run build
-
-# 3. 启动服务
-cd ..
-npm start
-```
-
-### Docker 部署
-
-```bash
-# 构建镜像
-docker build -t ad-fontes-manager .
-
-# 运行容器
-docker run -p 8080:8080 \
-  -e DATABASE_URL=<db-url> \
-  -e ADMIN_TOKEN=<token> \
-  ad-fontes-manager
+npm run test           # Vitest 前端单元测试
+npm run test-api       # API 接口测试（需要运行中的后端）
 ```
 
 ## 常见问题
 
 ### 端口冲突
 
-如果 8080 或 5173 端口被占用：
+Web 模式后端默认 8080，前端默认 5173。修改方式：
 
 ```bash
-# 设置环境变量
-export API_PORT=8081
-export CLIENT_DEV_PORT=5174
+PORT=8081 npm run dev:server
 ```
 
-### 数据库连接失败
+桌面模式端口随机分配，无需手动处理。
 
-1. 确认 `web/data/ad_fontes.db` 文件存在
-2. 运行 `cd node && npm run init-db` 初始化数据库
-3. 检查文件权限（需可读写）
+### 数据库初始化
 
-### 前端代理错误
+如果 `web/data/ad_fontes.db` 不存在，服务启动时会自动创建并运行迁移。
 
-确保后端服务已启动，且 vite.config.js 中的代理配置正确。
+### 桌面构建失败
 
-## 贡献指南
+1. 确认安装了 Visual Studio Build Tools（Windows）或 Xcode Command Line Tools（Mac）
+2. 检查 `@electron/rebuild` 日志中的原生模块编译输出
+3. 确保 `electron-builder.yml` 中的配置正确
 
-1. Fork 项目
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
-4. 推送分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
-
-## 资源
+## 外部资源
 
 - [Vue 3 文档](https://vuejs.org/)
 - [Express 文档](https://expressjs.com/)
+- [Electron 文档](https://www.electronjs.org/)
 - [Pinia 文档](https://pinia.vuejs.org/)
+- [Drizzle ORM 文档](https://orm.drizzle.team/)
 - [Tailwind CSS 文档](https://tailwindcss.com/)

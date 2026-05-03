@@ -16,7 +16,25 @@ const { createApp } = require('../server/app') as {
 let mainWindow: BrowserWindow | null = null;
 let serverInstance: http.Server | null = null;
 
+const DESKTOP_SERVER_PORT = 17387;
 const CONFIG_FILE = path.join(electronApp.getPath('userData'), 'config.json');
+
+interface ListenError extends Error {
+  code?: string;
+}
+
+const hasSingleInstanceLock = electronApp.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  electronApp.quit();
+}
+
+electronApp.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  mainWindow.focus();
+});
 
 function ensureDirectory(targetPath: string): void {
   if (!fs.existsSync(targetPath)) {
@@ -109,8 +127,19 @@ async function createWindow(): Promise<void> {
   });
 
   await new Promise<void>((resolve, reject) => {
-    serverInstance = serverApp.listen(0, '127.0.0.1');
-    serverInstance.once('error', reject);
+    serverInstance = serverApp.listen(DESKTOP_SERVER_PORT, '127.0.0.1');
+    serverInstance.once('error', error => {
+      if ((error as ListenError).code === 'EADDRINUSE') {
+        reject(
+          new Error(
+            `Local desktop server port ${DESKTOP_SERVER_PORT} is already in use. Close the other Ad Fontes Manager window and restart the app.`
+          )
+        );
+        return;
+      }
+
+      reject(error);
+    });
     serverInstance.once('listening', () => {
       const address = serverInstance?.address();
       if (!address || typeof address === 'string') {
@@ -130,7 +159,7 @@ async function createWindow(): Promise<void> {
         },
       });
 
-      void mainWindow.loadURL(`http://localhost:${address.port}`);
+      void mainWindow.loadURL(`http://localhost:${DESKTOP_SERVER_PORT}`);
       mainWindow.on('closed', () => {
         mainWindow = null;
       });
@@ -141,6 +170,8 @@ async function createWindow(): Promise<void> {
 }
 
 void electronApp.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) return;
+
   ensureConfig();
   registerIpcHandlers();
 
@@ -156,6 +187,8 @@ void electronApp.whenReady().then(async () => {
 });
 
 electronApp.on('activate', () => {
+  if (!hasSingleInstanceLock) return;
+
   if (BrowserWindow.getAllWindows().length === 0) {
     void createWindow();
   }

@@ -1,303 +1,141 @@
-# Ad Fontes Manager 配置系统文档
+# Ad Fontes Manager 配置系统
 
 ## 概述
 
-Ad Fontes Manager 遵循 **12-Factor App** 原则，采用轻量级环境变量配置系统。所有配置通过环境变量管理，开发环境支持 `.env` 文件，生产环境禁止 `.env` 文件。
+遵循 12-Factor App 原则，所有配置通过环境变量管理。桌面模式下额外支持 `config.json` 存储用户级设置。
 
 ## 配置加载优先级
 
 ```
-1. 系统环境变量 (最高优先级)
-2. .env 文件 (仅开发环境)
-3. 代码默认值 (最低优先级)
+1. 系统环境变量（最高优先级）
+2. .env 文件（仅开发环境）
+3. Electron main 进程注入（桌面模式，ADMIN_TOKEN）
+4. config.json（桌面模式，用户数据目录等持久化设置）
+5. 代码默认值（最低优先级）
 ```
 
-**注意**: 生产环境 (`NODE_ENV=production`) 禁止存在 `.env` 文件，应用会立即退出并报错。
+**注意**: 生产环境 (`NODE_ENV=production`) 禁止存在 `.env` 文件，应用会报错退出。
 
 ## 必需配置项
 
-应用启动时会强制验证以下配置项，缺少任何一项都会报错退出：
+| 环境变量 | 说明 |
+|----------|------|
+| `DATABASE_URL` | SQLite 数据库文件路径 |
+| `ADMIN_TOKEN` | API 访问令牌 |
+| `NODE_ENV` | 运行环境：`development` / `production` / `test` |
 
-| 配置项 | 环境变量 | 说明 |
-|--------|----------|------|
-| 数据库路径 | `DATABASE_URL` | SQLite 数据库文件路径 |
-| 管理员令牌 | `ADMIN_TOKEN` | API 访问令牌，生产环境 ≥32 字符 |
-| 运行环境 | `NODE_ENV` | `development` / `production` / `test` |
+桌面模式下 `ADMIN_TOKEN` 由主进程自动设置为 `dev-token-not-for-production`（开发）或从环境变量读取（生产构建）。
 
-## 配置文件
-
-### 1. `.env` 文件（开发环境专用）
-
-**位置**: 项目根目录  
-**用途**: 存储本地开发环境的敏感信息和个性化配置  
-**特点**: 
-- ❌ 不提交到 Git（已在 `.gitignore` 中配置）
-- ✅ 仅在开发环境加载
-- ✅ 优先级高于代码默认值
-
-**创建方式**:
-```bash
-cp .env.example .env
-# 编辑 .env 填入你的本地配置
-```
-
-**示例内容**:
-```bash
-# 核心配置
-NODE_ENV=development
-ADMIN_TOKEN=dev-token-not-for-production
-
-# 数据库配置
-DATABASE_URL=./data/ad_fontes.db
-
-# 可选配置
-LOG_LEVEL=debug
-PORT=8080
-```
-
-### 2. `.env.example` 文件
-
-**位置**: 项目根目录  
-**用途**: 作为 `.env` 的模板，展示所有可用的环境变量  
-**特点**: 
-- ✅ 提交到 Git
-- ✅ 使用占位符代替真实值
-- ✅ 供新开发者参考
-
-### 3. `.env.production` 文件（生产环境专用）
-
-**位置**: 服务器本地，项目根目录  
-**用途**: 生产环境配置，通过 Docker Compose 加载  
-**特点**: 
-- ❌ 不提交到 Git
-- ✅ 仅存在于服务器本地
-- ✅ 文件权限应设为 `600`（仅 root 可读）
-
-**创建方式**（在服务器上执行）:
-```bash
-echo "NODE_ENV=production
-ADMIN_TOKEN=$(openssl rand -hex 32)
-DATABASE_URL=/app/data/ad_fontes.db
-SERVER_CORS_ORIGINS=[\"https://yourdomain.com\"]
-SERVER_RATE_LIMIT=100
-LOG_LEVEL=warn" > .env.production
-
-chmod 600 .env.production
-```
-
-## 配置项详细说明
+## 全部配置项
 
 ### 核心配置
 
 | 环境变量 | 必需 | 默认值 | 说明 |
 |----------|------|--------|------|
-| `NODE_ENV` | ✅ | `development` | 运行环境: `development` \| `production` \| `test` |
-| `ADMIN_TOKEN` | ✅ | - | 管理员 API 令牌，生产环境必须 ≥32 字符 |
+| `NODE_ENV` | 是 | `development` | 运行环境 |
+| `ADMIN_TOKEN` | 是 | - | API 访问令牌 |
 
 ### 服务器配置
 
 | 环境变量 | 必需 | 默认值 | 说明 |
 |----------|------|--------|------|
-| `PORT` | ❌ | `8080` | API 服务器端口 |
-| `SERVER_PORT` | ❌ | `8080` | 同上（别名） |
-| `SERVER_HOST` | ❌ | `127.0.0.1` | 绑定地址，`0.0.0.0` 监听所有接口 |
-| `SERVER_CORS_ORIGINS` | ❌ | `["*"]` | 跨域来源，生产环境必须限制 |
-| `SERVER_RATE_LIMIT` | ❌ | `0` | 每分钟请求限制，0=禁用 |
-| `SERVER_TIMEOUT_MS` | ❌ | `10000` | 请求超时毫秒数 |
-
-### 安全配置
-
-| 环境变量 | 必需 | 默认值 | 说明 |
-|----------|------|--------|------|
-| `SECURITY_HELMET` | ❌ | `true` | 是否启用 Helmet 安全头 |
-| `SECURITY_HSTS` | ❌ | `true` | 是否发送 HSTS 头 |
+| `PORT` | 否 | `8080`（Web）/ 随机（桌面） | API 端口 |
+| `SERVER_HOST` | 否 | `127.0.0.1` | 绑定地址 |
+| `SERVER_CORS_ORIGINS` | 否 | `["*"]` | CORS 来源 |
+| `SERVER_RATE_LIMIT` | 否 | `0`（禁用） | 每分钟请求限制 |
+| `SERVER_TIMEOUT_MS` | 否 | `10000` | 请求超时 |
 
 ### 数据库配置
 
 | 环境变量 | 必需 | 默认值 | 说明 |
 |----------|------|--------|------|
-| `DATABASE_URL` | ✅ | `./data/ad_fontes.db` | SQLite 数据库文件路径 |
+| `DATABASE_URL` | 是 | `./data/ad_fontes.db` | SQLite 数据库路径 |
 
-**路径格式**:
-- 相对路径: `./data/ad_fontes.db`（相对于 `web/` 目录）
-- 绝对路径: `/opt/data/ad_fontes.db`
-- Docker: `/app/data/ad_fontes.db`（挂载卷）
+桌面模式下，数据库路径可通过设置页面的数据目录选择器修改，存储于 `<userData>/config.json`。
 
-### 前端配置
+### Anki 配置
 
 | 环境变量 | 必需 | 默认值 | 说明 |
 |----------|------|--------|------|
-| `CLIENT_DEV_PORT` | ❌ | `5173` | 前端开发服务器端口 |
-
-### 存储配置
-
-| 环境变量 | 必需 | 默认值 | 说明 |
-|----------|------|--------|------|
-| `MAX_LOCAL_ITEMS` | ❌ | `100` | LocalStorage 最大条目数 |
+| `ANKI_CONNECT_HOST` | 否 | `127.0.0.1` | AnkiConnect 主机地址 |
+| `ANKI_CONNECT_PORT` | 否 | `8765` | AnkiConnect 端口 |
 
 ### 日志配置
 
 | 环境变量 | 必需 | 默认值 | 说明 |
 |----------|------|--------|------|
-| `LOG_LEVEL` | ❌ | `info` | 日志级别: `debug` \| `info` \| `warn` \| `error` |
-| `LOG_DIR` | ❌ | `./logs` | 日志文件目录 |
-| `LOG_ROTATION_INTERVAL` | ❌ | `1d` | 日志切分周期 |
-| `LOG_ROTATION_MAX_SIZE` | ❌ | `10M` | 单个日志文件最大大小 |
-| `LOG_ROTATION_MAX_FILES` | ❌ | `30` | 保留的轮转日志文件数量 |
+| `LOG_LEVEL` | 否 | `info` | 日志级别 |
+| `LOG_DIR` | 否 | `./logs` | 日志目录 |
+| `LOG_ROTATION_INTERVAL` | 否 | `1d` | 日志切分周期 |
+| `LOG_ROTATION_MAX_SIZE` | 否 | `10M` | 单文件最大大小 |
+| `LOG_ROTATION_MAX_FILES` | 否 | `30` | 保留日志文件数 |
 
-## 使用场景
+### 前端配置（Web 模式）
 
-### 场景 1: 本地开发（推荐）
+| 环境变量 | 必需 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `VITE_ADMIN_TOKEN` | 否 | - | 前端内置的管理令牌 |
+| `VITE_API_BASE_URL` | 否 | `http://localhost:8080/api` | API 基地址 |
 
-使用 `.env` 文件管理本地配置：
+### 存储配置
+
+| 环境变量 | 必需 | 默认值 | 说明 |
+|----------|------|--------|------|
+| `MAX_LOCAL_ITEMS` | 否 | `100` | 本地存储最大条目数 |
+
+## 配置文件
+
+### `.env`（开发环境）
 
 ```bash
-# 1. 复制模板
 cp .env.example .env
-
-# 2. 编辑 .env，填入你的本地配置
-# DATABASE_URL=./data/ad_fontes.db
-
-# 3. 启动开发服务器
-cd web && npm run dev
 ```
 
-### 场景 2: 生产部署（Docker）
+```bash
+NODE_ENV=development
+ADMIN_TOKEN=dev-token-not-for-production
+DATABASE_URL=./data/ad_fontes.db
+LOG_LEVEL=debug
+PORT=8080
+```
+
+### `.env.production`（生产环境）
 
 ```bash
-# 1. 在服务器创建 .env.production
-echo "NODE_ENV=production
-ADMIN_TOKEN=$(openssl rand -hex 32)
+NODE_ENV=production
+ADMIN_TOKEN=<openssl rand -hex 32>
 DATABASE_URL=/app/data/ad_fontes.db
-SERVER_CORS_ORIGINS=[\"https://yourdomain.com\"]
+SERVER_CORS_ORIGINS=["https://yourdomain.com"]
 SERVER_RATE_LIMIT=100
-SECURITY_HSTS=true
-LOG_LEVEL=warn" > .env.production
-
-chmod 600 .env.production
-
-# 2. 启动服务
-docker-compose up -d --build
+LOG_LEVEL=warn
 ```
 
-### 场景 3: 生产部署（系统环境变量）
+### 桌面模式 `config.json`
 
-```bash
-# 设置环境变量
-export NODE_ENV=production
-export ADMIN_TOKEN="$(openssl rand -hex 32)"
-export DATABASE_URL="/app/data/ad_fontes.db"
-export SERVER_CORS_ORIGINS='["https://yourdomain.com"]'
-export SERVER_RATE_LIMIT="100"
-export SECURITY_HSTS="true"
+存储于 `%APPDATA%/ad-fontes-manager/config.json`（Windows）或 `~/Library/Application Support/ad-fontes-manager/config.json`（Mac）：
 
-# 启动服务
-cd web && npm start
+```json
+{
+  "dataDir": "C:\\Users\\xxx\\AppData\\Roaming\\ad-fontes-manager\\data"
+}
 ```
 
-### 场景 4: CI/CD 流水线
+用户可在设置页面修改数据目录，应用会自动迁移数据。
 
-```bash
-# 在 CI/CD 中设置环境变量
-export NODE_ENV=test
-export DATABASE_URL="./data/test.db"
-export ADMIN_TOKEN="test-token"
+## 配置验证
 
-# 运行测试
-npm test
-```
-
-## 在代码中使用配置
-
-### 后端 (Node.js)
-
-```javascript
-const config = require('./utils/config');
-
-// 获取配置值
-const dbUrl = config.get('database.url');
-const port = config.get('server.port', 8080);
-
-// 获取完整配置对象
-const allConfig = config.getAll();
-```
-
-### 配置验证
-
-应用启动时会自动验证配置：
+应用启动时自动验证必填项：
 
 ```
-# 缺少必需配置
 ❌ 缺少必需的环境变量:
    - DATABASE_URL
    - ADMIN_TOKEN
-
-请通过以下方式设置:
-   1. 创建 .env 文件（开发环境）
-   2. 设置系统环境变量
-   3. 使用 Docker env_file（生产环境）
-
-# 生产环境 ADMIN_TOKEN 太短
-❌ 生产环境 ADMIN_TOKEN 必须至少 32 字符
-   当前长度: 12
-   生成命令: openssl rand -hex 32
-
-# 生产环境存在 .env 文件
-❌ 生产环境禁止存在 .env 文件
-   发现文件: /app/.env
-   请使用系统环境变量或 Docker env_file 注入配置
 ```
 
 ## 安全建议
 
-### 1. 敏感信息处理
-
-- **永远不要**将 `.env` 或 `.env.production` 提交到 Git
-- **永远不要**在代码中硬编码密码或令牌
-- 使用占位符代替敏感信息
-
-### 2. 生产环境必须
-
-- 修改默认的 `ADMIN_TOKEN`（使用 `openssl rand -hex 32` 生成）
+- 生产环境 `ADMIN_TOKEN` 至少 32 字符（`openssl rand -hex 32`）
 - 限制 `SERVER_CORS_ORIGINS` 为实际域名
-- 启用 `SERVER_RATE_LIMIT`（建议 100-300）
-- 设置 `LOG_LEVEL=warn` 或 `error`
-- 设置 `.env.production` 文件权限为 `600`
-
-### 3. 定期维护
-
+- 生产环境设置 `LOG_LEVEL=warn` 或 `error`
+- `.env.production` 文件权限设为 `600`
 - 定期轮换 `ADMIN_TOKEN`
-- 定期清理旧日志文件
-- 定期检查日志目录与轮转策略是否符合保留要求
-
-## 故障排查
-
-### 配置不生效
-
-1. 检查环境变量名是否正确（注意大小写）
-2. 检查 `.env` 文件是否在项目根目录
-3. 检查 `NODE_ENV` 设置
-
-### 数据库连接失败
-
-1. 检查 `DATABASE_URL` 格式
-2. 检查数据库服务是否运行
-3. 检查网络连接和防火墙
-4. 检查 SSL 配置
-
-### 生产环境启动失败
-
-1. 确认 `.env` 文件不存在
-2. 确认所有必需配置项已设置
-3. 确认 `ADMIN_TOKEN` 长度 ≥32 字符
-
-## 更新日志
-
-### v2.0.0 (2026-03-05)
-- 重构为 12-Factor 配置系统
-- 移除 `config.yml` 支持
-- 生产环境禁止 `.env` 文件
-- 添加配置验证
-
-### v1.0.0 (2026-01-26)
-- 初始版本，统一配置系统

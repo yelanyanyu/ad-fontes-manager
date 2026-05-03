@@ -3,6 +3,12 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '@/stores/appStore';
 import { pingAnkiConnect } from '@/services/ankiConnectService';
+import {
+  getStoredAnkiExportOptionsSummary,
+  hasStoredAnkiExportOptions,
+  type StoredAnkiExportOptionsSummary,
+} from '@/services/ankiExportOptionsStore';
+import { listStoredFieldMappingModelNames } from '@/services/ankiFieldMappingStore';
 
 type AnkiStatus = 'connected' | 'disconnected' | 'testing';
 
@@ -13,6 +19,11 @@ const ankiStatus = ref<AnkiStatus>('disconnected');
 const isElectron = computed(() => Boolean(window.electronAPI));
 const dataDir = ref('');
 const dataDirStatus = ref('');
+const ankiConfig = ref<StoredAnkiExportOptionsSummary>(getStoredAnkiExportOptionsSummary());
+const ankiMappingModels = ref<string[]>([]);
+const hasSavedAnkiConfig = computed(
+  () => hasStoredAnkiExportOptions() || ankiMappingModels.value.length > 0
+);
 
 const ankiStatusText = computed(() => {
   if (ankiStatus.value === 'connected') return '已连接';
@@ -22,6 +33,11 @@ const ankiStatusText = computed(() => {
 
 const close = (): void => {
   void router.push('/');
+};
+
+const loadAnkiConfig = (): void => {
+  ankiConfig.value = getStoredAnkiExportOptionsSummary();
+  ankiMappingModels.value = listStoredFieldMappingModelNames();
 };
 
 const testAnkiConnection = async (): Promise<void> => {
@@ -60,6 +76,7 @@ const selectAndSetDataDir = async (): Promise<void> => {
 };
 
 onMounted(() => {
+  loadAnkiConfig();
   void testAnkiConnection();
   void loadDataDir();
 });
@@ -92,6 +109,33 @@ onMounted(() => {
           <button class="text-primary hover:underline text-xs ml-2" @click="testAnkiConnection">
             Refresh
           </button>
+        </div>
+
+        <div class="space-y-3 text-sm p-3 bg-slate-50 rounded-lg">
+          <div class="flex items-center justify-between gap-3">
+            <div class="font-semibold text-slate-700">Anki Configuration</div>
+            <button class="text-primary hover:underline text-xs" @click="loadAnkiConfig">
+              Refresh
+            </button>
+          </div>
+
+          <div v-if="hasSavedAnkiConfig" class="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-2">
+            <span class="text-slate-500">Deck</span>
+            <span class="break-all text-slate-700">{{ ankiConfig.deckName }}</span>
+            <span class="text-slate-500">Model</span>
+            <span class="break-all text-slate-700">{{ ankiConfig.modelName }}</span>
+            <span class="text-slate-500">Template</span>
+            <span class="break-all text-slate-700">{{ ankiConfig.templateName || 'Not selected' }}</span>
+            <span class="text-slate-500">Tags</span>
+            <span class="break-all text-slate-700">{{ ankiConfig.tagsText || 'None' }}</span>
+            <span class="text-slate-500">APKG file</span>
+            <span class="break-all text-slate-700">{{ ankiConfig.apkgPath }}</span>
+            <span class="text-slate-500">Field mappings</span>
+            <span class="break-all text-slate-700">
+              {{ ankiMappingModels.length ? ankiMappingModels.join(', ') : 'None' }}
+            </span>
+          </div>
+          <p v-else class="text-slate-500">No saved Anki configuration yet.</p>
         </div>
 
         <div v-if="isElectron" class="space-y-3 text-sm p-3 bg-slate-50 rounded-lg">

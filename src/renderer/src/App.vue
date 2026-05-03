@@ -1,7 +1,31 @@
-<script setup>
+<script setup lang="ts">
+import { onMounted } from 'vue';
 import Sidebar from './components/Layout/Sidebar.vue';
 import Header from './components/Layout/Header.vue';
 import ToastContainer from './components/ui/ToastContainer.vue';
+import { pingAnkiConnect } from '@/services/ankiConnectService';
+import { hasStoredAnkiExportOptions } from '@/services/ankiExportOptionsStore';
+import { listStoredFieldMappingModelNames } from '@/services/ankiFieldMappingStore';
+import { useAppStore } from '@/stores/appStore';
+
+const appStore = useAppStore();
+
+const hasSavedAnkiConfiguration = (): boolean =>
+  hasStoredAnkiExportOptions() || listStoredFieldMappingModelNames().length > 0;
+
+onMounted(async () => {
+  if (!hasSavedAnkiConfiguration()) return;
+
+  try {
+    await pingAnkiConnect();
+  } catch {
+    appStore.addToast(
+      'Anki connection failed. Please open Settings and reconfigure Anki.',
+      'warning',
+      8000
+    );
+  }
+});
 </script>
 
 <template>

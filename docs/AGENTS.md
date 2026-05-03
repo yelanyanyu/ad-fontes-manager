@@ -1,89 +1,70 @@
 # Ad Fontes Manager - Agent Guide
 
-> **Quick Start**: Read `.opencode/skills/ad-fontes/SKILL.md` first
-
-## How to Use This Guide
-
-This project uses a **skill-based documentation system** to avoid context pollution. Instead of loading all documentation at once, agents load specific guides based on their current task.
-
-## 📚 Skill Structure
-
-```
-.opencode/skills/ad-fontes/
-├── SKILL.md              # Entry point (always read first)
-├── getting-started.md    # First-time setup
-├── backend-patterns.md   # Express/API development
-├── frontend-patterns.md  # Vue 3/frontend development
-├── database-guide.md     # SQLite/Drizzle patterns
-├── security-guide.md     # Authentication/security
-└── troubleshooting.md    # Debugging common issues
-```
-
-## 🎯 Quick Reference
+## Quick Reference
 
 **When starting work:**
-1. Read `SKILL.md` for project overview
-2. Based on your task, load the specific sub-guide
+1. Read `CLAUDE.md` for project overview and architecture
+2. Based on your task, load the relevant doc from `docs/`
 
-**Task → Guide Mapping:**
+**Task → Document Mapping:**
 
-| Task | Load This Guide |
-|------|----------------|
-| First time on project | `getting-started.md` |
-| Backend/API work | `backend-patterns.md` |
-| Frontend/Vue work | `frontend-patterns.md` |
-| Database changes | `database-guide.md` |
-| Security review | `security-guide.md` |
-| Debugging bugs | `troubleshooting.md` |
+| Task | Document |
+|------|----------|
+| First time on project | `docs/DEVELOPMENT.md` |
+| Backend / API work | `docs/API.md` |
+| Frontend / Vue work | `docs/DEVELOPMENT.md` (前端开发 section) |
+| Database changes | `docs/DATABASE.md` |
+| Security review | `docs/SECURITY.md` |
+| Configuration | `docs/CONFIGURATION.md` |
+| Deployment | `docs/DEPLOYMENT.md` |
+| Logging / Debugging | `docs/LOGGING.md` |
+| Desktop / Electron | `CLAUDE.md` (Electron architecture section) |
 
-## 📖 Key Documents
-
-**Project Overview:**
-- `README.md` - High-level project info
-- `PROJECT_DIAGNOSTIC_REPORT.md` - Known issues (287 `any` usages, etc.)
-- `docs/` - Detailed documentation (API, DATABASE, SECURITY, etc.)
-
-**Configuration:**
-- `.env.example` - Environment template
-- `drizzle/` - Database migration files
-
-## 🚀 Development Commands
+## Development Commands
 
 ```bash
-# Setup (first time)
-cd web && npm install
-cd client && npm install
+# Setup
+npm install
 
 # Development
-npm run dev              # Both frontend + backend
-npm run dev:server       # Backend only
-npm run dev:client       # Frontend only
+npm run dev:web              # Web mode: backend + frontend
+npm run dev:desktop          # Electron desktop mode
+npm run dev:server           # Backend only
+npm run dev:renderer         # Frontend only
 
 # Quality checks
-npm run type-check       # TypeScript check
-npm run lint            # ESLint
-npm run format          # Prettier
+npm run type-check           # TypeScript check
+npm run lint                 # ESLint
+npm run format               # Prettier
 
 # Tests
-cd client && npm run test
+npm run test                 # Vitest frontend unit tests
+npm run test-api             # API smoke tests
 ```
 
-## ⚠️ Critical Rules
+## Critical Rules
 
-1. **Always read SKILL.md first** when starting
-2. **Check PROJECT_DIAGNOSTIC_REPORT.md** before major changes
-3. **Never commit `.env` files**
-4. **Run type-check before committing**
-5. **Replace `any` with proper types** when modifying code
-6. **Default to Zod for new boundary code**: define new request validation, config parsing, shared contracts, and reusable input/output schemas in `web/schemas/` first, then infer and reuse types from those schemas where practical
+1. Always read `CLAUDE.md` first when starting work
+2. Never commit `.env` files or credentials
+3. Run `npm run lint` before committing; fix all errors
+4. All write operations require `X-Admin-Token` header
+5. v1 API (`/api/words`) is frozen — do not modify. All new work goes in v2 (`/api/v2/words`)
+6. New validation must use Zod schemas under `web/schemas/` — no ad-hoc manual validation
+7. Replace nearby `any` usages when touching code
+8. Desktop and web modes must both work — always test or at minimum keep fallback paths
+9. `window.electronAPI` may be undefined (web mode) — always guard with optional chaining (`?.`)
 
-## 🔗 External Resources
+## Key Architectural Notes
+
+- **v2 single-table design**: `words_v2` stores full YAML as JSON in `content` column. No multi-table joins needed for word data.
+- **Electron**: Main process runs Express, preload exposes limited API via `contextBridge`, renderer is standard Vue 3. Port is random each launch — localStorage is NOT persistent across restarts.
+- **Auth flow in desktop**: Main process sets `process.env.ADMIN_TOKEN` → preload exposes `electronAPI.adminToken` → `writeAuth.ts` resolves token chain.
+- **Database**: SQLite via `better-sqlite3` with WAL mode. Orphan `-wal`/`-shm` files can corrupt data if a replacement DB is copied while the app is closed.
+
+## External Resources
 
 - Vue 3: https://vuejs.org/
 - Express: https://expressjs.com/
 - Pinia: https://pinia.vuejs.org/
-- SQLite: https://www.sqlite.org/docs.html
-
----
-
-**For detailed instructions, see the skill files in `.opencode/skills/ad-fontes/`**
+- Electron: https://www.electronjs.org/
+- Drizzle ORM: https://orm.drizzle.team/

@@ -86,6 +86,12 @@ export const hasStoredFieldMapping = (modelName: string): boolean => {
   return Object.prototype.hasOwnProperty.call(loadAllMappings(), normalizedModelName);
 };
 
+export const listStoredFieldMappingModelNames = (): string[] =>
+  Object.entries(loadAllMappings())
+    .filter(([modelName, mapping]) => modelName.trim() && mapping.length > 0)
+    .map(([modelName]) => modelName)
+    .sort((a, b) => a.localeCompare(b));
+
 export const saveFieldMapping = (modelName: string, mapping: FieldMappingConfig): void => {
   const normalizedModelName = modelName.trim();
   if (!normalizedModelName) return;

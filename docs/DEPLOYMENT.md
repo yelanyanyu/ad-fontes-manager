@@ -1,273 +1,158 @@
 # Ad Fontes Manager 部署指南
 
-## 概述
+## 部署方式概览
 
-本文档介绍如何将 Ad Fontes Manager 部署到生产环境。
+| 方式 | 适用平台 | 产物 |
+|------|----------|------|
+| Docker Compose | 服务器 (Linux) | Web 应用 |
+| 系统环境变量 | 服务器 (Linux) | Web 应用 |
+| electron-builder | Windows / Mac | 桌面安装包 |
 
-## 部署方式
+## 方式一：桌面程序构建
 
-### 方式一: Docker Compose (推荐)
+### Windows
 
-使用 Docker Compose 是最简单、最可靠的部署方式。
+```bash
+npm install
+npm run build:desktop:win
+```
 
-#### 1. 准备服务器
+产物输出到 `release/`：
+- `Ad Fontes Manager Setup 1.0.0.exe` — NSIS 安装程序
+- `win-unpacked/` — 未打包的可执行目录
 
-确保服务器已安装:
+用户可选择安装目录和数据目录。数据库等持久化文件存储在 `%APPDATA%/ad-fontes-manager/`。
+
+### Mac
+
+```bash
+npm install
+npm run build:desktop:mac
+```
+
+产物输出到 `release/`：
+- `Ad Fontes Manager-1.0.0.dmg` — DMG 安装镜像
+- `mac/` — 未打包的 `.app` bundle
+
+Mac 构建支持 x64 和 arm64 (Apple Silicon) 双架构。
+
+### CI/CD 自动构建
+
+推送 `v*` 标签触发 GitHub Actions 自动构建 Windows + Mac 安装包，并发布为 GitHub Release。
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+## 方式二：Docker Compose（Web 部署）
+
+### 前置要求
+
 - Docker 20.10+
 - Docker Compose 2.0+
 
-```bash
-# 检查版本
-docker --version
-docker-compose --version
-```
-
-#### 2. 克隆代码
+### 部署步骤
 
 ```bash
-git clone https://github.com/your-org/ad-fontes-manager.git
+git clone https://github.com/yelanyanyu/ad-fontes-manager.git
 cd ad-fontes-manager
-```
 
-#### 3. 创建生产环境配置
-
-在服务器上创建 `.env.production` 文件:
-
-```bash
-# 生成安全的 ADMIN_TOKEN
-ADMIN_TOKEN=$(openssl rand -hex 32)
-
+# 创建生产配置
 cat > .env.production << EOF
-# 核心配置
 NODE_ENV=production
-ADMIN_TOKEN=${ADMIN_TOKEN}
-
-# 数据库配置
+ADMIN_TOKEN=$(openssl rand -hex 32)
 DATABASE_URL=/app/data/ad_fontes.db
-
-# 服务器配置
-PORT=8080
 SERVER_HOST=0.0.0.0
 SERVER_CORS_ORIGINS=["https://yourdomain.com"]
 SERVER_RATE_LIMIT=100
-
-# AnkiConnect 配置 (可选)
-ANKI_CONNECT_HOST=host.docker.internal
-ANKI_CONNECT_PORT=8765
-
-# 日志配置
 LOG_LEVEL=warn
-LOG_DIR=./logs
-LOG_ROTATION_INTERVAL=1d
-LOG_ROTATION_MAX_SIZE=10M
-LOG_ROTATION_MAX_FILES=30
 EOF
 
-# 设置文件权限 (仅 root 可读)
 chmod 600 .env.production
-```
 
-**安全提示**: `.env.production` 文件包含敏感信息，务必设置权限为 `600`。
-
-#### 4. 启动服务
-
-```bash
 # 构建并启动
-docker-compose up -d --build
-
-# 查看日志
-docker-compose logs -f
-
-# 检查健康状态
-docker-compose ps
+docker compose --env-file .env.production build app
+docker compose --env-file .env.production up -d --force-recreate app
 ```
 
-#### 5. 更新部署
+或使用便捷脚本：
+
+```powershell
+./scripts/start-docker-prod.ps1
+```
+
+### 更新
 
 ```bash
-# 拉取最新代码
 git pull origin main
-
-# 重新构建并启动
-docker-compose up -d --build
-
-# 清理旧镜像
+docker compose --env-file .env.production build app
+docker compose --env-file .env.production up -d --force-recreate app
 docker image prune -f
 ```
 
-### 方式二: 系统环境变量
-
-如果不使用 Docker，可以直接在服务器上运行 Node.js 应用。
-
-#### 1. 准备环境
+## 方式三：Node.js 直接运行（Web 部署）
 
 ```bash
-# 安装 Node.js 18+
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
+# 1. 构建前端
+npm run build:web
 
-# 安装 PM2 (进程管理器)
-sudo npm install -g pm2
-```
-
-#### 2. 设置环境变量
-
-```bash
-# 编辑 /etc/environment 或使用 export
+# 2. 设置环境变量
 export NODE_ENV=production
 export ADMIN_TOKEN="$(openssl rand -hex 32)"
 export DATABASE_URL="/app/data/ad_fontes.db"
-export SERVER_CORS_ORIGINS='["https://yourdomain.com"]'
-export SERVER_RATE_LIMIT="100"
-export SECURITY_HSTS="true"
-export LOG_LEVEL="warn"
-```
 
-#### 3. 启动应用
-
-```bash
-cd web
-npm install --production
-npm run build
-pm2 start npm --name "ad-fontes-manager" -- start
-
-# 保存 PM2 配置
+# 3. 启动（使用 PM2 或其他进程管理器）
+pm2 start dist/server/standalone.js --name ad-fontes-manager
 pm2 save
-pm2 startup
 ```
 
-## 配置检查清单
+## AnkiConnect 配置
 
-部署前请确认:
+使用 Anki 导出功能需要在运行 Anki 的机器上安装 AnkiConnect 插件（代码: `2055492159`）。
 
-- [ ] `ADMIN_TOKEN` 已设置为强密码 (≥32 字符)
-- [ ] `DATABASE_URL` 指向正确的 SQLite 文件路径
-- [ ] `SERVER_CORS_ORIGINS` 已限制为实际域名
-- [ ] `SERVER_RATE_LIMIT` 已设置 (建议 100-300)
-- [ ] `LOG_LEVEL` 设置为 `warn` 或 `error`
-- [ ] `.env.production` 文件权限为 `600`
-- [ ] 防火墙已配置，只开放必要端口
+Docker 部署时，设置 `ANKI_CONNECT_HOST=host.docker.internal` 访问宿主机的 Anki。
 
-### AnkiConnect 配置 (可选)
-
-如需使用 Anki 导出功能:
-
-- [ ] Anki 已安装并运行
-- [ ] AnkiConnect 插件已安装 (代码: 2055492159)
-- [ ] `ANKI_CONNECT_HOST` 设置为正确的主机地址
-  - Docker: `host.docker.internal`
-  - 本地: `127.0.0.1`
-- [ ] `ANKI_CONNECT_PORT` 设置为 AnkiConnect 监听端口 (默认: 8765)
-
-**注意**: AnkiConnect 默认只接受本地连接。如需跨机器访问，需配置 AnkiConnect 的 `webCorsOriginList`。
+本地或桌面部署时，默认 `ANKI_CONNECT_HOST=127.0.0.1:8765` 即可。
 
 ## 健康检查
 
-应用启动后会自动进行健康检查:
-
 ```bash
-# 检查健康端点
-curl http://localhost:8080/api/health
-
-# 预期响应
-{"status":"ok"}
-```
-
-## 日志管理
-
-### Docker 部署
-
-```bash
-# 查看实时日志
-docker-compose logs -f
-
-# 查看最近 100 行
-docker-compose logs --tail=100
-
-# 查看特定服务的日志
-docker-compose logs -f app
-```
-
-### PM2 部署
-
-```bash
-# 查看日志
-pm2 logs ad-fontes-manager
-
-# 清空日志
-pm2 flush
+curl http://localhost:8080/api/core/health
+# {"status":"ok"}
 ```
 
 ## 备份与恢复
 
-### 数据库备份
-
 SQLite 数据库是单文件，直接复制即可：
 
 ```bash
-# 备份数据库文件
-cp /app/data/ad_fontes.db /backup/ad_fontes_$(date +%Y%m%d).db
+# 备份（确保关闭应用）
+cp /path/to/ad_fontes.db /backup/ad_fontes_$(date +%Y%m%d).db
 
-# 自动备份脚本 (添加到 crontab)
-0 2 * * * cp /app/data/ad_fontes.db /backup/ad_fontes_$(date +\%Y\%m\%d).db
+# 注意：WAL 模式下，正常关闭应用后 -wal 和 -shm 文件会自动合并删除。
+# 不要在应用运行时直接复制 .db 文件。
 ```
 
-### 配置备份
+## 配置检查清单
 
-```bash
-# 备份 .env.production
-cp .env.production /secure/backup/.env.production.$(date +%Y%m%d)
-```
+- [ ] `ADMIN_TOKEN` 已设置强密码（≥32 字符）
+- [ ] `DATABASE_URL` 路径正确且有读写权限
+- [ ] `SERVER_CORS_ORIGINS` 已限制（生产环境）
+- [ ] `SERVER_RATE_LIMIT` 已设置（建议 100-300）
+- [ ] 防火墙已配置，只开放必要端口
+- [ ] AnkiConnect 已安装并配置（如需 Anki 导出）
 
 ## 故障排查
 
 ### 服务无法启动
 
-1. 检查日志:
-   ```bash
-   docker-compose logs
-   ```
+1. 检查日志：`docker compose logs` 或 `pm2 logs`
+2. 检查配置：确认必填环境变量已设置
+3. 检查端口：`lsof -i :8080`
 
-2. 检查配置:
-   ```bash
-   # 确认所有必需变量已设置
-   cat .env.production | grep -E "^(NODE_ENV|ADMIN_TOKEN|DATABASE_URL)="
-   ```
+### 桌面程序白屏
 
-3. 检查端口占用:
-   ```bash
-   sudo lsof -i :8080
-   ```
-
-### 数据库连接失败
-
-1. 检查数据库服务状态
-2. 验证 `DATABASE_URL` 格式
-3. 检查网络连接和防火墙
-4. 确认 SSL 配置正确
-
-### 健康检查失败
-
-1. 检查应用日志
-2. 确认端口配置正确
-3. 检查是否有启动错误
-
-## 安全建议
-
-1. **使用 HTTPS**: 生产环境必须使用 HTTPS
-2. **定期更新**: 定期更新依赖和基础镜像
-3. **防火墙配置**: 只开放必要端口 (80, 443, 22)
-4. **定期轮换令牌**: 每 3-6 个月轮换一次 `ADMIN_TOKEN`
-5. **监控日志**: 启用审计日志并定期检查
-6. **备份策略**: 制定定期备份计划
-
-## 更新日志
-
-### 2026-03-27 (v1.5.1)
-- 添加 AnkiConnect 配置说明
-- 添加 Anki 导出功能部署指南
-- 更新 Docker 配置支持 host.docker.internal
-
-### 2026-03-05
-- 初始部署文档
-- 支持 Docker Compose 和系统环境变量两种部署方式
+1. 检查 `config.json` 中 `dataDir` 路径可访问
+2. 确认 `ad_fontes.db` 存在于数据目录
+3. 重新安装或清空 `%APPDATA%/ad-fontes-manager/`

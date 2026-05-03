@@ -1,37 +1,23 @@
-# Database Schema Documentation
+# Database Schema
 
-> **Database:** SQLite (via better-sqlite3 + Drizzle ORM)  
-> **Last Updated:** 2026-05-01
+> **Database:** SQLite (better-sqlite3 + Drizzle ORM)
+> **Last Updated:** 2026-05-03
 
 ## Overview
 
-Single-file SQLite database with Drizzle ORM. Schema is defined in `web/db/schema.ts` and managed via `drizzle-kit` migrations in `drizzle/`.
+Single-file SQLite database with Drizzle ORM. Schema defined in `web/db/schema.ts`, migrations managed via `drizzle-kit` in `drizzle/`.
 
-## Schema
+WAL journal mode is enabled for better concurrent read performance.
 
-All data is stored in `words_v2` — a single-table design where the full YAML document is stored as JSON in the `content` column.
+## words_v2 Table
 
-```mermaid
-erDiagram
-    words_v2 {
-        text id PK
-        text lemma
-        text language "en, de, etc."
-        text part_of_speech
-        json content "Full YAML document as JSON text"
-        text created_at
-        text updated_at
-        integer revision_count
-    }
-```
-
-### words_v2
+Single-table design — the full YAML document is stored as JSON text in the `content` column.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | TEXT | NO | - | UUID primary key |
 | `lemma` | TEXT | NO | - | Canonical form |
-| `language` | TEXT | NO | `'en'` | Language code (en, de) |
+| `language` | TEXT | NO | `'en'` | Language code (`en`, `de`) |
 | `part_of_speech` | TEXT | YES | - | Part of speech |
 | `content` | TEXT | NO | - | Full YAML document as JSON string |
 | `created_at` | TEXT | NO | `datetime('now')` | ISO timestamp |
@@ -46,41 +32,59 @@ erDiagram
 - `idx_words_v2_created_at` on `created_at`
 - `idx_words_v2_updated_at` on `updated_at`
 
+## The `content` Column
+
+The `content` column stores the complete YAML document as a JSON string. It is the single source of truth for a word entry. Example structure:
+
+```json
+{
+  "yield": { "lemma": "...", "contextual_meaning": { "en": "...", "zh": "..." } },
+  "etymology": { "root_and_affixes": { ... }, "historical_origins": { ... } },
+  "cognate_family": { "cognates": [...] },
+  "application": { "selected_examples": [...] },
+  "nuance": { "synonyms": [...] }
+}
+```
+
+German entries use `morphological_analysis` instead of `root_and_affixes`, plus additional fields like `historical_phonology`, `historical_semantics`, `dialectal_notes`, `observations`, `genus`, `kasus`.
+
 ## Schema Management
 
 ```bash
-# Generate migration after schema changes
-cd web && npx drizzle-kit generate
+# Generate migration after editing web/db/schema.ts
+npx drizzle-kit generate
 
-# Apply migrations (runs automatically on server start)
-cd web && npm run dev
-
-# Initialize a new database
-cd node && npm run init-db
+# Migrations run automatically on server start (pushMigration())
 ```
 
-## Data File
+## Data File Locations
 
-- Development: `web/data/ad_fontes.db`
-- Docker: `/app/data/ad_fontes.db` (volume mount `./web/data:/app/data`)
+| Mode | Path |
+|------|------|
+| Web dev | `web/data/ad_fontes.db` (or `DATABASE_URL` env var) |
+| Desktop (Windows) | `%APPDATA%/ad-fontes-manager/data/ad_fontes.db` |
+| Desktop (Mac) | `~/Library/Application Support/ad-fontes-manager/data/ad_fontes.db` |
+| Docker | `/app/data/ad_fontes.db` (volume mount) |
 
-## Migration from PostgreSQL
+## WAL Mode Notes
 
-A one-time import script is available:
+SQLite WAL (Write-Ahead Logging) creates two companion files alongside the database:
+- `ad_fontes.db-wal` — Write-Ahead Log
+- `ad_fontes.db-shm` — Shared Memory index
+
+These are normal and automatically cleaned up on clean shutdown. When copying or replacing the database file, delete these companion files first to avoid data corruption.
+
+## Migrating from PostgreSQL
 
 ```bash
-# Set PG source and SQLite target
-PG_DATABASE_URL=postgresql://user:pass@host:5432/db
-DATABASE_URL=./web/data/ad_fontes.db
-
-# Run import
-cd web && npm run import:pg-v2
-
-# Verify migration
-cd node && npm run verify-sqlite-migration
+PG_DATABASE_URL=postgresql://user:pass@host:5432/db \
+DATABASE_URL=./web/data/ad_fontes.db \
+npm run import:pg-v2
 ```
 
-Original PG schema and migration files have been removed. Git history (`schema.sql`, `migrations/`) is available for reference.
+## v1 Legacy Tables
+
+The old 6-table schema (`words`, `etymologies`, `cognates`, `examples`, `synonyms`, `user_requests`) still exists but is no longer used by any active code paths. Migrations only apply to `words_v2`.
 
 ## See Also
 

@@ -4,28 +4,29 @@ Ad Fontes Manager REST API
 
 ## Base Info
 
-- **Base URL**: `http://localhost:8080/api`
+- **Base URL**: `http://localhost:<port>/api`（Web 模式默认 8080，桌面模式端口随机）
 - **Content-Type**: `application/json`
+- **Authentication**: 写操作需要 `X-Admin-Token` 请求头
 
 ---
 
-## Words (v2 API, Recommended)
+## Words v2 (Recommended)
 
-All word operations should use the v2 API (`/api/v2/words`). The v1 API (`/api/words`) is preserved for backward compatibility only.
+所有词条操作应使用 v2 API (`/api/v2/words`)。v1 API (`/api/words`) 仅保留向后兼容，不再修改。
 
 ### List Words
 
 ```http
-GET /v2/words?page={page}&limit={limit}&search={keyword}&sort={sort}&language={lang}
+GET /v2/words?page=1&limit=20&search=keyword&sort=newest&language=en
 ```
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
-| page | number | no | Page number, default 1 |
-| limit | number | no | Items per page, default 20 |
-| search | string | no | Search keyword (partial match) |
-| sort | string | no | Sort: `newest`, `oldest`, `az`, `za` |
-| language | string | no | Language code: `en`, `de`. Default `en` |
+| page | number | no | 页码，默认 1 |
+| limit | number | no | 每页条数，默认 20 |
+| search | string | no | 搜索关键词（部分匹配） |
+| sort | string | no | 排序：`newest`, `oldest`, `az`, `za` |
+| language | string | no | 语言：`en`, `de`。默认 `en` |
 
 Response:
 
@@ -51,7 +52,7 @@ Response:
 ### Get Word Details (by Lemma)
 
 ```http
-GET /v2/words/details?word={lemma}&language={lang}
+GET /v2/words/details?word=example&language=en
 ```
 
 Response:
@@ -65,15 +66,13 @@ Response:
     "lemma": "example",
     "language": "en",
     "yield": { "lemma": "example", "contextual_meaning": {...} },
-    "etymology": { "root_and_affixes": {...} },
-    "cognate_family": {...},
-    "application": {...},
-    "nuance": {...}
+    "etymology": { ... },
+    "cognate_family": { ... },
+    "application": { ... },
+    "nuance": { ... }
   }
 }
 ```
-
-The `data` object contains the full YAML content expanded from JSONB. No separate `include` parameter needed.
 
 ### Get Word by ID
 
@@ -81,83 +80,45 @@ The `data` object contains the full YAML content expanded from JSONB. No separat
 GET /v2/words/:id
 ```
 
-Response:
-
-```json
-{
-  "id": "uuid",
-  "lemma": "example",
-  "language": "en",
-  "part_of_speech": "noun",
-  "content": { "yield": {...}, "etymology": {...} }
-}
-```
-
-### Check Word Existence
+### Check Existence
 
 ```http
-GET /v2/words/check?word={userWord}&language={lang}
+GET /v2/words/check?word=test&language=en
 ```
 
-Response:
+Response: `{ "found": true, "lemma": "test", "language": "en", "data": {...} }`
 
-```json
-{ "found": true, "lemma": "example", "language": "en", "data": {...} }
-```
-
-### Create Word
+### Validate YAML
 
 ```http
-POST /v2/words/add
+POST /v2/words/validate
+Content-Type: application/json
+
+{ "yaml": "yield:\n  lemma: example\n  ..." }
 ```
 
-Requires `X-Admin-Token` header.
+Response: `{ "valid": true, "errors": [], "language": "en" }`
 
-Request body:
-
-```json
-{
-  "word": "example",
-  "yaml": "yield:\n  lemma: example\n  ..."
-}
-```
-
-Response (201):
-
-```json
-{ "code": 201, "message": "created", "data": { "id": "uuid", "lemma": "example", "language": "en" } }
-```
-
-Response (409 conflict):
-
-```json
-{ "success": false, "code": 409, "message": "Duplicate word" }
-```
-
-### Save / Update Word
+### Save / Upsert Word
 
 ```http
 POST /v2/words
-```
+X-Admin-Token: <token>
+Content-Type: application/json
 
-Requires `X-Admin-Token` header.
-
-Request body:
-
-```json
 {
   "yaml": "yield:\n  lemma: example\n  ...",
   "forceUpdate": false
 }
 ```
 
-Response:
+Response (success):
 
 ```json
 { "success": true, "id": "uuid", "lemma": "example", "language": "en", "status": "created" }
 ```
 
-Conflict response (when `forceUpdate` is false and data has changed):
+Response (conflict, when `forceUpdate` is false):
 
 ```json
 {
@@ -172,100 +133,51 @@ Conflict response (when `forceUpdate` is false and data has changed):
 
 ```http
 DELETE /v2/words/:id
+X-Admin-Token: <token>
 ```
 
-Requires `X-Admin-Token` header.
-
-Response:
-
-```json
-{ "success": true }
-```
-
-### Language Filtering
-
-All v2 list/detail endpoints support `language` parameter:
-
-- `GET /v2/words?language=en` — English words only
-- `GET /v2/words?language=de` — German words only
-- `GET /v2/words/details?word=see&language=de` — lookup "see" as a German word
-
-Same lemma can exist in multiple languages (e.g. English "see" and German "See").
+Response: `{ "success": true }`
 
 ---
 
-## Words (v1 API, Legacy)
-
-The v1 API uses the old 6-table schema. It is frozen for backward compatibility only.
+## Words v1 (Legacy, Frozen)
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/words` | List English words |
-| GET | `/words/details` | Get details (requires `include` param) |
-| GET | `/words/:id` | Get by ID |
-| POST | `/words` | Save/update word |
-| POST | `/words/add` | Add word |
-| DELETE | `/words/:id` | Delete word |
+| GET | `/words` | 列表 |
+| GET | `/words/details` | 详情（需要 `include` 参数） |
+| GET | `/words/:id` | 按 ID 获取 |
+| POST | `/words` | 保存/更新 |
+| POST | `/words/add` | 新增 |
+| DELETE | `/words/:id` | 删除 |
+
+**不再修改 v1 端点。** 所有新功能在 v2 中实现。
 
 ---
 
-## Local Storage
+## Anki Export
 
-### List Local Records
-
-```http
-GET /local
-```
-
-### Save to Local
+### AnkiConnect Proxy
 
 ```http
-POST /local
+POST /anki/connect
+Content-Type: application/json
+
+{ "action": "deckNames", "version": 6 }
 ```
 
-Request body:
+代理到本地的 AnkiConnect 服务。
 
-```json
-{
-  "yaml": "yield:\n  lemma: example\n  ...",
-  "id": "uuid (optional)",
-  "forceUpdate": false
-}
-```
-
-### Delete Local Record
+### Export .apkg
 
 ```http
-DELETE /local/:id
+POST /anki/export-apkg
+Content-Type: application/json
+
+{ "payloads": [...], "deckName": "...", "modelName": "..." }
 ```
 
----
-
-## Sync
-
-### Check Conflicts
-
-```http
-POST /sync/check
-```
-
-Request body:
-
-```json
-{ "items": [{ "id": "uuid", "raw_yaml": "..." }] }
-```
-
-### Execute Sync
-
-```http
-POST /sync/execute
-```
-
-Request body:
-
-```json
-{ "items": [{ "id": "uuid", "raw_yaml": "..." }], "forceUpdate": false }
-```
+返回 `.apkg` 二进制流。
 
 ---
 
@@ -277,27 +189,18 @@ Request body:
 GET /api/core/config
 ```
 
-Note: Database URL is not returned for security; only `hasDatabaseUrl: true/false`.
+数据库 URL 不返回明文，仅返回 `hasDatabaseUrl: true/false`。
 
 ### Update Config
 
 ```http
 POST /api/core/config
+X-Admin-Token: <token>
 ```
-
-Requires `X-Admin-Token` header.
 
 ---
 
 ## System
-
-### Database Status
-
-```http
-GET /status
-```
-
-Response: `{ "connected": true }`
 
 ### Health Check
 
@@ -307,43 +210,17 @@ GET /api/core/health
 
 Response: `{ "status": "ok" }`
 
----
-
-## Anki Export
-
-### Connect via AnkiConnect
+### Database Status
 
 ```http
-POST /anki/connect
+GET /status
 ```
 
-Proxy to AnkiConnect service. Used for deck/model listing and note operations.
-
-### Export .apkg
-
-```http
-POST /anki/export-apkg
-```
-
-Generate `.apkg` file from payloads. Returns binary stream.
-
-### Import Word to Anki
-
-```http
-POST /words/:id/anki
-```
-
-### Check Duplicate in Anki
-
-```http
-POST /words/:id/anki/check-duplicate
-```
+Response: `{ "connected": true }`
 
 ---
 
 ## Error Handling
-
-Error response format:
 
 ```json
 { "success": false, "code": 400, "message": "Error description" }
@@ -353,11 +230,10 @@ Error response format:
 |--------|-------------|
 | 200 | Success |
 | 400 | Bad request |
-| 401 | Unauthorized (missing admin token) |
-| 403 | Forbidden (invalid admin token) |
+| 401 | Unauthorized（缺少 token） |
+| 403 | Forbidden（无效 token） |
 | 404 | Not found |
-| 409 | Conflict (duplicate word) |
-| 422 | Unprocessable (invalid YAML) |
+| 409 | Conflict（重复词条） |
+| 422 | Unprocessable（YAML 无效） |
 | 429 | Rate limited |
 | 500 | Internal server error |
-| 503 | Service unavailable |

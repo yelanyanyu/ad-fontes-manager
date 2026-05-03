@@ -89,7 +89,8 @@ const statusClassMap: Record<string, string> = {
         </div>
       </div>
 
-      <div class="p-5 border-b border-slate-100 space-y-4">
+      <div class="flex-1 overflow-auto min-h-0">
+        <div class="p-5 border-b border-slate-100 space-y-4">
         <div class="flex items-center justify-between gap-3">
           <div class="text-sm text-slate-600">
             <span v-if="ankiConnected" class="text-emerald-600 font-semibold">Anki connected</span>
@@ -263,7 +264,7 @@ const statusClassMap: Record<string, string> = {
         </div>
       </div>
 
-      <div class="flex-1 overflow-auto">
+      <div>
         <table class="min-w-full">
           <thead class="bg-slate-50 sticky top-0">
             <tr>
@@ -334,6 +335,7 @@ const statusClassMap: Record<string, string> = {
             </tr>
           </tbody>
         </table>
+      </div>
       </div>
     </div>
   </div>
