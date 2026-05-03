@@ -28,6 +28,8 @@ Desktop.ini
 # Editor/IDE
 .idea/
 .vscode/
+.claude/
+.opencode/
 .trae/
 *.suo
 *.ntvs*
@@ -35,6 +37,7 @@ Desktop.ini
 *.sln
 *.sw?
 skills
+CLAUDE.md
 
 # Project Specific (from README)
 web/data/local_words.json
