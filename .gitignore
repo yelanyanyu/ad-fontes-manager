@@ -31,10 +31,8 @@ Desktop.ini
 .idea/
 .vscode/
 .claude/
-.claude/settings.local.json
 .opencode/
 .trae/
-.trae/documents
 *.suo
 *.ntvs*
 *.njsproj
@@ -44,6 +42,7 @@ skills
 CLAUDE.md
 
 # Project Specific (from README)
+web/data/ad_fontes.db
 web/data/local_words.json
 web/config.json
 electron-user-data/
