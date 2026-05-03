@@ -11,7 +11,7 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const rootDir = path.resolve(__dirname, '..');
-const sqlitePath = process.env.SQLITE_PATH || path.resolve(rootDir, 'web/data/ad_fontes.db');
+const sqlitePath = process.env.SQLITE_PATH || path.resolve(rootDir, 'data/ad_fontes.db');
 const pgUrl = process.env.PG_DATABASE_URL;
 const doPgCheck = process.argv.includes('--pg-check');
 

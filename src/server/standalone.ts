@@ -14,7 +14,7 @@ const { loggers } = require('./utils/logger') as {
 };
 
 const isProduction = config.get<string>('core.env', 'development') === 'production';
-const dbPath = config.get<string>('database.url', './web/data/ad_fontes.db');
+const dbPath = config.get<string>('database.url', './data/ad_fontes.db');
 const distDir = path.resolve(__dirname, '..', '..', 'dist');
 
 const app = createApp({

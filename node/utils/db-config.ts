@@ -38,7 +38,7 @@ export function resolveDbPath(dbUrl: string, projectRoot: string = process.cwd()
     throw new Error('PostgreSQL connections are no longer supported. Use a SQLite file path.');
   }
   if (path.isAbsolute(dbUrl)) return dbUrl;
-  return path.resolve(projectRoot, 'web', dbUrl);
+  return path.resolve(projectRoot, dbUrl);
 }
 
 export function openSqliteDb(dbUrl: string) {

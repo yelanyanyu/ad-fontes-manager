@@ -21,7 +21,6 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test-api": "tsx src/server/test-api.ts",
-    "import:pg-v2": "tsx web/scripts/import-pg-words-v2-to-sqlite.ts",
     "format": "prettier --write ."
   },
   "engines": {

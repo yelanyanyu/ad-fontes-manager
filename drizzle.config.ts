@@ -3,6 +3,6 @@ export default {
   out: './drizzle',
   dialect: 'sqlite',
   dbCredentials: {
-    url: './web/data/ad_fontes.db',
+    url: './data/ad_fontes.db',
   },
 };

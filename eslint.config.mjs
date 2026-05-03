@@ -189,16 +189,11 @@ export default [
   {
     ignores: [
       'node_modules/**',
-      'web/node_modules/**',
-      'web/client/node_modules/**',
-      'web/**',
       'node/**',
       'dist/**',
       'out/**',
       'release/**',
       'coverage/**',
-      'web/dist/**',
-      'web/client/dist/**',
       '.worktrees/**',
       'src/renderer/public/**',
     ],

@@ -14,7 +14,7 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const rootDir = path.resolve(__dirname, '..');
-const rawPath = process.env.DATABASE_URL || path.resolve(rootDir, 'web/data/ad_fontes.db');
+const rawPath = process.env.DATABASE_URL || path.resolve(rootDir, 'data/ad_fontes.db');
 const resolvedPath = path.isAbsolute(rawPath) ? rawPath : path.resolve(rootDir, rawPath);
 
 const wordLemma = process.argv[2];

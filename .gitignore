@@ -42,11 +42,9 @@ skills
 CLAUDE.md
 
 # Project Specific (from README)
-web/data/ad_fontes.db
-web/data/local_words.json
-web/config.json
+data/ad_fontes.db
+data/local_words.json
 electron-user-data/
-web/dist/
 
 # Configuration files (contain sensitive data)
 config.yml

@@ -7,7 +7,6 @@
     "loader": "tsx loader.ts",
     "init-db": "tsx init_db.ts",
     "verify-sqlite-migration": "tsx verify-sqlite-migration.ts",
-    "export-pg-to-sqlite": "tsx ../web/scripts/import-pg-words-v2-to-sqlite.ts",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
