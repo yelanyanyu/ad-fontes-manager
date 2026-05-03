@@ -23,16 +23,17 @@ export const resolveWriteAuthToken = (sources: WriteAuthTokenSources): string =>
   const localToken = normalizeToken(sources.localStorageToken);
   const envToken = normalizeToken(sources.envToken);
   const electronToken = normalizeToken(sources.electronToken);
+
+  if (electronToken) return electronToken;
+
   if (sources.isDev) {
     if (localToken) return localToken;
-    if (electronToken) return electronToken;
     if (envToken) return envToken;
     return DEV_WRITE_TOKEN_FALLBACK;
   }
 
   if (envToken) return envToken;
   if (localToken) return localToken;
-  if (electronToken) return electronToken;
 
   return '';
 };

@@ -20,6 +20,7 @@ interface WordStoreState {
   dbListMeta: DbListMeta;
   currentEditingId: string | number | null;
   editorYaml: string;
+  editorReloadToken: number;
   loading: boolean;
 }
 
@@ -43,6 +44,7 @@ export const useWordStore = defineStore('word', {
     dbListMeta: defaultDbListMeta(),
     currentEditingId: null,
     editorYaml: '',
+    editorReloadToken: 0,
     loading: false,
   }),
 
@@ -193,6 +195,7 @@ export const useWordStore = defineStore('word', {
 
     setEditorYaml(yamlContent: string): void {
       this.editorYaml = yamlContent;
+      this.editorReloadToken++;
     },
   },
 });

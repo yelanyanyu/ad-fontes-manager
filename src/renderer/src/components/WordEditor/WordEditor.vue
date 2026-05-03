@@ -54,8 +54,9 @@ const appStore = useAppStore() as unknown as AppStoreLike;
  * @description 从 wordStore 解构的响应式引用
  * @property {Ref<string>} editorYaml - 编辑器中的 YAML 内容
  */
-const { editorYaml } = storeToRefs(wordStore as any) as {
+const { editorYaml, editorReloadToken } = storeToRefs(wordStore as any) as {
   editorYaml: Ref<string>;
+  editorReloadToken: Ref<number>;
 };
 
 /**
@@ -185,10 +186,10 @@ onUnmounted(() => {
  * 当外部更新 editorYaml 时，自动同步到 input 并触发验证
  */
 watch(
-  editorYaml,
-  val => {
-    if (typeof val === 'string') {
-      input.value = val;
+  editorReloadToken,
+  () => {
+    if (typeof editorYaml.value === 'string') {
+      input.value = editorYaml.value;
       handleInput();
     }
   },

@@ -57,6 +57,17 @@ describe('writeAuth', () => {
     expect(token).toBe('env-token');
   });
 
+  it('prefers Electron token over stale stored tokens', () => {
+    const token = resolveWriteAuthToken({
+      localStorageToken: 'stale-local-token',
+      envToken: 'env-token',
+      electronToken: 'electron-token',
+      isDev: false,
+    });
+
+    expect(token).toBe('electron-token');
+  });
+
   it('falls back to local token in production when env token is missing', () => {
     const token = resolveWriteAuthToken({
       localStorageToken: 'local-token',
