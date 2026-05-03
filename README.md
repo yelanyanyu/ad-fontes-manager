@@ -1,32 +1,71 @@
+<!--
+ * @Author: yelanyanyu
+ * @Date: 2026-05-03
+ * @Description: Ad Fontes Manager — README
+-->
+
+<div align="center">
+
 # Ad Fontes Manager
 
-Ad Fontes Manager 是 Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持词条的 YAML 编辑、实时预览、本地与云端数据同步，以及导出到 Anki（AnkiConnect 或 `.apkg`）。
+[![GitHub stars](https://img.shields.io/github/stars/yelanyanyu/ad-fontes-manager?style=flat-square)](https://github.com/yelanyanyu/ad-fontes-manager/stargazers)
+[![GitHub license](https://img.shields.io/github/license/yelanyanyu/ad-fontes-manager?style=flat-square)](./LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/yelanyanyu/ad-fontes-manager?style=flat-square)](https://github.com/yelanyanyu/ad-fontes-manager/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Web-blue?style=flat-square)](#)
 
-项目同时支持 **Web 应用** 和 **Windows / Mac 桌面程序**（Electron）两种运行模式，共享同一套后端和前端代码。
+Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持 YAML 编辑、实时预览、Anki 导出。
+
+[功能概览](#功能概览) · [快速开始](#快速开始) · [构建](#构建) · [文档](./docs/) · [CHANGELOG](./CHANGELOG.md)
+
+</div>
+
+---
 
 <img width="2560" height="1410" alt="screenshot" src="https://github.com/user-attachments/assets/97ea07fc-f1be-455f-91a2-4360efde1634" />
 
+## 目录
+
+- [功能概览](#功能概览)
+- [环境要求](#环境要求)
+- [快速开始](#快速开始)
+- [构建](#构建)
+- [常用命令](#常用命令)
+- [文件目录说明](#文件目录说明)
+- [技术栈](#技术栈)
+- [数据库](#数据库)
+- [配置](#配置)
+- [部署](#部署)
+- [文档](#文档)
+- [贡献](#贡献)
+- [版本控制](#版本控制)
+- [版权说明](#版权说明)
+- [鸣谢](#鸣谢)
+
 ## 功能概览
 
-- 词条管理：搜索、排序、分页、多语言（英语 / 德语）
+- 词条管理：搜索、排序、分页、多语言支持（英语 / 德语）
 - YAML 编辑器：实时语法校验 + 服务端 Schema 验证（300ms 防抖）
 - 保存时自动冲突检测，支持差异对比和强制覆盖
 - 预览单词卡片的 HTML 效果
 - 单个词条导出到 AnkiConnect 或下载为 `.apkg`
 - 批量操作：跨页选择、重复检测、批量导入/导出
 - 批量任务在后台执行，关闭弹窗或切换页面不丢失进度
-- 桌面模式下可自定义数据目录，配置随应用持久化
+- 桌面模式下可自定义数据目录
+
+项目同时支持 **Web 应用** 和 **Windows / Mac 桌面程序**（Electron）两种运行模式，共享同一套后端和前端代码。
 
 ## 环境要求
 
 - Node.js 22 LTS 或更高版本
 - npm 10 或更高版本
-- （可选）Anki + AnkiConnect 插件，用于 Anki 导出功能
+- （可选）Anki + [AnkiConnect](https://ankiweb.net/shared/info/2055492159) 插件，用于 Anki 导出功能
 
-## 快速开始（Web 开发模式）
+## 快速开始
+
+### Web 开发模式
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/yelanyanyu/ad-fontes-manager.git
 cd ad-fontes-manager
 npm install
 
@@ -37,29 +76,27 @@ cp .env.example .env
 npm run dev:web
 ```
 
-启动后：
-- 前端：`http://localhost:5173`
-- 后端 API：`http://localhost:8080/api`
+启动后：前端 `http://localhost:5173`，后端 API `http://localhost:8080/api`
 
-## 快速开始（桌面开发模式）
+### 桌面开发模式
 
 ```bash
 npm install
 npm run dev:desktop
 ```
 
-这会启动 Electron 窗口，内部加载 Vite 开发服务器和 Express 后端。
+启动 Electron 窗口，内部加载 Vite 开发服务器和 Express 后端。
 
 ## 构建
 
 ```bash
-# Web 前端构建
+# Web 前端
 npm run build:web
 
-# Windows 桌面程序
+# Windows 桌面程序（NSIS 安装包）
 npm run build:desktop:win
 
-# Mac 桌面程序
+# Mac 桌面程序（DMG）
 npm run build:desktop:mac
 ```
 
@@ -76,11 +113,6 @@ npm run dev:desktop          # Electron 桌面开发模式
 npm run dev:server           # 仅 Express 后端
 npm run dev:renderer         # 仅 Vite 前端
 
-# 构建
-npm run build:web            # Web 前端构建
-npm run build:desktop:win    # Windows 安装包
-npm run build:desktop:mac    # Mac DMG
-
 # 质量检查
 npm run type-check           # TypeScript 类型检查
 npm run lint                 # ESLint 检查
@@ -88,11 +120,11 @@ npm run lint:fix             # ESLint 自动修复
 npm run test                 # Vitest 单元测试
 npm run format               # Prettier 格式化
 
-# 数据库
+# 数据库迁移
 npm run import:pg-v2         # 从 PostgreSQL 迁移数据到 SQLite
 ```
 
-## 项目结构
+## 文件目录说明
 
 ```text
 ad-fontes-manager/
@@ -100,8 +132,8 @@ ad-fontes-manager/
 │   ├── main/                # Electron 主进程
 │   ├── preload/             # contextBridge 预加载脚本
 │   ├── renderer/            # Vue 3 前端（Vite 7）
-│   └── server/              # Express 5 后端
-├── web/                     # Web 专用代码（旧结构，逐步迁移中）
+│   └── server/              # Express 5 后端入口
+├── web/                     # 后端业务代码
 │   ├── services/            # 业务逻辑层
 │   ├── routes/              # API 路由
 │   ├── controllers/         # 控制器
@@ -141,13 +173,14 @@ ad-fontes-manager/
 单表设计 — `words_v2`，完整的 YAML 文档以 JSON 形式存储在 `content` 列中：
 
 ```
-id (UUID PK) | lemma | language (en/de) | part_of_speech | content (JSON) | created_at | updated_at | revision_count
+id (UUID PK) | lemma | language (en/de) | part_of_speech |
+content (JSON) | created_at | updated_at | revision_count
 UNIQUE(lemma, language)
 ```
 
 数据库文件位置：
 - Web 开发：`web/data/ad_fontes.db`
-- 桌面程序：`%APPDATA%/ad-fontes-manager/data/ad_fontes.db`（可自定义）
+- 桌面程序：`%APPDATA%/ad-fontes-manager/data/ad_fontes.db`（可在设置中自定义）
 
 ## 配置
 
@@ -170,7 +203,11 @@ Anki 连接（可选）：
 
 桌面模式下，管理令牌由主进程通过 `contextBridge` 自动注入，无需手动配置。
 
-## Docker 部署
+详见 [docs/CONFIGURATION.md](./docs/CONFIGURATION.md)。
+
+## 部署
+
+### Docker（Web 部署）
 
 ```bash
 cp .env.example .env.production
@@ -183,6 +220,16 @@ docker compose --env-file .env.production build app
 docker compose --env-file .env.production up -d --force-recreate app
 ```
 
+### 桌面程序安装
+
+从 [Releases](https://github.com/yelanyanyu/ad-fontes-manager/releases) 页面下载最新安装包：
+- Windows: `Ad Fontes Manager Setup x.x.x.exe`
+- Mac: `Ad Fontes Manager-x.x.x.dmg`
+
+或从源码构建（参见[构建](#构建)）。
+
+详见 [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)。
+
 ## 文档
 
 - [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) — 开发指南
@@ -193,6 +240,33 @@ docker compose --env-file .env.production up -d --force-recreate app
 - [docs/SECURITY.md](./docs/SECURITY.md) — 安全说明
 - [docs/LOGGING.md](./docs/LOGGING.md) — 日志系统
 
-## 许可证
+## 贡献
 
-[MIT](./LICENSE)
+本项目为开源项目，欢迎参与贡献。
+
+1. Fork 本仓库
+2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 创建 Pull Request
+
+提交请遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范。
+
+## 版本控制
+
+使用 Git 进行版本管理。各版本发布记录见 [CHANGELOG.md](./CHANGELOG.md) 和 [GitHub Releases](https://github.com/yelanyanyu/ad-fontes-manager/releases)。
+
+## 版权说明
+
+本项目采用 [MIT](./LICENSE) 许可证。
+
+## 鸣谢
+
+- [Vue 3](https://vuejs.org/)
+- [Electron](https://www.electronjs.org/)
+- [Express](https://expressjs.com/)
+- [Tailwind CSS](https://tailwindcss.com/)
+- [Drizzle ORM](https://orm.drizzle.team/)
+- [js-yaml](https://github.com/nodeca/js-yaml)
+- [anki-apkg-export](https://github.com/ewnd9/anki-apkg-export)
+- [Shields.io](https://shields.io/) — 徽章生成
