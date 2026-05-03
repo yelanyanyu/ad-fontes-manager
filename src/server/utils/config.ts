@@ -18,7 +18,8 @@ interface ConfigObject {
   [key: string]: ConfigValue | undefined;
 }
 
-const isProduction = process.env.NODE_ENV === 'production';
+const isDesktop = process.env.ADFONTES_DESKTOP === '1';
+const isProduction = process.env.NODE_ENV === 'production' && !isDesktop;
 
 if (isProduction) {
   const envPaths = [
@@ -139,6 +140,8 @@ function loadFromEnv(): ConfigObject {
   const envConfig: ConfigObject = {};
 
   for (const [envName, configPath] of Object.entries(envMapping)) {
+    if (isDesktop && envName === 'NODE_ENV') continue;
+
     const envValue = process.env[envName];
     if (envValue === undefined) continue;
 

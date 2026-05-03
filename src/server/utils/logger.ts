@@ -77,18 +77,16 @@ if (isProduction) {
     ])
   );
 } else {
-  logger = pino({
-    ...baseConfig,
-    transport: {
-      target: 'pino-pretty',
-      options: {
-        colorize: true,
-        translateTime: 'SYS:yyyy-mm-dd HH:MM:ss.l',
-        ignore: 'pid,hostname',
-        singleLine: false,
-      },
-    },
-  });
+  const pretty = require('pino-pretty') as typeof import('pino-pretty');
+  logger = pino(
+    baseConfig,
+    pretty({
+      colorize: true,
+      translateTime: 'SYS:yyyy-mm-dd HH:MM:ss.l',
+      ignore: 'pid,hostname',
+      singleLine: false,
+    })
+  );
 }
 
 const pinoHttp = require('pino-http') as (options: Record<string, unknown>) => unknown;

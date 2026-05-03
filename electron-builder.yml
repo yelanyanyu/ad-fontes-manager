@@ -6,6 +6,10 @@ directories:
   buildResources: assets
   output: release
 
+npmRebuild: true
+buildDependenciesFromSource: true
+nativeRebuilder: sequential
+
 files:
   - out/**/*
   - package.json

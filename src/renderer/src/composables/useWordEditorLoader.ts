@@ -89,7 +89,7 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
   /**
    * Load a record into the editor by ID.
    * - Local items: parse raw_yaml directly.
-   * - DB items: use v2 API GET /api/v2/words/:id, fall back to list cache, then v1 API.
+   * - DB items: use v2 API GET /api/v2/words/:id, then fall back to list cache.
    */
   const loadIntoEditor = async (id: string): Promise<void> => {
     const item = displayedRecords.value.find(r => r.id === id);
@@ -159,24 +159,6 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
       }
       wordStore.setEditingContext({ id, isLocal: false });
       return;
-    }
-
-    // --- Last resort: v1 API ---
-    try {
-      const full = await request.get(`/words/${encodeURIComponent(id)}`, {
-        skipErrorToast: true,
-      });
-      if (full) {
-        const obj = resolveYamlSource(full as Record<string, unknown>);
-        if (obj) {
-          wordStore.setEditorYaml(formatYamlForEditor(obj));
-          wordStore.setEditingContext({ id, isLocal: false });
-          wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（v1 回退 API）: ${id}`);
-          return;
-        }
-      }
-    } catch (e) {
-      wordLogger.error(`[loadIntoEditor] v1 API 也失败了: ${id}`, e);
     }
 
     wordLogger.error(`[loadIntoEditor] 词条数据为空: ${id}`);

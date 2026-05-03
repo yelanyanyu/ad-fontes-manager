@@ -1,6 +1,7 @@
 // Set admin token before importing the server module — config.ts reads env vars
 // at import time and caches the result. In desktop mode there is no .env file,
 // so we provide the same fallback the config defaults to.
+process.env.ADFONTES_DESKTOP = '1';
 process.env.ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'dev-token-not-for-production';
 
 import { app as electronApp, BrowserWindow, dialog, ipcMain } from 'electron';
@@ -18,6 +19,7 @@ let serverInstance: http.Server | null = null;
 
 const DESKTOP_SERVER_PORT = 17387;
 const CONFIG_FILE = path.join(electronApp.getPath('userData'), 'config.json');
+const DIAGNOSTIC_LOG_FILE = path.join(electronApp.getPath('userData'), 'desktop-runtime.log');
 
 interface ListenError extends Error {
   code?: string;
@@ -29,11 +31,44 @@ if (!hasSingleInstanceLock) {
 }
 
 electronApp.on('second-instance', () => {
+  writeDiagnosticLog('second-instance');
   if (!mainWindow) return;
   if (mainWindow.isMinimized()) {
     mainWindow.restore();
   }
   mainWindow.focus();
+});
+
+electronApp.on('child-process-gone', (_event, details) => {
+  writeDiagnosticLog('child-process-gone', details);
+});
+
+electronApp.on('render-process-gone', (_event, _webContents, details) => {
+  writeDiagnosticLog('app-render-process-gone', details);
+});
+
+function writeDiagnosticLog(message: string, details?: unknown): void {
+  try {
+    ensureDirectory(path.dirname(DIAGNOSTIC_LOG_FILE));
+    const suffix = details === undefined ? '' : ` ${JSON.stringify(details)}`;
+    fs.appendFileSync(DIAGNOSTIC_LOG_FILE, `[${new Date().toISOString()}] ${message}${suffix}\n`);
+  } catch {
+    // Diagnostics must never affect app startup.
+  }
+}
+
+process.on('uncaughtException', error => {
+  writeDiagnosticLog('uncaughtException', {
+    message: error.message,
+    stack: error.stack,
+  });
+  throw error;
+});
+
+process.on('unhandledRejection', reason => {
+  writeDiagnosticLog('unhandledRejection', {
+    reason: reason instanceof Error ? { message: reason.message, stack: reason.stack } : reason,
+  });
 });
 
 function ensureDirectory(targetPath: string): void {
@@ -127,8 +162,13 @@ async function createWindow(): Promise<void> {
   });
 
   await new Promise<void>((resolve, reject) => {
+    writeDiagnosticLog('server-listen-start', { port: DESKTOP_SERVER_PORT, dbPath });
     serverInstance = serverApp.listen(DESKTOP_SERVER_PORT, '127.0.0.1');
     serverInstance.once('error', error => {
+      writeDiagnosticLog('server-error', {
+        message: error instanceof Error ? error.message : String(error),
+        code: (error as ListenError).code,
+      });
       if ((error as ListenError).code === 'EADDRINUSE') {
         reject(
           new Error(
@@ -141,6 +181,7 @@ async function createWindow(): Promise<void> {
       reject(error);
     });
     serverInstance.once('listening', () => {
+      writeDiagnosticLog('server-listening', { port: DESKTOP_SERVER_PORT });
       const address = serverInstance?.address();
       if (!address || typeof address === 'string') {
         reject(new Error('Unable to determine local server port.'));
@@ -159,8 +200,19 @@ async function createWindow(): Promise<void> {
         },
       });
 
+      writeDiagnosticLog('browser-window-created');
+      mainWindow.webContents.on('render-process-gone', (_event, details) => {
+        writeDiagnosticLog('render-process-gone', details);
+      });
+      mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, url) => {
+        writeDiagnosticLog('did-fail-load', { errorCode, errorDescription, url });
+      });
+      mainWindow.on('close', () => {
+        writeDiagnosticLog('browser-window-close');
+      });
       void mainWindow.loadURL(`http://localhost:${DESKTOP_SERVER_PORT}`);
       mainWindow.on('closed', () => {
+        writeDiagnosticLog('browser-window-closed');
         mainWindow = null;
       });
 
@@ -172,12 +224,17 @@ async function createWindow(): Promise<void> {
 void electronApp.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return;
 
+  writeDiagnosticLog('app-ready');
   ensureConfig();
   registerIpcHandlers();
 
   try {
     await createWindow();
   } catch (err) {
+    writeDiagnosticLog('startup-failed', {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     dialog.showErrorBox(
       'Startup failed',
       `Unable to start Ad Fontes Manager:\n${err instanceof Error ? err.message : String(err)}`
@@ -195,7 +252,9 @@ electronApp.on('activate', () => {
 });
 
 electronApp.on('window-all-closed', () => {
+  writeDiagnosticLog('window-all-closed');
   if (serverInstance) {
+    writeDiagnosticLog('server-close-from-window-all-closed');
     serverInstance.close();
     serverInstance = null;
   }
@@ -206,7 +265,9 @@ electronApp.on('window-all-closed', () => {
 });
 
 electronApp.on('before-quit', () => {
+  writeDiagnosticLog('before-quit');
   if (serverInstance) {
+    writeDiagnosticLog('server-close-from-before-quit');
     serverInstance.close();
     serverInstance = null;
   }

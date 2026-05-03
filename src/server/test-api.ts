@@ -56,9 +56,9 @@ async function runTests(): Promise<void> {
       Array.isArray(local.data) ? `Array(${local.data.length})` : local.data
     );
 
-    const words = await testEndpoint('/api/words');
+    const words = await testEndpoint('/api/v2/words');
     console.log(
-      'OK /api/words:',
+      'OK /api/v2/words:',
       words.status,
       Array.isArray(words.data) ? `Array(${words.data.length})` : words.data
     );

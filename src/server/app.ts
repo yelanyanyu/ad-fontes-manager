@@ -117,7 +117,6 @@ export function createApp(options: CreateAppOptions): Express {
   app.use(httpLogger);
 
   app.use('/api', require('./routes/core'));
-  app.use('/api/words', require('./routes/wordsV2'));
   app.use('/api/v2/words', require('./routes/wordsV2'));
 
   if (options.isProduction && options.distDir) {

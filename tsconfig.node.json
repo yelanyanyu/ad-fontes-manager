@@ -17,6 +17,7 @@
     "src/server/**/*.ts",
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
+    "tests/**/*.ts",
     "vite.config.mts",
     "electron.vite.config.mts",
     "tailwind.config.ts",
