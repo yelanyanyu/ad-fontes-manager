@@ -25,21 +25,32 @@ Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持 YAML 
 
 ## 目录
 
-- [功能概览](#功能概览)
-- [环境要求](#环境要求)
-- [快速开始](#快速开始)
-- [构建](#构建)
-- [常用命令](#常用命令)
-- [文件目录说明](#文件目录说明)
-- [技术栈](#技术栈)
-- [数据库](#数据库)
-- [配置](#配置)
-- [部署](#部署)
-- [文档](#文档)
-- [贡献](#贡献)
-- [版本控制](#版本控制)
-- [版权说明](#版权说明)
-- [鸣谢](#鸣谢)
+- [Ad Fontes Manager](#ad-fontes-manager)
+  - [目录](#目录)
+  - [功能概览](#功能概览)
+  - [使用流程](#使用流程)
+    - [1. 生成词条 YAML](#1-生成词条-yaml)
+    - [2. 粘贴到 YAML 编辑器](#2-粘贴到-yaml-编辑器)
+    - [3. 保存到本地数据库](#3-保存到本地数据库)
+    - [4. 管理与导出](#4-管理与导出)
+  - [环境要求](#环境要求)
+  - [快速开始](#快速开始)
+    - [Web 开发模式](#web-开发模式)
+    - [桌面开发模式](#桌面开发模式)
+  - [构建](#构建)
+  - [常用命令](#常用命令)
+  - [文件目录说明](#文件目录说明)
+  - [技术栈](#技术栈)
+  - [数据库](#数据库)
+  - [配置](#配置)
+  - [部署](#部署)
+    - [Docker（Web 部署）](#dockerweb-部署)
+    - [桌面程序安装](#桌面程序安装)
+  - [文档](#文档)
+  - [贡献](#贡献)
+  - [版本控制](#版本控制)
+  - [版权说明](#版权说明)
+  - [鸣谢](#鸣谢)
 
 ## 功能概览
 
@@ -53,6 +64,59 @@ Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持 YAML 
 - 桌面模式下可自定义数据目录
 
 项目同时支持 **Web 应用** 和 **Windows / Mac 桌面程序**（Electron）两种运行模式，共享同一套后端和前端代码。
+
+## 使用流程
+
+### 1. 生成词条 YAML
+
+通过 [ad-fontes-prompts](https://github.com/yelanyanyu/ad-fontes-prompts)（搭配 LLM 的提示词工程工具）生成符合 Ad Fontes 规范的单词 YAML。例如，向 LLM 提交一个英语单词，得到如下结构化 YAML (下面的不全)：
+
+```yaml
+lemma: ephemeral
+language: en
+part_of_speech: adjective
+root_and_affixes:
+  etymology: Greek ἐφήμερος (ephēmeros) — epi (upon) + hēmera (day)
+  root: hēmer- (day)
+  affixes:
+    prefix: epi- (upon)
+    suffix: -al (adjectival)
+contextual_meaning:
+  en: lasting for a very short time
+  zh: 短暂的，转瞬即逝的
+morphology:
+  comparative: more ephemeral
+  superlative: most ephemeral
+historical_origins: ...
+visual_imagery_zh: ...
+collocations: ...
+example_sentences: ...
+```
+
+英语和德语词条遵循各自的 Schema 规范（详见 [docs/API.md](./docs/API.md)）。
+
+### 2. 粘贴到 YAML 编辑器
+
+将生成的 YAML 文本粘贴到左侧编辑面板。编辑器会在你输入时自动校验 —— 300ms 防抖后，语法错误和 Schema 不符的字段会以红色列表实时显示在底部。
+
+### 3. 保存到本地数据库
+
+点击编辑器上方的"保存"按钮将词条写入 SQLite 数据库。保存前系统会自动检测冲突：
+- **无冲突**：直接入库，`revision_count` 递增。
+- **有冲突**：弹出差异对比窗口，可选择覆盖已有记录或取消。
+
+数据库文件位置取决于运行模式：
+- Web：`./data/ad_fontes.db`
+- 桌面：`%APPDATA%/ad-fontes-manager/data/ad_fontes.db`（可在设置中自定义）
+
+### 4. 管理与导出
+
+入库后的词条可在右侧列表中搜索、排序、分页浏览。点击任一词条可重新编辑或预览其在 Anki 中的卡片效果。准备好后，可将其导入 Anki：
+
+- **单条导出**：在编辑器中点击"导出到 Anki"，选择 AnkiConnect 或下载 `.apkg` 文件。
+- **批量导出**：在词条列表中跨页勾选目标词条，一键批量检查重复并导入 Anki，任务在后台执行，不阻塞其他操作。
+
+---
 
 ## 环境要求
 
