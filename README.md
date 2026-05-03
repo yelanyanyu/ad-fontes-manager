@@ -258,7 +258,7 @@ docker compose --env-file .env.production up -d --force-recreate app
 
 ## 版权说明
 
-本项目采用 [MIT](./LICENSE) 许可证。
+本项目采用 [GNU Affero General Public License v3.0](./LICENSE) 许可证。个人和非商业用途可自由使用、修改和分发；商业用途（包括作为商业产品或服务的一部分提供）需另行授权。
 
 ## 鸣谢
 

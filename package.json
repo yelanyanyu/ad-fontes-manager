@@ -2,6 +2,7 @@
   "name": "ad-fontes-manager",
   "version": "1.0.0",
   "description": "Ad Fontes Manager web and desktop application",
+  "license": "AGPL-3.0-only",
   "main": "out/main/index.js",
   "scripts": {
     "dev:web": "concurrently \"npm run dev:server\" \"npm run dev:renderer\"",

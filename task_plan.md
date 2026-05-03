@@ -385,7 +385,7 @@ export default defineConfig({
 ```yaml
 appId: com.adfontes.manager
 productName: Ad Fontes Manager
-copyright: MIT
+copyright: AGPL-3.0-only
 
 directories:
   buildResources: assets
