@@ -55,6 +55,7 @@ config.yml.template
 *.tmp
 *.temp
 *.tsbuildinfo
+专利说明书.md
 
 # Local git worktrees
 *worktrees*
