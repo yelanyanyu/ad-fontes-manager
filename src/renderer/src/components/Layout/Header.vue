@@ -40,7 +40,7 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
   <header class="topbar">
     <div class="brand">
       <div class="brand-icon">
-        <img src="/logo.svg" alt="Logo" class="logo-img" />
+        <img src="/logo.png" alt="Logo" class="logo-img" />
       </div>
       <div class="brand-name">Etymos</div>
     </div>
@@ -137,8 +137,8 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
 }
 
 .brand-icon {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   color: var(--blue);
   display: grid;
   place-items: center;
@@ -149,9 +149,9 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
 }
 
 .logo-img {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
 }
 
 .brand-name {
