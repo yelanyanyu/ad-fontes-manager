@@ -22,7 +22,9 @@ Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持 YAML 
 
 ---
 
-<img width="2560" height="1410" alt="screenshot" src="https://github.com/user-attachments/assets/97ea07fc-f1be-455f-91a2-4360efde1634" />
+<img width="2499" height="1480" alt="image" src="https://github.com/user-attachments/assets/65db3247-275b-48c4-ab80-588e3c6bd6cd" />
+<img width="1919" height="948" alt="image" src="https://github.com/user-attachments/assets/c729ecfa-07c6-4bfa-a2e1-2b5e0c1ccddd" />
+
 
 ## 目录
 
