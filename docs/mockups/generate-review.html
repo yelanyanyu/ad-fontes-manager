@@ -4,18 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Etymos - 审核结果</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Raleway:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{heading:['Lora','Georgia','serif'],sans:['Raleway','system-ui','sans-serif']}}}};</script>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans antialiased">
+<body class="bg-stone-50 min-h-screen font-sans antialiased">
 
 <!-- Header -->
-<header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 flex-none">
+<header class="bg-white border-b border-emerald-100 h-16 flex items-center justify-between px-6 flex-none">
   <div class="flex items-center gap-3">
-    <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white font-bold text-sm">E</div>
+    <div class="w-8 h-8 rounded-xl bg-emerald-700 flex items-center justify-center text-white font-bold text-sm">E</div>
     <h1 class="font-bold text-slate-800 tracking-tight text-lg">Etymos</h1>
   </div>
   <div class="flex items-center gap-3">
-    <span class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+    <span class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
       <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
       全部完成 · 3/3
     </span>
@@ -24,31 +28,31 @@
 
 <div class="flex h-[calc(100vh-64px)]">
   <!-- Sidebar -->
-  <aside class="w-56 bg-slate-900 text-slate-300 flex flex-col flex-none">
+  <aside class="w-56 bg-emerald-950 text-emerald-200 flex flex-col flex-none">
     <nav class="flex-1 px-3 py-4 space-y-1">
-      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors">Words</a>
-      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm bg-slate-800 text-white transition-colors">Generate</a>
-      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors opacity-50">Phrases</a>
-      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors">Settings</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-emerald-800/40 transition-colors">Words</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm bg-emerald-700 text-white transition-colors">Generate</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-emerald-800/40 transition-colors opacity-50">Phrases</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-emerald-800/40 transition-colors">Settings</a>
     </nav>
   </aside>
 
-  <!-- Main -->
-  <main class="flex-1 overflow-hidden flex flex-col">
-    <!-- Top half: Summary bar + Table (scrollable) -->
-    <div class="flex-1 overflow-y-auto px-6 py-6 space-y-4">
+  <!-- Main + Right Panel -->
+  <div class="flex-1 flex overflow-hidden">
+    <!-- Main: Table area -->
+    <div class="flex-1 overflow-y-auto px-6 py-6 space-y-4 min-w-0">
       <!-- Summary bar -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 max-w-5xl mx-auto w-full">
+      <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm p-5">
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-base font-semibold text-slate-800">生成结果</h2>
-            <p class="text-sm text-slate-500 mt-0.5">English · 3 个单词 · 单次生成模式</p>
+            <p class="text-sm text-stone-500 mt-0.5">English · 3 个单词 · 单次生成模式</p>
           </div>
           <div class="flex items-center gap-3">
-            <button class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
+            <button class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-emerald-100 rounded-xl hover:bg-emerald-50 transition-colors">
               导出全部 JSON
             </button>
-            <button class="px-5 py-2 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors">
+            <button class="px-5 py-2 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-600 transition-colors">
               保存全部到词库
             </button>
           </div>
@@ -56,31 +60,31 @@
       </div>
 
       <!-- Review Table -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden max-w-5xl mx-auto w-full">
+      <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm overflow-hidden">
         <table class="w-full text-sm">
           <thead>
-            <tr class="border-b border-slate-200 bg-slate-50 text-left">
-              <th class="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">单词</th>
-              <th class="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">词性</th>
-              <th class="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">格式</th>
-              <th class="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 text-center">视觉</th>
-              <th class="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 text-center">演变</th>
-              <th class="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 text-center">辨析</th>
-              <th class="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-16 text-center">总评</th>
-              <th class="px-5 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">操作</th>
+            <tr class="border-b border-emerald-100 bg-stone-50 text-left">
+              <th class="px-5 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">单词</th>
+              <th class="px-5 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">词性</th>
+              <th class="px-5 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider">格式</th>
+              <th class="px-5 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider w-16 text-center">视觉</th>
+              <th class="px-5 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider w-16 text-center">演变</th>
+              <th class="px-5 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider w-16 text-center">辨析</th>
+              <th class="px-5 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider w-16 text-center">总评</th>
+              <th class="px-5 py-3 text-xs font-semibold text-stone-500 uppercase tracking-wider text-right">操作</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-100">
-            <!-- Row 1: high quality, selected -->
+          <tbody class="divide-y divide-emerald-100">
+            <!-- Row 1: selected, detail open -->
             <tr class="bg-blue-50/50 transition-colors ring-1 ring-inset ring-blue-200">
               <td class="px-5 py-3.5">
                 <div class="flex items-center gap-2.5">
-                  <input type="checkbox" checked class="rounded border-slate-300 text-slate-700 focus:ring-slate-400">
+                  <input type="checkbox" checked class="rounded border-emerald-300 text-slate-700 focus:ring-emerald-400">
                   <span class="font-medium text-slate-800">apple</span>
-                  <span class="text-xs text-blue-500 font-medium ml-auto">已选中</span>
+                  <span class="text-xs text-blue-500 font-medium ml-auto">详情已展开</span>
                 </div>
               </td>
-              <td class="px-5 py-3.5 text-slate-500">noun</td>
+              <td class="px-5 py-3.5 text-stone-500">noun</td>
               <td class="px-5 py-3.5">
                 <span class="inline-flex items-center gap-1 text-xs text-emerald-600">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
@@ -102,22 +106,22 @@
               <td class="px-5 py-3.5 text-right">
                 <div class="flex items-center justify-end gap-1.5">
                   <button class="px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors font-medium">详情</button>
-                  <button class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors">重新生成全部</button>
-                  <button class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors">预览</button>
-                  <button class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors">删除</button>
+                  <button class="px-2.5 py-1.5 text-xs text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors">重新生成全部</button>
+                  <button class="px-2.5 py-1.5 text-xs text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors">预览</button>
+                  <button class="px-2.5 py-1.5 text-xs text-stone-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors">删除</button>
                 </div>
               </td>
             </tr>
 
-            <!-- Row 2: borderline quality (not selected) -->
-            <tr class="hover:bg-slate-50/50 transition-colors">
+            <!-- Row 2 -->
+            <tr class="hover:bg-emerald-50/30 transition-colors">
               <td class="px-5 py-3.5">
                 <div class="flex items-center gap-2.5">
-                  <input type="checkbox" checked class="rounded border-slate-300 text-slate-700 focus:ring-slate-400">
+                  <input type="checkbox" checked class="rounded border-emerald-300 text-slate-700 focus:ring-emerald-400">
                   <span class="font-medium text-slate-800">serendipity</span>
                 </div>
               </td>
-              <td class="px-5 py-3.5 text-slate-500">noun</td>
+              <td class="px-5 py-3.5 text-stone-500">noun</td>
               <td class="px-5 py-3.5">
                 <span class="inline-flex items-center gap-1 text-xs text-amber-600">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
@@ -139,22 +143,22 @@
               <td class="px-5 py-3.5 text-right">
                 <div class="flex items-center justify-end gap-1.5">
                   <button class="px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors font-medium">详情</button>
-                  <button class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors">重新生成全部</button>
-                  <button class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors">预览</button>
-                  <button class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors">删除</button>
+                  <button class="px-2.5 py-1.5 text-xs text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors">重新生成全部</button>
+                  <button class="px-2.5 py-1.5 text-xs text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors">预览</button>
+                  <button class="px-2.5 py-1.5 text-xs text-stone-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors">删除</button>
                 </div>
               </td>
             </tr>
 
-            <!-- Row 3: excellent quality (not selected) -->
-            <tr class="hover:bg-slate-50/50 transition-colors">
+            <!-- Row 3 -->
+            <tr class="hover:bg-emerald-50/30 transition-colors">
               <td class="px-5 py-3.5">
                 <div class="flex items-center gap-2.5">
-                  <input type="checkbox" checked class="rounded border-slate-300 text-slate-700 focus:ring-slate-400">
+                  <input type="checkbox" checked class="rounded border-emerald-300 text-slate-700 focus:ring-emerald-400">
                   <span class="font-medium text-slate-800">ephemeral</span>
                 </div>
               </td>
-              <td class="px-5 py-3.5 text-slate-500">adjective</td>
+              <td class="px-5 py-3.5 text-stone-500">adjective</td>
               <td class="px-5 py-3.5">
                 <span class="inline-flex items-center gap-1 text-xs text-emerald-600">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
@@ -176,9 +180,9 @@
               <td class="px-5 py-3.5 text-right">
                 <div class="flex items-center justify-end gap-1.5">
                   <button class="px-2.5 py-1.5 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors font-medium">详情</button>
-                  <button class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors">重新生成全部</button>
-                  <button class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded transition-colors">预览</button>
-                  <button class="px-2.5 py-1.5 text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors">删除</button>
+                  <button class="px-2.5 py-1.5 text-xs text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors">重新生成全部</button>
+                  <button class="px-2.5 py-1.5 text-xs text-stone-500 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors">预览</button>
+                  <button class="px-2.5 py-1.5 text-xs text-stone-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors">删除</button>
                 </div>
               </td>
             </tr>
@@ -187,51 +191,50 @@
       </div>
     </div>
 
-    <!-- Bottom half: Detail panel for selected word (apple) -->
-    <div class="border-t border-slate-200 bg-white h-[45%] flex-none overflow-hidden">
-      <div class="flex items-center justify-between px-6 py-3 border-b border-slate-100 bg-slate-50/50">
-        <div class="flex items-center gap-4">
+    <!-- Right Panel: Word Detail (collapsible, shown expanded) -->
+    <div class="w-[480px] border-l border-emerald-100 bg-white flex flex-col overflow-hidden flex-none">
+      <!-- Panel header -->
+      <div class="flex items-center justify-between px-5 py-3 border-b border-emerald-50 bg-emerald-50/30 flex-none">
+        <div class="flex items-center gap-3">
+          <button class="p-1 rounded hover:bg-emerald-100 transition-colors text-stone-400 hover:text-stone-600" title="收起面板">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5"/></svg>
+          </button>
           <h3 class="text-sm font-semibold text-slate-800">
-            apple <span class="font-normal text-slate-400 text-xs ml-1">· noun · 评分 8.3</span>
+            apple <span class="font-normal text-stone-400 text-xs ml-1">· noun · 评分 8.3</span>
           </h3>
         </div>
         <div class="flex items-center gap-2">
-          <button class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 transition-colors">
-            忽略，直接保存此单词
-          </button>
-          <button class="px-3 py-1.5 text-xs font-medium text-white bg-slate-800 rounded hover:bg-slate-700 transition-colors">
+          <button class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-emerald-100 rounded hover:bg-emerald-50 transition-colors">
             保存此单词
+          </button>
+          <button class="p-1 rounded hover:bg-emerald-100 transition-colors text-stone-400 hover:text-stone-600" title="关闭面板">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
       </div>
 
-      <!-- Detail content: YAML editor + field reviews side by side -->
-      <div class="flex h-[calc(100%-44px)]">
-        <!-- Left: YAML Editor -->
-        <div class="w-1/2 border-r border-slate-100 flex flex-col">
-          <div class="px-4 py-2 border-b border-slate-50 flex items-center justify-between">
-            <span class="text-xs font-medium text-slate-500">YAML 原文（可手动编辑）</span>
+      <!-- Panel body: YAML editor + field reviews stacked vertically -->
+      <div class="flex-1 overflow-y-auto flex flex-col">
+        <!-- YAML Editor -->
+        <div class="flex flex-col border-b border-emerald-50 flex-none" style="height: 55%">
+          <div class="px-4 py-2 flex items-center justify-between bg-white border-b border-emerald-50/50">
+            <span class="text-xs font-medium text-stone-500">YAML 原文（可手动编辑）</span>
             <span class="text-xs text-emerald-500">格式正确</span>
           </div>
           <textarea class="flex-1 p-4 text-xs font-mono text-slate-700 resize-none focus:outline-none bg-white leading-relaxed">yield:
   user_word: "apple"
   lemma: "apple"
   syllabification: "ap-ple"
-  user_context_sentence: "I ate a juicy apple while reading under the tree."
   part_of_speech: "noun"
   contextual_meaning:
     en: "A round fruit with firm white flesh and red, green, or yellow skin"
     zh: "苹果"
-  other_common_meanings:
-    - "The tree which bears apples (Malus domestica)"
-    - "Something that resembles an apple, esp. the eye's pupil"
 
 etymology:
   root_and_affixes:
     prefix: ""
     root: "apple"
     suffix: ""
-    structure_analysis: "Single morpheme; borrowed into Old English from ...
   historical_origins:
     history_myth: "The apple appears widely in Indo-European mythology..."
     source_word: "OE appel (fruit, apple tree, eyeball)"
@@ -242,10 +245,12 @@ etymology:
     从指称具体的野苹果果实，到泛指任何圆形水果...</textarea>
         </div>
 
-        <!-- Right: Field Reviews -->
-        <div class="w-1/2 flex flex-col overflow-y-auto p-4 space-y-3">
-          <!-- Field: visual_imagery_zh -->
-          <div class="p-3 rounded-lg border border-amber-100 bg-amber-50/50">
+        <!-- Field Reviews -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-3">
+          <span class="text-xs font-medium text-stone-500">逐字段评分</span>
+
+          <!-- visual_imagery_zh (failed) -->
+          <div class="p-3 rounded-xl border border-amber-100 bg-amber-50/50">
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm font-medium text-slate-700">visual_imagery_zh</span>
               <div class="flex items-center gap-2">
@@ -268,16 +273,16 @@ etymology:
               </li>
             </ul>
             <div class="mt-2 flex items-center gap-2">
-              <input type="text" placeholder="修改意见（可选）" class="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-300">
-              <button class="px-2.5 py-1.5 text-xs font-medium text-white bg-slate-700 rounded hover:bg-slate-600 transition-colors flex items-center gap-1 whitespace-nowrap">
+              <input type="text" placeholder="修改意见（可选）" class="flex-1 px-2.5 py-1.5 text-xs border border-emerald-100 rounded focus:outline-none focus:ring-1 focus:ring-emerald-300">
+              <button class="px-2.5 py-1.5 text-xs font-medium text-white bg-emerald-600 rounded hover:bg-emerald-500 transition-colors flex items-center gap-1 whitespace-nowrap">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"/></svg>
                 AI 重生成并重新审核
               </button>
             </div>
           </div>
 
-          <!-- Field: meaning_evolution_zh -->
-          <div class="p-3 rounded-lg border border-emerald-100 bg-emerald-50/50">
+          <!-- meaning_evolution_zh (passed) -->
+          <div class="p-3 rounded-xl border border-emerald-100 bg-emerald-50/50">
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm font-medium text-slate-700">meaning_evolution_zh</span>
               <div class="flex items-center gap-2">
@@ -285,21 +290,18 @@ etymology:
                 <span class="text-xs text-emerald-600 font-medium">达标</span>
               </div>
             </div>
-            <p class="text-xs text-emerald-600 flex items-start gap-1.5">
-              <span class="mt-0.5">·</span>
-              <span>演变路径清晰，从具体到抽象的逻辑链完整</span>
-            </p>
+            <p class="text-xs text-emerald-600">演变路径清晰，从具体到抽象的逻辑链完整。</p>
             <div class="mt-2 flex items-center gap-2">
-              <input type="text" placeholder="修改意见（可选）" class="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-300">
-              <button class="px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 transition-colors flex items-center gap-1 whitespace-nowrap">
+              <input type="text" placeholder="修改意见（可选）" class="flex-1 px-2.5 py-1.5 text-xs border border-emerald-100 rounded focus:outline-none focus:ring-1 focus:ring-emerald-300">
+              <button class="px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-emerald-100 rounded hover:bg-emerald-50 transition-colors flex items-center gap-1 whitespace-nowrap">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"/></svg>
                 AI 重生成并重新审核
               </button>
             </div>
           </div>
 
-          <!-- Field: image_differentiation_zh -->
-          <div class="p-3 rounded-lg border border-emerald-100 bg-emerald-50/50">
+          <!-- image_differentiation_zh (passed) -->
+          <div class="p-3 rounded-xl border border-emerald-100 bg-emerald-50/50">
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm font-medium text-slate-700">image_differentiation_zh</span>
               <div class="flex items-center gap-2">
@@ -309,8 +311,8 @@ etymology:
             </div>
             <p class="text-xs text-emerald-600">同义词辨析到位，动作焦点区分清晰。</p>
             <div class="mt-2 flex items-center gap-2">
-              <input type="text" placeholder="修改意见（可选）" class="flex-1 px-2.5 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-300">
-              <button class="px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded hover:bg-slate-50 transition-colors flex items-center gap-1 whitespace-nowrap">
+              <input type="text" placeholder="修改意见（可选）" class="flex-1 px-2.5 py-1.5 text-xs border border-emerald-100 rounded focus:outline-none focus:ring-1 focus:ring-emerald-300">
+              <button class="px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-white border border-emerald-100 rounded hover:bg-emerald-50 transition-colors flex items-center gap-1 whitespace-nowrap">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182"/></svg>
                 AI 重生成并重新审核
               </button>
@@ -319,7 +321,7 @@ etymology:
         </div>
       </div>
     </div>
-  </main>
+  </div>
 </div>
 
 </body>

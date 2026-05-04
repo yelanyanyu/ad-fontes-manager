@@ -4,26 +4,30 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Etymos - AI 配置</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Raleway:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{heading:['Lora','Georgia','serif'],sans:['Raleway','system-ui','sans-serif']}}}};</script>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans antialiased">
+<body class="bg-stone-50 min-h-screen font-sans antialiased">
 
 <!-- Header -->
-<header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 flex-none">
+<header class="bg-white border-b border-emerald-100 h-16 flex items-center justify-between px-6 flex-none">
   <div class="flex items-center gap-3">
-    <div class="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-white font-bold text-sm">E</div>
+    <div class="w-8 h-8 rounded-xl bg-emerald-700 flex items-center justify-center text-white font-bold text-sm">E</div>
     <h1 class="font-bold text-slate-800 tracking-tight text-lg">Etymos</h1>
   </div>
 </header>
 
 <div class="flex h-[calc(100vh-64px)]">
   <!-- Sidebar -->
-  <aside class="w-56 bg-slate-900 text-slate-300 flex flex-col flex-none">
+  <aside class="w-56 bg-emerald-950 text-emerald-200 flex flex-col flex-none">
     <nav class="flex-1 px-3 py-4 space-y-1">
-      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors">Words</a>
-      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors">Generate</a>
-      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800 transition-colors opacity-50">Phrases</a>
-      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm bg-slate-800 text-white transition-colors">Settings</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-emerald-800/40 transition-colors">Words</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-emerald-800/40 transition-colors">Generate</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm hover:bg-emerald-800/40 transition-colors opacity-50">Phrases</a>
+      <a href="#" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm bg-emerald-700 text-white transition-colors">Settings</a>
     </nav>
   </aside>
 
@@ -34,163 +38,163 @@
       <h2 class="text-lg font-bold text-slate-800">设置</h2>
 
       <!-- Section: Custom Providers -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm p-6">
         <div class="flex items-center justify-between mb-1">
           <div>
             <h3 class="text-base font-semibold text-slate-800">AI 供应商</h3>
-            <p class="text-sm text-slate-400 mt-1 mb-5">管理自定义的 LLM 供应商平台。支持 OpenAI 兼容、Anthropic 及 Google 三种 API 格式。</p>
+            <p class="text-sm text-stone-400 mt-1 mb-5">管理自定义的 LLM 供应商平台。支持 OpenAI 兼容、Anthropic 及 Google 三种 API 格式。</p>
           </div>
-          <button class="px-3 py-1.5 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5">
+          <button class="px-3 py-1.5 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-600 transition-colors flex items-center gap-1.5">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
             添加供应商
           </button>
         </div>
 
         <!-- Provider Card 1: DeepSeek -->
-        <div class="mt-4 p-4 rounded-lg border border-slate-200 bg-slate-50/50">
+        <div class="mt-4 p-4 rounded-xl border border-emerald-100 bg-emerald-50/30">
           <div class="flex items-start justify-between mb-3">
             <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs">DS</div>
+              <div class="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs">DS</div>
               <div>
                 <span class="text-sm font-semibold text-slate-800">DeepSeek</span>
-                <span class="text-xs text-slate-400 ml-2">api.deepseek.com</span>
+                <span class="text-xs text-stone-400 ml-2">api.deepseek.com</span>
               </div>
             </div>
             <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-emerald-400" title="已配置"></span>
-              <button class="text-xs text-slate-400 hover:text-slate-600 px-1.5 py-1 rounded hover:bg-slate-100 transition-colors">编辑</button>
+              <button class="text-xs text-stone-400 hover:text-emerald-600 px-1.5 py-1 rounded hover:bg-emerald-50 transition-colors">编辑</button>
               <button class="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50 transition-colors">删除</button>
             </div>
           </div>
           <div class="grid grid-cols-12 gap-3 text-xs">
             <div class="col-span-3">
-              <span class="text-slate-400">API 格式</span>
+              <span class="text-stone-400">API 格式</span>
               <div class="flex gap-1 mt-0.5">
                 <span class="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 font-medium">OpenAI</span>
               </div>
             </div>
             <div class="col-span-3">
-              <span class="text-slate-400">API Key</span>
+              <span class="text-stone-400">API Key</span>
               <p class="font-mono mt-0.5 text-slate-600">sk-••••••••••••</p>
             </div>
             <div class="col-span-6">
-              <span class="text-slate-400">模型</span>
+              <span class="text-stone-400">模型</span>
               <div class="flex flex-wrap gap-1 mt-0.5">
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">deepseek-chat (DeepSeek-V3)</span>
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">deepseek-reasoner (DeepSeek-R1)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">deepseek-chat (DeepSeek-V3)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">deepseek-reasoner (DeepSeek-R1)</span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Provider Card 2: OpenAI -->
-        <div class="mt-3 p-4 rounded-lg border border-slate-200 bg-slate-50/50">
+        <div class="mt-3 p-4 rounded-xl border border-emerald-100 bg-emerald-50/30">
           <div class="flex items-start justify-between mb-3">
             <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-xs">OA</div>
+              <div class="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 font-bold text-xs">OA</div>
               <div>
                 <span class="text-sm font-semibold text-slate-800">OpenAI</span>
-                <span class="text-xs text-slate-400 ml-2">api.openai.com</span>
+                <span class="text-xs text-stone-400 ml-2">api.openai.com</span>
               </div>
             </div>
             <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-emerald-400" title="已配置"></span>
-              <button class="text-xs text-slate-400 hover:text-slate-600 px-1.5 py-1 rounded hover:bg-slate-100 transition-colors">编辑</button>
+              <button class="text-xs text-stone-400 hover:text-emerald-600 px-1.5 py-1 rounded hover:bg-emerald-50 transition-colors">编辑</button>
               <button class="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50 transition-colors">删除</button>
             </div>
           </div>
           <div class="grid grid-cols-12 gap-3 text-xs">
             <div class="col-span-3">
-              <span class="text-slate-400">API 格式</span>
+              <span class="text-stone-400">API 格式</span>
               <div class="flex gap-1 mt-0.5">
                 <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 font-medium">OpenAI</span>
               </div>
             </div>
             <div class="col-span-3">
-              <span class="text-slate-400">API Key</span>
+              <span class="text-stone-400">API Key</span>
               <p class="font-mono mt-0.5 text-slate-600">sk-••••••••••••</p>
             </div>
             <div class="col-span-6">
-              <span class="text-slate-400">模型</span>
+              <span class="text-stone-400">模型</span>
               <div class="flex flex-wrap gap-1 mt-0.5">
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">gpt-5-mini (GPT-5 Mini)</span>
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">gpt-5 (GPT-5)</span>
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">gpt-5.1 (GPT-5.1)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">gpt-5-mini (GPT-5 Mini)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">gpt-5 (GPT-5)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">gpt-5.1 (GPT-5.1)</span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Provider Card 3: Anthropic -->
-        <div class="mt-3 p-4 rounded-lg border border-slate-200 bg-slate-50/50">
+        <div class="mt-3 p-4 rounded-xl border border-emerald-100 bg-emerald-50/30">
           <div class="flex items-start justify-between mb-3">
             <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center text-amber-600 font-bold text-xs">AN</div>
+              <div class="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center text-amber-600 font-bold text-xs">AN</div>
               <div>
                 <span class="text-sm font-semibold text-slate-800">Anthropic</span>
-                <span class="text-xs text-slate-400 ml-2">api.anthropic.com</span>
+                <span class="text-xs text-stone-400 ml-2">api.anthropic.com</span>
               </div>
             </div>
             <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-emerald-400" title="已配置"></span>
-              <button class="text-xs text-slate-400 hover:text-slate-600 px-1.5 py-1 rounded hover:bg-slate-100 transition-colors">编辑</button>
+              <button class="text-xs text-stone-400 hover:text-emerald-600 px-1.5 py-1 rounded hover:bg-emerald-50 transition-colors">编辑</button>
               <button class="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50 transition-colors">删除</button>
             </div>
           </div>
           <div class="grid grid-cols-12 gap-3 text-xs">
             <div class="col-span-3">
-              <span class="text-slate-400">API 格式</span>
+              <span class="text-stone-400">API 格式</span>
               <div class="flex gap-1 mt-0.5">
                 <span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">Anthropic</span>
               </div>
             </div>
             <div class="col-span-3">
-              <span class="text-slate-400">API Key</span>
+              <span class="text-stone-400">API Key</span>
               <p class="font-mono mt-0.5 text-slate-600">sk-ant-••••••••••••</p>
             </div>
             <div class="col-span-6">
-              <span class="text-slate-400">模型</span>
+              <span class="text-stone-400">模型</span>
               <div class="flex flex-wrap gap-1 mt-0.5">
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">claude-sonnet-4-20250514 (Claude Sonnet 4)</span>
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">claude-haiku-4-5-20251001 (Claude Haiku 4.5)</span>
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">claude-opus-4-7 (Claude Opus 4.7)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">claude-sonnet-4-20250514 (Claude Sonnet 4)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">claude-haiku-4-5-20251001 (Claude Haiku 4.5)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">claude-opus-4-7 (Claude Opus 4.7)</span>
               </div>
             </div>
           </div>
         </div>
 
         <!-- Provider Card 4: aihubmix (third-party) -->
-        <div class="mt-3 p-4 rounded-lg border border-slate-200 bg-slate-50/50">
+        <div class="mt-3 p-4 rounded-xl border border-emerald-100 bg-emerald-50/30">
           <div class="flex items-start justify-between mb-3">
             <div class="flex items-center gap-3">
-              <div class="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-xs">AH</div>
+              <div class="w-8 h-8 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-xs">AH</div>
               <div>
                 <span class="text-sm font-semibold text-slate-800">aihubmix.com</span>
-                <span class="text-xs text-slate-400 ml-2">aihubmix.com</span>
+                <span class="text-xs text-stone-400 ml-2">aihubmix.com</span>
               </div>
             </div>
             <div class="flex items-center gap-1.5">
               <span class="w-2 h-2 rounded-full bg-emerald-400" title="已配置"></span>
-              <button class="text-xs text-slate-400 hover:text-slate-600 px-1.5 py-1 rounded hover:bg-slate-100 transition-colors">编辑</button>
+              <button class="text-xs text-stone-400 hover:text-emerald-600 px-1.5 py-1 rounded hover:bg-emerald-50 transition-colors">编辑</button>
               <button class="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50 transition-colors">删除</button>
             </div>
           </div>
           <div class="grid grid-cols-12 gap-3 text-xs">
             <div class="col-span-3">
-              <span class="text-slate-400">API 格式</span>
+              <span class="text-stone-400">API 格式</span>
               <div class="flex gap-1 mt-0.5">
                 <span class="px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 font-medium">OpenAI</span>
               </div>
             </div>
             <div class="col-span-3">
-              <span class="text-slate-400">API Key</span>
+              <span class="text-stone-400">API Key</span>
               <p class="font-mono mt-0.5 text-slate-600">sk-••••••••••••</p>
             </div>
             <div class="col-span-6">
-              <span class="text-slate-400">模型</span>
+              <span class="text-stone-400">模型</span>
               <div class="flex flex-wrap gap-1 mt-0.5">
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">gpt-5 (GPT-5 via aihubmix)</span>
-                <span class="px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 text-xs">claude-sonnet-4-20250514 (Claude Sonnet 4 via aihubmix)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">gpt-5 (GPT-5 via aihubmix)</span>
+                <span class="px-1.5 py-0.5 rounded bg-white border border-emerald-100 text-slate-600 text-xs">claude-sonnet-4-20250514 (Claude Sonnet 4 via aihubmix)</span>
               </div>
             </div>
           </div>
@@ -198,57 +202,69 @@
       </div>
 
       <!-- Section: Search Tool -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm p-6">
         <h3 class="text-base font-semibold text-slate-800 mb-1">搜索工具</h3>
-        <p class="text-sm text-slate-400 mb-5">用于词源搜索阶段。LLM 通过 tool call 调用搜索 + 抓取页面。域名配置按语言分组，提供合理的默认值。</p>
+        <p class="text-sm text-stone-400 mb-5">用于词源搜索阶段。LLM 通过 tool call 调用搜索 + 抓取页面。域名配置按语言分组，提供合理的默认值。</p>
 
         <div class="space-y-4">
           <div class="flex items-center gap-4">
             <label class="w-28 text-sm font-medium text-slate-600 flex-none">搜索 Provider</label>
-            <select class="max-w-xs px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300">
+            <select class="max-w-xs px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-stone-50 focus:outline-none focus:ring-2 focus:ring-emerald-300">
               <option selected>Brave Search</option>
               <option>Tavily</option>
             </select>
           </div>
           <div class="flex items-center gap-4">
             <label class="w-28 text-sm font-medium text-slate-600 flex-none">API Key</label>
-            <input type="password" value="BSA-••••••••••••••••" class="max-w-xs px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 font-mono">
+            <input type="password" value="BSA-••••••••••••••••" class="max-w-xs px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-stone-50 focus:outline-none focus:ring-2 focus:ring-emerald-300 font-mono">
             <span class="w-2 h-2 rounded-full bg-emerald-400 flex-none" title="已配置"></span>
+          </div>
+
+          <!-- Auto domains toggle -->
+          <div class="flex items-center gap-4">
+            <label class="w-28 text-sm font-medium text-slate-600 flex-none">搜索范围</label>
+            <label class="flex items-center gap-3 px-3 py-2 rounded-xl border border-emerald-100 cursor-pointer hover:bg-emerald-50 transition-colors">
+              <input type="checkbox" class="rounded border-emerald-300 text-slate-700 focus:ring-emerald-400">
+              <div>
+                <div class="text-sm font-medium text-slate-800">LLM 自动决定搜索网站</div>
+                <div class="text-xs text-stone-400">开启后不限定域名，由 LLM 自行判断搜索哪些网站。灵活性更高，但 token 消耗更大。</div>
+              </div>
+            </label>
           </div>
 
           <!-- Per-language domain tabs -->
           <div>
             <label class="w-28 text-sm font-medium text-slate-600 mb-2 block">搜索域名（按语言配置）</label>
             <!-- Tab bar -->
-            <div class="flex border-b border-slate-200 mb-3">
-              <button class="px-4 py-2 text-xs font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 hover:border-slate-300 transition-colors">全部</button>
-              <button class="px-4 py-2 text-xs font-medium text-slate-800 border-b-2 border-slate-800 transition-colors">English</button>
-              <button class="px-4 py-2 text-xs font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 hover:border-slate-300 transition-colors">Deutsch</button>
-              <button class="px-4 py-2 text-xs font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 hover:border-slate-300 transition-colors">Français</button>
-              <button class="px-4 py-2 text-xs font-medium text-slate-500 border-b-2 border-transparent hover:text-slate-700 hover:border-slate-300 transition-colors">Latina</button>
+            <div class="flex border-b border-emerald-100 mb-3">
+              <button class="px-4 py-2 text-xs font-medium text-stone-500 border-b-2 border-transparent hover:text-emerald-700 hover:border-emerald-300 transition-colors">全部</button>
+              <button class="px-4 py-2 text-xs font-medium text-slate-800 border-b-2 border-emerald-700 transition-colors">English</button>
+              <button class="px-4 py-2 text-xs font-medium text-stone-500 border-b-2 border-transparent hover:text-emerald-700 hover:border-emerald-300 transition-colors">Deutsch</button>
+              <button class="px-4 py-2 text-xs font-medium text-stone-500 border-b-2 border-transparent hover:text-emerald-700 hover:border-emerald-300 transition-colors">Français</button>
+              <button class="px-4 py-2 text-xs font-medium text-stone-500 border-b-2 border-transparent hover:text-emerald-700 hover:border-emerald-300 transition-colors">Latina</button>
             </div>
             <!-- English domains -->
             <div class="flex flex-col gap-2">
               <div class="flex items-center gap-2">
-                <span class="text-xs text-slate-400 w-16">English</span>
+                <span class="text-xs text-stone-400 w-16">English</span>
                 <div class="flex flex-wrap gap-1.5">
-                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-slate-100 text-slate-600 border border-slate-200">
+                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-emerald-50 text-slate-600 border border-emerald-100">
                     etymonline.com
-                    <button class="text-slate-400 hover:text-slate-600">&times;</button>
+                    <button class="text-stone-400 hover:text-emerald-600">&times;</button>
                   </span>
-                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-slate-100 text-slate-600 border border-slate-200">
+                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-emerald-50 text-slate-600 border border-emerald-100">
                     oed.com
-                    <button class="text-slate-400 hover:text-slate-600">&times;</button>
+                    <button class="text-stone-400 hover:text-emerald-600">&times;</button>
                   </span>
-                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-slate-100 text-slate-600 border border-slate-200">
+                  <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-emerald-50 text-slate-600 border border-emerald-100">
                     merriam-webster.com
-                    <button class="text-slate-400 hover:text-slate-600">&times;</button>
+                    <button class="text-stone-400 hover:text-emerald-600">&times;</button>
                   </span>
-                  <button class="px-2 py-1 text-xs text-slate-400 hover:text-slate-600 border border-dashed border-slate-300 rounded-full hover:border-slate-400 transition-colors">+ 添加</button>
+                  <button class="px-2 py-1 text-xs text-stone-400 hover:text-emerald-600 border border-dashed border-emerald-300 rounded-full hover:border-emerald-400 transition-colors">+ 添加</button>
                 </div>
               </div>
               <div class="flex items-center gap-2">
-                <span class="text-xs text-slate-400 w-16">通用</span>
+                <span class="text-xs text-stone-400 w-16">通用</span>
                 <div class="flex flex-wrap gap-1.5">
                   <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs bg-indigo-50 text-indigo-600 border border-indigo-200">
                     en.wiktionary.org
@@ -258,34 +274,34 @@
                     zh.wiktionary.org
                     <button class="text-indigo-400 hover:text-indigo-600">&times;</button>
                   </span>
-                  <button class="px-2 py-1 text-xs text-slate-400 hover:text-slate-600 border border-dashed border-slate-300 rounded-full hover:border-slate-400 transition-colors">+ 添加</button>
+                  <button class="px-2 py-1 text-xs text-stone-400 hover:text-emerald-600 border border-dashed border-emerald-300 rounded-full hover:border-emerald-400 transition-colors">+ 添加</button>
                 </div>
               </div>
             </div>
-            <p class="text-xs text-slate-400 mt-2">通用域名对所有语言生效。搜索时合并 通用 + 当前语言 的域名列表。未配置的语言仅使用通用域名。</p>
+            <p class="text-xs text-stone-400 mt-2">通用域名对所有语言生效。搜索时合并 通用 + 当前语言 的域名列表。未配置的语言仅使用通用域名。</p>
           </div>
         </div>
       </div>
 
       <!-- Section: Pipeline Stages -->
-      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+      <div class="bg-white rounded-2xl border border-emerald-100 shadow-sm p-6">
         <h3 class="text-base font-semibold text-slate-800 mb-1">流水线阶段配置</h3>
-        <p class="text-sm text-slate-400 mb-5">每个阶段可指定不同的供应商和模型，达到节省花费的目的。</p>
+        <p class="text-sm text-stone-400 mb-5">每个阶段可指定不同的供应商和模型，达到节省花费的目的。</p>
 
         <div class="space-y-5">
           <!-- Stage: Pass 1 (search + structural) -->
-          <div class="p-4 rounded-lg border border-slate-200 bg-slate-50/50">
+          <div class="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30">
             <div class="flex items-center justify-between mb-3">
               <div>
                 <span class="text-sm font-semibold text-slate-800">Pass 1: 搜索 + 结构生成</span>
-                <p class="text-xs text-slate-400 mt-0.5">搜索词源网站、总结结果、生成 yield / morphology / historical_origins 等结构性字段</p>
+                <p class="text-xs text-stone-400 mt-0.5">搜索词源网站、总结结果、生成 yield / morphology / historical_origins 等结构性字段</p>
               </div>
-              <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">需要 tool call</span>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-stone-500 font-medium">需要 tool call</span>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs text-slate-500 mb-1">供应商</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">供应商</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option selected>Anthropic</option>
                   <option>OpenAI</option>
@@ -294,31 +310,31 @@
                 </select>
               </div>
               <div>
-                <label class="block text-xs text-slate-500 mb-1">模型</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">模型</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option selected>claude-sonnet-4-20250514 · Anthropic</option>
                   <option>claude-haiku-4-5-20251001 · Anthropic</option>
                   <option>claude-opus-4-7 · Anthropic</option>
                 </select>
-                <span class="text-xs text-slate-400 mt-0.5 block">来源: Anthropic (Anthropic 格式)</span>
+                <span class="text-xs text-stone-400 mt-0.5 block">来源: Anthropic (Anthropic 格式)</span>
               </div>
             </div>
           </div>
 
           <!-- Stage: Pass 2 (creative fields) -->
-          <div class="p-4 rounded-lg border border-slate-200 bg-slate-50/50">
+          <div class="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30">
             <div class="flex items-center justify-between mb-3">
               <div>
                 <span class="text-sm font-semibold text-slate-800">Pass 2: 创意字段生成</span>
-                <p class="text-xs text-slate-400 mt-0.5">接收 Pass 1 结果 + 搜索摘要，生成 visual_imagery_zh、meaning_evolution_zh、cognate_family 等创意字段</p>
+                <p class="text-xs text-stone-400 mt-0.5">接收 Pass 1 结果 + 搜索摘要，生成 visual_imagery_zh、meaning_evolution_zh、cognate_family 等创意字段</p>
               </div>
               <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 font-medium">高 token 消耗</span>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs text-slate-500 mb-1">供应商</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">供应商</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option>Anthropic</option>
                   <option selected>OpenAI</option>
@@ -327,31 +343,31 @@
                 </select>
               </div>
               <div>
-                <label class="block text-xs text-slate-500 mb-1">模型</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">模型</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option>gpt-5-mini · OpenAI</option>
                   <option selected>gpt-5 · OpenAI</option>
                   <option>gpt-5.1 · OpenAI</option>
                 </select>
-                <span class="text-xs text-slate-400 mt-0.5 block">来源: OpenAI (OpenAI 格式)</span>
+                <span class="text-xs text-stone-400 mt-0.5 block">来源: OpenAI (OpenAI 格式)</span>
               </div>
             </div>
           </div>
 
           <!-- Stage: Format Fixer -->
-          <div class="p-4 rounded-lg border border-slate-200 bg-slate-50/50">
+          <div class="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30">
             <div class="flex items-center justify-between mb-3">
               <div>
                 <span class="text-sm font-semibold text-slate-800">格式修复</span>
-                <p class="text-xs text-slate-400 mt-0.5">修复 YAML 格式错误（不修改内容），轻量模型即可</p>
+                <p class="text-xs text-stone-400 mt-0.5">修复 YAML 格式错误（不修改内容），轻量模型即可</p>
               </div>
               <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-600 font-medium">轻量</span>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs text-slate-500 mb-1">供应商</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">供应商</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option>Anthropic</option>
                   <option selected>OpenAI</option>
@@ -360,31 +376,31 @@
                 </select>
               </div>
               <div>
-                <label class="block text-xs text-slate-500 mb-1">模型</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">模型</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option selected>gpt-5-mini · OpenAI</option>
                   <option>claude-haiku-4-5-20251001 · Anthropic</option>
                   <option>deepseek-chat · DeepSeek</option>
                 </select>
-                <span class="text-xs text-slate-400 mt-0.5 block">来源: OpenAI (OpenAI 格式)</span>
+                <span class="text-xs text-stone-400 mt-0.5 block">来源: OpenAI (OpenAI 格式)</span>
               </div>
             </div>
           </div>
 
           <!-- Stage: Content Reviewer -->
-          <div class="p-4 rounded-lg border border-slate-200 bg-slate-50/50">
+          <div class="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30">
             <div class="flex items-center justify-between mb-3">
               <div>
                 <span class="text-sm font-semibold text-slate-800">内容审查</span>
-                <p class="text-xs text-slate-400 mt-0.5">对 visual_imagery_zh、meaning_evolution_zh、image_differentiation_zh 三个字段评分</p>
+                <p class="text-xs text-stone-400 mt-0.5">对 visual_imagery_zh、meaning_evolution_zh、image_differentiation_zh 三个字段评分</p>
               </div>
               <span class="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 font-medium">高 token 消耗</span>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs text-slate-500 mb-1">供应商</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">供应商</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option>Anthropic</option>
                   <option selected>OpenAI</option>
@@ -392,57 +408,57 @@
                 </select>
               </div>
               <div>
-                <label class="block text-xs text-slate-500 mb-1">模型</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">模型</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option>gpt-5-mini · OpenAI</option>
                   <option selected>gpt-5 · OpenAI</option>
                   <option>gpt-5.1 · OpenAI</option>
                 </select>
-                <span class="text-xs text-slate-400 mt-0.5 block">来源: OpenAI (OpenAI 格式)</span>
+                <span class="text-xs text-stone-400 mt-0.5 block">来源: OpenAI (OpenAI 格式)</span>
               </div>
             </div>
           </div>
 
           <!-- Stage: Field Regeneration -->
-          <div class="p-4 rounded-lg border border-slate-200 bg-slate-50/50">
+          <div class="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30">
             <div class="flex items-center justify-between mb-3">
               <div>
                 <span class="text-sm font-semibold text-slate-800">字段重生成</span>
-                <p class="text-xs text-slate-400 mt-0.5">根据审查意见重新生成指定字段</p>
+                <p class="text-xs text-stone-400 mt-0.5">根据审查意见重新生成指定字段</p>
               </div>
-              <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">同 Pass 2</span>
+              <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-stone-500 font-medium">同 Pass 2</span>
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs text-slate-500 mb-1">供应商</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">供应商</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option>Anthropic</option>
                   <option selected>OpenAI</option>
                 </select>
               </div>
               <div>
-                <label class="block text-xs text-slate-500 mb-1">模型</label>
-                <select class="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-300">
+                <label class="block text-xs text-stone-500 mb-1">模型</label>
+                <select class="w-full px-3 py-2 text-sm border border-emerald-100 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300">
                   <option value="">-- 请选择 --</option>
                   <option selected>gpt-5 · OpenAI</option>
                 </select>
-                <span class="text-xs text-slate-400 mt-0.5 block">来源: OpenAI (OpenAI 格式)</span>
+                <span class="text-xs text-stone-400 mt-0.5 block">来源: OpenAI (OpenAI 格式)</span>
               </div>
             </div>
-            <label class="flex items-center gap-2 mt-3 text-xs text-slate-400 cursor-pointer">
-              <input type="checkbox" checked class="rounded border-slate-300 text-slate-600 focus:ring-slate-400">
+            <label class="flex items-center gap-2 mt-3 text-xs text-stone-400 cursor-pointer">
+              <input type="checkbox" checked class="rounded border-emerald-300 text-slate-600 focus:ring-emerald-400">
               与 Pass 2 保持一致（更改 Pass 2 时自动同步）
             </label>
           </div>
         </div>
 
         <div class="mt-6 flex items-center justify-end gap-3">
-          <button class="px-4 py-2 text-sm font-medium text-amber-600 bg-white border border-amber-200 rounded-lg hover:bg-amber-50 transition-colors">
+          <button class="px-4 py-2 text-sm font-medium text-amber-600 bg-white border border-amber-200 rounded-xl hover:bg-amber-50 transition-colors">
             恢复默认 AI 配置
           </button>
-          <button class="px-5 py-2 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors">
+          <button class="px-5 py-2 text-sm font-medium text-white bg-emerald-700 rounded-xl hover:bg-emerald-600 transition-colors">
             保存配置
           </button>
         </div>

@@ -12,6 +12,7 @@
 [![GitHub license](https://img.shields.io/github/license/yelanyanyu/ad-fontes-manager?style=flat-square)](./LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/yelanyanyu/ad-fontes-manager?style=flat-square)](https://github.com/yelanyanyu/ad-fontes-manager/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Web-blue?style=flat-square)](#)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yelanyanyu/ad-fontes-manager)
 
 Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持 YAML 编辑、实时预览、Anki 导出。
 
@@ -28,6 +29,7 @@ Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持 YAML 
 - [Ad Fontes Manager](#ad-fontes-manager)
   - [目录](#目录)
   - [功能概览](#功能概览)
+  - [开发计划](#开发计划)
   - [使用流程](#使用流程)
     - [1. 生成词条 YAML](#1-生成词条-yaml)
     - [2. 粘贴到 YAML 编辑器](#2-粘贴到-yaml-编辑器)
