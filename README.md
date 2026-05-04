@@ -22,8 +22,8 @@ Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持 YAML 
 
 ---
 
-<img width="2499" height="1480" alt="image" src="https://github.com/user-attachments/assets/65db3247-275b-48c4-ab80-588e3c6bd6cd" />
-<img width="1919" height="948" alt="image" src="https://github.com/user-attachments/assets/c729ecfa-07c6-4bfa-a2e1-2b5e0c1ccddd" />
+<img width="1672" height="941" alt="ChatGPT Image 2026年5月4日 22_15_39" src="https://github.com/user-attachments/assets/e06b4a75-3a8b-4646-9b56-c93b79a833b9" />
+
 
 
 ## 目录
