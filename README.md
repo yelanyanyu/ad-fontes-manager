@@ -8,6 +8,8 @@
 
 # Ad Fontes Manager
 
+<img src="src/renderer/public/logo.png" alt="Ad Fontes Logo" width="96" height="96" />
+
 [![GitHub stars](https://img.shields.io/github/stars/yelanyanyu/ad-fontes-manager?style=flat-square)](https://github.com/yelanyanyu/ad-fontes-manager/stargazers)
 [![GitHub license](https://img.shields.io/github/license/yelanyanyu/ad-fontes-manager?style=flat-square)](./LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/yelanyanyu/ad-fontes-manager?style=flat-square)](https://github.com/yelanyanyu/ad-fontes-manager/releases)
