@@ -204,21 +204,28 @@ onMounted(() => {
 
 <style scoped>
 .settings-page {
-  min-height: calc(100vh - 88px);
-  padding: 8px 0;
+  height: 100%;
+  min-height: 0;
+  padding: 8px 0 24px;
+  box-sizing: border-box;
 }
 
 .settings-container {
   max-width: 672px;
+  height: 100%;
+  min-height: 0;
   margin: 0 auto;
   background: var(--surface-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-head {
+  flex: 0 0 auto;
   height: 48px;
   padding: 0 14px;
   display: flex;
@@ -259,10 +266,13 @@ onMounted(() => {
 }
 
 .panel-body {
+  min-height: 0;
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 24px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .settings-section {

@@ -77,13 +77,15 @@ onUnmounted(() => window.removeEventListener(ONBOARDING_REPLAY_EVENT, replayTour
 
 <style scoped>
 .app {
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: 58px 1fr;
 }
 
 .main {
   min-width: 0;
+  min-height: 0;
   display: grid;
   grid-template-rows: 58px 1fr;
 }
@@ -92,6 +94,8 @@ onUnmounted(() => window.removeEventListener(ONBOARDING_REPLAY_EVENT, replayTour
   min-width: 0;
   min-height: 0;
   padding: 16px 14px 14px;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   background: transparent;
 }

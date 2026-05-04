@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-05-04
+
+### 新增
+
+- 亲生命设计系统：基于 CSS 自定义属性的亮色/暗色双主题，支持跟随系统 + 手动切换。
+- Topbar 快捷主题切换按钮：一键在亮色/暗色之间切换。
+- YAML 编辑器行号列：随文本滚动同步，颜色随校验状态变化（绿/红/灰）。
+- 应用全局玻璃拟态顶栏、固定宽度图标侧栏、统一面板容器与阴影系统。
+
+### 变更
+
+- 图标系统全面迁移：移除 FontAwesome 依赖，全部使用内联 SVG 图标。
+- 字体栈更新：Inter（UI 正文）+ JetBrains Mono（代码），衬线回退至 Georgia。
+- 侧边栏重构：从可折叠文字菜单改为 58px 固定图标模式，hover tooltip 显示导航名称。
+- 词表表格重设计：HTML table 替换为 CSS Grid 布局，Lemma 列使用衬线字体，行操作按钮 hover 渐显。
+- 工具栏、分页、弹窗、Toast 等组件统一使用设计 tokens。
+- Logo 从 SVG 切换为 PNG，应用于 Web、桌面图标和 README。
+- Tailwind 颜色配置桥接至 CSS 变量，保持工具类便利性的同时支持主题切换。
+
+### 文档
+
+- README 新增 Logo 展示。
+- 桌面应用图标：Windows 和 macOS 构建统一使用 `assets/icon.png`。
+
+### 修复
+
+- 表格高度约束修复：`min-height` → `height` 使 Grid 子元素正确产生滚动条。
+- Column 按钮下拉菜单定位修复。
+- 新手引导 `data-tour` 属性恢复，5 步引导全部正常。
+- YAML 编辑器状态指示器动态变色（原来始终为绿色）。
+- 自定义滚动条适配亮/暗双主题。
+- Settings 页面滚动修复：`.panel-body` 添加 `overflow-y: auto`，面板内容可正常滚动。
+- 布局高度链修复：`100vh` → `100%`，`#app` 加入高度继承链，解决 Electron 窗口内布局溢出问题。
+- Electron 开发模式 API 代理修复：`electron.vite.config.mts` 新增 `/api` 反向代理，主进程支持 `ELECTRON_RENDERER_URL` 环境变量。
+
 ## [1.8.0] - 2026-05-03
 
 ### 新增

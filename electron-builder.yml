@@ -17,6 +17,7 @@ asarUnpack:
   - "**/*.node"
 
 win:
+  icon: assets/icon.png
   target:
     - target: nsis
       arch:
@@ -28,6 +29,7 @@ nsis:
   allowToChangeInstallationDirectory: true
 
 mac:
+  icon: assets/icon.png
   target:
     - target: dmg
       arch:

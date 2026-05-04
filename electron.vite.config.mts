@@ -30,6 +30,14 @@ export default defineConfig({
         plugins: [tailwindcss(undefined), autoprefixer()],
       },
     },
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:17387',
+          changeOrigin: true,
+        },
+      },
+    },
     build: {
       rollupOptions: {
         input: resolve('src/renderer/index.html'),

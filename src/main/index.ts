@@ -210,7 +210,8 @@ async function createWindow(): Promise<void> {
       mainWindow.on('close', () => {
         writeDiagnosticLog('browser-window-close');
       });
-      void mainWindow.loadURL(`http://localhost:${DESKTOP_SERVER_PORT}`);
+      const rendererDevUrl = process.env.ELECTRON_RENDERER_URL;
+      void mainWindow.loadURL(rendererDevUrl || `http://localhost:${DESKTOP_SERVER_PORT}`);
       mainWindow.on('closed', () => {
         writeDiagnosticLog('browser-window-closed');
         mainWindow = null;
