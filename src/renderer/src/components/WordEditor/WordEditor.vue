@@ -271,7 +271,7 @@ const overwrite = async () => {
 
 <template>
   <div
-    class="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0 overflow-hidden relative"
+    class="bg-white rounded-2xl shadow-sm border border-emerald-100 flex-1 flex flex-col min-h-0 overflow-hidden relative"
   >
     <ConflictModal
       :open="!!conflictData"
@@ -290,13 +290,13 @@ const overwrite = async () => {
       @primary="overwrite"
     />
     <div
-      class="flex justify-between items-center px-4 py-3 border-b border-slate-100 bg-slate-50/50 flex-none"
+      class="flex justify-between items-center px-4 py-3 border-b border-emerald-50 bg-emerald-50/30 flex-none"
     >
       <div class="flex items-center gap-3">
-        <h2 class="text-xs font-bold text-slate-500 uppercase tracking-wider">YAML Editor</h2>
+        <h2 class="text-xs font-bold text-stone-500 uppercase tracking-wider">YAML Editor</h2>
         <span
           class="text-xs font-mono"
-          :class="status === 'Valid YAML' ? 'text-green-500' : status === '' ? 'text-slate-400' : 'text-red-500'"
+          :class="status === 'Valid YAML' ? 'text-green-500' : status === '' ? 'text-stone-400' : 'text-red-500'"
         >{{ status || 'Ready' }}</span>
       </div>
       <!-- Schema validation errors -->
@@ -307,7 +307,7 @@ const overwrite = async () => {
       </div>
       <div class="flex gap-2">
         <button
-          class="text-xs text-slate-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+          class="text-xs text-stone-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-50 transition-colors"
           @click="clear"
         >
           Clear
@@ -319,7 +319,7 @@ const overwrite = async () => {
       <div class="absolute inset-0 flex flex-col">
         <textarea
           v-model="input"
-          class="flex-1 w-full h-full font-mono text-sm bg-white p-4 resize-none outline-none focus:bg-slate-50 transition-colors"
+          class="flex-1 w-full h-full font-mono text-sm bg-white p-4 resize-none outline-none focus:bg-stone-50 transition-colors"
           placeholder="Paste your YAML here..."
           spellcheck="false"
           @input="handleInput"
@@ -327,7 +327,7 @@ const overwrite = async () => {
       </div>
     </div>
 
-    <div class="p-3 border-t border-slate-100 bg-white flex justify-end flex-none">
+    <div class="p-3 border-t border-emerald-50 bg-white flex justify-end flex-none">
       <button
         :class="[
           'px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2',

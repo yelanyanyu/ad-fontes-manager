@@ -9,6 +9,7 @@ import {
   type StoredAnkiExportOptionsSummary,
 } from '@/services/ankiExportOptionsStore';
 import { listStoredFieldMappingModelNames } from '@/services/ankiFieldMappingStore';
+import { requestOnboardingReplay } from '@/components/Onboarding/onboardingState';
 
 type AnkiStatus = 'connected' | 'disconnected' | 'testing';
 
@@ -75,6 +76,11 @@ const selectAndSetDataDir = async (): Promise<void> => {
   }
 };
 
+const replayOnboarding = (): void => {
+  requestOnboardingReplay();
+  appStore.addToast('新手指引已重新启动', 'info');
+};
+
 onMounted(() => {
   loadAnkiConfig();
   void testAnkiConnection();
@@ -85,17 +91,17 @@ onMounted(() => {
 <template>
   <div class="p-8">
     <div
-      class="max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+      class="max-w-2xl mx-auto bg-white rounded-xl shadow-sm border border-emerald-100 overflow-hidden"
     >
-      <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+      <div class="p-6 border-b border-emerald-50 flex justify-between items-center bg-stone-50">
         <h3 class="text-lg font-bold text-slate-800">Settings</h3>
-        <button class="text-slate-400 hover:text-slate-600 transition-colors" @click="close">
+        <button class="text-stone-400 hover:text-emerald-600 transition-colors" @click="close">
           <i class="fa-solid fa-xmark text-xl" />
         </button>
       </div>
 
       <div class="p-6 space-y-4">
-        <div class="flex items-center gap-2 text-sm p-3 bg-slate-50 rounded-lg">
+        <div class="flex items-center gap-2 text-sm p-3 bg-stone-50 rounded-lg">
           <span class="text-slate-500">Anki Status:</span>
           <span
             :class="{
@@ -111,7 +117,7 @@ onMounted(() => {
           </button>
         </div>
 
-        <div class="space-y-3 text-sm p-3 bg-slate-50 rounded-lg">
+        <div class="space-y-3 text-sm p-3 bg-stone-50 rounded-lg">
           <div class="flex items-center justify-between gap-3">
             <div class="font-semibold text-slate-700">Anki Configuration</div>
             <button class="text-primary hover:underline text-xs" @click="loadAnkiConfig">
@@ -138,7 +144,7 @@ onMounted(() => {
           <p v-else class="text-slate-500">No saved Anki configuration yet.</p>
         </div>
 
-        <div v-if="isElectron" class="space-y-3 text-sm p-3 bg-slate-50 rounded-lg">
+        <div v-if="isElectron" class="space-y-3 text-sm p-3 bg-stone-50 rounded-lg">
           <div>
             <div class="font-semibold text-slate-700">Data Directory</div>
             <div class="mt-1 break-all text-slate-500">{{ dataDir }}</div>
@@ -150,6 +156,19 @@ onMounted(() => {
             Choose Directory
           </button>
           <p v-if="dataDirStatus" class="text-slate-500">{{ dataDirStatus }}</p>
+        </div>
+
+        <div class="space-y-3 text-sm p-3 bg-stone-50 rounded-lg">
+          <div>
+            <div class="font-semibold text-slate-700">新手指引</div>
+            <div class="mt-1 text-slate-500">重新播放界面高亮引导。</div>
+          </div>
+          <button
+            class="px-3 py-2 bg-emerald-700 text-white rounded-xl hover:bg-emerald-600 transition-colors"
+            @click="replayOnboarding"
+          >
+            重新播放新手指引
+          </button>
         </div>
       </div>
     </div>

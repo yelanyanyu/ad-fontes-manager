@@ -34,7 +34,7 @@ const emit = defineEmits<{
             p === page
               ? 'bg-primary text-white font-bold'
               : typeof p === 'number'
-                ? 'hover:bg-slate-100 text-slate-600'
+                ? 'hover:bg-emerald-50 text-slate-600'
                 : 'text-slate-400 cursor-default',
           ]"
           :disabled="typeof p !== 'number'"

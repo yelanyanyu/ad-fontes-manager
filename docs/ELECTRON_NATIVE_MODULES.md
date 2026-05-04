@@ -1,111 +1,403 @@
-# Electron 桌面构建：Native Module ABI 踩坑实录
+# Electron Native Modules 运行时 ABI 手册
 
-> **日期**: 2026-05-03
-> **涉及包**: better-sqlite3 (native C++ addon)
-> **核心问题**: Electron 构建成功 ≠ 运行时 native 模块可用
+> 适用范围：Electron 桌面构建、Web/dev 后端、`better-sqlite3` native addon  
+> 当前关键版本：Node.js 22 ABI 127；Electron 39 ABI 140  
+> 核心原则：ABI 不能真正统一，只能由脚本在不同运行时前自动切换
 
 ---
 
-## 问题现象
+## 一句话结论
 
-桌面安装包构建成功，启动后几秒闪退。前端页面加载后第一次 API 请求触发闪退。
+本项目同时支持 Web/dev 和 Electron desktop 两种运行时。`better-sqlite3` 是 C++
+native addon，它的 `.node` 文件必须匹配“加载它的运行时 ABI”。
 
-## 错误信息
+- Web/dev 后端由系统 Node.js 加载，当前 Node.js 22 需要 ABI **127**
+- Desktop 后端由 Electron 39 内置 Node/V8 加载，需要 ABI **140**
 
+所以根目录的：
+
+```text
+node_modules/better-sqlite3/build/Release/better_sqlite3.node
 ```
+
+不能同时兼容 127 和 140。可统一的是**构建流程**，不是 ABI 本身。
+
+---
+
+## 现在应该使用的命令
+
+日常不用手动记 ABI，直接用这些入口：
+
+```bash
+npm run dev:web
+npm run build:web
+npm run start:web
+npm run build:desktop:win
+npm run build:desktop:mac
+```
+
+这些脚本会自动做 ABI 准备：
+
+- Web/dev 入口先运行 `npm run native:node`
+- Desktop 构建入口先运行 `npm run native:electron`
+- Desktop 构建结束后，无论成功失败，都会运行 `npm run native:node` 恢复本地开发环境
+
+手动诊断时才需要直接运行：
+
+```bash
+npm run native:node      # 确保根 node_modules 可被当前 Node.js 加载
+npm run native:electron  # 为 Electron 运行时重编译 better-sqlite3
+```
+
+---
+
+## 当前脚本分工
+
+### `scripts/ensure-node-native.mjs`
+
+对应命令：
+
+```bash
+npm run native:node
+```
+
+用途：
+
+1. 先尝试用当前 Node.js 打开 `better-sqlite3` 内存数据库
+2. 如果能加载，直接跳过
+3. 如果不能加载，执行 `npm rebuild better-sqlite3`
+4. rebuild 后再次验证能否加载
+
+这保证 Web/dev 后端不会因为根 `node_modules` 仍是 Electron ABI 140 而崩。
+
+注意：只执行 `require('better-sqlite3')` 不够。`better-sqlite3` 的 JS 入口可能先加载成功，
+真正的 native `.node` 文件会在 `new Database(...)` 时加载。因此验证必须实际打开数据库：
+
+```bash
+node -e "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close();"
+```
+
+### `scripts/rebuild-electron-native.mjs`
+
+对应命令：
+
+```bash
+npm run native:electron
+```
+
+用途：
+
+1. Windows 下先检查是否有进程正在加载 `better_sqlite3.node`
+2. 如果发现锁定进程，提前输出 PID 和进程路径并退出
+3. 如果未锁定，执行 `@electron/rebuild`
+4. 用 Electron 当前版本重编译 `better-sqlite3`
+
+核心命令等价于：
+
+```bash
+npx @electron/rebuild --version <electron version> --which-module better-sqlite3 --force --build-from-source
+```
+
+### `scripts/build-desktop.mjs`
+
+对应命令：
+
+```bash
+npm run build:desktop:win
+npm run build:desktop:mac
+```
+
+流程：
+
+```text
+node scripts/build-desktop.mjs win|mac
+  ├── electron-vite build
+  ├── npm run build:desktop:server
+  ├── npm run native:electron
+  ├── electron-builder --win|--mac
+  └── finally: npm run native:node
+```
+
+`finally` 很重要：即使桌面构建失败，也要把根 `node_modules` 恢复到当前 Node.js 可用状态。
+
+---
+
+## `electron-builder.yml` 必须保持的设置
+
+当前策略是：不要让 electron-builder 自己重编 native 依赖。native rebuild 只由我们的脚本负责。
+
+```yaml
+npmRebuild: false
+buildDependenciesFromSource: false
+
+asarUnpack:
+  - "**/*.node"
+```
+
+原因：
+
+- `npmRebuild: true` 会让 electron-builder 在我们显式 rebuild 之外再次介入
+- Windows 上打包目录和根目录可能存在硬链接/文件占用问题
+- native rebuild 的时机必须可控，否则容易出现构建成功但运行时 ABI 错误
+
+---
+
+## 常见故障 1：Web/dev 出现 ECONNRESET 或 ECONNREFUSED
+
+### 现象
+
+Vite 输出类似：
+
+```text
+[vite] http proxy error: /api/v2/words...
+Error: read ECONNRESET
+AggregateError [ECONNREFUSED]
+```
+
+### 真正原因
+
+通常不是 Vite proxy 的问题，而是 Express 后端进程先崩了。常见根因是：
+
+```text
+better_sqlite3.node was compiled against a different Node.js version
+using NODE_MODULE_VERSION 140. This version of Node.js requires
+NODE_MODULE_VERSION 127.
+```
+
+也就是根 `node_modules` 还停留在 Electron ABI 140，但 Web/dev 后端由系统 Node.js 加载，需要 ABI 127。
+
+### 处理
+
+```bash
+npm run native:node
+npm run dev:web
+```
+
+验证：
+
+```bash
+node -e "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('node abi ok')"
+```
+
+---
+
+## 常见故障 2：Desktop 启动后闪退或首次 API 请求后退出
+
+### 现象
+
+桌面包能构建出来，但启动后几秒闪退，或前端页面加载后第一次 API 请求触发退出。
+
+### 典型错误
+
+```text
 better_sqlite3.node was compiled against a different Node.js version
 using NODE_MODULE_VERSION 127. This version of Node.js requires
 NODE_MODULE_VERSION 140.
 ```
 
-## 根因
+### 真正原因
 
-- Node.js 22 的 ABI 版本是 **127**
-- Electron 39 内置 Node 运行时的 ABI 版本是 **140**
-- `npm install` 下载的 `better-sqlite3` 预编译包是 Node ABI (127)
-- Electron 主进程加载该 `.node` 文件时 ABI 不匹配，进程崩溃
+打包给 Electron 的 `.node` 文件仍是 Node ABI 127，但 Electron 39 需要 ABI 140。
 
-## 排查思路
+### 处理
 
-1. **先抓运行期日志，别盯着 build log**  
-   build log 里的 warning 很容易误导。真正根因在 `desktop-runtime.log`。
-
-2. **定位哪个 native 模块**  
-   `better-sqlite3` 是整个项目唯一的 native C++ 模块，在 `src/server/db/index.ts` 中首次 `require()`。
-
-3. **检查打包产物**  
-   解压 `release/win-unpacked/resources/app.asar`，检查 `node_modules/better-sqlite3/build/Release/better_sqlite3.node` 的 ABI 版本。
-
-## 修复方案
-
-### 1. 强制 electron-builder 从源码构建 native 模块
-
-`electron-builder.yml`:
-
-```yaml
-npmRebuild: false
-
-asarUnpack:
-  - "**/*.node"
-
-afterPack: "./scripts/setup-native-modules.js"
-```
-
-### 2. 显式执行 Electron ABI rebuild
-
-构建前用 `@electron/rebuild` 对 `better-sqlite3` 执行针对 Electron ABI 的重编译：
+使用桌面构建入口，不要直接跳过脚本调用 electron-builder：
 
 ```bash
-npx @electron/rebuild --version 39.2.7 --which-module better-sqlite3 --force --build-from-source
+npm run build:desktop:win
+npm run build:desktop:mac
 ```
 
-### 3. 打包后恢复 Node 开发 ABI（Windows 关键）
+不要直接运行：
 
-Windows 下 `npm rebuild better-sqlite3` 可能通过硬链接把 `release/win-unpacked` 里的 Electron ABI 文件也改回 Node ABI。
+```bash
+electron-builder --win
+```
 
-正确做法：
-1. 打包完成后，立即保存 `release/win-unpacked/.../better_sqlite3.node` → 临时目录
-2. 执行 `npm rebuild better-sqlite3` 恢复根 `node_modules` 为 Node ABI
-3. 把临时目录中保存的 Electron ABI `.node` 文件写回 `release/win-unpacked`
+除非你已经手动确认 `npm run native:electron` 成功执行。
 
-对应脚本：
-- `scripts/rebuild-electron-native.mjs` — 步骤 1
-- `scripts/restore-native-after-desktop-build.mjs` — 步骤 2-3
+---
 
-### 4. 桌面模式与 Web 模式拆分
+## 常见故障 3：`EPERM: operation not permitted, unlink better_sqlite3.node`
 
-用 `ADFONTES_DESKTOP=1` 环境变量区分 Electron 运行环境和 Web 环境，避免：
-- Electron 进程加载根 `.env` 触发 `process.exit(1)`（config.ts 生产模式检查）
-- 日志目录、数据库路径等配置冲突
+### 现象
+
+`native:electron` 或桌面构建期间输出：
+
+```text
+Building modules: better-sqlite3
+EPERM: operation not permitted, unlink
+D:\...\node_modules\better-sqlite3\build\Release\better_sqlite3.node
+```
+
+### 真正原因
+
+Windows 正在加载这个 native DLL，导致 `electron-rebuild` 无法删除/替换它。通常是某个 Node/Electron 进程还活着：
+
+- `npm run dev:web`
+- `npm run dev:server`
+- `npm run dev:desktop`
+- 之前启动的 `Ad Fontes Manager.exe`
+- Electron preview window
+
+当前 `scripts/rebuild-electron-native.mjs` 会提前检查并列出占用进程，例如：
+
+```text
+Processes currently loading this file:
+- PID 45572: node (G:\99-programsFiles\nodejs\node.exe)
+```
+
+### 处理
+
+先关闭相关终端或应用，然后重试：
+
+```bash
+npm run build:desktop:win
+```
+
+如果确认某个 PID 就是旧 dev server，可手动停止：
+
+```powershell
+Stop-Process -Id 45572
+```
+
+也可以查看可能的占用者：
+
+```powershell
+$target = (Resolve-Path .\node_modules\better-sqlite3\build\Release\better_sqlite3.node).Path
+Get-Process | ForEach-Object {
+  $p = $_
+  try {
+    $p.Modules |
+      Where-Object { $_.FileName -eq $target } |
+      ForEach-Object {
+        [pscustomobject]@{
+          Id = $p.Id
+          ProcessName = $p.ProcessName
+          Path = $p.Path
+          Module = $_.FileName
+        }
+      }
+  } catch {}
+}
+```
+
+---
+
+## 常见故障 4：`node-gyp failed to rebuild`
+
+### 现象
+
+`@electron/rebuild` 报：
+
+```text
+node-gyp failed to rebuild better-sqlite3
+```
+
+### 先区分两类原因
+
+如果前面同时有：
+
+```text
+EPERM: operation not permitted, unlink better_sqlite3.node
+```
+
+那是文件锁问题，按上一节处理。
+
+如果没有 EPERM，而是编译失败，通常是本机 C++ 构建环境问题。
+
+### Windows 处理方向
+
+安装或修复 Visual Studio Build Tools：
+
+- Workload: **Desktop development with C++**
+- MSVC toolchain
+- Windows SDK
+- Python 可被 `node-gyp` 找到
+
+然后重试：
+
+```bash
+npm run native:electron
+```
+
+### macOS 处理方向
+
+确保 Xcode Command Line Tools 可用：
+
+```bash
+xcode-select --install
+```
+
+然后重试：
+
+```bash
+npm run native:electron
+```
+
+---
+
+## 为什么不通过“换同一个 Node 版本”解决？
+
+可行性低，不推荐。
+
+原因：
+
+1. Electron 自带嵌入式 Node/V8，不直接使用系统 Node.js
+2. Electron 的 ABI 由 Electron 版本决定
+3. 系统 Node.js 的 ABI 由本机 Node 版本决定
+4. 两者即使都叫 Node，也可能不是同一个 ABI
+5. Electron 升级后 ABI 可能再次变化
+
+因此不要把目标设为“统一 Node 版本”。正确目标是：
+
+```text
+在不同运行时启动/构建前，自动准备对应 ABI。
+```
+
+---
 
 ## 验证清单
 
-每次桌面构建后必须验证两个运行时：
+### Web/dev 验证
 
 ```bash
-# 1. Electron 包内
-# 启动 release/win-unpacked/Ad Fontes Manager.exe，8秒后仍运行即通过
-
-# 2. 本地 Node 开发环境
-node -e "require('better-sqlite3')"  # 必须通过
+npm run native:node
+node -e "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('node abi ok')"
+npm run build:web
 ```
 
-## 构建流程总结
+### Desktop 构建验证
 
-```
+```bash
 npm run build:desktop:win
-  ├── electron-vite build          # 编译 main/preload/renderer
-  ├── tsc -p tsconfig.server-build.json  # 编译 server
-  ├── npm run rebuild:electron:native    # @electron/rebuild → Electron ABI
-  ├── electron-builder --win             # 打包安装程序
-  └── npm run restore:native-after-desktop-build  # 恢复 Node ABI
+node -e "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('node abi restored')"
 ```
 
-## 核心教训
+Windows 桌面包还应手动启动：
 
-> Electron + native addon 的桌面构建，必须把 "Electron ABI rebuild" 和 "Node 开发 ABI 恢复" 作为显式构建步骤，而不是交给默认行为碰运气。
+```text
+release/win-unpacked/Ad Fontes Manager.exe
+```
 
-1. `npm install` 的预编译 native 包是 Node ABI，不能直接给 Electron 用
-2. `electron-builder` 的 "preparing native dependencies" 不一定能正确 rebuild
-3. Windows 硬链接可能导致 `npm rebuild` 污染已打包的 Electron 产物
-4. 验证覆盖两个运行时：打包后的 Electron + 本地开发 Node
+启动后保持运行，并能正常请求 `/api/v2/words`，才算 Electron ABI 验证通过。
+
+---
+
+## 维护注意事项
+
+1. 不要把 `electron-builder.yml` 改回 `npmRebuild: true`
+2. 不要绕过 `npm run build:desktop:*` 直接运行 `electron-builder`
+3. 桌面构建前关闭所有 dev server 和已启动的桌面应用
+4. 桌面构建失败后仍应确认 `npm run native:node` 能通过
+5. 升级 Electron、Node.js、better-sqlite3 时，重新验证本文所有命令
+
+---
+
+## 事故时间线摘要
+
+- Electron 桌面运行需要 ABI 140，根 `node_modules` 默认是 Node ABI 127，导致桌面闪退
+- 构建后根 `node_modules` 停在 ABI 140，导致 Web/dev 后端 `ECONNRESET` / `ECONNREFUSED`
+- `electron-builder.yml` 一度保留 `npmRebuild: true`，与显式 rebuild 流程冲突
+- Windows 下运行中的 Node 进程锁住 `better_sqlite3.node`，导致 `EPERM unlink`
+- 当前方案改为脚本化切换：Web/dev 前 `native:node`，desktop 前 `native:electron`，desktop 后 `native:node`

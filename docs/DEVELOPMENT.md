@@ -17,7 +17,7 @@ cd ad-fontes-manager
 npm install
 ```
 
-项目是 monorepo 结构，根目录 `npm install` 会安装所有依赖（包括 Electron、Vue、Express 等）。`better-sqlite3` 等原生模块由 `electron-builder` 的 `@electron/rebuild` 自动处理。
+项目是 monorepo 结构，根目录 `npm install` 会安装所有依赖（包括 Electron、Vue、Express 等）。`better-sqlite3` 原生模块的 ABI 切换由脚本手动控制（参见下方「原生模块（ABI 切换）」章节）。
 
 ### 配置环境变量
 
@@ -266,13 +266,53 @@ npx drizzle-kit generate
 
 ## 桌面开发注意事项
 
-### 原生模块
+### 原生模块（ABI 切换）
 
-`better-sqlite3` 是原生模块，需要针对 Electron 的 Node.js 版本重新编译。`electron-builder` 通过 `@electron/rebuild` 自动处理。如果遇到原生模块加载错误，运行：
+`better-sqlite3` 是 C++ 原生模块，它的 `.node` 文件必须匹配加载它的运行时 ABI：
+
+| 运行时 | ABI 版本 |
+|--------|---------|
+| 系统 Node.js 22（Web/dev 后端） | 127 |
+| Electron 39 内置 Node（桌面应用） | 140 |
+
+**两套 ABI 不能共存。** 用以下脚本手动切换：
 
 ```bash
-npx @electron/rebuild
+npm run native:node        # 为 Web/dev 准备 ABI 127
+npm run native:electron    # 为 Electron 准备 ABI 140
 ```
+
+日常开发不需要手动记 — `npm run dev:web` 和 `npm run build:desktop:win` 会自动调用对应脚本。
+
+**桌面构建流程**：
+
+```text
+npm run build:desktop:win|mac
+  ├── electron-vite build
+  ├── npm run native:electron            # 切换到 Electron ABI 140
+  ├── electron-builder                   # 打包
+  └── finally: npm run native:node       # 恢复 Node ABI 127（无论构建成败）
+```
+
+**`electron-builder.yml` 必须保持**：
+
+```yaml
+npmRebuild: false              # 不由 electron-builder 重编原生模块
+buildDependenciesFromSource: false
+asarUnpack:
+  - "**/*.node"                # .node 文件不打入 asar
+```
+
+**常见故障**：
+
+| 现象 | 根因 | 处理 |
+|------|------|------|
+| Web/dev 报 `ECONNRESET` | 根 `node_modules` 处于 Electron ABI 140 | `npm run native:node` |
+| 桌面启动后闪退 | 打包的 `.node` 是 Node ABI 127 | 确保用 `npm run build:desktop:win` 而非直接 `electron-builder` |
+| `EPERM: operation not permitted, unlink` | Windows 进程正在加载该 `.node` | 关闭所有 dev server 和桌面应用后重试 |
+| `node-gyp failed to rebuild` | C++ 编译环境不全 | Windows: 安装 VS Build Tools（Desktop development with C++）；macOS: `xcode-select --install` |
+
+详细 ABI 说明和调试步骤见 [docs/ELECTRON_NATIVE_MODULES.md](./ELECTRON_NATIVE_MODULES.md)。
 
 ### IPC 通信
 
@@ -312,9 +352,12 @@ PORT=8081 npm run dev:server
 
 ### 桌面构建失败
 
-1. 确认安装了 Visual Studio Build Tools（Windows）或 Xcode Command Line Tools（Mac）
+1. 确认安装了 Visual Studio Build Tools（Windows，Desktop development with C++）或 Xcode Command Line Tools（Mac，`xcode-select --install`）
 2. 检查 `@electron/rebuild` 日志中的原生模块编译输出
-3. 确保 `electron-builder.yml` 中的配置正确
+3. 确保 `electron-builder.yml` 中 `npmRebuild: false` 未改动
+4. 构建前关闭所有 dev server 和已启动的桌面应用（避免 Windows `EPERM` 文件锁）
+5. 构建后验证 ABI 恢复：`node -e "require('better-sqlite3'); console.log('node abi ok')"`
+6. 详细故障排查见 [docs/ELECTRON_NATIVE_MODULES.md](./ELECTRON_NATIVE_MODULES.md)
 
 ## 外部资源
 

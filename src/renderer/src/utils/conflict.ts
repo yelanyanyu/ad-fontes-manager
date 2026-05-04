@@ -58,7 +58,7 @@ export const deepDiffAdapter: DeepDiffAdapter = {
     return (diffs as DiffEntry[]).map(diff => {
       const path = Array.isArray(diff.path) && diff.path.length ? diff.path.join('.') : 'root';
 
-      let cls = 'bg-slate-100 text-slate-600 border-slate-200';
+      let cls = 'bg-stone-100 text-slate-600 border-emerald-100';
       if (diff.kind === 'N') cls = 'bg-green-100 text-green-700 border-green-200';
       if (diff.kind === 'D') cls = 'bg-red-100 text-red-700 border-red-200';
       if (diff.kind === 'E') cls = 'bg-yellow-100 text-yellow-700 border-yellow-200';

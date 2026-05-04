@@ -78,7 +78,12 @@ onUnmounted(() => {
 <template>
   <main ref="container" class="absolute inset-0 flex flex-row p-4 gap-0 h-full">
     <!-- Left: Editor -->
-    <div ref="leftPanel" class="flex flex-col h-full min-w-[300px]" style="width: 45%">
+    <div
+      ref="leftPanel"
+      data-tour="word-editor"
+      class="flex flex-col h-full min-w-[300px]"
+      style="width: 45%"
+    >
       <WordEditor />
     </div>
 
@@ -86,7 +91,7 @@ onUnmounted(() => {
     <div ref="dragHandle" class="resizer z-20" />
 
     <!-- Right: List -->
-    <div class="flex-1 flex flex-col h-full min-w-[350px] min-h-0">
+    <div data-tour="word-list" class="flex-1 flex flex-col h-full min-w-[350px] min-h-0">
       <WordList @preview="showPreview" />
     </div>
 

@@ -322,17 +322,17 @@ const copyRichText = (): void => {
 </script>
 
 <template>
-  <div class="absolute inset-0 bg-slate-100 overflow-y-auto flex flex-col z-30">
+  <div class="absolute inset-0 bg-stone-100 overflow-y-auto flex flex-col z-30">
     <!-- Preview Header -->
     <div
-      class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm"
+      class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-emerald-100 px-6 py-3 flex items-center justify-between shadow-sm"
     >
       <button
-        class="text-slate-500 hover:text-slate-800 flex items-center gap-2 font-bold text-sm transition-colors group"
+        class="text-stone-500 hover:text-slate-800 flex items-center gap-2 font-bold text-sm transition-colors group"
         @click="close"
       >
         <div
-          class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-slate-200 transition-colors"
+          class="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center group-hover:bg-emerald-100 transition-colors"
         >
           <i class="fa-solid fa-arrow-left" />
         </div>
@@ -340,12 +340,12 @@ const copyRichText = (): void => {
       </button>
 
       <!-- View Toggle -->
-      <div class="flex bg-slate-100 p-1 rounded-lg">
+      <div class="flex bg-stone-100 p-1 rounded-lg">
         <button
           :class="[
             mode === 'card'
               ? 'bg-white text-slate-700 shadow-sm'
-              : 'text-slate-500 hover:bg-slate-200/50',
+              : 'text-slate-500 hover:bg-emerald-100/50',
           ]"
           class="px-4 py-1.5 text-xs rounded-md font-bold transition-colors"
           @click="mode = 'card'"
@@ -356,7 +356,7 @@ const copyRichText = (): void => {
           :class="[
             mode === 'markdown'
               ? 'bg-white text-slate-700 shadow-sm'
-              : 'text-slate-500 hover:bg-slate-200/50',
+              : 'text-slate-500 hover:bg-emerald-100/50',
           ]"
           class="px-4 py-1.5 text-xs rounded-md font-medium transition-colors"
           @click="mode = 'markdown'"
@@ -421,16 +421,16 @@ const copyRichText = (): void => {
           <div id="md-render-target" class="p-8 markdown-body" v-html="content" />
         </div>
         <div
-          class="bg-slate-800 rounded-lg shadow-sm border border-slate-700 overflow-hidden text-slate-300"
+          class="bg-emerald-950 rounded-xl shadow-sm border border-emerald-800/50 overflow-hidden text-emerald-200"
         >
           <div
-            class="bg-slate-900 border-b border-slate-700 px-4 py-2 flex justify-between items-center"
+            class="bg-emerald-950 border-b border-emerald-800/50 px-4 py-2 flex justify-between items-center"
           >
-            <h3 class="font-bold text-sm text-slate-400 uppercase tracking-wide">
+            <h3 class="font-bold text-sm text-emerald-400 uppercase tracking-wide">
               <i class="fa-solid fa-code mr-2" />Source
             </h3>
             <button
-              class="text-xs bg-slate-700 text-white border border-slate-600 px-3 py-1 rounded shadow-sm"
+              class="text-xs bg-emerald-700 text-white border border-emerald-600 px-3 py-1 rounded shadow-sm"
               @click="copyContent('md')"
             >
               Copy Source

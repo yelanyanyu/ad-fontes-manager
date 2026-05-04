@@ -110,14 +110,14 @@ const format = val => {
     aria-modal="true"
   >
     <div
-      class="w-full max-w-5xl rounded-xl bg-white shadow-lg border border-slate-200 overflow-hidden"
+      class="w-full max-w-5xl rounded-xl bg-white shadow-lg border border-emerald-100 overflow-hidden"
     >
       <div
-        class="px-4 py-3 border-b border-slate-100 font-bold text-slate-800 flex items-center justify-between"
+        class="px-4 py-3 border-b border-emerald-50 font-bold text-slate-800 flex items-center justify-between"
       >
         <span>{{ title }}</span>
         <button
-          class="text-slate-400 hover:text-slate-600 transition-colors"
+          class="text-stone-400 hover:text-emerald-600 transition-colors"
           aria-label="Close"
           @click="$emit('close')"
         >
@@ -125,23 +125,23 @@ const format = val => {
         </button>
       </div>
 
-      <div v-if="subtitle" class="px-4 py-2 text-sm text-slate-600 border-b border-slate-100">
+      <div v-if="subtitle" class="px-4 py-2 text-sm text-slate-600 border-b border-emerald-50">
         {{ subtitle }}
       </div>
 
       <div
         v-if="modules.length || badges.length"
-        class="px-4 py-3 text-sm text-slate-600 border-b border-slate-100"
+        class="px-4 py-3 text-sm text-slate-600 border-b border-emerald-50"
       >
         <div class="flex flex-wrap items-center gap-2">
           <span class="font-bold text-slate-700">Modules:</span>
           <span
             v-for="m in modules"
             :key="m"
-            class="px-2 py-0.5 rounded border bg-slate-50 text-slate-700 border-slate-200 text-xs font-bold"
+            class="px-2 py-0.5 rounded border bg-slate-50 text-slate-700 border-emerald-100 text-xs font-bold"
             >{{ m }}</span
           >
-          <span v-if="!modules.length" class="text-slate-400 text-xs">No module detail</span>
+          <span v-if="!modules.length" class="text-stone-400 text-xs">No module detail</span>
         </div>
         <div class="mt-2 flex flex-wrap gap-1">
           <span
@@ -155,9 +155,9 @@ const format = val => {
       </div>
 
       <div class="grid grid-cols-2 gap-0">
-        <div class="border-r border-slate-100">
+        <div class="border-r border-emerald-50">
           <div
-            class="px-4 py-2 text-xs font-bold text-slate-500 bg-slate-50 border-b border-slate-100"
+            class="px-4 py-2 text-xs font-bold text-slate-500 bg-slate-50 border-b border-emerald-50"
           >
             {{ leftLabel }}
           </div>
@@ -165,7 +165,7 @@ const format = val => {
         </div>
         <div>
           <div
-            class="px-4 py-2 text-xs font-bold text-slate-500 bg-slate-50 border-b border-slate-100"
+            class="px-4 py-2 text-xs font-bold text-slate-500 bg-slate-50 border-b border-emerald-50"
           >
             {{ rightLabel }}
           </div>
@@ -173,16 +173,16 @@ const format = val => {
         </div>
       </div>
 
-      <div class="px-4 py-3 border-t border-slate-100 flex justify-end gap-2 bg-slate-50">
+      <div class="px-4 py-3 border-t border-emerald-50 flex justify-end gap-2 bg-slate-50">
         <button
           v-if="tertiaryLabel"
-          class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
+          class="px-3 py-1.5 rounded-lg border border-emerald-100 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
           @click="$emit('tertiary')"
         >
           {{ tertiaryLabel }}
         </button>
         <button
-          class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
+          class="px-3 py-1.5 rounded-lg border border-emerald-100 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
           @click="$emit('secondary')"
         >
           {{ secondaryLabel }}

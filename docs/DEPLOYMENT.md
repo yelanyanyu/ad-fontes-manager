@@ -17,6 +17,11 @@ npm install
 npm run build:desktop:win
 ```
 
+构建流程会自动：
+1. 将 `better-sqlite3` 切换到 Electron 39 ABI 140
+2. 执行 electron-builder 打包
+3. 构建结束后恢复 Node ABI（无论成功失败）
+
 产物输出到 `release/`：
 - `Ad Fontes Manager Setup 1.0.0.exe` — NSIS 安装程序
 - `win-unpacked/` — 未打包的可执行目录
@@ -35,6 +40,8 @@ npm run build:desktop:mac
 - `mac/` — 未打包的 `.app` bundle
 
 Mac 构建支持 x64 和 arm64 (Apple Silicon) 双架构。
+
+> **注意**：桌面构建前请关闭所有 dev server 和已启动的桌面应用，否则 Windows 可能触发 `EPERM` 文件锁错误。不要直接运行 `electron-builder`，必须通过 `npm run build:desktop:*` 入口。
 
 ### CI/CD 自动构建
 
@@ -151,8 +158,9 @@ cp /path/to/ad_fontes.db /backup/ad_fontes_$(date +%Y%m%d).db
 2. 检查配置：确认必填环境变量已设置
 3. 检查端口：`lsof -i :8080`
 
-### 桌面程序白屏
+### 桌面程序白屏或闪退
 
 1. 检查 `config.json` 中 `dataDir` 路径可访问
 2. 确认 `ad_fontes.db` 存在于数据目录
-3. 重新安装或清空 `%APPDATA%/ad-fontes-manager/`
+3. **Native ABI 不匹配**：检查是否绕过构建脚本直接运行了 electron-builder，导致 `.node` 文件 ABI 错误。使用 `npm run build:desktop:win` 重新构建
+4. 重新安装或清空 `%APPDATA%/ad-fontes-manager/`

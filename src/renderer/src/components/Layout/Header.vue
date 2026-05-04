@@ -1,27 +1,28 @@
 <template>
   <header
-    class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 flex-none z-10"
+    class="bg-white border-b border-emerald-100 h-16 flex items-center justify-between px-6 flex-none z-10"
   >
     <!-- Logo & Title -->
     <div class="flex items-center gap-3">
-      <img src="/logo.svg" alt="Logo" class="w-8 h-8 rounded-lg flex-none bg-slate-100" />
+      <img src="/logo.svg" alt="Logo" class="w-8 h-8 rounded-lg flex-none bg-emerald-50" />
       <h1 class="font-bold text-slate-800 tracking-tight text-lg">Etymos</h1>
     </div>
 
     <!-- Actions -->
     <div class="flex items-center gap-4 ml-4">
       <!-- Language Switcher -->
-      <div class="relative" ref="langMenuRef">
+      <BellIcon />
+      <div class="relative" ref="langMenuRef" data-tour="language-switcher">
         <button
           @click="open = !open"
           class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
-                 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200
+                 bg-stone-50 hover:bg-emerald-50 text-slate-600 border border-emerald-100
                  transition-colors cursor-pointer"
         >
           <span class="text-base leading-none">{{ currentFlag }}</span>
           <span>{{ currentLabel }}</span>
           <svg
-            class="w-3.5 h-3.5 text-slate-400 transition-transform"
+            class="w-3.5 h-3.5 text-stone-400 transition-transform"
             :class="{ 'rotate-180': open }"
             fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"
           >
@@ -39,7 +40,7 @@
         >
           <div
             v-if="open"
-            class="absolute right-0 mt-1.5 w-44 rounded-lg bg-white border border-slate-200
+            class="absolute right-0 mt-1.5 w-44 rounded-lg bg-white border border-emerald-100
                    shadow-lg py-1 z-50"
           >
             <button
@@ -47,7 +48,7 @@
               :key="lang.code"
               @click="select(lang.code)"
               class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm
-                     hover:bg-slate-50 transition-colors text-left"
+                     hover:bg-emerald-50 transition-colors text-left"
               :class="
                 appStore.currentLanguage === lang.code
                   ? 'text-indigo-600 font-semibold bg-indigo-50/50'
@@ -76,6 +77,7 @@ fill-rule="evenodd" clip-rule="evenodd"
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useAppStore, SUPPORTED_LANGUAGES } from '@/stores/appStore';
+import BellIcon from '@/components/Announcement/BellIcon.vue';
 
 const appStore = useAppStore();
 const open = ref(false);

@@ -53,13 +53,13 @@ const emit = defineEmits<{
 const onOverlayClick = (): void => emit('return');
 
 const statusClassMap: Record<string, string> = {
-  pending: 'bg-slate-100 text-slate-600 border-slate-200',
+  pending: 'bg-emerald-50 text-slate-600 border-emerald-100',
   checking: 'bg-blue-50 text-blue-700 border-blue-200',
   duplicate: 'bg-amber-50 text-amber-700 border-amber-200',
   ready: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   importing: 'bg-blue-50 text-blue-700 border-blue-200',
   imported: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  skipped: 'bg-slate-100 text-slate-600 border-slate-200',
+  skipped: 'bg-emerald-50 text-slate-600 border-emerald-100',
   overwritten: 'bg-orange-50 text-orange-700 border-orange-200',
   failed: 'bg-red-50 text-red-700 border-red-200',
 };
@@ -69,19 +69,19 @@ const statusClassMap: Record<string, string> = {
   <div v-if="open" class="fixed inset-0 z-40 bg-black/40" @click="onOverlayClick" />
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <div
-      class="w-full max-w-6xl h-[90vh] rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden flex flex-col"
+      class="w-full max-w-6xl h-[90vh] rounded-xl bg-white border border-emerald-100 shadow-xl overflow-hidden flex flex-col"
     >
-      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <div class="px-5 py-4 border-b border-emerald-50 flex items-center justify-between">
         <h3 class="text-slate-800 font-bold text-base">Batch Anki Card Operations</h3>
         <div class="flex items-center gap-2">
           <button
-            class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+            class="text-sm px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 hover:bg-stone-50"
             @click="emit('return')"
           >
             Back to List
           </button>
           <button
-            class="w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            class="w-8 h-8 rounded-full text-stone-400 hover:text-slate-700 hover:bg-emerald-50 transition-colors"
             @click="emit('close')"
           >
             <i class="fa-solid fa-xmark" />
@@ -90,7 +90,7 @@ const statusClassMap: Record<string, string> = {
       </div>
 
       <div class="flex-1 overflow-auto min-h-0">
-        <div class="p-5 border-b border-slate-100 space-y-4">
+        <div class="p-5 border-b border-emerald-50 space-y-4">
         <div class="flex items-center justify-between gap-3">
           <div class="text-sm text-slate-600">
             <span v-if="ankiConnected" class="text-emerald-600 font-semibold">Anki connected</span>
@@ -98,7 +98,7 @@ const statusClassMap: Record<string, string> = {
             <span class="ml-3 text-slate-500">{{ items.length }} words selected</span>
           </div>
           <button
-            class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+            class="text-sm px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 hover:bg-stone-50"
             :disabled="busy"
             @click="emit('connect-anki')"
           >
@@ -110,7 +110,7 @@ const statusClassMap: Record<string, string> = {
           <label class="text-sm text-slate-700 font-medium">
             Deck Name
             <select
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
               :value="deckName"
               :disabled="!canEditConfig"
               @change="emit('update:deckName', ($event.target as HTMLSelectElement).value)"
@@ -124,7 +124,7 @@ const statusClassMap: Record<string, string> = {
           <label class="text-sm text-slate-700 font-medium">
             Model Name
             <select
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
               :value="modelName"
               :disabled="!canEditConfig"
               @change="emit('update:modelName', ($event.target as HTMLSelectElement).value)"
@@ -138,7 +138,7 @@ const statusClassMap: Record<string, string> = {
           <label class="text-sm text-slate-700 font-medium">
             Card Template
             <select
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
               :value="templateName"
               :disabled="!canEditConfig"
               @change="emit('update:templateName', ($event.target as HTMLSelectElement).value)"
@@ -156,7 +156,7 @@ const statusClassMap: Record<string, string> = {
           <label class="text-sm text-slate-700 font-medium">
             Tags (comma separated)
             <input
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
               :value="tagsInput"
               :disabled="!canEditConfig"
               @input="emit('update:tagsInput', ($event.target as HTMLInputElement).value)"
@@ -164,7 +164,7 @@ const statusClassMap: Record<string, string> = {
           </label>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div class="rounded-lg border border-emerald-100 bg-stone-50 p-4">
           <div
             v-if="!ankiConnected"
             class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-sm"
@@ -183,14 +183,14 @@ const statusClassMap: Record<string, string> = {
 
         <div class="flex flex-wrap gap-2">
           <button
-            class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
+            class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-sm hover:bg-stone-50"
             :disabled="busy || !items.length || !canEditConfig"
             @click="emit('check-duplicates')"
           >
             Check Duplicates
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
+            class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-sm hover:bg-stone-50"
             :disabled="busy || !items.length"
             @click="emit('ignore-all-duplicates')"
           >
@@ -234,7 +234,7 @@ const statusClassMap: Record<string, string> = {
           </button>
           <button
             v-if="canResume"
-            class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-sm hover:bg-slate-50"
+            class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-sm hover:bg-stone-50"
             :disabled="busy"
             @click="emit('restart-operation')"
           >
@@ -248,7 +248,7 @@ const statusClassMap: Record<string, string> = {
 
         <div v-if="progress.total > 0" class="space-y-2">
           <div class="text-xs text-slate-600 font-medium">{{ progressLabel }}</div>
-          <div class="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+          <div class="w-full h-2 rounded-full bg-emerald-50 overflow-hidden">
             <div
               class="h-full bg-blue-500 transition-all duration-300"
               :style="{ width: `${progress.percent}%` }"
@@ -266,7 +266,7 @@ const statusClassMap: Record<string, string> = {
 
       <div>
         <table class="min-w-full">
-          <thead class="bg-slate-50 sticky top-0">
+          <thead class="bg-stone-50 sticky top-0">
             <tr>
               <th
                 class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold"
@@ -295,14 +295,14 @@ const statusClassMap: Record<string, string> = {
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-slate-100">
-            <tr v-for="item in items" :key="item.key" class="hover:bg-slate-50/70">
+          <tbody class="divide-y divide-emerald-100">
+            <tr v-for="item in items" :key="item.key" class="hover:bg-stone-50/70">
               <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ item.lemma }}</td>
               <td class="px-4 py-3 text-xs text-slate-600">
                 <span
                   :class="
                     item.record.isLocal
-                      ? 'inline-flex items-center gap-1 px-2 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200'
+                      ? 'inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-slate-600 border border-emerald-100'
                       : 'inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200'
                   "
                 >
@@ -326,7 +326,7 @@ const statusClassMap: Record<string, string> = {
               </td>
               <td class="px-4 py-3 text-right">
                 <button
-                  class="text-xs px-2 py-1 rounded border border-slate-200 text-slate-600 hover:bg-slate-50"
+                  class="text-xs px-2 py-1 rounded border border-emerald-100 text-slate-600 hover:bg-stone-50"
                   @click="emit('preview-word', item.id)"
                 >
                   Preview HTML

@@ -7,6 +7,7 @@ import './style.css';
 import './assets/main.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 import 'github-markdown-css/github-markdown.css';
+import 'driver.js/dist/driver.css';
 
 const bootstrap = async (): Promise<void> => {
   await bootstrapRequestRateLimit();

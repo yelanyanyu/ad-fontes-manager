@@ -6,9 +6,8 @@ directories:
   buildResources: assets
   output: release
 
-npmRebuild: true
-buildDependenciesFromSource: true
-nativeRebuilder: sequential
+npmRebuild: false
+buildDependenciesFromSource: false
 
 files:
   - out/**/*

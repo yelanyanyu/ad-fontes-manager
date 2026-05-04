@@ -55,7 +55,7 @@ const clearAll = (): void => {
       <h4 class="font-bold text-slate-700 text-sm">Field Mapping</h4>
       <div class="flex flex-wrap gap-2">
         <button
-          class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs hover:bg-slate-50 disabled:text-slate-400"
+          class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-xs hover:bg-stone-50 disabled:text-stone-400"
           :disabled="disabled || !hasRecommendedMapping"
           type="button"
           @click="resetToRecommended"
@@ -63,7 +63,7 @@ const clearAll = (): void => {
           Recommended
         </button>
         <button
-          class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs hover:bg-slate-50 disabled:text-slate-400"
+          class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-xs hover:bg-stone-50 disabled:text-stone-400"
           :disabled="disabled"
           type="button"
           @click="clearAll"
@@ -73,9 +73,9 @@ const clearAll = (): void => {
       </div>
     </div>
 
-    <div class="max-h-72 overflow-auto rounded-lg border border-slate-200">
+    <div class="max-h-72 overflow-auto rounded-lg border border-emerald-100">
       <table class="min-w-full text-sm">
-        <thead class="bg-slate-50 sticky top-0">
+        <thead class="bg-stone-50 sticky top-0">
           <tr>
             <th class="px-3 py-2 text-left text-[11px] uppercase text-slate-500 font-bold">
               Anki Field
@@ -85,12 +85,12 @@ const clearAll = (): void => {
             </th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-emerald-100">
           <tr v-for="fieldName in modelFieldNames" :key="fieldName">
             <td class="px-3 py-2 text-slate-700 font-medium break-all">{{ fieldName }}</td>
             <td class="px-3 py-2">
               <select
-                class="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                class="w-full rounded-lg border border-emerald-300 px-2 py-1.5 text-sm"
                 :disabled="disabled"
                 :value="getMappingFor(fieldName)"
                 @change="setMapping(fieldName, ($event.target as HTMLSelectElement).value)"

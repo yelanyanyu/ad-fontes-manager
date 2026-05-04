@@ -788,7 +788,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
 
 <template>
   <div
-    class="bg-white rounded-xl shadow-sm border border-slate-200 flex-col flex h-full overflow-hidden ml-1"
+    class="bg-white rounded-2xl shadow-sm border border-emerald-100 flex-col flex h-full overflow-hidden ml-1"
   >
     <AnkiExportModal
       :open="ankiExportOpen"
@@ -927,7 +927,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @select-all-matching="void selectAllMatching()"
       @open-batch-anki-export="void openBatchAnkiExport()"
     />
-    <div v-if="showBatchSummaryBar" class="px-4 py-2 border-b border-slate-100 bg-blue-50/50">
+    <div v-if="showBatchSummaryBar" class="px-4 py-2 border-b border-emerald-50 bg-blue-50/50">
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-3 min-w-0">
           <span class="text-xs font-semibold text-blue-700 whitespace-nowrap">
@@ -936,13 +936,13 @@ const paginationRange = computed<Array<number | '...'>>(() => {
           <span class="text-xs text-slate-600 whitespace-nowrap">
             {{ batchAnkiProgress.processed }}/{{ batchAnkiProgress.total }}
           </span>
-          <div class="w-44 h-2 rounded-full bg-slate-200 overflow-hidden">
+          <div class="w-44 h-2 rounded-full bg-emerald-200 overflow-hidden">
             <div
               class="h-full bg-blue-500 transition-all duration-300"
               :style="{ width: `${batchAnkiProgress.percent}%` }"
             />
           </div>
-          <span class="text-xs text-slate-500">
+          <span class="text-xs text-stone-500">
             imported {{ batchAnkiStatusSummary.imported + batchAnkiStatusSummary.overwritten }},
             duplicate {{ batchAnkiStatusSummary.duplicate }}, failed
             {{ batchAnkiStatusSummary.failed }}, cancelled {{ batchAnkiStatusSummary.cancelled }}
@@ -956,7 +956,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
         </div>
         <div class="flex items-center gap-2">
           <button
-            class="text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            class="text-xs px-2 py-1 rounded border border-emerald-100 bg-white text-slate-600 hover:bg-stone-50"
             @click="openBatchPanelFromSummary"
           >
             Open Batch Panel
@@ -976,7 +976,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
             Resume
           </button>
           <button
-            class="text-xs px-2 py-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            class="text-xs px-2 py-1 rounded border border-emerald-100 bg-white text-slate-600 hover:bg-stone-50 disabled:opacity-60 disabled:cursor-not-allowed"
             :disabled="batchAnkiBusy || batchAnkiProgress.phase !== 'idle'"
             @click="closeBatchSummary"
           >
@@ -986,10 +986,10 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto bg-slate-50">
+    <div class="flex-1 overflow-y-auto bg-stone-50">
       <div
         v-if="loading && !displayedRecords.length"
-        class="text-center text-slate-400 py-10 flex flex-col items-center gap-2"
+        class="text-center text-stone-400 py-10 flex flex-col items-center gap-2"
       >
         <i class="fa-solid fa-spinner fa-spin text-2xl" />
         <span>Loading records...</span>
@@ -997,15 +997,15 @@ const paginationRange = computed<Array<number | '...'>>(() => {
 
       <div
         v-else
-        class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-visible m-4"
+        class="bg-white rounded-lg border border-emerald-100 shadow-sm overflow-visible m-4"
       >
         <div class="overflow-x-auto">
           <table class="min-w-full">
-            <thead class="bg-slate-50">
+            <thead class="bg-stone-50">
               <tr>
                 <th
                   scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left w-10"
+                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-500 text-left w-10"
                 >
                   <input
                     type="checkbox"
@@ -1017,7 +1017,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
                 </th>
                 <th
                   scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left min-w-[220px]"
+                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-500 text-left min-w-[220px]"
                 >
                   Lemma
                 </th>
@@ -1025,30 +1025,30 @@ const paginationRange = computed<Array<number | '...'>>(() => {
                   v-for="col in shownColumns"
                   :key="col"
                   scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-left whitespace-nowrap"
+                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-500 text-left whitespace-nowrap"
                 >
                   {{ columnLabels[col] }}
                 </th>
                 <th
                   scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 text-right w-[200px]"
+                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-500 text-right w-[200px]"
                 >
                   <div class="flex items-center justify-end gap-1 relative">
                     <button
-                      class="text-slate-400 hover:text-slate-600 text-[11px] font-normal normal-case inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-200 hover:border-slate-300 transition-colors"
+                      class="text-stone-400 hover:text-slate-600 text-[11px] font-normal normal-case inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-100 hover:border-slate-300 transition-colors"
                       @click.stop="columnMenuOpen = !columnMenuOpen"
                     >
                       <i class="fa-solid fa-columns text-[9px]" /> Columns
                     </button>
                     <div
                       v-if="columnMenuOpen"
-                      class="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 p-2 min-w-[140px]"
+                      class="absolute right-0 top-full mt-1 bg-white border border-emerald-100 rounded-lg shadow-lg z-50 p-2 min-w-[140px]"
                       @click.stop
                     >
                       <label
                         v-for="col in allColumnKeys"
                         :key="col"
-                        class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-50 rounded cursor-pointer whitespace-nowrap"
+                        class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-700 hover:bg-stone-50 rounded cursor-pointer whitespace-nowrap"
                       >
                         <input
                           type="checkbox"
@@ -1067,7 +1067,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
               <tr
                 v-for="item in displayedRecords"
                 :key="makeWordSelectionKey(item)"
-                :class="isSelected(item) ? 'bg-blue-50/60' : 'hover:bg-slate-50/60'"
+                :class="isSelected(item) ? 'bg-blue-50/60' : 'hover:bg-stone-50/60'"
               >
                 <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
                   <input
@@ -1091,19 +1091,19 @@ const paginationRange = computed<Array<number | '...'>>(() => {
                 <td class="px-4 py-3 text-sm text-slate-700 text-right">
                   <div class="flex items-center justify-end gap-2 w-[140px]">
                     <button
-                      class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
+                      class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-emerald-100 bg-white text-slate-600 hover:text-slate-900 hover:bg-stone-50 transition-colors"
                       @click="handlePreview(item.id)"
                     >
                       <i class="fa-solid fa-eye" />
                     </button>
                     <button
-                      class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
+                      class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-emerald-100 bg-white text-slate-600 hover:text-slate-900 hover:bg-stone-50 transition-colors"
                       @click="handleEdit(item.id)"
                     >
                       <i class="fa-solid fa-pen" />
                     </button>
                     <button
-                      class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 transition-colors"
+                      class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-emerald-100 bg-white text-slate-600 hover:text-slate-900 hover:bg-stone-50 transition-colors"
                       @click="toggleMenu(item.id)"
                     >
                       <i class="fa-solid fa-ellipsis" />

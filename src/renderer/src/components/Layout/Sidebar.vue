@@ -46,12 +46,12 @@ const toggle = () => {
     id="sidebar"
     :class="[
       sidebarOpen ? 'w-64' : 'w-16',
-      'bg-slate-900 text-slate-300 flex flex-col transition-all duration-300 flex-none h-full z-20',
+      'bg-emerald-950 text-emerald-200 flex flex-col transition-all duration-300 flex-none h-full z-20',
     ]"
   >
     <!-- Sidebar Toggle -->
-    <div class="p-4 flex items-center justify-center h-16 border-b border-slate-800">
-      <button class="text-slate-500 hover:text-white transition-colors p-1" @click="toggle">
+    <div class="p-4 flex items-center justify-center h-16 border-b border-emerald-800/50">
+      <button class="text-emerald-400 hover:text-white transition-colors p-1" @click="toggle">
         <i class="fa-solid fa-bars" />
       </button>
     </div>
@@ -61,7 +61,7 @@ const toggle = () => {
       <!-- Words 导航链接 -->
       <RouterLink
         to="/"
-        class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors group"
+        class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-emerald-800/40 transition-colors group"
         :class="{ 'justify-center': !sidebarOpen }"
       >
         <i class="fa-solid fa-book w-5 text-center transition-colors group-hover:text-white" />
@@ -72,7 +72,7 @@ const toggle = () => {
       <!-- Phrases 导航链接 -->
       <RouterLink
         to="/phrase"
-        class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors group"
+        class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-emerald-800/40 transition-colors group"
         :class="{ 'justify-center': !sidebarOpen }"
       >
         <i
@@ -82,13 +82,26 @@ const toggle = () => {
           >Phrases</span
         >
       </RouterLink>
+      <RouterLink
+        to="/editor"
+        data-tour="generate-entry"
+        class="sidebar-item flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-emerald-800/40 transition-colors group"
+        :class="{ 'justify-center': !sidebarOpen }"
+      >
+        <i
+          class="fa-solid fa-wand-magic-sparkles w-5 text-center transition-colors group-hover:text-white"
+        />
+        <span class="sidebar-text font-medium whitespace-nowrap" :class="{ hidden: !sidebarOpen }"
+          >Generate</span
+        >
+      </RouterLink>
     </nav>
 
     <!-- Footer / Settings -->
-    <div class="p-4 border-t border-slate-800">
+    <div class="p-4 border-t border-emerald-800/50">
       <RouterLink
         to="/settings"
-        class="sidebar-item flex items-center gap-3 px-3 py-2.5 w-full rounded-lg hover:bg-slate-800 transition-colors text-left group"
+        class="sidebar-item flex items-center gap-3 px-3 py-2.5 w-full rounded-xl hover:bg-emerald-800/40 transition-colors text-left group"
         :class="{ 'justify-center': !sidebarOpen }"
       >
         <div class="relative flex-none">

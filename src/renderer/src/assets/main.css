@@ -1,5 +1,5 @@
-body { background-color: #f8fafc; color: #0f172a; }
-.glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
+body { background-color: #faf8f5; color: #0f172a; }
+.glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(226, 239, 231, 0.8); }
 .diff-added { background-color: #dcfce7; }
 .diff-removed { background-color: #fee2e2; }
 
@@ -7,12 +7,12 @@ body { background-color: #f8fafc; color: #0f172a; }
 .resizer {
     width: 6px;
     cursor: col-resize;
-    background-color: #e2e8f0;
+    background-color: #e2efe7;
     border-radius: 9999px;
     flex-shrink: 0;
     transition: background-color 0.2s;
     margin: 0 4px;
 }
 .resizer:hover, .resizer.active {
-    background-color: #3b82f6;
+    background-color: #15803D;
 }

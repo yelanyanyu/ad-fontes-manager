@@ -56,12 +56,12 @@ const mappedFieldNames = computed(() => {
   <div v-if="open" class="fixed inset-0 z-40 bg-black/40" @click="onOverlayClick" />
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <div
-      class="w-full max-w-3xl rounded-xl bg-white border border-slate-200 shadow-xl overflow-hidden"
+      class="w-full max-w-3xl rounded-xl bg-white border border-emerald-100 shadow-xl overflow-hidden"
     >
-      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      <div class="px-5 py-4 border-b border-emerald-50 flex items-center justify-between">
         <h3 class="text-slate-800 font-bold text-base">Anki Card Export</h3>
         <button
-          class="w-8 h-8 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+          class="w-8 h-8 rounded-full text-stone-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
           @click="emit('close')"
         >
           <i class="fa-solid fa-xmark" />
@@ -75,7 +75,7 @@ const mappedFieldNames = computed(() => {
             <span v-else class="text-amber-600 font-semibold">Anki not connected</span>
           </div>
           <button
-            class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+            class="text-sm px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 hover:bg-emerald-50"
             :disabled="busy"
             @click="emit('connect-anki')"
           >
@@ -87,7 +87,7 @@ const mappedFieldNames = computed(() => {
           <label class="text-sm text-slate-700 font-medium">
             Deck Name
             <select
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
               :value="props.deckName"
               @change="emit('update:deckName', ($event.target as HTMLSelectElement).value)"
             >
@@ -103,7 +103,7 @@ const mappedFieldNames = computed(() => {
           <label class="text-sm text-slate-700 font-medium">
             Model Name
             <select
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
               :value="props.modelName"
               @change="emit('update:modelName', ($event.target as HTMLSelectElement).value)"
             >
@@ -119,7 +119,7 @@ const mappedFieldNames = computed(() => {
           <label class="text-sm text-slate-700 font-medium">
             Card Template
             <select
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
               :value="props.templateName"
               @change="emit('update:templateName', ($event.target as HTMLSelectElement).value)"
             >
@@ -139,7 +139,7 @@ const mappedFieldNames = computed(() => {
           <label class="text-sm text-slate-700 font-medium">
             Tags (comma separated)
             <input
-              class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
               :value="props.tagsInput"
               @input="emit('update:tagsInput', ($event.target as HTMLInputElement).value)"
             />
@@ -150,12 +150,12 @@ const mappedFieldNames = computed(() => {
           .apkg File Name
           <div class="mt-1 flex gap-2">
             <input
-              class="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              class="flex-1 rounded-lg border border-emerald-300 px-3 py-2 text-sm"
               :value="props.apkgPath"
               @input="emit('update:apkgPath', ($event.target as HTMLInputElement).value)"
             />
             <button
-              class="px-3 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm"
+              class="px-3 py-2 rounded-lg border border-emerald-100 text-slate-700 hover:bg-emerald-50 text-sm"
               :disabled="busy"
               @click="emit('browse-apkg-path')"
             >
@@ -166,7 +166,7 @@ const mappedFieldNames = computed(() => {
 
         <div class="flex justify-end">
           <button
-            class="text-sm px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50"
+            class="text-sm px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 hover:bg-emerald-50"
             :disabled="busy"
             @click="emit('refresh')"
           >
@@ -205,7 +205,7 @@ const mappedFieldNames = computed(() => {
           </div>
         </div>
 
-        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div class="rounded-lg border border-emerald-100 bg-stone-50 p-4">
           <div
             v-if="!ankiConnected"
             class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-sm"
@@ -224,7 +224,7 @@ const mappedFieldNames = computed(() => {
             <div
               v-for="fieldName in mappedFieldNames"
               :key="fieldName"
-              class="bg-white border border-slate-200 rounded p-2 break-all"
+              class="bg-white border border-emerald-100 rounded p-2 break-all"
             >
               <strong>{{ fieldName }}:</strong>
               {{
@@ -237,12 +237,12 @@ const mappedFieldNames = computed(() => {
         </div>
       </div>
 
-      <div class="px-5 py-4 border-t border-slate-100 flex flex-wrap justify-end gap-2">
+      <div class="px-5 py-4 border-t border-emerald-50 flex flex-wrap justify-end gap-2">
         <button
           :class="
             duplicateConflict
               ? 'px-4 py-2 rounded-lg border border-red-300 bg-red-600 text-white hover:bg-red-500 text-sm'
-              : 'px-4 py-2 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-sm'
+              : 'px-4 py-2 rounded-lg border border-emerald-100 text-slate-700 hover:bg-emerald-50 text-sm'
           "
           :disabled="busy || !payload"
           @click="emit('import-test')"
