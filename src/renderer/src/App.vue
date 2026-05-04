@@ -56,21 +56,43 @@ onUnmounted(() => window.removeEventListener(ONBOARDING_REPLAY_EVENT, replayTour
 </script>
 
 <template>
-  <div class="h-screen flex overflow-hidden bg-stone-50 text-slate-800">
+  <div class="app">
     <Sidebar />
 
-    <div class="flex-1 flex flex-col min-w-0 h-full relative">
+    <main class="main">
       <Header />
 
-      <div class="flex-1 relative overflow-hidden">
+      <section class="workspace">
         <RouterView v-slot="{ Component }">
           <KeepAlive include="HomeView">
             <component :is="Component" />
           </KeepAlive>
         </RouterView>
-      </div>
-    </div>
+      </section>
+    </main>
 
     <ToastContainer />
   </div>
 </template>
+
+<style scoped>
+.app {
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 58px 1fr;
+}
+
+.main {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: 58px 1fr;
+}
+
+.workspace {
+  min-width: 0;
+  min-height: 0;
+  padding: 16px 14px 14px;
+  overflow: auto;
+  background: transparent;
+}
+</style>

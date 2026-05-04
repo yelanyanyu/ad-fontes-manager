@@ -53,168 +53,510 @@ const onPageSizeChange = (event: Event) => {
 </script>
 
 <template>
-  <div v-if="searchModeOpen" class="fixed inset-0 z-30" @click="emit('close-search-mode')" />
+  <div v-if="searchModeOpen" class="search-backdrop" @click="emit('close-search-mode')" />
 
-  <div class="px-4 py-3 border-b border-slate-100 flex flex-col gap-3 bg-slate-50/50 flex-none">
-    <div class="flex items-center gap-2 w-full">
-      <div class="relative w-full">
-        <i
-          class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 text-xs"
-        />
+  <div class="toolbar">
+    <div class="toolbar-row">
+      <div class="search-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
         <input
           :value="search"
           type="text"
           placeholder="Search..."
-          class="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-8 pr-4 text-xs focus:ring-1 focus:ring-primary transition-all outline-none placeholder-slate-400"
           @input="onSearchInput"
           @keydown="emit('search-keydown', $event)"
         />
       </div>
-      <div class="relative flex items-stretch">
+
+      <div class="search-actions">
         <button
           :disabled="!canSearch"
-          class="min-w-[88px] text-xs bg-primary text-white rounded-l-lg px-3 py-1.5 hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          class="search-btn"
           @click="emit('search')"
         >
-          <i v-if="loading" class="fa-solid fa-spinner fa-spin text-xs" />
+          <svg
+            v-if="loading"
+            class="animate-spin"
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+          >
+            <circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="31.4 31.4" />
+          </svg>
           <span>{{ loading ? 'Searching' : 'Search' }}</span>
         </button>
         <button
-          class="w-10 bg-primary text-white rounded-r-lg border-l border-blue-400/50 hover:bg-blue-600 transition-colors flex items-center justify-center gap-1"
+          class="search-btn"
           :title="searchModeLabel"
           @click="emit('toggle-search-mode')"
         >
-          <i class="fa-solid fa-magnifying-glass text-[11px]" />
-          <span class="text-[10px]">▼</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
         </button>
-        <Transition
-          enter-active-class="transition duration-150 ease-out"
-          enter-from-class="opacity-0 -translate-y-1 scale-95"
-          enter-to-class="opacity-100 translate-y-0 scale-100"
-          leave-active-class="transition duration-100 ease-in"
-          leave-from-class="opacity-100 translate-y-0 scale-100"
-          leave-to-class="opacity-0 -translate-y-1 scale-95"
-        >
-          <div
-            v-if="searchModeOpen"
-            class="absolute right-0 top-full mt-2 z-40 w-44 rounded-lg border border-slate-200 bg-white shadow-lg p-1"
-          >
-            <button
-              class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
-              :class="
-                searchMode === 'partial'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-50'
-              "
-              @click="emit('set-search-mode', 'partial')"
-            >
-              Partial Match
-            </button>
-            <button
-              class="w-full text-left px-3 py-2 rounded-md text-xs font-medium transition-colors"
-              :class="
-                searchMode === 'exact'
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-600 hover:bg-slate-50'
-              "
-              @click="emit('set-search-mode', 'exact')"
-            >
-              Exact Match
-            </button>
-          </div>
-        </Transition>
       </div>
     </div>
 
-    <div class="flex justify-between items-center">
-      <div class="flex items-center gap-2">
-        <select
-          :value="sort"
-          class="text-xs border border-slate-200 rounded px-2 py-1.5 bg-white text-slate-600 outline-none focus:ring-1 focus:ring-primary shadow-sm cursor-pointer"
-          @change="onSortChange"
+    <Transition
+      enter-active-class="transition duration-150 ease-out"
+      enter-from-class="opacity-0 -translate-y-1 scale-95"
+      enter-to-class="opacity-100 translate-y-0 scale-100"
+      leave-active-class="transition duration-100 ease-in"
+      leave-from-class="opacity-100 translate-y-0 scale-100"
+      leave-to-class="opacity-0 -translate-y-1 scale-95"
+    >
+      <div
+        v-if="searchModeOpen"
+        class="search-mode-menu"
+      >
+        <button
+          :class="searchMode === 'partial' ? 'active' : ''"
+          @click="emit('set-search-mode', 'partial')"
         >
-          <option value="az">A-Z</option>
-          <option value="za">Z-A</option>
-          <option value="newest">Newest</option>
-          <option value="oldest">Oldest</option>
-        </select>
-        <div
-          class="flex items-center gap-2 bg-white border border-slate-200 rounded px-2 py-1 shadow-sm"
+          Partial Match
+        </button>
+        <button
+          :class="searchMode === 'exact' ? 'active' : ''"
+          @click="emit('set-search-mode', 'exact')"
         >
-          <span class="text-[10px] text-slate-400 uppercase font-bold">Size</span>
+          Exact Match
+        </button>
+      </div>
+    </Transition>
+
+    <div class="toolbar-row split">
+      <div class="toolbar-left">
+        <div class="ctl">
+          <select :value="sort" class="ctl-select" @change="onSortChange">
+            <option value="az">A-Z</option>
+            <option value="za">Z-A</option>
+            <option value="newest">Newest</option>
+            <option value="oldest">Oldest</option>
+          </select>
+        </div>
+
+        <div class="ctl">
+          SIZE
           <input
             :value="pageSize"
             type="number"
             min="1"
             max="500"
-            class="w-10 text-xs bg-transparent outline-none text-center font-medium text-slate-700"
+            class="page-size-input"
             @change="onPageSizeChange"
           />
         </div>
+
         <button
           v-if="isBackendConnected"
-          class="text-xs bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-600 hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+          class="ctl"
           title="Select all records matching current search"
           :disabled="!!selectingAllMatching"
           @click="emit('select-all-matching')"
         >
-          <i class="fa-solid fa-check-double" :class="{ 'fa-spin fa-spinner': !!selectingAllMatching }" />
-          <span>{{ selectingAllMatching ? 'Selecting...' : 'Select All Matching' }}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+          {{ selectingAllMatching ? 'Selecting...' : 'Select All Matching' }}
         </button>
+
         <button
           v-if="isBackendConnected && localSyncCount"
           :disabled="syncAllLoading"
-          class="text-xs bg-white border border-slate-200 rounded px-2 py-1.5 text-slate-600 hover:bg-slate-50 shadow-sm flex items-center gap-2 disabled:opacity-60"
+          class="ctl"
           @click="emit('open-sync-all')"
         >
-          <i class="fa-solid fa-cloud-arrow-up" />
-          <span>Sync All ({{ localSyncCount }})</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+          Sync All ({{ localSyncCount }})
         </button>
       </div>
-      <div class="flex items-center gap-3">
+
+      <div class="toolbar-right">
         <button
           v-if="hasSelection"
-          class="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 rounded px-2 py-1.5 hover:bg-emerald-100 shadow-sm flex items-center gap-2"
-          title="Open batch Anki operations for selected words"
+          class="btn btn-soft-green"
+          style="height: 28px; padding: 0 10px"
           data-test="batch-export-anki-button"
           @click="emit('open-batch-anki-export')"
         >
-          <i class="fa-solid fa-layer-group" />
-          <span>Batch Anki Actions</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <ellipse cx="12" cy="5" rx="7" ry="3" />
+            <path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5" />
+            <path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
+          </svg>
+          Batch Anki Actions
         </button>
         <button
           v-if="hasSelection"
-          class="text-xs bg-blue-50 border border-blue-200 text-blue-700 rounded px-2 py-1.5 hover:bg-blue-100 shadow-sm flex items-center gap-2"
-          title="Print selected lemmas"
+          class="btn btn-soft-blue"
+          style="height: 28px; padding: 0 10px"
           data-test="print-selected-button"
           @click="emit('print-selected')"
         >
-          <i class="fa-solid fa-print" />
-          <span>Print Selected ({{ selectedCount }})</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M6 9V2h12v7" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <path d="M6 14h12v8H6z" />
+          </svg>
+          Print Selected ({{ selectedCount }})
         </button>
         <button
           v-if="hasSelection"
-          class="text-xs bg-white border border-slate-200 text-slate-600 rounded px-2 py-1.5 hover:bg-slate-50 shadow-sm flex items-center gap-2"
-          title="Clear all selected items"
+          class="btn btn-quiet"
+          style="height: 28px; padding: 0 10px"
           data-test="clear-selection-button"
           @click="emit('clear-selection')"
         >
-          <i class="fa-solid fa-xmark" />
-          <span>Clear Selection</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <circle cx="12" cy="12" r="8" />
+          </svg>
+          Clear Selection
         </button>
-        <span
-          class="text-xs font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full"
-        >
-          {{ totalCount }} words
-        </span>
-        <button
-          class="text-slate-400 hover:text-primary transition-colors p-1"
-          title="Reload All"
-          @click="emit('refresh')"
-        >
-          <i class="fa-solid fa-arrows-rotate" :class="{ 'fa-spin': loading }" />
+        <div class="count">{{ totalCount }} words</div>
+        <button class="refresh" title="Refresh" @click="emit('refresh')">
+          <svg
+            :class="{ 'animate-spin': loading }"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
         </button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.toolbar {
+  padding: 10px 12px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+}
+
+[data-theme="dark"] .toolbar {
+  background: #26231e;
+}
+
+.toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-row.split {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.search-wrap {
+  flex: 1;
+  min-width: 280px;
+  height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: #fff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: #8f877e;
+  box-shadow: 0 1px 1px rgba(22, 16, 10, 0.018);
+}
+
+[data-theme="dark"] .search-wrap {
+  background: #201d18;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
+}
+
+.search-wrap:focus-within {
+  border-color: rgba(36, 114, 83, 0.52);
+  box-shadow: 0 0 0 3px rgba(36, 114, 83, 0.1);
+}
+
+[data-theme="dark"] .search-wrap:focus-within {
+  border-color: rgba(67, 179, 127, 0.52);
+  box-shadow: 0 0 0 3px rgba(67, 179, 127, 0.1);
+}
+
+.search-wrap input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.search-wrap input::placeholder {
+  color: #9a9389;
+}
+
+.search-actions {
+  display: flex;
+  align-items: center;
+}
+
+.search-btn {
+  height: 34px;
+  border: 0;
+  background: var(--green);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  padding: 0 16px;
+  box-shadow: 0 6px 14px rgba(36, 114, 83, 0.14);
+  cursor: pointer;
+}
+
+.search-btn:first-child {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+.search-btn:last-child {
+  border-left: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 0 10px;
+}
+
+.search-btn:hover {
+  background: var(--green-hover);
+}
+
+.search-btn:disabled {
+  opacity: 0.6;
+}
+
+[data-theme="dark"] .search-btn {
+  color: #07110c;
+  box-shadow: 0 6px 16px rgba(67, 179, 127, 0.16);
+}
+
+[data-theme="dark"] .search-btn:last-child {
+  border-left: 1px solid rgba(0, 0, 0, 0.16);
+}
+
+.search-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.search-mode-menu {
+  position: absolute;
+  right: 12px;
+  top: 48px;
+  z-index: 40;
+  width: 176px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+}
+
+.search-mode-menu button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.search-mode-menu button:hover {
+  background: var(--surface-soft);
+}
+
+.search-mode-menu button.active {
+  background: var(--green-soft);
+  color: var(--green);
+  font-weight: 600;
+}
+
+.ctl {
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: #625c54;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 1px 1px rgba(22, 16, 10, 0.018);
+  cursor: pointer;
+}
+
+[data-theme="dark"] .ctl {
+  background: rgba(255, 255, 255, 0.05);
+  color: #c3b9ad;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.14);
+}
+
+.ctl:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ctl strong {
+  font-weight: 700;
+  color: #34302b;
+}
+
+[data-theme="dark"] .ctl strong {
+  color: #f0e8dd;
+}
+
+.page-size-input {
+  width: 40px;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #34302b;
+}
+
+[data-theme="dark"] .page-size-input {
+  color: #f0e8dd;
+}
+
+.ctl-select {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  outline: 0;
+  cursor: pointer;
+}
+
+.count {
+  height: 28px;
+  border: 1px solid var(--border);
+  background: #f7f3ec;
+  color: #625c54;
+  border-radius: var(--radius-full);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 650;
+  display: inline-flex;
+  align-items: center;
+}
+
+[data-theme="dark"] .count {
+  background: #2b2721;
+  color: #d2c8bc;
+}
+
+.refresh {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: #7b746b;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+[data-theme="dark"] .refresh {
+  color: #aaa197;
+}
+
+[data-theme="dark"] .refresh:hover {
+  color: #fff;
+}
+
+/* Button variants */
+.btn {
+  height: 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 560;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-soft-green {
+  background: var(--green-soft);
+  border-color: var(--green-border);
+  color: #1f6a4a;
+  font-weight: 620;
+}
+
+[data-theme="dark"] .btn-soft-green {
+  color: #93e6bb;
+}
+
+.btn-soft-blue {
+  background: var(--blue-soft);
+  border-color: var(--blue-border);
+  color: #2452bb;
+  font-weight: 620;
+}
+
+[data-theme="dark"] .btn-soft-blue {
+  color: #adc4ff;
+}
+
+.btn-quiet {
+  background: var(--surface);
+  border-color: var(--border);
+  color: #6e6860;
+}
+
+[data-theme="dark"] .btn-quiet {
+  background: rgba(255, 255, 255, 0.05);
+  color: #b6aca1;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+</style>

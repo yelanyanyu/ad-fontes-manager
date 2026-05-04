@@ -322,11 +322,9 @@ const copyRichText = (): void => {
 </script>
 
 <template>
-  <div class="absolute inset-0 bg-stone-100 overflow-y-auto flex flex-col z-30">
+  <div class="preview-container">
     <!-- Preview Header -->
-    <div
-      class="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-emerald-100 px-6 py-3 flex items-center justify-between shadow-sm"
-    >
+    <div class="preview-header">
       <button
         class="text-stone-500 hover:text-slate-800 flex items-center gap-2 font-bold text-sm transition-colors group"
         @click="close"
@@ -334,7 +332,7 @@ const copyRichText = (): void => {
         <div
           class="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center group-hover:bg-emerald-100 transition-colors"
         >
-          <i class="fa-solid fa-arrow-left" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
         </div>
         <span>Back to List</span>
       </button>
@@ -369,7 +367,7 @@ const copyRichText = (): void => {
     <div class="p-8 w-full max-w-5xl mx-auto flex-1">
       <!-- Dynamic Content -->
       <div v-if="loading" class="text-center py-10 flex flex-col items-center gap-2 text-slate-500">
-        <i class="fa-solid fa-spinner fa-spin text-2xl" />
+        <svg class="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="31.4 31.4" /></svg>
         <span>Loading...</span>
       </div>
 
@@ -381,14 +379,14 @@ const copyRichText = (): void => {
             class="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2"
             @click="copyContent('html')"
           >
-            <i class="fa-solid fa-copy" /> <span>Copy HTML Code (Anki)</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg> <span>Copy HTML Code (Anki)</span>
           </button>
           <button
             :disabled="generatingImage"
             class="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2"
             @click="copyImageToClipboard"
           >
-            <i class="fa-solid fa-image" :class="{ 'fa-spin': generatingImage }" />
+            <svg :class="{ 'animate-spin': generatingImage }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><path d="m21 15-5-5L5 21" /></svg>
             <span>{{ generatingImage ? 'Generating...' : 'Copy as Image' }}</span>
           </button>
           <button
@@ -396,19 +394,17 @@ const copyRichText = (): void => {
             class="bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-400 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2"
             @click="downloadCardImage"
           >
-            <i class="fa-solid fa-download" :class="{ 'fa-spin': generatingImage }" />
+            <svg :class="{ 'animate-spin': generatingImage }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /><path d="M12 15V3" /></svg>
             <span>{{ generatingImage ? 'Generating...' : 'Download Image' }}</span>
           </button>
         </div>
       </div>
 
       <div v-else class="flex flex-col gap-8 w-full max-w-4xl mx-auto">
-        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div
-            class="bg-gray-50 border-b border-gray-200 px-4 py-2 flex justify-between items-center"
-          >
+        <div class="preview-card">
+          <div class="preview-card-header">
             <h3 class="font-bold text-sm text-gray-700 uppercase tracking-wide">
-              <i class="fa-solid fa-eye mr-2" />Preview
+              <svg class="inline mr-2" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>Preview
             </h3>
             <button
               class="text-xs bg-white text-blue-600 border border-blue-200 px-3 py-1 rounded shadow-sm"
@@ -420,27 +416,138 @@ const copyRichText = (): void => {
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div id="md-render-target" class="p-8 markdown-body" v-html="content" />
         </div>
-        <div
-          class="bg-emerald-950 rounded-xl shadow-sm border border-emerald-800/50 overflow-hidden text-emerald-200"
-        >
-          <div
-            class="bg-emerald-950 border-b border-emerald-800/50 px-4 py-2 flex justify-between items-center"
-          >
-            <h3 class="font-bold text-sm text-emerald-400 uppercase tracking-wide">
-              <i class="fa-solid fa-code mr-2" />Source
+        <div class="source-panel">
+          <div class="source-header">
+            <h3>
+              <svg class="inline mr-2" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m16 18 6-6-6-6" /><path d="m8 6-6 6 6 6" /></svg>Source
             </h3>
-            <button
-              class="text-xs bg-emerald-700 text-white border border-emerald-600 px-3 py-1 rounded shadow-sm"
-              @click="copyContent('md')"
-            >
+            <button class="btn btn-sm" @click="copyContent('md')">
               Copy Source
             </button>
           </div>
-          <div class="p-4 overflow-x-auto">
-            <pre class="text-sm whitespace-pre-wrap">{{ generateMarkdown(rawData || {}) }}</pre>
+          <div class="source-body">
+            <pre>{{ generateMarkdown(rawData || {}) }}</pre>
           </div>
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.preview-container {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-bottom);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+}
+
+.preview-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: rgba(255, 255, 252, 0.76);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--border);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+[data-theme="dark"] .preview-header {
+  background: rgba(24, 22, 20, 0.76);
+}
+
+.preview-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.preview-card-header {
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preview-card-header h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.source-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+[data-theme="dark"] .source-panel {
+  background: var(--nav-soft);
+  border-color: var(--border);
+}
+
+.source-header {
+  background: var(--surface-soft);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+[data-theme="dark"] .source-header {
+  background: var(--nav);
+}
+
+.source-header h3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.source-body {
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.source-body pre {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.btn {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+  font-weight: 560;
+  transition: background 0.12s ease;
+}
+
+.btn:hover {
+  background: var(--surface-soft);
+}
+</style>

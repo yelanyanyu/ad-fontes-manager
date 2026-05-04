@@ -29,7 +29,7 @@ const emit = defineEmits<{
           class="text-stone-400 hover:text-slate-600 transition-colors"
           @click="emit('close')"
         >
-          <i class="fa-solid fa-xmark text-xl" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12" /></svg>
         </button>
       </div>
       <div class="px-4 py-3 text-sm text-slate-600 border-b border-emerald-50">

@@ -1,20 +1,19 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
+import WordEditor from '@/components/WordEditor/WordEditor.vue';
+import WordList from '@/components/WordList/WordList.vue';
+import WordPreview from '@/components/WordPreview/WordPreview.vue';
 
 defineOptions({
   name: 'HomeView',
 });
 
-import WordEditor from '@/components/WordEditor/WordEditor.vue';
-import WordList from '@/components/WordList/WordList.vue';
-import WordPreview from '@/components/WordPreview/WordPreview.vue';
+const leftPanel = ref<HTMLElement | null>(null);
+const dragHandle = ref<HTMLElement | null>(null);
+const container = ref<HTMLElement | null>(null);
+const previewId = ref<string | null>(null);
 
-const leftPanel = ref(null);
-const dragHandle = ref(null);
-const container = ref(null);
-const previewId = ref(null);
-
-const showPreview = id => {
+const showPreview = (id: string) => {
   previewId.value = id;
 };
 
@@ -22,8 +21,8 @@ const closePreview = () => {
   previewId.value = null;
 };
 
-let handleResizeMove = null;
-let handleResizeUp = null;
+let handleResizeMove: ((e: MouseEvent) => void) | null = null;
+let handleResizeUp: (() => void) | null = null;
 
 onMounted(() => {
   const handle = dragHandle.value;
@@ -36,7 +35,7 @@ onMounted(() => {
   let startX = 0;
   let startWidth = 0;
 
-  handle.addEventListener('mousedown', e => {
+  handle.addEventListener('mousedown', (e) => {
     isResizing = true;
     startX = e.clientX;
     startWidth = left.getBoundingClientRect().width;
@@ -45,12 +44,11 @@ onMounted(() => {
     e.preventDefault();
   });
 
-  handleResizeMove = e => {
+  handleResizeMove = (e) => {
     if (!isResizing) return;
     const dx = e.clientX - startX;
     const newWidth = startWidth + dx;
 
-    // Constraints
     if (newWidth < 300) return;
     if (newWidth > parent.clientWidth - 350) return;
 
@@ -76,26 +74,62 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main ref="container" class="absolute inset-0 flex flex-row p-4 gap-0 h-full">
-    <!-- Left: Editor -->
+  <div ref="container" class="grid-layout">
     <div
       ref="leftPanel"
       data-tour="word-editor"
-      class="flex flex-col h-full min-w-[300px]"
+      class="left-panel"
       style="width: 45%"
     >
       <WordEditor />
     </div>
 
-    <!-- Resizer -->
-    <div ref="dragHandle" class="resizer z-20" />
+    <div ref="dragHandle" class="resizer" />
 
-    <!-- Right: List -->
-    <div data-tour="word-list" class="flex-1 flex flex-col h-full min-w-[350px] min-h-0">
+    <div data-tour="word-list" class="right-panel">
       <WordList @preview="showPreview" />
     </div>
 
-    <!-- Preview Overlay -->
     <WordPreview v-if="previewId" :word-id="previewId" @close="closePreview" />
-  </main>
+  </div>
 </template>
+
+<style scoped>
+.grid-layout {
+  height: calc(100vh - 88px);
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  align-items: stretch;
+}
+
+.left-panel {
+  flex: none;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.right-panel {
+  flex: 1;
+  min-width: 350px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.resizer {
+  width: 6px;
+  cursor: col-resize;
+  background-color: var(--border);
+  border-radius: 999px;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+  margin: 0 4px;
+}
+
+.resizer:hover,
+.resizer.active {
+  background-color: var(--green);
+}
+</style>

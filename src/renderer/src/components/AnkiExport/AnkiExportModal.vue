@@ -56,26 +56,26 @@ const mappedFieldNames = computed(() => {
   <div v-if="open" class="fixed inset-0 z-40 bg-black/40" @click="onOverlayClick" />
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <div
-      class="w-full max-w-3xl rounded-xl bg-white border border-emerald-100 shadow-xl overflow-hidden"
+      class="anki-modal-container w-full max-w-3xl rounded-xl bg-[var(--surface-panel)] border border-[var(--border)] shadow-xl overflow-hidden"
     >
-      <div class="px-5 py-4 border-b border-emerald-50 flex items-center justify-between">
-        <h3 class="text-slate-800 font-bold text-base">Anki Card Export</h3>
+      <div class="px-5 py-4 border-b border-[var(--line)] flex items-center justify-between">
+        <h3 class="text-[var(--text)] font-bold text-base">Anki Card Export</h3>
         <button
-          class="w-8 h-8 rounded-full text-stone-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+          class="w-8 h-8 rounded-full text-[var(--faint)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)] transition-colors"
           @click="emit('close')"
         >
-          <i class="fa-solid fa-xmark" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12" /></svg>
         </button>
       </div>
 
       <div class="p-5 space-y-4 max-h-[72vh] overflow-y-auto">
         <div class="flex items-center justify-between gap-3">
-          <div class="text-sm text-slate-600">
-            <span v-if="ankiConnected" class="text-emerald-600 font-semibold">Anki connected</span>
-            <span v-else class="text-amber-600 font-semibold">Anki not connected</span>
+          <div class="text-sm text-[var(--text-soft)]">
+            <span v-if="ankiConnected" class="text-[var(--green)] font-semibold">Anki connected</span>
+            <span v-else class="text-[var(--amber)] font-semibold">Anki not connected</span>
           </div>
           <button
-            class="text-sm px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 hover:bg-emerald-50"
+            class="text-sm px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)]"
             :disabled="busy"
             @click="emit('connect-anki')"
           >
@@ -84,10 +84,10 @@ const mappedFieldNames = computed(() => {
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <label class="text-sm text-slate-700 font-medium">
+          <label class="text-sm text-[var(--text)] font-medium">
             Deck Name
             <select
-              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               :value="props.deckName"
               @change="emit('update:deckName', ($event.target as HTMLSelectElement).value)"
             >
@@ -100,10 +100,10 @@ const mappedFieldNames = computed(() => {
             </select>
           </label>
 
-          <label class="text-sm text-slate-700 font-medium">
+          <label class="text-sm text-[var(--text)] font-medium">
             Model Name
             <select
-              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               :value="props.modelName"
               @change="emit('update:modelName', ($event.target as HTMLSelectElement).value)"
             >
@@ -116,10 +116,10 @@ const mappedFieldNames = computed(() => {
             </select>
           </label>
 
-          <label class="text-sm text-slate-700 font-medium">
+          <label class="text-sm text-[var(--text)] font-medium">
             Card Template
             <select
-              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               :value="props.templateName"
               @change="emit('update:templateName', ($event.target as HTMLSelectElement).value)"
             >
@@ -136,26 +136,26 @@ const mappedFieldNames = computed(() => {
         </div>
 
         <div class="grid grid-cols-1 gap-4">
-          <label class="text-sm text-slate-700 font-medium">
+          <label class="text-sm text-[var(--text)] font-medium">
             Tags (comma separated)
             <input
-              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               :value="props.tagsInput"
               @input="emit('update:tagsInput', ($event.target as HTMLInputElement).value)"
             />
           </label>
         </div>
 
-        <label class="text-sm text-slate-700 font-medium block">
+        <label class="text-sm text-[var(--text)] font-medium block">
           .apkg File Name
           <div class="mt-1 flex gap-2">
             <input
-              class="flex-1 rounded-lg border border-emerald-300 px-3 py-2 text-sm"
+              class="flex-1 rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               :value="props.apkgPath"
               @input="emit('update:apkgPath', ($event.target as HTMLInputElement).value)"
             />
             <button
-              class="px-3 py-2 rounded-lg border border-emerald-100 text-slate-700 hover:bg-emerald-50 text-sm"
+              class="px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)] text-sm"
               :disabled="busy"
               @click="emit('browse-apkg-path')"
             >
@@ -166,7 +166,7 @@ const mappedFieldNames = computed(() => {
 
         <div class="flex justify-end">
           <button
-            class="text-sm px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 hover:bg-emerald-50"
+            class="text-sm px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)]"
             :disabled="busy"
             @click="emit('refresh')"
           >
@@ -176,14 +176,14 @@ const mappedFieldNames = computed(() => {
 
         <div
           v-if="error"
-          class="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm"
+          class="rounded-lg border border-[var(--red-border)] bg-[var(--red-soft)] text-[var(--red)] px-3 py-2 text-sm"
         >
           {{ error }}
         </div>
 
         <div
           v-if="duplicateConflict"
-          class="rounded-lg border border-red-200 bg-red-50 text-red-800 px-3 py-3 text-sm"
+          class="rounded-lg border border-[var(--red-border)] bg-[var(--red-soft)] text-[var(--red)] px-3 py-3 text-sm"
         >
           <div class="font-semibold">Detected duplicate word: {{ duplicateConflict.word }}</div>
           <div class="text-xs mt-1">
@@ -191,12 +191,12 @@ const mappedFieldNames = computed(() => {
             NoteId:
             {{ duplicateConflict.noteId }}
           </div>
-          <div class="mt-2 text-xs text-red-700">
+          <div class="mt-2 text-xs text-[var(--red)]">
             Duplicate detected. Overwrite will replace all fields in the existing note.
           </div>
           <div class="mt-3 flex justify-end">
             <button
-              class="px-3 py-1.5 rounded-lg border border-red-300 bg-red-600 text-white text-sm hover:bg-red-500"
+              class="px-3 py-1.5 rounded-lg border border-[var(--red-border)] bg-[var(--red)] text-white text-sm hover:opacity-85"
               :disabled="busy || !payload"
               @click="emit('import-test')"
             >
@@ -205,10 +205,10 @@ const mappedFieldNames = computed(() => {
           </div>
         </div>
 
-        <div class="rounded-lg border border-emerald-100 bg-stone-50 p-4">
+        <div class="rounded-lg border border-[var(--line)] bg-[var(--surface-soft)] p-4">
           <div
             v-if="!ankiConnected"
-            class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-sm"
+            class="rounded-lg border border-[var(--amber-border)] bg-[var(--amber-soft)] text-[var(--amber)] px-3 py-2 text-sm"
           >
             Please connect Anki before configuring field mapping.
           </div>
@@ -224,7 +224,7 @@ const mappedFieldNames = computed(() => {
             <div
               v-for="fieldName in mappedFieldNames"
               :key="fieldName"
-              class="bg-white border border-emerald-100 rounded p-2 break-all"
+              class="bg-[var(--table-field)] border border-[var(--line)] rounded p-2 break-all"
             >
               <strong>{{ fieldName }}:</strong>
               {{
@@ -237,12 +237,12 @@ const mappedFieldNames = computed(() => {
         </div>
       </div>
 
-      <div class="px-5 py-4 border-t border-emerald-50 flex flex-wrap justify-end gap-2">
+      <div class="px-5 py-4 border-t border-[var(--line)] flex flex-wrap justify-end gap-2">
         <button
           :class="
             duplicateConflict
-              ? 'px-4 py-2 rounded-lg border border-red-300 bg-red-600 text-white hover:bg-red-500 text-sm'
-              : 'px-4 py-2 rounded-lg border border-emerald-100 text-slate-700 hover:bg-emerald-50 text-sm'
+              ? 'px-4 py-2 rounded-lg border border-[var(--red-border)] bg-[var(--red)] text-white hover:opacity-85 text-sm'
+              : 'px-4 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)] text-sm'
           "
           :disabled="busy || !payload"
           @click="emit('import-test')"
@@ -256,7 +256,7 @@ const mappedFieldNames = computed(() => {
           }}
         </button>
         <button
-          class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm disabled:bg-blue-300"
+          class="px-4 py-2 rounded-lg bg-[var(--blue)] hover:opacity-80 text-white text-sm disabled:opacity-50"
           :disabled="busy || !payload"
           @click="emit('export-apkg')"
         >

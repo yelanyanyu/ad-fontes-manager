@@ -788,7 +788,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
 
 <template>
   <div
-    class="bg-white rounded-2xl shadow-sm border border-emerald-100 flex-col flex h-full overflow-hidden ml-1"
+    class="panel table-panel"
   >
     <AnkiExportModal
       :open="ankiExportOpen"
@@ -927,56 +927,59 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @select-all-matching="void selectAllMatching()"
       @open-batch-anki-export="void openBatchAnkiExport()"
     />
-    <div v-if="showBatchSummaryBar" class="px-4 py-2 border-b border-emerald-50 bg-blue-50/50">
+    <div
+      v-if="showBatchSummaryBar"
+      class="px-4 py-2 border-b border-[var(--line)] bg-[var(--surface-soft)]"
+    >
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-3 min-w-0">
-          <span class="text-xs font-semibold text-blue-700 whitespace-nowrap">
+          <span class="text-xs font-semibold text-[var(--blue)] whitespace-nowrap">
             {{ batchAnkiStageLabel }}
           </span>
-          <span class="text-xs text-slate-600 whitespace-nowrap">
+          <span class="text-xs text-[var(--text-soft)] whitespace-nowrap">
             {{ batchAnkiProgress.processed }}/{{ batchAnkiProgress.total }}
           </span>
-          <div class="w-44 h-2 rounded-full bg-emerald-200 overflow-hidden">
+          <div class="w-44 h-2 rounded-full bg-[var(--surface)] overflow-hidden">
             <div
-              class="h-full bg-blue-500 transition-all duration-300"
+              class="h-full bg-[var(--blue)] transition-all duration-300"
               :style="{ width: `${batchAnkiProgress.percent}%` }"
             />
           </div>
-          <span class="text-xs text-stone-500">
+          <span class="text-xs text-[var(--muted)]">
             imported {{ batchAnkiStatusSummary.imported + batchAnkiStatusSummary.overwritten }},
             duplicate {{ batchAnkiStatusSummary.duplicate }}, failed
             {{ batchAnkiStatusSummary.failed }}, cancelled {{ batchAnkiStatusSummary.cancelled }}
           </span>
           <span
             v-if="batchAnkiCanResume && batchAnkiLastStoppedPhase"
-            class="text-xs text-amber-700 whitespace-nowrap"
+            class="text-xs text-[var(--amber)] whitespace-nowrap"
           >
             Cancelled during {{ batchAnkiLastStoppedPhase }}
           </span>
         </div>
         <div class="flex items-center gap-2">
           <button
-            class="text-xs px-2 py-1 rounded border border-emerald-100 bg-white text-slate-600 hover:bg-stone-50"
+            class="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)]"
             @click="openBatchPanelFromSummary"
           >
             Open Batch Panel
           </button>
           <button
             v-if="batchAnkiCanCancel"
-            class="text-xs px-2 py-1 rounded border border-red-200 bg-white text-red-700 hover:bg-red-50"
+            class="text-xs px-2 py-1 rounded border border-[var(--red-border)] bg-[var(--surface)] text-[var(--red)] hover:bg-[var(--red-soft)]"
             @click="cancelBatchFromSummary"
           >
             Cancel
           </button>
           <button
             v-if="batchAnkiCanResume"
-            class="text-xs px-2 py-1 rounded border border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+            class="text-xs px-2 py-1 rounded border border-[var(--blue-border)] bg-[var(--surface)] text-[var(--blue)] hover:bg-[var(--blue-soft)]"
             @click="void resumeBatchFromSummary()"
           >
             Resume
           </button>
           <button
-            class="text-xs px-2 py-1 rounded border border-emerald-100 bg-white text-slate-600 hover:bg-stone-50 disabled:opacity-60 disabled:cursor-not-allowed"
+            class="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)] disabled:opacity-60 disabled:cursor-not-allowed"
             :disabled="batchAnkiBusy || batchAnkiProgress.phase !== 'idle'"
             @click="closeBatchSummary"
           >
@@ -986,133 +989,114 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       </div>
     </div>
 
-    <div class="flex-1 overflow-y-auto bg-stone-50">
+    <div class="table-wrap">
       <div
         v-if="loading && !displayedRecords.length"
-        class="text-center text-stone-400 py-10 flex flex-col items-center gap-2"
+        class="table-empty"
       >
-        <i class="fa-solid fa-spinner fa-spin text-2xl" />
+        <svg class="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="31.4 31.4" />
+        </svg>
         <span>Loading records...</span>
       </div>
 
-      <div
-        v-else
-        class="bg-white rounded-lg border border-emerald-100 shadow-sm overflow-visible m-4"
-      >
-        <div class="overflow-x-auto">
-          <table class="min-w-full">
-            <thead class="bg-stone-50">
-              <tr>
-                <th
-                  scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-500 text-left w-10"
-                >
-                  <input
-                    type="checkbox"
-                    :checked="isAllVisibleSelected"
-                    class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    aria-label="Select all visible words"
-                    @change="toggleSelectAllVisible"
-                  />
-                </th>
-                <th
-                  scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-500 text-left min-w-[220px]"
-                >
-                  Lemma
-                </th>
-                <th
-                  v-for="col in shownColumns"
-                  :key="col"
-                  scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-500 text-left whitespace-nowrap"
-                >
-                  {{ columnLabels[col] }}
-                </th>
-                <th
-                  scope="col"
-                  class="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-stone-500 text-right w-[200px]"
-                >
-                  <div class="flex items-center justify-end gap-1 relative">
-                    <button
-                      class="text-stone-400 hover:text-slate-600 text-[11px] font-normal normal-case inline-flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-100 hover:border-slate-300 transition-colors"
-                      @click.stop="columnMenuOpen = !columnMenuOpen"
-                    >
-                      <i class="fa-solid fa-columns text-[9px]" /> Columns
-                    </button>
-                    <div
-                      v-if="columnMenuOpen"
-                      class="absolute right-0 top-full mt-1 bg-white border border-emerald-100 rounded-lg shadow-lg z-50 p-2 min-w-[140px]"
-                      @click.stop
-                    >
-                      <label
-                        v-for="col in allColumnKeys"
-                        :key="col"
-                        class="flex items-center gap-2 px-2 py-1.5 text-xs text-slate-700 hover:bg-stone-50 rounded cursor-pointer whitespace-nowrap"
-                      >
-                        <input
-                          type="checkbox"
-                          :checked="visibleColumns[col]"
-                          class="h-3.5 w-3.5 rounded border-slate-300 text-blue-600"
-                          @change="toggleColumn(col)"
-                        />
-                        {{ columnLabels[col] }}
-                      </label>
-                    </div>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-              <tr
-                v-for="item in displayedRecords"
-                :key="makeWordSelectionKey(item)"
-                :class="isSelected(item) ? 'bg-blue-50/60' : 'hover:bg-stone-50/60'"
+      <div v-else class="table-wrap">
+        <div class="table-shell">
+          <div class="thead" :style="{ gridTemplateColumns: `34px 1fr ${shownColumns.map(() => 'auto').join(' ')} 122px` }">
+            <div
+              :class="['check', { selected: isAllVisibleSelected }]"
+              role="checkbox"
+              :aria-checked="isAllVisibleSelected"
+              :aria-label="'Select all visible words'"
+              @click="toggleSelectAllVisible"
+            >
+              <span v-if="isAllVisibleSelected">&#10003;</span>
+            </div>
+            <div>LEMMA</div>
+            <div
+              v-for="col in shownColumns"
+              :key="col"
+              class="thead-col"
+            >
+              {{ columnLabels[col] }}
+            </div>
+            <div class="right">
+              <div class="ctl" style="height: 26px" @click.stop="columnMenuOpen = !columnMenuOpen">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="M9 4v16" />
+                  <path d="M15 4v16" />
+                  <path d="M3 10h18" />
+                </svg>
+                Columns
+              </div>
+              <div
+                v-if="columnMenuOpen"
+                class="column-menu"
+                @click.stop
               >
-                <td class="px-4 py-3 text-sm text-slate-700 whitespace-nowrap">
+                <label
+                  v-for="col in allColumnKeys"
+                  :key="col"
+                  class="column-menu-item"
+                >
                   <input
                     type="checkbox"
-                    :checked="isSelected(item)"
-                    class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    :aria-label="`Select ${item.lemma || item.yield?.lemma || item.id}`"
-                    @change="toggleSelection(item)"
+                    :checked="visibleColumns[col]"
+                    @change="toggleColumn(col)"
                   />
-                </td>
-                <td class="px-4 py-3 text-sm text-slate-700 font-bold text-slate-900">
-                  {{ item.lemma || item.yield?.lemma }}
-                </td>
-                <td
-                  v-for="col in shownColumns"
-                  :key="col"
-                  class="px-4 py-3 text-sm text-slate-600 whitespace-nowrap"
-                >
-                  {{ formatColValue(item, col) }}
-                </td>
-                <td class="px-4 py-3 text-sm text-slate-700 text-right">
-                  <div class="flex items-center justify-end gap-2 w-[140px]">
-                    <button
-                      class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-emerald-100 bg-white text-slate-600 hover:text-slate-900 hover:bg-stone-50 transition-colors"
-                      @click="handlePreview(item.id)"
-                    >
-                      <i class="fa-solid fa-eye" />
-                    </button>
-                    <button
-                      class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-emerald-100 bg-white text-slate-600 hover:text-slate-900 hover:bg-stone-50 transition-colors"
-                      @click="handleEdit(item.id)"
-                    >
-                      <i class="fa-solid fa-pen" />
-                    </button>
-                    <button
-                      class="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-emerald-100 bg-white text-slate-600 hover:text-slate-900 hover:bg-stone-50 transition-colors"
-                      @click="toggleMenu(item.id)"
-                    >
-                      <i class="fa-solid fa-ellipsis" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  {{ columnLabels[col] }}
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-for="item in displayedRecords"
+            :key="makeWordSelectionKey(item)"
+            class="trow" :style="{ gridTemplateColumns: `34px 1fr ${shownColumns.map(() => 'auto').join(' ')} 122px` }"
+          >
+            <div
+              :class="['check', { selected: isSelected(item) }]"
+              role="checkbox"
+              :aria-checked="isSelected(item)"
+              :aria-label="`Select ${item.lemma || item.yield?.lemma || item.id}`"
+              @click="toggleSelection(item)"
+            >
+              <span v-if="isSelected(item)">&#10003;</span>
+            </div>
+            <div class="lemma-cell">
+              {{ item.lemma || item.yield?.lemma }}
+            </div>
+            <div
+              v-for="col in shownColumns"
+              :key="col"
+              class="data-cell"
+            >
+              {{ formatColValue(item, col) }}
+            </div>
+            <div class="row-actions">
+              <button class="action-btn" title="View" @click="handlePreview(item.id)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+              <button class="action-btn" title="Edit" @click="handleEdit(item.id)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
+              </button>
+              <button class="action-btn" title="More" @click="toggleMenu(item.id)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <circle cx="5" cy="12" r="1" />
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="19" cy="12" r="1" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1126,3 +1110,273 @@ const paginationRange = computed<Array<number | '...'>>(() => {
     />
   </div>
 </template>
+
+<style scoped>
+/* Panel container */
+.panel {
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.table-panel {
+  display: grid;
+  grid-template-rows: auto 1fr 48px;
+  min-height: 0;
+}
+
+/* Table wrapper — min-height:0 is critical for grid children to scroll */
+.table-wrap {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: auto;
+  background: var(--surface);
+  padding: 12px;
+}
+
+.table-panel > .table-wrap {
+  min-height: 0;
+}
+
+.table-shell {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--table-field);
+}
+
+/* Table header row */
+.thead {
+  display: grid;
+  align-items: center;
+  padding: 0 14px;
+  min-height: 42px;
+  background: #f4f1eb;
+  color: #756d63;
+  font-size: 12px;
+  font-weight: 740;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+
+[data-theme="dark"] .thead {
+  background: var(--table-head);
+  color: #aaa197;
+}
+
+.thead .right {
+  justify-self: end;
+  position: relative;
+}
+
+.thead-col {
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+
+/* Table row */
+.trow {
+  display: grid;
+  align-items: center;
+  padding: 0 14px;
+  min-height: 51px;
+  border-bottom: 1px solid var(--line);
+  transition: background 0.12s ease;
+}
+
+.trow:last-child {
+  border-bottom: 0;
+}
+
+.trow:hover {
+  background: #f6f3ed;
+}
+
+[data-theme="dark"] .trow:hover {
+  background: #2a251f;
+}
+
+/* Checkbox */
+.check {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1px solid #b7aea3;
+  background: #fff;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+[data-theme="dark"] .check {
+  border-color: #575047;
+  background: #201d18;
+  color: #06100b;
+}
+
+.check.selected {
+  background: var(--green);
+  border-color: var(--green);
+}
+
+/* Lemma cell */
+.lemma-cell {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+  color: #27231f;
+  padding: 0 8px;
+}
+
+[data-theme="dark"] .lemma-cell {
+  color: #eee8de;
+}
+
+.data-cell {
+  padding: 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Row actions — fade in on hover */
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  opacity: 0.56;
+  transition: opacity 0.12s ease;
+}
+
+.trow:hover .row-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  width: 31px;
+  height: 31px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: #fdfbf7;
+  color: #5c564f;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.action-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.75;
+}
+
+.action-btn:hover {
+  background: #faf8f5;
+  border-color: var(--border-strong);
+}
+
+[data-theme="dark"] .action-btn {
+  background: rgba(255, 255, 255, 0.045);
+  color: #bdb3a7;
+}
+
+[data-theme="dark"] .action-btn:hover {
+  background: rgba(255, 255, 255, 0.065);
+  color: #fff;
+}
+
+/* Empty state */
+.table-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Column menu — positioned relative to .right */
+.column-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  z-index: 50;
+  padding: 4px;
+  min-width: 140px;
+}
+
+.column-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.column-menu-item:hover {
+  background: var(--surface-soft);
+}
+
+.column-menu-item input {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border-color: var(--border-strong);
+  accent-color: var(--green);
+}
+
+/* ctl (reused in header column button) */
+.ctl {
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: #625c54;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 1px 1px rgba(22, 16, 10, 0.018);
+  cursor: pointer;
+}
+
+[data-theme="dark"] .ctl {
+  background: rgba(255, 255, 255, 0.05);
+  color: #c3b9ad;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.14);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+</style>

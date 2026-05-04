@@ -52,10 +52,10 @@ const clearAll = (): void => {
 <template>
   <div class="field-mapping-editor">
     <div class="flex items-center justify-between gap-3 mb-3">
-      <h4 class="font-bold text-slate-700 text-sm">Field Mapping</h4>
+      <h4 class="font-bold text-[var(--text)] text-sm">Field Mapping</h4>
       <div class="flex flex-wrap gap-2">
         <button
-          class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-xs hover:bg-stone-50 disabled:text-stone-400"
+          class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] text-xs hover:bg-[var(--surface-soft)] disabled:text-[var(--faint)]"
           :disabled="disabled || !hasRecommendedMapping"
           type="button"
           @click="resetToRecommended"
@@ -63,7 +63,7 @@ const clearAll = (): void => {
           Recommended
         </button>
         <button
-          class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-xs hover:bg-stone-50 disabled:text-stone-400"
+          class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] text-xs hover:bg-[var(--surface-soft)] disabled:text-[var(--faint)]"
           :disabled="disabled"
           type="button"
           @click="clearAll"
@@ -73,24 +73,26 @@ const clearAll = (): void => {
       </div>
     </div>
 
-    <div class="max-h-72 overflow-auto rounded-lg border border-emerald-100">
+    <div class="max-h-72 overflow-auto rounded-lg border border-[var(--line)] bg-[var(--table-field)]">
       <table class="min-w-full text-sm">
-        <thead class="bg-stone-50 sticky top-0">
+        <thead class="bg-[var(--surface-head)] sticky top-0">
           <tr>
-            <th class="px-3 py-2 text-left text-[11px] uppercase text-slate-500 font-bold">
+            <th class="px-3 py-2 text-left text-[11px] uppercase text-[var(--muted)] font-bold">
               Anki Field
             </th>
-            <th class="px-3 py-2 text-left text-[11px] uppercase text-slate-500 font-bold">
+            <th class="px-3 py-2 text-left text-[11px] uppercase text-[var(--muted)] font-bold">
               Data Source
             </th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-emerald-100">
+        <tbody class="divide-y divide-[var(--line)]">
           <tr v-for="fieldName in modelFieldNames" :key="fieldName">
-            <td class="px-3 py-2 text-slate-700 font-medium break-all">{{ fieldName }}</td>
+            <td class="px-3 py-2 text-[var(--text-soft)] font-medium break-all">
+              {{ fieldName }}
+            </td>
             <td class="px-3 py-2">
               <select
-                class="w-full rounded-lg border border-emerald-300 px-2 py-1.5 text-sm"
+                class="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-2 py-1.5 text-sm"
                 :disabled="disabled"
                 :value="getMappingFor(fieldName)"
                 @change="setMapping(fieldName, ($event.target as HTMLSelectElement).value)"

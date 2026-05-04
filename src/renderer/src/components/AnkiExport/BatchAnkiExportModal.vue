@@ -53,15 +53,15 @@ const emit = defineEmits<{
 const onOverlayClick = (): void => emit('return');
 
 const statusClassMap: Record<string, string> = {
-  pending: 'bg-emerald-50 text-slate-600 border-emerald-100',
-  checking: 'bg-blue-50 text-blue-700 border-blue-200',
-  duplicate: 'bg-amber-50 text-amber-700 border-amber-200',
-  ready: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  importing: 'bg-blue-50 text-blue-700 border-blue-200',
-  imported: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  skipped: 'bg-emerald-50 text-slate-600 border-emerald-100',
-  overwritten: 'bg-orange-50 text-orange-700 border-orange-200',
-  failed: 'bg-red-50 text-red-700 border-red-200',
+  pending: 'bg-[var(--surface-soft)] text-[var(--muted)] border-[var(--border)]',
+  checking: 'bg-[var(--blue-soft)] text-[var(--blue)] border-[var(--blue-border)]',
+  duplicate: 'bg-[var(--amber-soft)] text-[var(--amber)] border-[var(--amber-border)]',
+  ready: 'bg-[var(--green-soft)] text-[var(--green)] border-[var(--green-border)]',
+  importing: 'bg-[var(--blue-soft)] text-[var(--blue)] border-[var(--blue-border)]',
+  imported: 'bg-[var(--green-soft)] text-[var(--green)] border-[var(--green-border)]',
+  skipped: 'bg-[var(--surface-soft)] text-[var(--muted)] border-[var(--border)]',
+  overwritten: 'bg-[var(--amber-soft)] text-[var(--amber)] border-[var(--amber-border)]',
+  failed: 'bg-[var(--red-soft)] text-[var(--red)] border-[var(--red-border)]',
 };
 </script>
 
@@ -69,36 +69,36 @@ const statusClassMap: Record<string, string> = {
   <div v-if="open" class="fixed inset-0 z-40 bg-black/40" @click="onOverlayClick" />
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4">
     <div
-      class="w-full max-w-6xl h-[90vh] rounded-xl bg-white border border-emerald-100 shadow-xl overflow-hidden flex flex-col"
+      class="anki-modal-container w-full max-w-6xl h-[90vh] rounded-xl bg-[var(--surface-panel)] border border-[var(--border)] shadow-xl overflow-hidden flex flex-col"
     >
-      <div class="px-5 py-4 border-b border-emerald-50 flex items-center justify-between">
-        <h3 class="text-slate-800 font-bold text-base">Batch Anki Card Operations</h3>
+      <div class="px-5 py-4 border-b border-[var(--line)] flex items-center justify-between">
+        <h3 class="text-[var(--text)] font-bold text-base">Batch Anki Card Operations</h3>
         <div class="flex items-center gap-2">
           <button
-            class="text-sm px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 hover:bg-stone-50"
+            class="text-sm px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)]"
             @click="emit('return')"
           >
             Back to List
           </button>
           <button
-            class="w-8 h-8 rounded-full text-stone-400 hover:text-slate-700 hover:bg-emerald-50 transition-colors"
+            class="w-8 h-8 rounded-full text-[var(--faint)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)] transition-colors"
             @click="emit('close')"
           >
-            <i class="fa-solid fa-xmark" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 6 6 18M6 6l12 12" /></svg>
           </button>
         </div>
       </div>
 
       <div class="flex-1 overflow-auto min-h-0">
-        <div class="p-5 border-b border-emerald-50 space-y-4">
+        <div class="p-5 border-b border-[var(--line)] space-y-4">
         <div class="flex items-center justify-between gap-3">
-          <div class="text-sm text-slate-600">
-            <span v-if="ankiConnected" class="text-emerald-600 font-semibold">Anki connected</span>
-            <span v-else class="text-amber-600 font-semibold">Anki not connected</span>
-            <span class="ml-3 text-slate-500">{{ items.length }} words selected</span>
+          <div class="text-sm text-[var(--text-soft)]">
+            <span v-if="ankiConnected" class="text-[var(--green)] font-semibold">Anki connected</span>
+            <span v-else class="text-[var(--amber)] font-semibold">Anki not connected</span>
+            <span class="ml-3 text-[var(--muted)]">{{ items.length }} words selected</span>
           </div>
           <button
-            class="text-sm px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 hover:bg-stone-50"
+            class="text-sm px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)]"
             :disabled="busy"
             @click="emit('connect-anki')"
           >
@@ -107,10 +107,10 @@ const statusClassMap: Record<string, string> = {
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <label class="text-sm text-slate-700 font-medium">
+          <label class="text-sm text-[var(--text)] font-medium">
             Deck Name
             <select
-              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               :value="deckName"
               :disabled="!canEditConfig"
               @change="emit('update:deckName', ($event.target as HTMLSelectElement).value)"
@@ -121,10 +121,10 @@ const statusClassMap: Record<string, string> = {
               <option v-for="deck in deckOptions" :key="deck" :value="deck">{{ deck }}</option>
             </select>
           </label>
-          <label class="text-sm text-slate-700 font-medium">
+          <label class="text-sm text-[var(--text)] font-medium">
             Model Name
             <select
-              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               :value="modelName"
               :disabled="!canEditConfig"
               @change="emit('update:modelName', ($event.target as HTMLSelectElement).value)"
@@ -135,10 +135,10 @@ const statusClassMap: Record<string, string> = {
               <option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option>
             </select>
           </label>
-          <label class="text-sm text-slate-700 font-medium">
+          <label class="text-sm text-[var(--text)] font-medium">
             Card Template
             <select
-              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               :value="templateName"
               :disabled="!canEditConfig"
               @change="emit('update:templateName', ($event.target as HTMLSelectElement).value)"
@@ -153,10 +153,10 @@ const statusClassMap: Record<string, string> = {
               </option>
             </select>
           </label>
-          <label class="text-sm text-slate-700 font-medium">
+          <label class="text-sm text-[var(--text)] font-medium">
             Tags (comma separated)
             <input
-              class="mt-1 w-full rounded-lg border border-emerald-300 px-3 py-2 text-sm"
+              class="mt-1 w-full rounded-lg border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] px-3 py-2 text-sm"
               :value="tagsInput"
               :disabled="!canEditConfig"
               @input="emit('update:tagsInput', ($event.target as HTMLInputElement).value)"
@@ -164,10 +164,10 @@ const statusClassMap: Record<string, string> = {
           </label>
         </div>
 
-        <div class="rounded-lg border border-emerald-100 bg-stone-50 p-4">
+        <div class="rounded-lg border border-[var(--line)] bg-[var(--surface-soft)] p-4">
           <div
             v-if="!ankiConnected"
-            class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-sm"
+            class="rounded-lg border border-[var(--amber-border)] bg-[var(--amber-soft)] text-[var(--amber)] px-3 py-2 text-sm"
           >
             Please connect Anki before configuring field mapping.
           </div>
@@ -183,35 +183,35 @@ const statusClassMap: Record<string, string> = {
 
         <div class="flex flex-wrap gap-2">
           <button
-            class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-sm hover:bg-stone-50"
+            class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] text-sm hover:bg-[var(--surface-soft)]"
             :disabled="busy || !items.length || !canEditConfig"
             @click="emit('check-duplicates')"
           >
             Check Duplicates
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-sm hover:bg-stone-50"
+            class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] text-sm hover:bg-[var(--surface-soft)]"
             :disabled="busy || !items.length"
             @click="emit('ignore-all-duplicates')"
           >
             Ignore All Duplicates
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg border border-orange-200 text-orange-700 text-sm hover:bg-orange-50"
+            class="px-3 py-1.5 rounded-lg border border-[var(--amber-border)] bg-[var(--surface)] text-[var(--amber)] text-sm hover:bg-[var(--amber-soft)]"
             :disabled="busy || !items.length"
             @click="emit('overwrite-all-duplicates')"
           >
             Overwrite All Duplicates
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-500 disabled:bg-indigo-300"
+            class="px-3 py-1.5 rounded-lg bg-[var(--blue)] text-white text-sm hover:opacity-85 disabled:opacity-50"
             :disabled="busy || !items.length"
             @click="emit('export-apkg')"
           >
             Export Selected as .apkg
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-500 disabled:bg-blue-300"
+            class="px-3 py-1.5 rounded-lg bg-[var(--green)] text-white text-sm hover:bg-[var(--green-hover)] disabled:opacity-50"
             :disabled="busy || !items.length"
             @click="emit('import-ready-items')"
           >
@@ -219,14 +219,14 @@ const statusClassMap: Record<string, string> = {
           </button>
           <button
             v-if="canCancel"
-            class="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-sm hover:bg-red-50"
+            class="px-3 py-1.5 rounded-lg border border-[var(--red-border)] bg-[var(--surface)] text-[var(--red)] text-sm hover:bg-[var(--red-soft)]"
             @click="emit('cancel-operation')"
           >
             Cancel Batch Operation
           </button>
           <button
             v-if="canResume"
-            class="px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 text-sm hover:bg-blue-50"
+            class="px-3 py-1.5 rounded-lg border border-[var(--blue-border)] bg-[var(--surface)] text-[var(--blue)] text-sm hover:bg-[var(--blue-soft)]"
             :disabled="busy"
             @click="emit('resume-operation')"
           >
@@ -234,7 +234,7 @@ const statusClassMap: Record<string, string> = {
           </button>
           <button
             v-if="canResume"
-            class="px-3 py-1.5 rounded-lg border border-emerald-100 text-slate-700 text-sm hover:bg-stone-50"
+            class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] text-sm hover:bg-[var(--surface-soft)]"
             :disabled="busy"
             @click="emit('restart-operation')"
           >
@@ -242,15 +242,15 @@ const statusClassMap: Record<string, string> = {
           </button>
         </div>
 
-        <div v-if="canResume && lastStoppedPhase" class="text-xs text-amber-700">
+        <div v-if="canResume && lastStoppedPhase" class="text-xs text-[var(--amber)]">
           Batch operation was cancelled during {{ lastStoppedPhase }}.
         </div>
 
         <div v-if="progress.total > 0" class="space-y-2">
-          <div class="text-xs text-slate-600 font-medium">{{ progressLabel }}</div>
-          <div class="w-full h-2 rounded-full bg-emerald-50 overflow-hidden">
+          <div class="text-xs text-[var(--muted)] font-medium">{{ progressLabel }}</div>
+          <div class="w-full h-2 rounded-full bg-[var(--surface-soft)] overflow-hidden">
             <div
-              class="h-full bg-blue-500 transition-all duration-300"
+              class="h-full bg-[var(--blue)] transition-all duration-300"
               :style="{ width: `${progress.percent}%` }"
             />
           </div>
@@ -258,55 +258,55 @@ const statusClassMap: Record<string, string> = {
 
         <div
           v-if="error"
-          class="rounded-lg border border-red-200 bg-red-50 text-red-700 px-3 py-2 text-sm"
+          class="rounded-lg border border-[var(--red-border)] bg-[var(--red-soft)] text-[var(--red)] px-3 py-2 text-sm"
         >
           {{ error }}
         </div>
       </div>
 
       <div>
-        <table class="min-w-full">
-          <thead class="bg-stone-50 sticky top-0">
+        <table class="min-w-full bg-[var(--table-field)]">
+          <thead class="bg-[var(--surface-head)] sticky top-0">
             <tr>
               <th
-                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-[var(--muted)] font-bold"
               >
                 Lemma
               </th>
               <th
-                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-[var(--muted)] font-bold"
               >
                 Source
               </th>
               <th
-                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-[var(--muted)] font-bold"
               >
                 Status
               </th>
               <th
-                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+                class="px-4 py-2 text-left text-[11px] uppercase tracking-wider text-[var(--muted)] font-bold"
               >
                 Details
               </th>
               <th
-                class="px-4 py-2 text-right text-[11px] uppercase tracking-wider text-slate-500 font-bold"
+                class="px-4 py-2 text-right text-[11px] uppercase tracking-wider text-[var(--muted)] font-bold"
               >
                 Action
               </th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-emerald-100">
-            <tr v-for="item in items" :key="item.key" class="hover:bg-stone-50/70">
-              <td class="px-4 py-3 text-sm font-semibold text-slate-900">{{ item.lemma }}</td>
-              <td class="px-4 py-3 text-xs text-slate-600">
+          <tbody class="divide-y divide-[var(--line)]">
+            <tr v-for="item in items" :key="item.key" class="hover:bg-[var(--surface-soft)]">
+              <td class="px-4 py-3 text-sm font-semibold text-[var(--text)]">{{ item.lemma }}</td>
+              <td class="px-4 py-3 text-xs text-[var(--muted)]">
                 <span
                   :class="
                     item.record.isLocal
-                      ? 'inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-50 text-slate-600 border border-emerald-100'
-                      : 'inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200'
+                      ? 'inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--surface-soft)] text-[var(--muted)] border border-[var(--border)]'
+                      : 'inline-flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue-border)]'
                   "
                 >
-                  <i class="fa-solid fa-cloud" />
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /></svg>
                   DB
                 </span>
               </td>
@@ -318,15 +318,15 @@ const statusClassMap: Record<string, string> = {
                   {{ item.status }}
                 </span>
               </td>
-              <td class="px-4 py-3 text-xs text-slate-600">
+              <td class="px-4 py-3 text-xs text-[var(--muted)]">
                 <span v-if="item.conflict">Duplicate noteId: {{ item.conflict.noteId }}</span>
                 <span v-else-if="item.noteId">NoteId: {{ item.noteId }}</span>
-                <span v-else-if="item.error" class="text-red-600">{{ item.error }}</span>
+                <span v-else-if="item.error" class="text-[var(--red)]">{{ item.error }}</span>
                 <span v-else>-</span>
               </td>
               <td class="px-4 py-3 text-right">
                 <button
-                  class="text-xs px-2 py-1 rounded border border-emerald-100 text-slate-600 hover:bg-stone-50"
+                  class="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)]"
                   @click="emit('preview-word', item.id)"
                 >
                   Preview HTML
@@ -340,3 +340,17 @@ const statusClassMap: Record<string, string> = {
     </div>
   </div>
 </template>
+
+<style scoped>
+.anki-modal-container input:focus,
+.anki-modal-container select:focus,
+.anki-modal-container textarea:focus {
+  border-color: var(--green-border) !important;
+  box-shadow: 0 0 0 3px rgba(36, 114, 83, 0.08) !important;
+}
+[data-theme="dark"] .anki-modal-container input:focus,
+[data-theme="dark"] .anki-modal-container select:focus,
+[data-theme="dark"] .anki-modal-container textarea:focus {
+  box-shadow: 0 0 0 3px rgba(67, 179, 127, 0.1) !important;
+}
+</style>

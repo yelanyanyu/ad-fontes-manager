@@ -32,14 +32,18 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
   <div ref="rootRef" class="relative" data-tour="announcement-bell">
     <button
       type="button"
-      class="relative flex h-9 w-9 items-center justify-center rounded-lg border border-emerald-100 bg-stone-50 text-stone-500 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
+      class="icon-btn"
       aria-label="查看公告"
+      title="Notifications"
       @click.stop="toggle"
     >
-      <i class="fa-regular fa-bell text-base" />
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
+        <path d="M13.7 21a2 2 0 0 1-3.4 0" />
+      </svg>
       <span
         v-if="announcementStore.hasUnread"
-        class="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white"
+        class="unread-dot"
         aria-hidden="true"
       />
     </button>
@@ -61,3 +65,46 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
     </Transition>
   </div>
 </template>
+
+<style scoped>
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  position: relative;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: #5e5851;
+  display: grid;
+  place-items: center;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.icon-btn:hover {
+  background: #fff;
+  border-color: var(--border-strong);
+}
+
+[data-theme="dark"] .icon-btn {
+  background: rgba(255, 255, 255, 0.05);
+  color: #c7beb3;
+}
+
+[data-theme="dark"] .icon-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.unread-dot {
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 2px solid var(--surface);
+}
+</style>

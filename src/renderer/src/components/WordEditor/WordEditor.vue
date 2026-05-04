@@ -1,28 +1,4 @@
 <script setup lang="ts">
-/**
- * @file WordEditor.vue
- * @description 词条编辑组件，提供 YAML 编辑、验证、保存和冲突处理功能
- *
- * @component WordEditor
- * @category Components
- * @subcategory WordEditor
- *
- * @features
- * - YAML 文本编辑与实时验证
- * - 词条保存（支持本地和数据库两种模式）
- * - 冲突检测与处理（使用现有数据或覆盖）
- * - 连接状态感知（根据连接状态自动选择保存目标）
- *
- * @dependencies
- * - vue: Vue 3 Composition API
- * - js-yaml: YAML 解析与格式化
- * - pinia: 状态管理
- * - @/stores/wordStore: 词条状态管理
- * - @/stores/appStore: 应用状态管理（Toast 通知）
- * - @/components/ui/ConflictModal.vue: 冲突弹窗组件
- * - @/utils/conflict: 冲突处理工具（diff 适配器、YAML 格式化器）
- */
-
 import { ref, watch, computed, onUnmounted } from 'vue';
 import type { Ref } from 'vue';
 import yaml from 'js-yaml';
@@ -36,10 +12,7 @@ import request from '@/utils/request';
 
 interface WordStoreLike {
   editorYaml: string;
-  saveWord: (
-    yamlContent: string,
-    force?: boolean
-  ) => Promise<boolean | ConflictData>;
+  saveWord: (yamlContent: string, force?: boolean) => Promise<boolean | ConflictData>;
   setEditingContext: (context: { id: string | null }) => void;
 }
 
@@ -50,78 +23,35 @@ interface AppStoreLike {
 const wordStore = useWordStore() as unknown as WordStoreLike;
 const appStore = useAppStore() as unknown as AppStoreLike;
 
-/**
- * @description 从 wordStore 解构的响应式引用
- * @property {Ref<string>} editorYaml - 编辑器中的 YAML 内容
- */
 const { editorYaml, editorReloadToken } = storeToRefs(wordStore as any) as {
   editorYaml: Ref<string>;
   editorReloadToken: Ref<number>;
 };
 
-/**
- * @description 编辑器中的 YAML 文本内容
- * @type {Ref<string>}
- * @default ''
- */
 const input = ref<string>('');
-
-/**
- * @description YAML 验证状态
- * @type {Ref<string>}
- * @default ''
- * @value 'Valid YAML' - YAML 格式有效
- * @value 'Invalid YAML' - YAML 格式无效
- */
+const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const lineNumberRef = ref<HTMLElement | null>(null);
 const status = ref<EditorStatus>('');
-
-/**
- * @description 冲突数据，用于显示冲突弹窗
- * @type {Ref<Object|null>}
- * @property {string} status - 冲突状态，值为 'conflict' 时表示冲突
- * @property {Object} oldData - 服务器/本地现有的数据
- * @property {Object} newData - 用户尝试保存的新数据
- * @property {Array} diff - 数据差异列表
- * @property {string} source - 冲突来源（'local' | 'db'）
- * @property {string} id - 冲突词条的 ID
- * @default null
- */
 const conflictData = ref<ConflictData | null>(null);
-
-/**
- * @description 保存按钮标签计算属性
- * 根据当前编辑状态和连接状态动态生成保存按钮的显示文本
- * @computed
- * @returns {string} 保存按钮标签
- * @returns {'Save Locally (Offline)'} 当编辑本地词条或连接断开时
- * @returns {'Save to Database'} 当连接正常且编辑非本地词条时
- */
-const saveLabel = 'Save';
-
-/**
- * @description 判断输入是否为空
- * 检查 textarea 内容是否为空或仅包含空白字符
- * @computed
- * @returns {boolean} 为空时返回 true，否则返回 false
- */
-const isEmpty = computed(() => {
-  return !input.value || input.value.trim().length === 0;
-});
-
-/**
- * Schema validation errors from the backend.
- */
 const schemaErrors = ref<string[]>([]);
 const validating = ref(false);
 let validateTimer: ReturnType<typeof setTimeout> | null = null;
 
-/**
- * @description 处理编辑器输入并验证 YAML（语法 + Schema）
- * - 第一步：本地 YAML 语法检查（即时）
- * - 第二步：服务端 Schema 校验（300ms 防抖）
- * @function handleInput
- * @returns {void}
- */
+const syncScroll = () => {
+  if (textareaRef.value && lineNumberRef.value) {
+    lineNumberRef.value.scrollTop = textareaRef.value.scrollTop;
+  }
+};
+
+const isEmpty = computed(() => !input.value || input.value.trim().length === 0);
+
+const lineCount = computed(() => {
+  if (!input.value) return 1;
+  return input.value.split('\n').length;
+});
+
+const saveLabel = 'Save';
+
 const handleInput = () => {
   if (!input.value || input.value.trim().length === 0) {
     status.value = '';
@@ -129,7 +59,6 @@ const handleInput = () => {
     return;
   }
 
-  // Step 1: local syntax check (instant)
   try {
     const result = yaml.load(input.value) as Record<string, unknown> | null;
     if (
@@ -138,7 +67,7 @@ const handleInput = () => {
       !Array.isArray(result) &&
       result.yield !== undefined
     ) {
-      status.value = validating.value ? 'Valid YAML' : 'Valid YAML';
+      status.value = 'Valid YAML';
     } else {
       status.value = 'Invalid YAML';
       schemaErrors.value = [];
@@ -150,7 +79,6 @@ const handleInput = () => {
     return;
   }
 
-  // Step 2: debounced server-side schema validation
   if (validateTimer) clearTimeout(validateTimer);
   validateTimer = setTimeout(async () => {
     validating.value = true;
@@ -169,7 +97,6 @@ const handleInput = () => {
         status.value = 'Invalid YAML';
       }
     } catch {
-      // If the API is unreachable, still allow saving (backend will validate)
       schemaErrors.value = [];
     } finally {
       validating.value = false;
@@ -181,10 +108,6 @@ onUnmounted(() => {
   if (validateTimer) clearTimeout(validateTimer);
 });
 
-/**
- * @description 监听 editorYaml 变化，同步到编辑器
- * 当外部更新 editorYaml 时，自动同步到 input 并触发验证
- */
 watch(
   editorReloadToken,
   () => {
@@ -196,27 +119,14 @@ watch(
   { immediate: true }
 );
 
-/**
- * @description 清空编辑器内容
- * @function clear
- * @returns {void}
- */
 const clear = () => {
   input.value = '';
   status.value = '';
+  schemaErrors.value = [];
 };
 
-/**
- * @description 保存词条
- * 验证 YAML 格式后调用 store 保存，处理可能的冲突情况
- * @async
- * @function save
- * @returns {Promise<void>}
- * @emits appStore.addToast - 当 YAML 格式无效时发送错误提示
- */
 const save = async () => {
   if (!input.value) return;
-  // 保存前再次验证 YAML
   if (status.value === 'Invalid YAML') {
     appStore.addToast('Cannot save: Invalid YAML format', 'error');
     return;
@@ -227,21 +137,10 @@ const save = async () => {
   }
 };
 
-/**
- * @description 关闭冲突弹窗
- * @function closeConflict
- * @returns {void}
- */
 const closeConflict = () => {
   conflictData.value = null;
 };
 
-/**
- * @description 冲突处理：使用现有数据
- * 当检测到冲突时，选择放弃当前编辑内容，使用服务器/本地现有的数据
- * @function useExisting
- * @returns {void}
- */
 const useExisting = () => {
   if (!conflictData.value || !conflictData.value.oldData) return;
   try {
@@ -256,13 +155,6 @@ const useExisting = () => {
   closeConflict();
 };
 
-/**
- * @description 冲突处理：覆盖现有数据
- * 当检测到冲突时，选择强制使用当前编辑内容覆盖服务器/本地现有的数据
- * @async
- * @function overwrite
- * @returns {Promise<void>}
- */
 const overwrite = async () => {
   const ok = await wordStore.saveWord(input.value, true);
   if (ok) closeConflict();
@@ -270,9 +162,7 @@ const overwrite = async () => {
 </script>
 
 <template>
-  <div
-    class="bg-white rounded-2xl shadow-sm border border-emerald-100 flex-1 flex flex-col min-h-0 overflow-hidden relative"
-  >
+  <div class="panel editor-panel">
     <ConflictModal
       :open="!!conflictData"
       title="Conflict Detected"
@@ -289,58 +179,308 @@ const overwrite = async () => {
       @secondary="useExisting"
       @primary="overwrite"
     />
-    <div
-      class="flex justify-between items-center px-4 py-3 border-b border-emerald-50 bg-emerald-50/30 flex-none"
-    >
-      <div class="flex items-center gap-3">
-        <h2 class="text-xs font-bold text-stone-500 uppercase tracking-wider">YAML Editor</h2>
-        <span
-          class="text-xs font-mono"
-          :class="status === 'Valid YAML' ? 'text-green-500' : status === '' ? 'text-stone-400' : 'text-red-500'"
-        >{{ status || 'Ready' }}</span>
+
+    <div class="panel-head">
+      <div class="panel-title">
+        <strong>YAML Editor</strong>
+        <span>
+          <span
+            class="status-dot"
+            :class="{
+              'dot-valid': status === 'Valid YAML',
+              'dot-invalid': status === 'Invalid YAML',
+              'dot-ready': !status || status === '',
+            }"
+          />
+          {{ status || 'Ready' }}
+        </span>
       </div>
-      <!-- Schema validation errors -->
-      <div v-if="schemaErrors.length > 0" class="px-4 py-2 bg-red-50 border-t border-red-100 flex-none">
-        <ul class="text-xs text-red-600 space-y-0.5">
-          <li v-for="(err, i) in schemaErrors" :key="i">• {{ err }}</li>
-        </ul>
-      </div>
-      <div class="flex gap-2">
-        <button
-          class="text-xs text-stone-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-50 transition-colors"
-          @click="clear"
-        >
-          Clear
-        </button>
-      </div>
+      <button class="head-link" @click="clear">Clear</button>
     </div>
 
-    <div class="flex-1 relative group min-h-0">
-      <div class="absolute inset-0 flex flex-col">
+    <div class="editor-area">
+      <div ref="lineNumberRef" class="line-number">
+        <template v-for="n in lineCount" :key="n">{{ n }}<br /></template>
+      </div>
+      <div class="editor-input">
         <textarea
+          ref="textareaRef"
           v-model="input"
-          class="flex-1 w-full h-full font-mono text-sm bg-white p-4 resize-none outline-none focus:bg-stone-50 transition-colors"
-          placeholder="Paste your YAML here..."
           spellcheck="false"
+          placeholder="每行输入 YAML 内容，例如：lemma: apple..."
           @input="handleInput"
+          @scroll="syncScroll"
         />
       </div>
     </div>
 
-    <div class="p-3 border-t border-emerald-50 bg-white flex justify-end flex-none">
+    <div v-if="schemaErrors.length > 0" class="schema-errors">
+      <ul>
+        <li v-for="(err, i) in schemaErrors" :key="i">{{ err }}</li>
+      </ul>
+    </div>
+
+    <div class="editor-foot">
       <button
-        :class="[
-          'px-6 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2',
-          isEmpty
-            ? 'bg-slate-300 text-white cursor-not-allowed'
-            : 'bg-primary hover:bg-blue-600 text-white',
-        ]"
+        :class="['btn', isEmpty ? 'btn-disabled' : 'btn-primary']"
         :disabled="isEmpty"
         @click="save"
+        style="min-width: 96px"
       >
-        <i class="fa-regular fa-floppy-disk" />
-        <span>{{ saveLabel }}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M19 21H5a2 2 0 0 1-2-2V7l4-4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z" />
+          <path d="M17 21v-8H7v8" />
+          <path d="M7 3v4h8" />
+        </svg>
+        {{ saveLabel }}
       </button>
     </div>
   </div>
 </template>
+
+<style scoped>
+.panel {
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.editor-panel {
+  display: grid;
+  grid-template-rows: 48px 1fr auto 56px;
+}
+
+.panel-head {
+  height: 48px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #fffefa, #fbf8f2);
+  flex: none;
+}
+
+[data-theme="dark"] .panel-head {
+  background: linear-gradient(180deg, #2a261f, #221f1a);
+}
+
+.panel-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.panel-title strong {
+  font-size: 14px;
+  font-weight: 740;
+  letter-spacing: 0.055em;
+  color: #2f2b26;
+  text-transform: uppercase;
+}
+
+[data-theme="dark"] .panel-title strong {
+  color: #eee8de;
+}
+
+.panel-title span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-valid {
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(36, 114, 83, 0.08);
+}
+
+.dot-invalid {
+  background: var(--red);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.dot-ready {
+  background: var(--faint);
+  box-shadow: 0 0 0 3px rgba(155, 148, 138, 0.1);
+}
+
+[data-theme="dark"] .dot-valid {
+  box-shadow: 0 0 0 3px rgba(67, 179, 127, 0.1);
+}
+
+[data-theme="dark"] .dot-invalid {
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.15);
+}
+
+[data-theme="dark"] .dot-ready {
+  box-shadow: 0 0 0 3px rgba(127, 119, 111, 0.1);
+}
+
+.head-link {
+  border: 0;
+  background: transparent;
+  color: #9d968d;
+  font-size: 13px;
+  padding: 0;
+  cursor: pointer;
+}
+
+[data-theme="dark"] .head-link {
+  color: #8d857b;
+}
+
+[data-theme="dark"] .head-link:hover {
+  color: #eee8de;
+}
+
+.editor-area {
+  min-height: 0;
+  background: var(--editor-field);
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.72;
+  color: #3b3732;
+}
+
+[data-theme="dark"] .editor-area {
+  color: #d8d0c5;
+}
+
+.line-number {
+  padding-top: 18px;
+  text-align: center;
+  color: #b5ada2;
+  border-right: 1px solid var(--line);
+  user-select: none;
+  overflow: hidden;
+  line-height: 1.72;
+  font-size: 13px;
+}
+
+[data-theme="dark"] .line-number {
+  color: #706961;
+  background: #1b1814;
+}
+
+.editor-input {
+  padding: 18px 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-input textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}
+
+.editor-input textarea::placeholder {
+  color: #9a9389;
+}
+
+[data-theme="dark"] .editor-input textarea::placeholder {
+  color: #80786f;
+}
+
+.schema-errors {
+  padding: 8px 14px;
+  background: var(--red-soft);
+  border-top: 1px solid var(--red-border);
+}
+
+.schema-errors ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.schema-errors li {
+  font-size: 12px;
+  color: var(--red);
+  line-height: 1.6;
+}
+
+.editor-foot {
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 12px;
+  flex: none;
+}
+
+[data-theme="dark"] .editor-foot {
+  background: #26231e;
+}
+
+/* Button system (shared) */
+.btn {
+  height: 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 560;
+  white-space: nowrap;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn-primary {
+  background: var(--green);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(36, 114, 83, 0.16);
+}
+
+.btn-primary:hover {
+  background: var(--green-hover);
+}
+
+[data-theme="dark"] .btn-primary {
+  color: #08100c;
+  box-shadow: 0 6px 18px rgba(67, 179, 127, 0.18);
+}
+
+.btn-disabled {
+  opacity: 0.48;
+  box-shadow: none;
+  pointer-events: none;
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--muted);
+}
+</style>

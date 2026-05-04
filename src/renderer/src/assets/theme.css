@@ -1,0 +1,203 @@
+/* === Ad Fontes / Etymos — Biophilic Design System === */
+/* Light theme (default) */
+:root {
+  --bg-top: #f7f4ee;
+  --bg-bottom: #f1ede6;
+  --surface: #fffefa;
+  --editor-field: #fcfbf7;
+  --table-field: #faf9f5;
+  --surface-panel: rgba(255, 255, 252, 0.94);
+  --surface-soft: #fbf8f2;
+  --surface-head: #fffdf8;
+
+  --text: #1f1d1a;
+  --text-soft: #3d3934;
+  --muted: #6d6860;
+  --faint: #9b948a;
+
+  --border: #e6ded3;
+  --border-strong: #d6ccbf;
+  --line: #eee7dc;
+
+  --nav: #15120f;
+  --nav-soft: #1e1a16;
+
+  --green: #247253;
+  --green-hover: #1f6549;
+  --green-soft: #eef8f2;
+  --green-border: #c8e8d8;
+
+  --blue: #245bd8;
+  --blue-soft: #eef3ff;
+  --blue-border: #cbd9ff;
+
+  --red: #dc2626;
+  --red-soft: #fef2f2;
+  --red-border: #fecaca;
+
+  --amber: #d97706;
+  --amber-soft: #fffbeb;
+  --amber-border: #fde68a;
+
+  --shadow-sm: 0 1px 2px rgba(24, 18, 10, 0.035);
+  --shadow-md: 0 8px 26px rgba(24, 18, 10, 0.055);
+
+  --sans: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, "Times New Roman", serif;
+  --mono: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  color-scheme: light;
+}
+
+/* Dark theme */
+[data-theme="dark"] {
+  --bg-top: #181612;
+  --bg-bottom: #11100e;
+  --surface: #24211d;
+  --surface-panel: rgba(35, 32, 28, 0.96);
+  --surface-soft: #211e1a;
+  --surface-head: #29251f;
+  --editor-field: #211e1a;
+  --table-field: #24201b;
+  --table-head: #2d2822;
+
+  --text: #eee8de;
+  --text-soft: #d7cec2;
+  --muted: #aaa197;
+  --faint: #7f776f;
+
+  --border: #3f3931;
+  --border-strong: #5a5148;
+  --line: #37312b;
+
+  --nav: #0b0a09;
+  --nav-soft: #171410;
+
+  --green: #43b37f;
+  --green-hover: #4fc08b;
+  --green-soft: rgba(67, 179, 127, 0.12);
+  --green-border: rgba(67, 179, 127, 0.34);
+
+  --blue: #7ca2ff;
+  --blue-soft: rgba(124, 162, 255, 0.12);
+  --blue-border: rgba(124, 162, 255, 0.28);
+
+  --red: #f87171;
+  --red-soft: rgba(248, 113, 113, 0.12);
+  --red-border: rgba(248, 113, 113, 0.3);
+
+  --amber: #fbbf24;
+  --amber-soft: rgba(251, 191, 36, 0.12);
+  --amber-border: rgba(251, 191, 36, 0.3);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-md: 0 12px 34px rgba(0, 0, 0, 0.24);
+
+  color-scheme: dark;
+}
+
+/* === Global reset & base === */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+  background:
+    radial-gradient(circle at 80% -12%, rgba(255, 255, 255, 0.88), transparent 28%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+  overflow: hidden;
+  transition: background 0.4s ease, color 0.3s ease;
+}
+
+[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at 78% -16%, rgba(94, 76, 52, 0.22), transparent 32%),
+    radial-gradient(circle at 12% 112%, rgba(67, 179, 127, 0.08), transparent 25%),
+    linear-gradient(180deg, var(--bg-top) 0%, var(--bg-bottom) 100%);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+/* === Smooth theme transition === */
+*,
+*::before,
+*::after {
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.15s ease,
+    box-shadow 0.3s ease;
+}
+
+/* === Selection === */
+::selection {
+  background: rgba(36, 114, 83, 0.18);
+  color: inherit;
+}
+
+[data-theme="dark"] ::selection {
+  background: rgba(67, 179, 127, 0.32);
+  color: #fff;
+}
+
+/* === Scrollbar === */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d6cec2;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #b8afa2;
+  background-clip: content-box;
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #39342e;
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--radius-full);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #514a42;
+  background-clip: content-box;
+}
+
+/* Fonts are loaded in index.html via <link> for performance */

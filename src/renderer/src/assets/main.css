@@ -1,18 +1,40 @@
-body { background-color: #faf8f5; color: #0f172a; }
-.glass { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px); border: 1px solid rgba(226, 239, 231, 0.8); }
-.diff-added { background-color: #dcfce7; }
-.diff-removed { background-color: #fee2e2; }
+/* Ad Fontes Manager — Shared utility styles */
+/* Theme colors, shadows, typography are in theme.css */
 
 /* Resizer Styles */
 .resizer {
-    width: 6px;
-    cursor: col-resize;
-    background-color: #e2efe7;
-    border-radius: 9999px;
-    flex-shrink: 0;
-    transition: background-color 0.2s;
-    margin: 0 4px;
+  width: 6px;
+  cursor: col-resize;
+  background-color: var(--border);
+  border-radius: 999px;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+  margin: 0 4px;
 }
-.resizer:hover, .resizer.active {
-    background-color: #15803D;
+
+.resizer:hover,
+.resizer.active {
+  background-color: var(--green);
+}
+
+/* Diff badges */
+.diff-added {
+  background-color: var(--green-soft);
+}
+.diff-removed {
+  background-color: var(--red-soft);
+}
+
+/* Spin animation (used by SVG spinners) */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
 }

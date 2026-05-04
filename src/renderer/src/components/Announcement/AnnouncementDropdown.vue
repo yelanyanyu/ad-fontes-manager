@@ -51,10 +51,7 @@ const sortedAnnouncements = computed(() =>
               </span>
               <span class="mt-0.5 block text-xs text-slate-500">{{ announcement.date }}</span>
             </span>
-            <i
-              class="fa-solid fa-chevron-down mt-1 text-xs text-slate-400 transition-transform"
-              :class="{ 'rotate-180': expandedVersion === announcement.version }"
-            />
+            <svg class="chevron-icon" :class="{ 'rotate-180': expandedVersion === announcement.version }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m6 9 6 6 6-6" /></svg>
           </span>
         </button>
 
