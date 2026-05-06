@@ -259,7 +259,15 @@ UNIQUE(lemma, language)
 
 ## 配置
 
-项目遵循 12-Factor App 原则，通过环境变量配置。
+项目使用双层配置文件，各司其职：
+
+### `.env` — 基础设施配置
+
+部署/环境相关配置，由部署者手动编辑。从 `.env.example` 复制并填入真实值：
+
+```bash
+cp .env.example .env
+```
 
 必填变量：
 
@@ -275,6 +283,20 @@ Anki 连接（可选）：
 |------|------|--------|
 | `ANKI_CONNECT_HOST` | AnkiConnect 地址 | `127.0.0.1` |
 | `ANKI_CONNECT_PORT` | AnkiConnect 端口 | `8765` |
+
+### `config.json` — 应用运行时配置
+
+AI 提供商、Pipeline 阶段、搜索 API、审核阈值等运行时配置，由应用 UI（设置页面）自动管理，无需手动编辑。
+
+从 `config.example.json` 复制到 `config.json` 即可获得预设的 5 家 AI 供应商模板：
+
+```bash
+cp config.example.json config.json
+```
+
+`config.json` 不会被 Git 追踪（已加入 `.gitignore`），`config.example.json` 作为模板推送到远程仓库。
+
+> **优先级**：`.env` 中的环境变量会覆盖 `config.json` 中对应的值。例如 `ADMIN_TOKEN` 在 `.env` 中设置后，`config.json` 中的 `core.admin_token` 将被忽略。
 
 桌面模式下，管理令牌由主进程通过 `contextBridge` 自动注入，无需手动配置。
 
