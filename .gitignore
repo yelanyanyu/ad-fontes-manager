@@ -52,6 +52,8 @@ electron-user-data/
 # Configuration files (contain sensitive data)
 config.yml
 config.yml.template
+config.json
+config.json.bak
 .env.production
 
 # Temporary files

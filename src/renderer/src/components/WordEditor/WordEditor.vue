@@ -189,7 +189,7 @@ const overwrite = async () => {
             :class="{
               'dot-valid': status === 'Valid YAML',
               'dot-invalid': status === 'Invalid YAML',
-              'dot-ready': !status || status === '',
+              'dot-ready': status === '',
             }"
           />
           {{ status || 'Ready' }}

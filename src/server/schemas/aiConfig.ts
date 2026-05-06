@@ -1,0 +1,96 @@
+const { z } = require('zod') as typeof import('zod');
+
+const AIProviderSchema = z.object({
+  id: z
+    .string()
+    .trim()
+    .min(1, 'Provider ID is required')
+    .regex(/^[a-z0-9_-]+$/, 'Provider ID must be lowercase alphanumeric (a-z, 0-9, _, -)'),
+  name: z.string().trim().min(1, 'Provider name is required'),
+  type: z.enum(['openai', 'anthropic']).default('openai'),
+  baseUrl: z.string().trim().url('Must be a valid URL'),
+  apiKey: z.string().default(''),
+  models: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1, 'Model ID is required'),
+        name: z.string().trim().min(1, 'Model name is required'),
+      })
+    )
+    .min(1, 'At least one model is required'),
+});
+
+const AISearchConfigSchema = z.object({
+  provider: z.enum(['brave', 'tavily']).default('brave'),
+  apiKey: z.string().default(''),
+  autoDomains: z.boolean().default(false),
+  domains: z
+    .object({
+      common: z.array(z.string().trim().min(1)).default([]),
+      en: z.array(z.string().trim().min(1)).default([]),
+      de: z.array(z.string().trim().min(1)).default([]),
+    })
+    .default({ common: [], en: [], de: [] }),
+});
+
+const AIStageConfigSchema = z.object({
+  provider: z.string().trim().min(1, 'Provider is required'),
+  model: z.string().trim().min(1, 'Model is required'),
+});
+
+const AIStageMapSchema = z
+  .object({
+    research: AIStageConfigSchema.optional(),
+    enrichment: AIStageConfigSchema.optional(),
+    review: AIStageConfigSchema.optional(),
+  })
+  .default({});
+
+const AIReviewConfigSchema = z
+  .object({
+    threshold: z.number().int().min(1).max(10).default(6),
+    thresholdByLanguage: z.record(z.string(), z.number().int().min(1).max(10)).default({}),
+  })
+  .default({ threshold: 6, thresholdByLanguage: {} });
+
+const AIConfigSchema = z.object({
+  providers: z.array(AIProviderSchema).default([]),
+  search: AISearchConfigSchema.optional(),
+  stages: AIStageMapSchema,
+  review: AIReviewConfigSchema,
+});
+
+const AIConfigUpdateSchema = z.object({
+  providers: z.array(AIProviderSchema).optional(),
+  search: AISearchConfigSchema.optional(),
+  stages: z
+    .object({
+      research: AIStageConfigSchema.optional(),
+      enrichment: AIStageConfigSchema.optional(),
+      review: AIStageConfigSchema.optional(),
+    })
+    .optional(),
+  review: z
+    .object({
+      threshold: z.number().int().min(1).max(10).optional(),
+      thresholdByLanguage: z.record(z.string(), z.number().int().min(1).max(10)).optional(),
+    })
+    .optional(),
+});
+
+const TestProviderInputSchema = z.object({
+  providerId: z.string().trim().min(1).optional(),
+  baseUrl: z.string().trim().url('Must be a valid URL'),
+  apiKey: z.string().min(1, 'API Key is required'),
+  type: z.enum(['openai', 'anthropic']),
+  model: z.string().trim().min(1, 'Model is required'),
+});
+
+module.exports = {
+  AIConfigSchema,
+  AIConfigUpdateSchema,
+  AIProviderSchema,
+  AISearchConfigSchema,
+  AIStageConfigSchema,
+  TestProviderInputSchema,
+};

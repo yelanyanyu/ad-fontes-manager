@@ -8,7 +8,7 @@
     "dev:web": "npm run native:node && concurrently \"npm run dev:server\" \"npm run dev:renderer\"",
     "dev:server": "npm run native:node && cross-env NODE_ENV=development tsx watch src/server/standalone.ts",
     "dev:renderer": "vite",
-    "dev:desktop": "electron-vite dev",
+    "dev:desktop": "npm run build:desktop:server && electron-vite dev",
     "build:web:renderer": "vite build",
     "build:web:server": "cross-env NODE_ENV=production tsc -p tsconfig.node.json --noEmit",
     "build:web": "npm run native:node && npm run build:web:renderer",

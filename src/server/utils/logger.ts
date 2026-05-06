@@ -144,6 +144,7 @@ const loggers = {
   anki: createModuleLogger('anki'),
   auth: createModuleLogger('auth'),
   system: createModuleLogger('system'),
+  ai: createModuleLogger('ai'),
 };
 
 module.exports = {

@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
 const net = require('net') as typeof import('net');
+const { AIConfigSchema } = require('./aiConfig') as {
+  AIConfigSchema: import('zod').ZodType<unknown>;
+};
 
 const SupportedEnvSchema = z.enum(['development', 'test', 'production']);
 
@@ -84,6 +87,7 @@ const ConfigSchema = z
       helmet: z.boolean(),
       hsts: z.boolean(),
     }),
+    ai: AIConfigSchema.optional(),
   })
   .superRefine((config, ctx) => {
     if (config.core.env === 'production' && config.core.admin_token.length < 32) {

@@ -1,4 +1,4 @@
-const path = require('path') as typeof import('path');
+﻿const path = require('path') as typeof import('path');
 const fs = require('fs') as typeof import('fs');
 const { ConfigSchema } = require('../schemas/config') as {
   ConfigSchema: {
@@ -31,9 +31,9 @@ if (isProduction) {
 
   for (const envPath of envPaths) {
     if (fs.existsSync(envPath)) {
-      console.error('�?生产环境禁止存在 .env 文件');
-      console.error(`   发现文件: ${envPath}`);
-      console.error('   请使用系统环境变量或 Docker env_file 注入配置');
+      console.error('鉂?鐢熶骇鐜绂佹瀛樺湪 .env 鏂囦欢');
+      console.error(`   鍙戠幇鏂囦欢: ${envPath}`);
+      console.error('   璇蜂娇鐢ㄧ郴缁熺幆澧冨彉閲忔垨 Docker env_file 娉ㄥ叆閰嶇疆');
       process.exit(1);
     }
   }
@@ -94,7 +94,58 @@ const defaultConfig: ConfigObject = {
     helmet: true,
     hsts: true,
   },
+  ai: {
+    providers: [],
+    stages: {},
+    review: {
+      threshold: 6,
+      thresholdByLanguage: {},
+    },
+  },
 };
+
+function resolveConfigPath(): string {
+  if (process.env.ADFONTES_CONFIG_PATH) return process.env.ADFONTES_CONFIG_PATH;
+  return path.join(process.cwd(), 'config.json');
+}
+
+function loadConfigFile(): ConfigObject {
+  const configPath = resolveConfigPath();
+  try {
+    if (!fs.existsSync(configPath)) return {};
+
+    const raw = fs.readFileSync(configPath, 'utf-8');
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as ConfigObject;
+    }
+    console.warn(`config.json at ${configPath} is not a valid object, ignoring`);
+  } catch (error) {
+    console.warn(`Failed to read ${configPath}, using defaults`, error);
+  }
+  return {};
+}
+
+function backupConfigFile(configPath: string): void {
+  if (!fs.existsSync(configPath)) return;
+  try {
+    fs.copyFileSync(configPath, `${configPath}.bak`);
+  } catch {
+    // A failed backup should not block saving the current config.
+  }
+}
+
+function saveConfigFile(config: ConfigObject): void {
+  const configPath = resolveConfigPath();
+  const dir = path.dirname(configPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  const tmpPath = `${configPath}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(config, null, 2), 'utf-8');
+  backupConfigFile(configPath);
+  fs.renameSync(tmpPath, configPath);
+  clearCache();
+}
 
 const envMapping: Record<string, string> = {
   NODE_ENV: 'core.env',
@@ -119,6 +170,15 @@ const envMapping: Record<string, string> = {
   LOG_ROTATION_MAX_FILES: 'logging.rotation.max_files',
   SECURITY_HELMET: 'security.helmet',
   SECURITY_HSTS: 'security.hsts',
+  AI_SEARCH_API_KEY: 'ai.search.apiKey',
+  AI_SEARCH_PROVIDER: 'ai.search.provider',
+  AI_REVIEW_THRESHOLD: 'ai.review.threshold',
+  AI_RESEARCH_PROVIDER: 'ai.stages.research.provider',
+  AI_RESEARCH_MODEL: 'ai.stages.research.model',
+  AI_ENRICHMENT_PROVIDER: 'ai.stages.enrichment.provider',
+  AI_ENRICHMENT_MODEL: 'ai.stages.enrichment.model',
+  AI_REVIEW_PROVIDER: 'ai.stages.review.provider',
+  AI_REVIEW_MODEL: 'ai.stages.review.model',
 };
 
 function parseEnvValue(value: string | undefined): ConfigValue | undefined {
@@ -204,7 +264,7 @@ function getByPath(config: ConfigObject, lookupPath: string): ConfigValue | unde
 function validateConfig(config: ConfigObject): ConfigObject {
   const result = ConfigSchema.safeParse(config);
   if (!result.success) {
-    console.error('�?配置校验失败:');
+    console.error('鉂?閰嶇疆鏍￠獙澶辫触:');
     result.error.issues.forEach(issue => {
       const issuePath = issue.path.length > 0 ? issue.path.join('.') : 'root';
       console.error(`   - ${issuePath}: ${issue.message}`);
@@ -217,7 +277,7 @@ function validateConfig(config: ConfigObject): ConfigObject {
     getByPath(validatedConfig, 'core.env') === 'production' &&
     !getByPath(validatedConfig, 'database.ssl')
   ) {
-    console.warn('⚠️  警告: 生产环境建议启用数据�?SSL (DATABASE_SSL=true)');
+    console.warn('鈿狅笍  璀﹀憡: 鐢熶骇鐜寤鸿鍚敤鏁版嵁搴?SSL (DATABASE_SSL=true)');
   }
 
   return validatedConfig;
@@ -227,8 +287,9 @@ let configCache: ConfigObject | null = null;
 
 function loadConfig(): ConfigObject {
   if (configCache) return configCache;
+  const fileConfig = loadConfigFile();
   const envConfig = loadFromEnv();
-  configCache = validateConfig(deepMerge(defaultConfig, envConfig));
+  configCache = validateConfig(deepMerge(defaultConfig, deepMerge(fileConfig, envConfig)));
   return configCache;
 }
 
@@ -260,4 +321,6 @@ module.exports = {
   reload,
   clearCache,
   defaultConfig,
+  saveConfigFile,
+  resolveConfigPath,
 };

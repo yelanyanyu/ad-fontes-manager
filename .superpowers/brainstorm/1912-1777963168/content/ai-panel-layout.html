@@ -1,0 +1,56 @@
+<h2>AI 生成模块放在 Home 页面的哪个位置？</h2>
+<p class="subtitle">考虑输入区、中间过程展示、最终 YAML 输出的空间关系</p>
+
+<div class="section">
+  <h3>当前布局（参考）</h3>
+  <div class="mockup">
+    <div class="mockup-header">HomeView 现状</div>
+    <div class="mockup-body">
+      <div style="display:flex;gap:8px;align-items:stretch;min-height:240px">
+        <div style="flex:45;display:flex;flex-direction:column;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+          <div style="height:36px;background:var(--surface-soft);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;font-size:12px;font-weight:600">YAML Editor</div>
+          <div style="flex:1;padding:12px;font-family:mono;font-size:11px;color:var(--muted)">lemma: example<br>yield:<br>&nbsp;&nbsp;language: en<br>...</div>
+          <div style="height:40px;background:var(--surface);border-top:1px solid var(--border);display:flex;align-items:center;justify-content:flex-end;padding:0 12px"><button class="mock-button">Save</button></div>
+        </div>
+        <div style="width:6px;border-radius:3px;background:var(--border)"></div>
+        <div style="flex:55;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">WordList</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>左面板 Tab 切换</h3>
+      <p>WordEditor 区域顶部加 Tab：<b>"Manual Edit" | "AI Generate"</b>。切换到 AI Generate 后，左侧区域全部变为 AI 输入+进度+结果。完成后 YAML 自动灌入 Manual 编辑器，切回 Tab。</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>已有面板结构，改动最小</li><li>生成时编辑器不可见（逻辑隔离）</li><li>右侧 WordList 始终可见，用户可参照已有词条</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>生成过程中看不到编辑器，无法对照现有 YAML</li><li>Tab 内要容纳输入+3步进度+结果预览，空间紧张</li></ul></div>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>左面板顶部可折叠 AI Bar</h3>
+      <p>编辑器上方嵌入一个可折叠的 AI 生成条：收起时是一行窄条"AI Generate"按钮；展开时显示输入+进度+步骤日志。编辑器仍在下方可见。完成后 YAML 直接出现在下方编辑器中。</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>编辑器始终可见，可在生成过程中对照/参考</li><li>展开/收起状态自然区分"输入中"和"编辑中"</li><li>不需要 Tab 切换，用户很自然理解"上面输入→下面出结果"</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>展开后挤压编辑器空间（但可滚动）</li><li>两个面板（AI Bar + 编辑器）的滚动协调需要注意</li></ul></div>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>三栏布局：编辑器 | AI 面板 | WordList</h3>
+      <p>在左右分栏中间插入第三个可收起面板（AI 生成专用）。平时收起为窄条，生成时展开。左侧编辑器 + 中间 AI 面板 + 右侧列表。</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>编辑器始终全尺寸可见</li><li>AI 过程与编辑完全隔离，最清晰的关注点分离</li><li>扩展性好：以后批量生成可复用此面板</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>三栏在小屏幕上很窄</li><li>需要第二个拖拽分隔条</li><li>改动了现有布局结构，代码变更最大</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
