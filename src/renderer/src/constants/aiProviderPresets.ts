@@ -13,7 +13,12 @@ export interface AIProviderPreset {
   anthropicApiHost: string;
   enabled: boolean;
   isSystem: boolean;
-  models: Array<{ id: string; name: string; group: string }>;
+  models: Array<{
+    id: string;
+    name: string;
+    group: string;
+    endpointType?: AIProviderMasked['type'];
+  }>;
   logo?: string;
   websites?: {
     official?: string;
@@ -40,7 +45,12 @@ export const aiProviderPresets: AIProviderPreset[] = [
       models: 'https://platform.deepseek.com/api-docs/',
     },
     models: [
-      { id: 'deepseek-v4-pro', name: 'deepseek-v4-pro[1m]', group: 'deepseek' },
+      {
+        id: 'deepseek-v4-pro[1m]',
+        name: 'deepseek-v4-pro[1m]',
+        group: 'deepseek',
+        endpointType: 'anthropic',
+      },
       { id: 'deepseek-v4-flash', name: 'deepseek-v4-flash[1m]', group: 'deepseek' },
     ],
   },

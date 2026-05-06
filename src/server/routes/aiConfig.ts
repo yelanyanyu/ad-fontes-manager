@@ -16,8 +16,9 @@ const { validateBody } = require('../middleware/validate') as {
     schema: ZodType<unknown>
   ) => (req: Request, res: Response, next: NextFunction) => void;
 };
-const { TestProviderInputSchema } = require('../schemas/aiConfig') as {
+const { TestProviderInputSchema, TestSearchInputSchema } = require('../schemas/aiConfig') as {
   TestProviderInputSchema: ZodType<unknown>;
+  TestSearchInputSchema: ZodType<unknown>;
 };
 const { getAIConfigMasked, updateAIConfig, resolveProviderApiKeyForTest } =
   require('../services/ai/configService') as {
@@ -33,12 +34,22 @@ const { loggers } = require('../utils/logger') as {
     };
   };
 };
+const { resolveAIEndpoint } = require('../services/ai/endpointResolver') as {
+  resolveAIEndpoint: (input: {
+    providerType: 'openai' | 'anthropic';
+    baseUrl: string;
+    anthropicBaseUrl?: string;
+    modelEndpointType?: 'openai' | 'anthropic';
+  }) => { endpointType: 'openai' | 'anthropic'; baseUrl: string };
+};
 
 interface TestProviderBody {
   providerId?: string;
   baseUrl: string;
+  anthropicBaseUrl?: string;
   apiKey: string;
   type: 'openai' | 'anthropic';
+  modelEndpointType?: 'openai' | 'anthropic';
   model: string;
 }
 
@@ -89,17 +100,24 @@ router.post(
   requireWriteAccess,
   validateBody(TestProviderInputSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { providerId, baseUrl, type, model } = req.body as TestProviderBody;
+    const { providerId, baseUrl, anthropicBaseUrl, type, modelEndpointType, model } =
+      req.body as TestProviderBody;
     const apiKey = resolveProviderApiKeyForTest(providerId, (req.body as TestProviderBody).apiKey);
-    const normalizedBase = baseUrl.replace(/\/+$/, '');
+    const endpoint = resolveAIEndpoint({
+      providerType: type,
+      baseUrl,
+      anthropicBaseUrl,
+      modelEndpointType,
+    });
+    const normalizedBase = endpoint.baseUrl.replace(/\/+$/, '');
     const start = Date.now();
     const controller = new globalThis.AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
 
     const chatUrl =
-      type === 'anthropic'
+      endpoint.endpointType === 'anthropic'
         ? `${normalizedBase}/messages`
-        : `${formatApiHost(baseUrl)}/chat/completions`;
+        : `${formatApiHost(endpoint.baseUrl)}/chat/completions`;
 
     const body = JSON.stringify({
       model,
@@ -124,8 +142,9 @@ router.post(
         loggers.ai.error(
           {
             baseUrl,
+            resolvedBaseUrl: endpoint.baseUrl,
             chatUrl,
-            type,
+            type: endpoint.endpointType,
             model,
             latencyMs,
             statusCode: response.status,
@@ -143,7 +162,15 @@ router.post(
       }
 
       loggers.ai.info(
-        { baseUrl, chatUrl, type, model, latencyMs, ok: true },
+        {
+          baseUrl,
+          resolvedBaseUrl: endpoint.baseUrl,
+          chatUrl,
+          type: endpoint.endpointType,
+          model,
+          latencyMs,
+          ok: true,
+        },
         'Provider connectivity test succeeded'
       );
       res.json({ ok: true, latencyMs });
@@ -152,9 +179,88 @@ router.post(
       const err = error as { name?: string; message?: string };
       const message = err.name === 'AbortError' ? 'Connection timed out (15s)' : err.message;
       loggers.ai.error(
-        { baseUrl, chatUrl, type, model, latencyMs, error: message },
+        {
+          baseUrl,
+          resolvedBaseUrl: endpoint.baseUrl,
+          chatUrl,
+          type: endpoint.endpointType,
+          model,
+          latencyMs,
+          error: message,
+        },
         'Provider connectivity test error'
       );
+      res.json({ ok: false, error: message || 'Connection failed', latencyMs });
+    } finally {
+      clearTimeout(timeout);
+    }
+  })
+);
+
+router.post(
+  '/config/ai/test-search',
+  requireWriteAccess,
+  validateBody(TestSearchInputSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const { provider, apiKey } = req.body as { provider: 'brave' | 'tavily'; apiKey: string };
+    const start = Date.now();
+    const controller = new globalThis.AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+
+    try {
+      let searchUrl: string;
+      let headers: Record<string, string>;
+      let body: string | undefined;
+
+      if (provider === 'brave') {
+        searchUrl = 'https://api.search.brave.com/res/v1/web/search?q=test&count=1';
+        headers = {
+          Accept: 'application/json',
+          'X-Subscription-Token': apiKey,
+        };
+        body = undefined;
+      } else {
+        searchUrl = 'https://api.tavily.com/search';
+        headers = { 'Content-Type': 'application/json' };
+        body = JSON.stringify({ query: 'test', api_key: apiKey, max_results: 1 });
+      }
+
+      const response = await fetch(searchUrl, {
+        method: provider === 'brave' ? 'GET' : 'POST',
+        headers,
+        body,
+        signal: controller.signal,
+      });
+      const latencyMs = Date.now() - start;
+
+      if (!response.ok) {
+        const errorBody = await response.text().catch(() => '');
+        loggers.ai.error(
+          {
+            provider,
+            searchUrl,
+            latencyMs,
+            statusCode: response.status,
+            body: errorBody.slice(0, 500),
+          },
+          'Search API test failed'
+        );
+        res.json({
+          ok: false,
+          latencyMs,
+          error: `HTTP ${response.status} ${response.statusText}`,
+          statusCode: response.status,
+        });
+        return;
+      }
+
+      loggers.ai.info({ provider, searchUrl, latencyMs, ok: true }, 'Search API test succeeded');
+      res.json({ ok: true, latencyMs });
+    } catch (error) {
+      const latencyMs = Date.now() - start;
+      const err = error as { name?: string; message?: string };
+      const message = err.name === 'AbortError' ? 'Connection timed out (15s)' : err.message;
+      loggers.ai.error({ provider, latencyMs, error: message }, 'Search API test error');
       res.json({ ok: false, error: message || 'Connection failed', latencyMs });
     } finally {
       clearTimeout(timeout);

@@ -45,9 +45,14 @@
         "name": "deepseek",
         "type": "openai",
         "baseUrl": "https://api.deepseek.com",
+        "anthropicBaseUrl": "https://api.deepseek.com/anthropic",
         "apiKey": "",
         "models": [
-          { "id": "deepseek-v4-pro", "name": "deepseek-v4-pro[1m]" },
+          {
+            "id": "deepseek-v4-pro[1m]",
+            "name": "deepseek-v4-pro[1m]",
+            "endpointType": "anthropic"
+          },
           { "id": "deepseek-v4-flash", "name": "deepseek-v4-flash[1m]" }
         ]
       },
@@ -106,11 +111,9 @@
       }
     },
     "stages": {
-      "pass1": { "provider": "", "model": "" },
-      "pass2": { "provider": "", "model": "" },
-      "fixer": { "provider": "", "model": "" },
-      "reviewer": { "provider": "", "model": "" },
-      "regenerator": { "provider": "", "model": "" }
+      "fast": { "provider": "", "model": "" },
+      "balanced": { "provider": "", "model": "" },
+      "expert": { "provider": "", "model": "" }
     },
     "review": {
       "threshold": 6,

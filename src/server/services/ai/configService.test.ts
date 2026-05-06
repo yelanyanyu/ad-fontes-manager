@@ -211,6 +211,98 @@ void describe('configService', () => {
     assert.equal(saved.ai.search.apiKey, '');
   });
 
+  void it('updateAIConfig persists model endpoint overrides and Anthropic provider URL', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const { updateAIConfig } = loadService();
+
+    updateAIConfig({
+      providers: [
+        {
+          id: 'deepseek',
+          name: 'deepseek',
+          type: 'openai',
+          baseUrl: 'https://api.deepseek.com',
+          anthropicBaseUrl: 'https://api.deepseek.com/anthropic',
+          apiKey: '',
+          models: [
+            { id: 'deepseek-v4-flash', name: 'deepseek-v4-flash' },
+            {
+              id: 'deepseek-v4-pro[1m]',
+              name: 'deepseek-v4-pro[1m]',
+              endpointType: 'anthropic',
+            },
+          ],
+        },
+      ],
+    });
+
+    const saved = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+      ai: {
+        providers: Array<{
+          anthropicBaseUrl?: string;
+          models: Array<{ id: string; endpointType?: string }>;
+        }>;
+      };
+    };
+
+    assert.equal(saved.ai.providers[0].anthropicBaseUrl, 'https://api.deepseek.com/anthropic');
+    assert.equal(saved.ai.providers[0].models[1].endpointType, 'anthropic');
+  });
+
+  void it('updateAIConfig preserves unrelated config file sections when saving AI settings', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          server: { port: 4567 },
+          database: { url: './data/custom.db' },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const { updateAIConfig } = loadService();
+
+    updateAIConfig({
+      providers: [
+        {
+          id: 'deepseek',
+          name: 'deepseek',
+          type: 'openai',
+          baseUrl: 'https://api.deepseek.com',
+          apiKey: '',
+          models: [{ id: 'deepseek-chat', name: 'deepseek-chat' }],
+        },
+      ],
+    });
+
+    const saved = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+      server?: { port?: number };
+      database?: { url?: string };
+      ai?: { providers: Array<{ id: string }> };
+    };
+
+    assert.equal(saved.server?.port, 4567);
+    assert.equal(saved.database?.url, './data/custom.db');
+    assert.equal(saved.ai?.providers[0].id, 'deepseek');
+  });
+
   void it('updateAIConfig never persists a masked provider key without an existing real key', () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),

@@ -13,16 +13,18 @@ import {
   fetchAIConfig,
   saveAIConfig,
   testProvider,
+  testSearch,
   type AIConfigMasked,
   type AIProviderMasked,
   type AIStageConfig,
   type TestProviderResult,
 } from '@/services/aiConfigApi';
+import { mergeSavedAIConfigWithDraft } from '@/services/aiConfigDraft';
 import { aiProviderPresets, type AIProviderPreset } from '@/constants/aiProviderPresets';
 import { requestOnboardingReplay } from '@/components/Onboarding/onboardingState';
 
 type AnkiStatus = 'connected' | 'disconnected' | 'testing';
-type StageKey = 'pass1' | 'pass2' | 'fixer' | 'reviewer' | 'regenerator';
+type StageKey = 'fast' | 'balanced' | 'expert';
 type DomainGroup = 'common' | 'en' | 'de';
 type SettingsPage = 'about' | 'api';
 type ApiSection = 'providers' | 'stages' | 'search' | 'review';
@@ -48,6 +50,8 @@ const showAddProviderPopup = ref(false);
 const showApiKey = reactive<Record<string, boolean>>({});
 const testingProvider = reactive<Record<string, boolean>>({});
 const testResults = reactive<Record<string, TestProviderResult>>({});
+const testingSearch = ref(false);
+const searchTestResult = ref<TestProviderResult | null>(null);
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let autoSaveBusy = false;
 const domainDrafts = reactive<Record<DomainGroup, string>>({
@@ -62,9 +66,10 @@ const addProviderForm = reactive({
 const showAddModelRow = ref(false);
 const newModelId = ref('');
 const newModelName = ref('');
+const newModelEndpointType = ref<'' | AIProviderMasked['type']>('');
 const testModelId = ref('');
 
-const stageKeys: StageKey[] = ['pass1', 'pass2', 'fixer', 'reviewer', 'regenerator'];
+const stageKeys: StageKey[] = ['fast', 'balanced', 'expert'];
 const domainGroups: Array<{ key: DomainGroup; label: string }> = [
   { key: 'common', label: '通用域名' },
   { key: 'en', label: '英文域名' },
@@ -97,7 +102,7 @@ const apiSectionTitles: Record<ApiSection, string> = {
 
 const apiSectionDescription: Record<ApiSection, string> = {
   providers: '管理 LLM 提供商、密钥、地址和模型列表',
-  stages: '为 Pipeline 5 个阶段（Pass 1 / Pass 2 / Fixer / Reviewer / Regenerator）指定供应商与模型',
+  stages: '为快速 / 均衡 / 专家三种模型配置指定供应商与模型，系统自动分配到对应流水线阶段',
   search: '配置网页搜索提供商与域名偏好',
   review: '设置审核评分阈值（1-10）与按语言覆盖',
 };
@@ -122,9 +127,28 @@ const providerFromPreset = (preset: AIProviderPreset): AIProviderMasked => ({
   name: preset.name,
   type: preset.type,
   baseUrl: preset.apiHost,
+  anthropicBaseUrl: preset.anthropicApiHost,
   apiKey: '',
-  models: preset.models.map(model => ({ id: model.id, name: model.name })),
+  models: preset.models.map(model => ({
+    id: model.id,
+    name: model.name,
+    endpointType: model.endpointType,
+  })),
 });
+
+const mergePresetModels = (
+  presetModels: AIProviderMasked['models'],
+  savedModels: AIProviderMasked['models']
+): AIProviderMasked['models'] => {
+  const savedById = new Map(savedModels.map(model => [model.id, model]));
+  const presetIds = new Set(presetModels.map(model => model.id));
+  const mergedPresetModels = presetModels.map(presetModel => ({
+    ...presetModel,
+    ...savedById.get(presetModel.id),
+    endpointType: savedById.get(presetModel.id)?.endpointType || presetModel.endpointType,
+  }));
+  return [...mergedPresetModels, ...savedModels.filter(model => !presetIds.has(model.id))];
+};
 
 const mergePresetProviders = (providers: AIProviderMasked[]): AIProviderMasked[] => {
   const providerById = new Map(providers.map(provider => [provider.id, provider]));
@@ -136,7 +160,7 @@ const mergePresetProviders = (providers: AIProviderMasked[]): AIProviderMasked[]
     return {
       ...presetProvider,
       ...savedProvider,
-      models: savedProvider.models.length > 0 ? savedProvider.models : presetProvider.models,
+      models: mergePresetModels(presetProvider.models, savedProvider.models),
     };
   });
   const customProviders = providers.filter(provider => !presetIds.has(provider.id));
@@ -169,24 +193,29 @@ const normalizeAIConfig = (config: AIConfigMasked): AIConfigMasked => ({
 
 const stageLabel = (stageKey: StageKey): string =>
   ({
-    pass1: 'Pass 1 搜索生成',
-    pass2: 'Pass 2 深度生成',
-    fixer: '格式修复',
-    reviewer: '内容审核',
-    regenerator: '字段重生成',
+    fast: '快速模型',
+    balanced: '均衡模型',
+    expert: '专家模型',
   })[stageKey];
 
 const stageDescription = (stageKey: StageKey): string =>
   ({
-    pass1: '轻量模型 + 搜索工具调用。搜索词源网站，生成结构性字段（yield、root_and_affixes / morphological_analysis 等），包含 Format Check 自动校验。',
-    pass2: '重量模型，无搜索工具。接收 Pass 1 输出 + 搜索摘要，生成视觉意象、意义演变、同源词族、应用场景等深度字段。',
-    fixer: '轻量模型，专修 YAML 格式错误。Zod schema 校验失败时自动重试，最多 3 次，仍失败则标记为"格式错误"。',
-    reviewer: '重量模型，对 visual_imagery_zh、meaning_evolution_zh、image_differentiation_zh 三个字段评分（1-10 分制）。阈值按语言可分别设定。',
-    regenerator: '针对审核未达标的字段，单独重新生成并重新审核。最多 N 次重试（可配置），仍失败则提示用户手动决策。',
+    fast: '轻量快速模型。用于 Pass 1（搜索生成）和 Fixer（格式修复）阶段，速度快、成本低。',
+    balanced: '均衡质量模型。用于 Pass 2（深度生成）和 Regenerator（字段重生成）阶段，平衡速度与质量。',
+    expert: '最强推理模型。用于 Reviewer（内容审核评分）阶段，需要最高质量的三字段评分（1-10 分制）。',
   })[stageKey];
 
 const getProviderModels = (providerId: string): AIProviderMasked['models'] =>
   aiConfig.value?.providers.find(provider => provider.id === providerId)?.models || [];
+
+const getModelEndpointType = (
+  provider: AIProviderMasked,
+  modelId: string
+): AIProviderMasked['type'] =>
+  provider.models.find(model => model.id === modelId)?.endpointType || provider.type;
+
+const getModelEndpointLabel = (provider: AIProviderMasked, modelId: string): string =>
+  getModelEndpointType(provider, modelId) === 'anthropic' ? 'Anthropic' : 'OpenAI';
 
 const getStage = (stageKey: StageKey): AIStageConfig => {
   if (!aiConfig.value) return { provider: '', model: '' };
@@ -200,12 +229,21 @@ const getStage = (stageKey: StageKey): AIStageConfig => {
 const updateStageProvider = (stageKey: StageKey, providerId: string): void => {
   const stage = getStage(stageKey);
   stage.provider = providerId;
-  stage.model = getProviderModels(providerId)[0]?.id || '';
+  stage.model = '';
   triggerAutoSave();
 };
 
 const updateStageModel = (stageKey: StageKey, modelId: string): void => {
   getStage(stageKey).model = modelId;
+  triggerAutoSave();
+};
+
+const updateModelEndpointType = (
+  model: AIProviderMasked['models'][number],
+  endpointType: string
+): void => {
+  model.endpointType =
+    endpointType === 'openai' || endpointType === 'anthropic' ? endpointType : undefined;
   triggerAutoSave();
 };
 
@@ -248,7 +286,9 @@ const handleSaveAIConfig = async (silent = true): Promise<void> => {
   aiSaving.value = true;
   aiError.value = '';
   try {
-    aiConfig.value = normalizeAIConfig(await saveAIConfig(sanitizeAIConfigForSave(aiConfig.value)));
+    const draftConfig = aiConfig.value;
+    const savedConfig = await saveAIConfig(sanitizeAIConfigForSave(draftConfig));
+    aiConfig.value = normalizeAIConfig(mergeSavedAIConfigWithDraft(savedConfig, draftConfig));
     if (!silent) {
       appStore.addToast('AI config saved', 'success');
     }
@@ -303,11 +343,8 @@ const onTypeChange = (): void => {
   if (!selectedProvider.value) return;
   const preset = aiProviderPresets.find(p => p.id === selectedProvider.value!.id);
   if (!preset) { triggerAutoSave(); return; }
-  if (selectedProvider.value.type === 'anthropic' && preset.anthropicApiHost) {
-    selectedProvider.value.baseUrl = preset.anthropicApiHost;
-  } else {
-    selectedProvider.value.baseUrl = preset.apiHost;
-  }
+  selectedProvider.value.baseUrl = preset.apiHost;
+  selectedProvider.value.anthropicBaseUrl = preset.anthropicApiHost;
   triggerAutoSave();
 };
 
@@ -325,6 +362,7 @@ const confirmAddProvider = async (): Promise<void> => {
     name: addProviderForm.name.trim(),
     type: addProviderForm.type,
     baseUrl: 'https://api.openai.com/v1',
+    anthropicBaseUrl: 'https://api.anthropic.com',
     apiKey: '',
     models: [{ id: 'gpt-4o-mini', name: 'gpt-4o-mini' }],
   };
@@ -359,9 +397,13 @@ const addModel = (): void => {
   const id = newModelId.value.trim();
   if (!id) return;
   const name = newModelName.value.trim() || id;
-  selectedProvider.value.models = [...selectedProvider.value.models, { id, name }];
+  selectedProvider.value.models = [
+    ...selectedProvider.value.models,
+    { id, name, endpointType: newModelEndpointType.value || undefined },
+  ];
   newModelId.value = '';
   newModelName.value = '';
+  newModelEndpointType.value = '';
   showAddModelRow.value = false;
   triggerAutoSave();
 };
@@ -389,9 +431,11 @@ const handleTestProvider = async (): Promise<void> => {
   }
 
   const preset = aiProviderPresets.find(p => p.id === provider.id);
+  const modelId = testModelId.value || provider.models[0]?.id;
+  const modelEndpointType = getModelEndpointType(provider, modelId);
   const testBaseUrl =
-    provider.type === 'anthropic' && preset?.anthropicApiHost
-      ? preset.anthropicApiHost
+    modelEndpointType === 'anthropic'
+      ? provider.anthropicBaseUrl || preset?.anthropicApiHost || provider.baseUrl
       : provider.baseUrl;
 
   testingProvider[provider.id] = true;
@@ -399,9 +443,11 @@ const handleTestProvider = async (): Promise<void> => {
     const result = await testProvider({
       providerId: provider.id,
       baseUrl: testBaseUrl,
+      anthropicBaseUrl: provider.anthropicBaseUrl || preset?.anthropicApiHost,
       apiKey: provider.apiKey,
       type: provider.type,
-      model: testModelId.value || provider.models[0]?.id,
+      modelEndpointType: provider.models.find(model => model.id === modelId)?.endpointType,
+      model: modelId,
     });
     testResults[provider.id] = result;
     if (result.ok) {
@@ -426,6 +472,40 @@ const handleTestProvider = async (): Promise<void> => {
     );
   } finally {
     testingProvider[provider.id] = false;
+  }
+};
+
+const handleTestSearch = async (): Promise<void> => {
+  if (!aiConfig.value?.search) return;
+  const search = aiConfig.value.search;
+  if (!search.apiKey.trim()) {
+    appStore.addToast('测试搜索前请输入 API Key', 'error');
+    return;
+  }
+  testingSearch.value = true;
+  searchTestResult.value = null;
+  try {
+    const result = await testSearch({
+      provider: search.provider,
+      apiKey: search.apiKey,
+    });
+    searchTestResult.value = result;
+    if (result.ok) {
+      appStore.addToast(`搜索连接成功 (${result.latencyMs || 0}ms)`, 'success');
+    } else {
+      appStore.addToast(result.error || '搜索连接失败', 'error');
+    }
+  } catch (error) {
+    searchTestResult.value = {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Test failed',
+    };
+    appStore.addToast(
+      error instanceof Error ? error.message : '搜索连接失败',
+      'error'
+    );
+  } finally {
+    testingSearch.value = false;
   }
 };
 
@@ -692,7 +772,7 @@ onMounted(() => {
                   <select
                     v-model="testModelId"
                     class="field-control test-model-select"
-                    :title="'选择测试模型'"
+                    title="选择测试模型"
                   >
                     <option v-for="m in selectedProvider.models" :key="m.id" :value="m.id">
                       {{ m.id }}
@@ -721,6 +801,16 @@ onMounted(() => {
                 <input
                   v-model="selectedProvider.baseUrl"
                   class="field-control api-url-input"
+                  @blur="flushAutoSave()"
+                />
+              </div>
+
+              <div class="api-field-block">
+                <label class="api-field-label">Anthropic API 地址</label>
+                <input
+                  v-model="selectedProvider.anthropicBaseUrl"
+                  class="field-control api-url-input"
+                  placeholder="https://api.anthropic.com"
                   @blur="flushAutoSave()"
                 />
               </div>
@@ -764,6 +854,18 @@ onMounted(() => {
                   >
                     <span class="model-id" :title="model.id">{{ model.id }}</span>
                     <span class="model-name" :title="model.name">{{ model.name }}</span>
+                    <span class="model-endpoint-badge">
+                      {{ getModelEndpointLabel(selectedProvider, model.id) }}
+                    </span>
+                    <select
+                      :value="model.endpointType || ''"
+                      class="field-control model-endpoint-select"
+                      @change="updateModelEndpointType(model, ($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="">继承</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                    </select>
                     <button
                       type="button"
                       class="model-remove-btn"
@@ -785,11 +887,19 @@ onMounted(() => {
                       placeholder="显示名称"
                       @keydown.enter="addModel()"
                     />
+                    <select
+                      v-model="newModelEndpointType"
+                      class="field-control model-endpoint-select"
+                    >
+                      <option value="">继承</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                    </select>
                     <button class="btn btn-compact" type="button" @click="addModel()">确定</button>
-                    <button class="btn btn-compact" type="button" @click="showAddModelRow = false; newModelId = ''; newModelName = ''">取消</button>
+                    <button class="btn btn-compact" type="button" @click="showAddModelRow = false; newModelId = ''; newModelName = ''; newModelEndpointType = ''">取消</button>
                   </div>
                   <p v-if="!selectedProvider.models.length && !showAddModelRow" class="empty-text">
-                    暂无模型，点击上方按钮添加
+                    暂无模型
                   </p>
                 </div>
               </div>
@@ -818,8 +928,8 @@ onMounted(() => {
             <div v-else-if="activeApiSection === 'stages'" class="api-config-stack">
               <section class="ai-panel ai-panel-stages">
                 <header class="ai-panel-header">
-                  <h2>流水线阶段</h2>
-                  <p>为 5 个 Pipeline 阶段分别指定供应商与模型</p>
+                  <h2>阶段模型分配</h2>
+                  <p>为快速 / 均衡 / 专家三种模型配置指定供应商与模型</p>
                 </header>
                 <div
                   v-for="stageKey in stageKeys"
@@ -894,36 +1004,53 @@ onMounted(() => {
                       API Key
                       <span class="stage-info-icon">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
-                        <span class="stage-tooltip">搜索提供商的 API 密钥，用于在 Pass 1 阶段调用搜索工具，检索词源网站信息。</span>
+                        <span class="stage-tooltip">用于 Pass 1 搜索阶段的搜索 API 密钥。</span>
                       </span>
                     </span>
-                    <span class="secret-input api-secret-input">
-                      <input
-                        v-model="aiConfig.search.apiKey"
-                        class="field-control"
-                        :type="showApiKey._search ? 'text' : 'password'"
-                        placeholder="输入搜索 API Key"
-                        @input="triggerAutoSave()"
-                      />
+                    <div class="secret-input-row">
+                      <span class="secret-input api-secret-input">
+                        <input
+                          v-model="aiConfig.search.apiKey"
+                          class="field-control"
+                          :type="showApiKey._search ? 'text' : 'password'"
+                          placeholder="输入搜索 API Key"
+                          @input="triggerAutoSave()"
+                        />
+                        <button
+                          type="button"
+                          class="eye-toggle"
+                          :title="showApiKey._search ? '隐藏' : '查看'"
+                          @click="showApiKey._search = !showApiKey._search"
+                        >
+                          <svg v-if="showApiKey._search" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                        </button>
+                      </span>
                       <button
+                        class="btn btn-compact"
                         type="button"
-                        class="eye-toggle"
-                        :title="showApiKey._search ? '隐藏' : '查看'"
-                        @click="showApiKey._search = !showApiKey._search"
+                        :disabled="testingSearch"
+                        @click="handleTestSearch()"
                       >
-                        <svg v-if="showApiKey._search" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
-                        <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                        {{ testingSearch ? '检测中...' : '检测' }}
                       </button>
-                    </span>
+                    </div>
                   </label>
                 </div>
+                <p v-if="searchTestResult" class="provider-test-result search-test-result">
+                  {{
+                    searchTestResult.ok
+                      ? `连接成功 ${searchTestResult.latencyMs || 0}ms`
+                      : searchTestResult.error
+                  }}
+                </p>
 
                 <div class="domain-toggle-row">
                   <span class="search-field-label">
                     自动域名
                     <span class="stage-info-icon">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
-                      <span class="stage-tooltip">开启后，系统根据目标语言自动选择对应的搜索域名列表，无需手动配置。关闭后可手动指定每个语言组的域名。</span>
+                      <span class="stage-tooltip">开启后根据当前语言自动追加默认搜索域名；关闭后使用下方手动域名。</span>
                     </span>
                   </span>
                   <input
@@ -987,7 +1114,7 @@ onMounted(() => {
               <section class="ai-panel ai-panel-review">
                 <header class="ai-panel-header">
                   <h2>审核阈值</h2>
-                  <p>低于阈值的字段需要人工审核</p>
+                  <p>设置默认审核阈值和语言覆盖</p>
                 </header>
 
                 <div class="threshold-section">
@@ -1011,10 +1138,10 @@ onMounted(() => {
                   </div>
                   <div class="threshold-lang-row">
                     <span class="search-field-label">
-                      按语言
+                      语言覆盖
                       <span class="stage-info-icon">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
-                        <span class="stage-tooltip">按语言覆盖默认阈值。当设置了语言特定阈值时，该语言的审核将使用此值而非默认阈值。可用于针对不同语言调整审核严格度。</span>
+                        <span class="stage-tooltip">分别覆盖英文和德文的审核阈值；未设置时使用默认值。</span>
                       </span>
                     </span>
                     <div class="threshold-lang-inputs">
@@ -1674,6 +1801,21 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+}
+
+.model-endpoint-badge {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  flex-shrink: 0;
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.model-endpoint-select {
+  flex: 0 0 116px;
+  font-size: 11px;
+  padding: 4px 8px;
 }
 
 .model-remove-btn {

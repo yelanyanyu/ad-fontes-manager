@@ -87,7 +87,8 @@ POST /api/v2/generate/single
   │
   ▼
 [Research] researchAgent
-  模型: config.stages.research (轻量，默认 openai/gpt-4o-mini)
+  模型: config.stages.research (轻量，默认 deepseek/
+deepseek-v4-flash[1m])
   Tools: searchEtymology + fetchPage
   输入: word, context, language, notes
   输出: yield, root_and_affixes, historical_origins（不含 zh 创意字段）
@@ -95,7 +96,8 @@ POST /api/v2/generate/single
   │
   ▼
 [Enrichment] enrichmentAgent
-  模型: config.stages.enrichment (重量，默认 openai/gpt-4o)
+  模型: config.stages.enrichment (重量，默认 deepseek/
+deepseek-v4-pro[1m])
   Tools: 无
   输入: Research 输出 + 搜索摘要
   输出: visual_imagery_zh, meaning_evolution_zh, cognate_family,
@@ -104,7 +106,8 @@ POST /api/v2/generate/single
   │
   ▼
 [Review] reviewerAgent
-  模型: config.stages.review (重量，默认 openai/gpt-4o)
+  模型: config.stages.review (重量，默认 deepseek/
+deepseek-v4-pro[1m])
   评分 3 字段: visual_imagery_zh, meaning_evolution_zh, image_differentiation_zh
   每个字段: 1-10 分 + 评价文字（正面/负面逐条列出）
   Zod outputSchema 约束输出 JSON

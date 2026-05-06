@@ -1,6 +1,6 @@
 const config = require('../../utils/config') as {
   get: <T = unknown>(path: string, defaultValue?: T) => T;
-  getAll: () => Record<string, unknown>;
+  loadConfigFile: () => Record<string, unknown>;
   saveConfigFile: (config: Record<string, unknown>) => void;
 };
 const { loggers } = require('../../utils/logger') as {
@@ -19,6 +19,7 @@ const { AIConfigSchema, AIConfigUpdateSchema } = require('../../schemas/aiConfig
 interface AIModel {
   id: string;
   name: string;
+  endpointType?: 'openai' | 'anthropic';
 }
 
 interface AIProvider {
@@ -26,6 +27,7 @@ interface AIProvider {
   name: string;
   type: 'openai' | 'anthropic';
   baseUrl: string;
+  anthropicBaseUrl?: string;
   apiKey: string;
   models: AIModel[];
 }
@@ -50,9 +52,9 @@ interface AIConfig {
   providers: AIProvider[];
   search?: AISearchConfig;
   stages: {
-    research?: AIStageConfig;
-    enrichment?: AIStageConfig;
-    review?: AIStageConfig;
+    fast?: AIStageConfig;
+    balanced?: AIStageConfig;
+    expert?: AIStageConfig;
   };
   review: {
     threshold: number;
@@ -162,8 +164,7 @@ function updateAIConfig(input: unknown): AIConfigMasked {
   };
 
   const fullValidated = AIConfigSchema.parse(merged);
-  const fullConfig = { ...config.getAll(), ai: fullValidated };
-  config.saveConfigFile(fullConfig);
+  config.saveConfigFile({ ...config.loadConfigFile(), ai: fullValidated });
 
   loggers.ai.info(
     {

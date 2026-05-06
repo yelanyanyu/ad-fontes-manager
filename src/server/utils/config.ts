@@ -173,12 +173,12 @@ const envMapping: Record<string, string> = {
   AI_SEARCH_API_KEY: 'ai.search.apiKey',
   AI_SEARCH_PROVIDER: 'ai.search.provider',
   AI_REVIEW_THRESHOLD: 'ai.review.threshold',
-  AI_RESEARCH_PROVIDER: 'ai.stages.research.provider',
-  AI_RESEARCH_MODEL: 'ai.stages.research.model',
-  AI_ENRICHMENT_PROVIDER: 'ai.stages.enrichment.provider',
-  AI_ENRICHMENT_MODEL: 'ai.stages.enrichment.model',
-  AI_REVIEW_PROVIDER: 'ai.stages.review.provider',
-  AI_REVIEW_MODEL: 'ai.stages.review.model',
+  AI_FAST_PROVIDER: 'ai.stages.fast.provider',
+  AI_FAST_MODEL: 'ai.stages.fast.model',
+  AI_BALANCED_PROVIDER: 'ai.stages.balanced.provider',
+  AI_BALANCED_MODEL: 'ai.stages.balanced.model',
+  AI_EXPERT_PROVIDER: 'ai.stages.expert.provider',
+  AI_EXPERT_MODEL: 'ai.stages.expert.model',
 };
 
 function parseEnvValue(value: string | undefined): ConfigValue | undefined {
@@ -321,6 +321,7 @@ module.exports = {
   reload,
   clearCache,
   defaultConfig,
+  loadConfigFile,
   saveConfigFile,
   resolveConfigPath,
 };

@@ -5,8 +5,9 @@ export interface AIProviderMasked {
   name: string;
   type: 'openai' | 'anthropic';
   baseUrl: string;
+  anthropicBaseUrl?: string;
   apiKey: string;
-  models: { id: string; name: string }[];
+  models: { id: string; name: string; endpointType?: 'openai' | 'anthropic' }[];
 }
 
 export interface AISearchConfigMasked {
@@ -29,9 +30,9 @@ export interface AIConfigMasked {
   providers: AIProviderMasked[];
   search?: AISearchConfigMasked;
   stages: {
-    research?: AIStageConfig;
-    enrichment?: AIStageConfig;
-    review?: AIStageConfig;
+    fast?: AIStageConfig;
+    balanced?: AIStageConfig;
+    expert?: AIStageConfig;
   };
   review: {
     threshold: number;
@@ -42,8 +43,10 @@ export interface AIConfigMasked {
 export interface TestProviderInput {
   providerId?: string;
   baseUrl: string;
+  anthropicBaseUrl?: string;
   apiKey: string;
   type: 'openai' | 'anthropic';
+  modelEndpointType?: 'openai' | 'anthropic';
   model: string;
 }
 
@@ -61,3 +64,11 @@ export const saveAIConfig = (config: AIConfigMasked): Promise<AIConfigMasked> =>
 
 export const testProvider = (input: TestProviderInput): Promise<TestProviderResult> =>
   request.post('/v2/config/ai/test-provider', input, { skipErrorToast: true });
+
+export interface TestSearchInput {
+  provider: 'brave' | 'tavily';
+  apiKey: string;
+}
+
+export const testSearch = (input: TestSearchInput): Promise<TestProviderResult> =>
+  request.post('/v2/config/ai/test-search', input, { skipErrorToast: true });

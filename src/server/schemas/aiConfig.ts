@@ -1,5 +1,7 @@
 const { z } = require('zod') as typeof import('zod');
 
+const AIEndpointTypeSchema = z.enum(['openai', 'anthropic']);
+
 const AIProviderSchema = z.object({
   id: z
     .string()
@@ -7,14 +9,16 @@ const AIProviderSchema = z.object({
     .min(1, 'Provider ID is required')
     .regex(/^[a-z0-9_-]+$/, 'Provider ID must be lowercase alphanumeric (a-z, 0-9, _, -)'),
   name: z.string().trim().min(1, 'Provider name is required'),
-  type: z.enum(['openai', 'anthropic']).default('openai'),
+  type: AIEndpointTypeSchema.default('openai'),
   baseUrl: z.string().trim().url('Must be a valid URL'),
+  anthropicBaseUrl: z.string().trim().url('Must be a valid URL').optional(),
   apiKey: z.string().default(''),
   models: z
     .array(
       z.object({
         id: z.string().trim().min(1, 'Model ID is required'),
         name: z.string().trim().min(1, 'Model name is required'),
+        endpointType: AIEndpointTypeSchema.optional(),
       })
     )
     .min(1, 'At least one model is required'),
@@ -40,9 +44,9 @@ const AIStageConfigSchema = z.object({
 
 const AIStageMapSchema = z
   .object({
-    research: AIStageConfigSchema.optional(),
-    enrichment: AIStageConfigSchema.optional(),
-    review: AIStageConfigSchema.optional(),
+    fast: AIStageConfigSchema.optional(),
+    balanced: AIStageConfigSchema.optional(),
+    expert: AIStageConfigSchema.optional(),
   })
   .default({});
 
@@ -65,9 +69,9 @@ const AIConfigUpdateSchema = z.object({
   search: AISearchConfigSchema.optional(),
   stages: z
     .object({
-      research: AIStageConfigSchema.optional(),
-      enrichment: AIStageConfigSchema.optional(),
-      review: AIStageConfigSchema.optional(),
+      fast: AIStageConfigSchema.optional(),
+      balanced: AIStageConfigSchema.optional(),
+      expert: AIStageConfigSchema.optional(),
     })
     .optional(),
   review: z
@@ -81,9 +85,16 @@ const AIConfigUpdateSchema = z.object({
 const TestProviderInputSchema = z.object({
   providerId: z.string().trim().min(1).optional(),
   baseUrl: z.string().trim().url('Must be a valid URL'),
+  anthropicBaseUrl: z.string().trim().url('Must be a valid URL').optional(),
   apiKey: z.string().min(1, 'API Key is required'),
-  type: z.enum(['openai', 'anthropic']),
+  type: AIEndpointTypeSchema,
+  modelEndpointType: AIEndpointTypeSchema.optional(),
   model: z.string().trim().min(1, 'Model is required'),
+});
+
+const TestSearchInputSchema = z.object({
+  provider: z.enum(['brave', 'tavily']),
+  apiKey: z.string().min(1, 'API Key is required'),
 });
 
 module.exports = {
@@ -93,4 +104,5 @@ module.exports = {
   AISearchConfigSchema,
   AIStageConfigSchema,
   TestProviderInputSchema,
+  TestSearchInputSchema,
 };
