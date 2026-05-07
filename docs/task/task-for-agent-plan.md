@@ -31,65 +31,12 @@
 - Modify: `src/server/schemas/config.ts`
 - Modify: `src/server/utils/config.ts`
 
-- [ ] **Step 1: Write AI config Zod schema**
+- [x] **Step 1: Write AI config Zod schema** ✅ 已实现
 
-Create `src/server/schemas/aiConfig.ts`:
-
-```typescript
-import { z } from 'zod';
-
-export const AIProviderSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  baseUrl: z.string().url(),
-  apiKey: z.string().min(1),
-  formats: z.array(z.enum(['openai', 'anthropic', 'google'])).min(1),
-  models: z
-    .array(
-      z.object({
-        id: z.string().min(1),
-        name: z.string().min(1),
-        formats: z.array(z.enum(['openai', 'anthropic', 'google'])).min(1),
-      })
-    )
-    .min(1),
-});
-
-export const AISearchConfigSchema = z.object({
-  provider: z.enum(['brave', 'tavily']),
-  apiKey: z.string().min(1),
-  autoDomains: z.boolean().default(false),
-  domains: z.object({
-    common: z.array(z.string()).default([]),
-    en: z.array(z.string()).default([]),
-    de: z.array(z.string()).default([]),
-  }),
-});
-
-export const AIStageConfigSchema = z.object({
-  provider: z.string().min(1),
-  model: z.string().min(1),
-});
-
-export const AIConfigSchema = z.object({
-  providers: z.array(AIProviderSchema).default([]),
-  search: AISearchConfigSchema.optional(),
-  stages: z.object({
-    research: AIStageConfigSchema.optional(),
-    enrichment: AIStageConfigSchema.optional(),
-    review: AIStageConfigSchema.optional(),
-  }),
-  review: z.object({
-    threshold: z.number().min(1).max(10).default(6),
-    thresholdByLanguage: z.record(z.number().min(1).max(10)).default({}),
-  }).default({}),
-});
-
-export type AIProvider = z.infer<typeof AIProviderSchema>;
-export type AISearchConfig = z.infer<typeof AISearchConfigSchema>;
-export type AIStageConfig = z.infer<typeof AIStageConfigSchema>;
-export type AIConfig = z.infer<typeof AIConfigSchema>;
-```
+当前实现于 `src/server/schemas/aiConfig.ts`。与原始计划的差异：
+- Provider 用 `type: 'openai' | 'anthropic'` 替代 `formats` 数组
+- 阶段键改为 `fast/balanced/expert`（三档配置）
+- 额外包含 `TestProviderInputSchema` 和 `TestSearchInputSchema`
 
 - [ ] **Step 2: Add AI config to top-level ConfigSchema**
 
@@ -168,12 +115,12 @@ Expected: no errors matching `aiConfig` or `config.ts`.
 
 ---
 
-### Task 2: AI 模块 Logger
+### Task 2: AI 模块 Logger ✅ 已实现
 
 **Files:**
 - Modify: `src/server/utils/logger.ts`
 
-- [ ] **Step 1: Add `loggers.ai`**
+- [x] **Step 1: Add `loggers.ai`**
 
 Add to the `loggers` object:
 
@@ -280,7 +227,7 @@ export interface PipelineStage {
   id: string;
   description: string;
   type: 'llm' | 'validate';    // 'llm' = call model; 'validate' = Zod schema check (Phase 2)
-  modelKey?: 'research' | 'enrichment' | 'review';
+  modelKey?: 'fast' | 'balanced' | 'expert';
   systemPromptFile?: string;    // undefined for validate stages
   toolNames?: string[];
   outputParser?: (text: string) => Record<string, unknown>;
@@ -677,12 +624,12 @@ export interface ResolvedModel {
 }
 
 const FALLBACKS: Record<string, ResolvedModel> = {
-  research: { provider: 'openai', modelId: 'gpt-4o-mini', apiKey: '', baseUrl: 'https://api.openai.com/v1', format: 'openai' },
-  enrichment: { provider: 'openai', modelId: 'gpt-4o', apiKey: '', baseUrl: 'https://api.openai.com/v1', format: 'openai' },
-  review: { provider: 'openai', modelId: 'gpt-4o', apiKey: '', baseUrl: 'https://api.openai.com/v1', format: 'openai' },
+  fast: { provider: 'openai', modelId: 'gpt-4o-mini', apiKey: '', baseUrl: 'https://api.openai.com/v1', format: 'openai' },
+  balanced: { provider: 'openai', modelId: 'gpt-4o', apiKey: '', baseUrl: 'https://api.openai.com/v1', format: 'openai' },
+  expert: { provider: 'openai', modelId: 'gpt-4o', apiKey: '', baseUrl: 'https://api.openai.com/v1', format: 'openai' },
 };
 
-export function resolveModel(stageName: 'research' | 'enrichment' | 'review'): ResolvedModel {
+export function resolveModel(stageName: 'fast' | 'balanced' | 'expert'): ResolvedModel {
   const aiConfig = config.getAIConfig();
   const stageConfig = aiConfig?.stages?.[stageName];
 
@@ -695,7 +642,7 @@ export function resolveModel(stageName: 'research' | 'enrichment' | 'review'): R
         modelId: stageConfig.model,
         apiKey: provider.apiKey,
         baseUrl: provider.baseUrl,
-        format: provider.formats.includes('openai') ? 'openai' : 'anthropic',
+        format: provider.type,
       };
     }
   }
@@ -711,7 +658,7 @@ export function resolveModel(stageName: 'research' | 'enrichment' | 'review'): R
         modelId: envKey,
         apiKey: provider.apiKey,
         baseUrl: provider.baseUrl,
-        format: provider.formats.includes('openai') ? 'openai' : 'anthropic',
+        format: provider.type,
       };
     }
   }
@@ -732,7 +679,7 @@ export const researchStage: PipelineStage = {
   id: 'research',
   description: '搜索词源网站并生成结构字段',
   type: 'llm',
-  modelKey: 'research',
+  modelKey: 'fast',
   systemPromptFile: 'english-generation.md',
   toolNames: ['search_etymology', 'fetch_page'],
   outputParser: (text: string) => {
@@ -758,7 +705,7 @@ export const enrichmentStage: PipelineStage = {
   id: 'enrichment',
   description: '生成创意 zh 字段',
   type: 'llm',
-  modelKey: 'enrichment',
+  modelKey: 'balanced',
   systemPromptFile: 'english-generation.md',
   outputParser: (text: string) => {
     const yamlMatch = text.match(/```yaml?\n?([\s\S]*?)```/);
@@ -805,7 +752,7 @@ export const reviewerStage: PipelineStage = {
   id: 'review',
   description: 'Reviewer 评分',
   type: 'llm',
-  modelKey: 'review',
+  modelKey: 'expert',
   systemPromptFile: 'content-reviewer.md',
   outputParser: (text: string) => {
     const jsonMatch = text.match(/\{[\s\S]*\}/);

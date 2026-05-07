@@ -87,8 +87,8 @@ POST /api/v2/generate/single
   │
   ▼
 [Research] researchAgent
-  模型: config.stages.research (轻量，默认 deepseek/
-deepseek-v4-flash[1m])
+  模型: config.stages.fast (快速模型)
+  默认: config.stages.fast 指定的供应商与模型
   Tools: searchEtymology + fetchPage
   输入: word, context, language, notes
   输出: yield, root_and_affixes, historical_origins（不含 zh 创意字段）
@@ -96,8 +96,8 @@ deepseek-v4-flash[1m])
   │
   ▼
 [Enrichment] enrichmentAgent
-  模型: config.stages.enrichment (重量，默认 deepseek/
-deepseek-v4-pro[1m])
+  模型: config.stages.balanced (均衡模型)
+  默认: config.stages.balanced 指定的供应商与模型
   Tools: 无
   输入: Research 输出 + 搜索摘要
   输出: visual_imagery_zh, meaning_evolution_zh, cognate_family,
@@ -106,8 +106,8 @@ deepseek-v4-pro[1m])
   │
   ▼
 [Review] reviewerAgent
-  模型: config.stages.review (重量，默认 deepseek/
-deepseek-v4-pro[1m])
+  模型: config.stages.expert (专家模型)
+  默认: config.stages.expert 指定的供应商与模型
   评分 3 字段: visual_imagery_zh, meaning_evolution_zh, image_differentiation_zh
   每个字段: 1-10 分 + 评价文字（正面/负面逐条列出）
   Zod outputSchema 约束输出 JSON
@@ -176,26 +176,30 @@ src/server/
 
 ## 六、配置系统
 
-### Schema 对齐 Phase 2 计划
+### Schema（已实现）
+
+当前实现于 `src/server/schemas/aiConfig.ts`。与原始计划的差异：
+
+- Provider 用 `type: 'openai' | 'anthropic'` 替代 `formats` 数组。计划中的 `formats` 数组和 per-model `type` 覆盖待实施。
+- 阶段键从 `research/enrichment/review` 改为 `fast/balanced/expert`（三档配置，自动映射到 5 个 Pipeline 阶段）。
 
 ```typescript
-// src/server/schemas/aiConfig.ts
+// src/server/schemas/aiConfig.ts（当前实现）
 const AIProviderSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  type: z.enum(['openai', 'anthropic']).default('openai'),
   baseUrl: z.string().url(),
-  apiKey: z.string().min(1),
-  formats: z.array(z.enum(['openai', 'anthropic', 'google'])).min(1),
+  apiKey: z.string().default(''),
   models: z.array(z.object({
     id: z.string().min(1),
     name: z.string().min(1),
-    formats: z.array(z.enum(['openai', 'anthropic', 'google'])).min(1),
   })).min(1),
 });
 
 const AISearchConfigSchema = z.object({
-  provider: z.enum(['brave', 'tavily']),
-  apiKey: z.string().min(1),
+  provider: z.enum(['brave', 'tavily']).default('brave'),
+  apiKey: z.string().default(''),
   autoDomains: z.boolean().default(false),
   domains: z.object({
     common: z.array(z.string()),
@@ -213,10 +217,10 @@ const AIConfigSchema = z.object({
   providers: z.array(AIProviderSchema).default([]),
   search: AISearchConfigSchema.optional(),
   stages: z.object({
-    research: AIStageConfigSchema.optional(),
-    enrichment: AIStageConfigSchema.optional(),
-    review: AIStageConfigSchema.optional(),
-  }),
+    fast: AIStageConfigSchema.optional(),
+    balanced: AIStageConfigSchema.optional(),
+    expert: AIStageConfigSchema.optional(),
+  }).default({}),
   review: z.object({
     threshold: z.number().min(1).max(10).default(6),
     thresholdByLanguage: z.record(z.number().min(1).max(10)).default({}),
@@ -224,11 +228,23 @@ const AIConfigSchema = z.object({
 });
 ```
 
+### 阶段映射
+
+| 配置档位 | 模型要求 | 自动分配到 |
+|---------|---------|-----------|
+| `fast`（快速） | 轻量快速 | Pass 1（搜索生成）+ Fixer（格式修复） |
+| `balanced`（均衡） | 质量速度平衡 | Pass 2（深度生成）+ Regenerator（字段重生成） |
+| `expert`（专家） | 最强推理 | Reviewer（内容审核评分） |
+
 ### 读写方式
 
-- `GET /api/v2/config/ai` → 返回脱敏配置（API Key 仅显示 `sk-***xxxx`）
-- `PUT /api/v2/config/ai` → 保存配置到 `config.json`
-- `.env` 可覆盖：`AI_SEARCH_API_KEY`、`AI_REVIEW_THRESHOLD` 等
+- `GET /api/v2/config/ai` → 返回完整配置
+- `PUT /api/v2/config/ai` → 保存 AI 配置到 `config.json`
+- `POST /api/v2/config/ai/test-provider` → 测试 LLM 供应商连接
+- `POST /api/v2/config/ai/test-search` → 测试搜索 API 连接
+- `.env` 可覆盖：`AI_FAST_PROVIDER`、`AI_FAST_MODEL`、`AI_BALANCED_PROVIDER` 等
+- `config.json` 仅存 `ai` 子树，基础设施配置由 `.env` 管理
+- `config.example.json` 提供预设模板，可安全推送到远程仓库
 
 ---
 
@@ -244,7 +260,7 @@ interface ResolvedModel {
   format: 'openai' | 'anthropic';  // determines which AI SDK provider to create
 }
 
-function resolveModel(stageName: 'research' | 'enrichment' | 'review'): ResolvedModel
+function resolveModel(stageName: 'fast' | 'balanced' | 'expert'): ResolvedModel
 ```
 
 3 个 agent 配置和 pipe.ts 统一从此获取模型信息，不再直接读 config。
@@ -295,8 +311,10 @@ function resolveModel(stageName: 'research' | 'enrichment' | 'review'): Resolved
 |------|------|------|
 | POST | `/api/v2/generate/single` | Body: `{word, context?, language, notes?}` → `{jobId}` |
 | GET | `/api/v2/generate/:jobId/stream` | SSE: step:start / tokens / complete / error / pipeline:complete |
-| GET | `/api/v2/config/ai` | 脱敏 AI 配置 |
+| GET | `/api/v2/config/ai` | 获取 AI 配置 |
 | PUT | `/api/v2/config/ai` | 更新 AI 配置 |
+| POST | `/api/v2/config/ai/test-provider` | 测试 LLM 供应商连接 |
+| POST | `/api/v2/config/ai/test-search` | 测试搜索 API 连接 |
 
 ---
 
@@ -367,8 +385,17 @@ import { sequentialRunner } from '../services/ai/pipe';
 
 - Fixer / Regenerator（格式修复/字段重生成 agent）
 - 批量生成 / GenerateView 页面
-- Settings UI 中的 AI 配置区块
 - `step:tokens` 流式开关 UI（前缀预留，默认关闭）
 - 德语管道（`PipelineDefinition` + `language` 字段已支持多语）
 - Anki 集成
 - Mastra workflow（`PipelineRunner` 接口已预留，后续换实现）
+
+## 十五、已完成（超出原始 scope）
+
+- Settings UI 中的 AI 配置区块（供应商管理、阶段模型分配、搜索 API、审核阈值）
+- 供应商连接测试（chat completion 检测）
+- 搜索 API 连接测试
+- Provider 预设（DeepSeek、OpenRouter、Bailian、Silicon、AiHubMix）+ logo
+- `config.example.json` 安全模板
+- `config.json` 仅存 `ai` 子树，`.env` 管基础设施
+- 模型级 `type` 覆盖（待实施：per-model `type` 字段，未设置时继承 provider.type）
