@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import type { StepState } from '@/composables/useAiGenerate';
 
-defineProps<{
+const props = defineProps<{
   open: boolean;
   step: StepState | null;
 }>();
@@ -9,6 +10,19 @@ defineProps<{
 const emit = defineEmits<{
   close: [];
 }>();
+
+const thinkingOpen = ref(true);
+const toolsOpen = ref(true);
+const rawOpen = ref(false);
+
+watch(
+  () => props.step?.step,
+  () => {
+    thinkingOpen.value = true;
+    toolsOpen.value = true;
+    rawOpen.value = false;
+  }
+);
 </script>
 
 <template>
@@ -24,28 +38,43 @@ const emit = defineEmits<{
     </header>
 
     <div class="stage-panel-body">
-      <section v-if="step?.toolCalls?.length" class="tool-section">
-        <h3>Tools</h3>
-        <div v-for="toolCall in step.toolCalls" :key="toolCall.toolCallId" class="tool-record">
-          <div class="tool-record-head">
-            <strong>{{ toolCall.toolName }}</strong>
-            <span :class="`tool-${toolCall.status}`">{{ toolCall.status }}</span>
+      <section v-if="step?.toolCalls?.length" class="collapsible-section">
+        <button class="toggle-head" type="button" @click.stop="toolsOpen = !toolsOpen">
+          <span class="toggle-arrow">{{ toolsOpen ? '&#9660;' : '&#9654;' }}</span>
+          <h3>Tools</h3>
+        </button>
+        <div v-show="toolsOpen" class="collapsible-body">
+          <div v-for="toolCall in step.toolCalls" :key="toolCall.toolCallId" class="tool-record">
+            <div class="tool-record-head">
+              <strong>{{ toolCall.toolName }}</strong>
+              <span :class="`tool-${toolCall.status}`">{{ toolCall.status }}</span>
+            </div>
+            <pre v-if="toolCall.input">{{ JSON.stringify(toolCall.input, null, 2) }}</pre>
+            <pre v-if="toolCall.output">{{ JSON.stringify(toolCall.output, null, 2) }}</pre>
+            <p v-if="toolCall.warning" class="warning-text">{{ toolCall.warning }}</p>
+            <p v-if="toolCall.error" class="error-text">{{ toolCall.error }}</p>
           </div>
-          <pre v-if="toolCall.input">{{ JSON.stringify(toolCall.input, null, 2) }}</pre>
-          <pre v-if="toolCall.output">{{ JSON.stringify(toolCall.output, null, 2) }}</pre>
-          <p v-if="toolCall.warning" class="warning-text">{{ toolCall.warning }}</p>
-          <p v-if="toolCall.error" class="error-text">{{ toolCall.error }}</p>
         </div>
       </section>
 
-      <section v-if="step?.reasoningText" class="reasoning-section">
-        <h3>Thinking</h3>
-        <pre>{{ step.reasoningText }}</pre>
+      <section v-if="step?.reasoningText" class="collapsible-section">
+        <button class="toggle-head" type="button" @click.stop="thinkingOpen = !thinkingOpen">
+          <span class="toggle-arrow">{{ thinkingOpen ? '&#9660;' : '&#9654;' }}</span>
+          <h3>Thinking</h3>
+        </button>
+        <div v-show="thinkingOpen" class="collapsible-body">
+          <pre>{{ step.reasoningText }}</pre>
+        </div>
       </section>
 
-      <section class="raw-section">
-        <h3>Raw Text</h3>
-        <pre>{{ step?.rawText || step?.tokens || 'No output yet.' }}</pre>
+      <section class="collapsible-section">
+        <button class="toggle-head" type="button" @click.stop="rawOpen = !rawOpen">
+          <span class="toggle-arrow">{{ rawOpen ? '&#9660;' : '&#9654;' }}</span>
+          <h3>Raw Text</h3>
+        </button>
+        <div v-show="rawOpen" class="collapsible-body">
+          <pre>{{ step?.rawText || step?.tokens || 'No output yet.' }}</pre>
+        </div>
       </section>
     </div>
   </aside>
@@ -109,15 +138,43 @@ const emit = defineEmits<{
   gap: 14px;
 }
 
-.tool-section,
-.raw-section {
+.collapsible-section {
+  display: grid;
+  gap: 8px;
+}
+
+.toggle-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  padding: 2px 0;
+  cursor: pointer;
+  color: var(--muted);
+  user-select: none;
+}
+
+.toggle-head:hover {
+  color: var(--text);
+}
+
+.toggle-arrow {
+  font-size: 9px;
+  line-height: 1;
+  width: 10px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.collapsible-body {
   display: grid;
   gap: 8px;
 }
 
 h3 {
   margin: 0;
-  color: var(--muted);
+  color: inherit;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;

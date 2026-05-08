@@ -123,11 +123,23 @@ export function useAiGenerate() {
       const data = JSON.parse(event.data) as { step: string; message: string };
       const job = jobs.value.get(jobId);
       if (!job) return;
-      if (!job.steps.some(step => step.step === data.step && step.status === 'running')) {
-        job.steps.push({ step: data.step, status: 'running', message: data.message });
+      const existingIdx = job.steps.findIndex(
+        step => step.step === data.step && step.status === 'running'
+      );
+      if (existingIdx >= 0) {
+        job.steps[existingIdx] = { step: data.step, status: 'running', message: data.message };
+      } else {
+        const oldIdx = job.steps.findIndex(step => step.step === data.step);
+        if (oldIdx >= 0) {
+          job.steps[oldIdx] = { step: data.step, status: 'running', message: data.message };
+        } else {
+          job.steps.push({ step: data.step, status: 'running', message: data.message });
+        }
       }
       job.currentStep = data.step;
-      job.status = 'running';
+      if (data.step !== 'fixing') {
+        job.status = 'running';
+      }
       touchJobs();
     });
 
@@ -233,12 +245,14 @@ export function useAiGenerate() {
         step.status = 'error';
         step.error = data.error;
       }
-      if (job.error !== 'User cancelled') {
+      if (data.step !== 'fixing' && job.error !== 'User cancelled') {
         job.status = 'error';
         job.error = data.error;
       }
-      es.close();
-      eventSources.delete(jobId);
+      if (data.step !== 'fixing') {
+        es.close();
+        eventSources.delete(jobId);
+      }
       touchJobs();
     });
 
@@ -250,8 +264,11 @@ export function useAiGenerate() {
       job.currentStep = undefined;
       job.yaml = data.yaml;
       job.scores = data.scores;
-      es.close();
-      eventSources.delete(jobId);
+      const revisionNotes = data.scores?.revision_notes as string | undefined;
+      if (!revisionNotes || revisionNotes === '无需修改。') {
+        es.close();
+        eventSources.delete(jobId);
+      }
       touchJobs();
     });
 
@@ -281,12 +298,18 @@ export function useAiGenerate() {
     };
   }
 
-  async function resumeGeneration(jobId: string, fromStage?: ResumeStage): Promise<void> {
+  async function resumeGeneration(
+    jobId: string,
+    fromStage?: ResumeStage,
+    notes?: string,
+    userScore?: number
+  ): Promise<void> {
     eventSources.get(jobId)?.close();
-    const response = await request.post<{ jobId: string }>(
-      `/v2/generate/${jobId}/resume`,
-      fromStage ? { fromStage } : {}
-    );
+    const body: Record<string, unknown> = {};
+    if (fromStage) body.fromStage = fromStage;
+    if (notes !== undefined) body.notes = notes;
+    if (userScore !== undefined) body.userScore = userScore;
+    const response = await request.post<{ jobId: string }>(`/v2/generate/${jobId}/resume`, body);
     const job = jobs.value.get(response.jobId);
     if (job) {
       job.status = 'running';
@@ -304,6 +327,21 @@ export function useAiGenerate() {
       job.error = 'User cancelled';
       touchJobs();
     }
+  }
+
+  async function fixGeneration(jobId: string): Promise<string> {
+    const response = await request.post<{ yaml: string }>(`/v2/generate/${jobId}/fix`, undefined, {
+      timeout: 180_000,
+    });
+    const job = jobs.value.get(jobId);
+    if (job) {
+      job.yaml = response.yaml;
+      if (job.scores)
+        job.scores =
+          ((response as Record<string, unknown>).scores as Record<string, unknown>) || job.scores;
+      touchJobs();
+    }
+    return response.yaml;
   }
 
   function unsubscribeJob(jobId: string): void {
@@ -331,6 +369,7 @@ export function useAiGenerate() {
     startGeneration,
     cancelGeneration,
     resumeGeneration,
+    fixGeneration,
     subscribeToJob,
     unsubscribeJob,
     selectJob,

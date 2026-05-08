@@ -14,10 +14,18 @@ const emit = defineEmits<{
 }>();
 
 const appStore = useAppStore();
-const { currentJob, isRunning, isComplete, startGeneration, cancelGeneration, resumeGeneration } =
-  useAiGenerate();
+const {
+  currentJob,
+  isRunning,
+  isComplete,
+  startGeneration,
+  cancelGeneration,
+  resumeGeneration,
+  fixGeneration,
+} = useAiGenerate();
 
 const word = ref('');
+const fixing = ref(false);
 const context = ref('');
 const notes = ref('');
 const errorMessage = ref('');
@@ -27,11 +35,20 @@ const language = computed<LanguageCode>(() => appStore.currentLanguage);
 
 const stageOrder = ['searching', 'pondering', 'auditing'];
 
+const displaySteps = computed(() => {
+  const steps = [...(currentJob.value?.steps || [])];
+  if (hasRevisionNotes.value && !steps.some(s => s.step === 'fixing')) {
+    steps.push({ step: 'fixing', status: 'pending' as const });
+  }
+  return steps;
+});
+
 const progressPercent = computed(() => {
   const job = currentJob.value;
   if (!job) return 0;
   const complete = job.steps.filter(step => step.status === 'complete').length;
-  return Math.min(100, Math.round((complete / stageOrder.length) * 100));
+  const total = stageOrder.length + (hasRevisionNotes.value ? 1 : 0);
+  return Math.min(100, Math.round((complete / total) * 100));
 });
 
 const reviewScore = computed(() => {
@@ -43,6 +60,24 @@ const stageOptions = computed(() =>
   currentJob.value?.steps.filter(step => step.status === 'complete' || step.status === 'error') ||
   []
 );
+
+const hasRevisionNotes = computed(() => {
+  const notes = currentJob.value?.scores?.revision_notes as string | undefined;
+  return typeof notes === 'string' && notes.length > 0 && notes !== '无需修改。';
+});
+
+async function handleFix(): Promise<void> {
+  const jobId = currentJob.value?.jobId;
+  if (!jobId) return;
+  fixing.value = true;
+  try {
+    await fixGeneration(jobId);
+  } catch (err) {
+    errorMessage.value = err instanceof Error ? err.message : 'Fix failed';
+  } finally {
+    fixing.value = false;
+  }
+}
 
 async function handleStart(): Promise<void> {
   errorMessage.value = '';
@@ -73,7 +108,12 @@ async function handleResume(fromStage?: ResumeStage): Promise<void> {
   const jobId = currentJob.value?.jobId;
   if (!jobId) return;
   try {
-    await resumeGeneration(jobId, fromStage);
+    await resumeGeneration(
+      jobId,
+      fromStage,
+      notes.value.trim() || undefined,
+      reviewScore.value ?? undefined
+    );
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '重试失败';
   }
@@ -93,7 +133,22 @@ function fillEditor(): void {
   }
 }
 
-function openStagePanel(step: StepState): void {
+function handleScoreChange(e: Event): void {
+  const target = e.target as HTMLInputElement;
+  const value = parseInt(target.value, 10);
+  if (currentJob.value?.scores && !isNaN(value)) {
+    (currentJob.value.scores as Record<string, unknown>).overall_score = Math.max(
+      0,
+      Math.min(10, value)
+    );
+  }
+}
+
+function handleStageClick(step: StepState): void {
+  if (step.step === 'fixing' && step.status === 'pending') {
+    handleFix();
+    return;
+  }
   selectedStage.value = step;
   stagePanelOpen.value = true;
 }
@@ -158,12 +213,12 @@ function openStagePanel(step: StepState): void {
 
         <div class="stage-list">
           <button
-            v-for="step in currentJob.steps"
+            v-for="step in displaySteps"
             :key="step.step"
             type="button"
             class="stage-row"
             :class="`stage-${step.status}`"
-            @click="openStagePanel(step)"
+            @click="handleStageClick(step)"
           >
             <span class="stage-name">{{ step.step }}</span>
             <span class="stage-meta">
@@ -176,11 +231,27 @@ function openStagePanel(step: StepState): void {
       <section v-if="isComplete" class="result-section">
         <div class="score-line">
           <span>Review score</span>
-          <strong>{{ reviewScore ?? '-' }}/10</strong>
+          <input
+            type="number"
+            min="0"
+            max="10"
+            :value="reviewScore"
+            class="score-input"
+            @change="handleScoreChange"
+          />
         </div>
         <div class="result-actions">
           <button type="button" class="secondary-button" @click="handleResume('pondering')">
             Regenerate
+          </button>
+          <button
+            v-if="hasRevisionNotes"
+            type="button"
+            class="secondary-button fix-button"
+            :disabled="fixing"
+            @click="handleFix"
+          >
+            {{ fixing ? 'Fixing...' : 'Auto Fix' }}
           </button>
           <button type="button" class="primary-button" @click="fillEditor">Fill Editor</button>
         </div>
@@ -308,6 +379,24 @@ function openStagePanel(step: StepState): void {
   justify-content: space-between;
 }
 
+.score-input {
+  width: 52px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--editor-field);
+  color: var(--text);
+  text-align: center;
+  font-weight: 650;
+  font-size: 13px;
+  outline: 0;
+}
+
+.score-input:focus {
+  border-color: var(--green-border);
+  box-shadow: 0 0 0 2px var(--green-soft);
+}
+
 .primary-button,
 .secondary-button,
 .danger-button {
@@ -418,6 +507,11 @@ function openStagePanel(step: StepState): void {
 
 .stage-running {
   border-color: var(--amber);
+}
+
+.stage-pending {
+  border-color: var(--line);
+  opacity: 0.55;
 }
 
 .resume-buttons {

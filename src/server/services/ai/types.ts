@@ -54,6 +54,7 @@ export interface PipelineContext {
   creativeYaml?: string;
   fullYaml?: string;
   scores?: Record<string, unknown>;
+  userScore?: number;
 }
 
 export interface PipelineJob {

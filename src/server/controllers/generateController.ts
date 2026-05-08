@@ -20,6 +20,25 @@ const { loggers } = require('../utils/logger') as {
     };
   };
 };
+const { streamText } = require('ai') as typeof import('ai');
+const { createOpenAI } = require('@ai-sdk/openai') as typeof import('@ai-sdk/openai');
+const { createAnthropic } = require('@ai-sdk/anthropic') as typeof import('@ai-sdk/anthropic');
+const { resolveModel } = require('../services/ai/modelResolver') as {
+  resolveModel: (stageName: string) => {
+    provider: string;
+    modelId: string;
+    apiKey: string;
+    baseUrl: string;
+    format: 'openai' | 'anthropic';
+    isMock: boolean;
+  };
+};
+const { loadSystemPrompt } = require('../services/ai/prompts/loader') as {
+  loadSystemPrompt: (filename: string, variables: Record<string, string>) => string;
+};
+const { stripMarkdownFences } = require('../services/ai/utils') as {
+  stripMarkdownFences: (text: string) => string;
+};
 
 import type { PipelineJob, PipelineProgressEvent } from '../services/ai/types';
 
@@ -31,6 +50,8 @@ const GenerateRequestSchema = z.object({
 });
 const ResumeRequestSchema = z.object({
   fromStage: z.enum(['searching', 'pondering', 'auditing']).optional(),
+  notes: z.string().optional(),
+  userScore: z.number().min(0).max(10).optional(),
 });
 
 const jobs = new Map<string, PipelineJob>();
@@ -108,8 +129,10 @@ function updateJobFromEvent(job: PipelineJob, event: PipelineProgressEvent): voi
       step.error = event.error;
       step.endTime = Date.now();
     }
-    job.status = 'error';
-    job.error = event.error;
+    if (event.step !== 'fixing') {
+      job.status = 'error';
+      job.error = event.error;
+    }
     return;
   }
 
@@ -509,7 +532,13 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
 
   const failedStep = oldJob.steps.find(step => step.status === 'error');
   const resumeFromStage = parsed.data.fromStage || failedStep?.step || 'searching';
+  if (parsed.data.notes !== undefined) {
+    oldJob.notes = parsed.data.notes;
+  }
   const resumeState = buildResumeState(oldJob, resumeFromStage);
+  if (parsed.data.userScore !== undefined) {
+    resumeState.previousContext.userScore = parsed.data.userScore;
+  }
 
   oldJob.status = 'running';
   oldJob.error = undefined;
@@ -533,10 +562,238 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
   res.status(202).json({ jobId });
 }
 
+async function handleFixJob(req: Request, res: Response): Promise<void> {
+  const jobId = firstParam(req.params.jobId);
+  const job = jobs.get(jobId);
+  if (!job) {
+    res.status(404).json({ code: 404, message: 'Job not found' });
+    return;
+  }
+
+  const yamlText = job.result?.yaml;
+  if (!yamlText) {
+    res.status(400).json({ code: 400, message: 'No YAML to fix' });
+    return;
+  }
+
+  const scores = job.result?.scores as Record<string, unknown> | undefined;
+  const revisionNotes = scores?.revision_notes as string | undefined;
+  if (!revisionNotes || revisionNotes === '无需修改。') {
+    res.status(400).json({ code: 400, message: 'No revision notes to apply' });
+    return;
+  }
+
+  res.setTimeout(0);
+
+  const runLogger = loggers.ai.child({ jobId, word: job.word, language: job.language });
+  runLogger.info({ event: 'fix:started' }, 'AI fix started');
+
+  const fixController = new globalThis.AbortController();
+  const fixTimeoutMs = 180_000;
+  const fixTimeoutId = setTimeout(() => fixController.abort(), fixTimeoutMs);
+
+  res.on('close', () => fixController.abort());
+  req.on('aborted', () => fixController.abort());
+
+  updateJobFromEvent(job, {
+    type: 'step:start',
+    step: 'fixing',
+    message: 'Applying revision notes',
+  });
+  broadcast(jobId, 'step:start', {
+    type: 'step:start',
+    step: 'fixing',
+    message: 'Applying revision notes',
+  });
+
+  try {
+    const prompt = loadSystemPrompt('content-fixer.md', {
+      word: job.word,
+      context: job.context || '',
+      language: job.language,
+      notes: job.notes || '',
+      yaml: yamlText,
+      revisionNotes,
+    });
+
+    const model = resolveModel('expert');
+    const provider =
+      model.format === 'openai'
+        ? createOpenAI({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.modelId)
+        : createAnthropic({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.modelId);
+
+    const result = streamText({
+      model: provider,
+      messages: [{ role: 'user', content: prompt }],
+      abortSignal: fixController.signal,
+    } as Parameters<typeof streamText>[0]);
+
+    let fullText = '';
+    let reasoningText = '';
+    const toolStartTimes = new Map<string, number>();
+    const fixStepStart = Date.now();
+
+    for await (const part of result.fullStream as AsyncIterable<Record<string, unknown>>) {
+      if (part.type === 'text-delta') {
+        const text =
+          typeof part.delta === 'string'
+            ? part.delta
+            : typeof part.text === 'string'
+              ? part.text
+              : typeof part.textDelta === 'string'
+                ? part.textDelta
+                : '';
+        fullText += text;
+        updateJobFromEvent(job, { type: 'step:tokens', step: 'fixing', chunk: text });
+        broadcast(jobId, 'step:tokens', { type: 'step:tokens', step: 'fixing', chunk: text });
+      } else if (part.type === 'reasoning-delta' || part.type === 'reasoning') {
+        const chunk =
+          typeof (part as Record<string, unknown>).delta === 'string'
+            ? ((part as Record<string, unknown>).delta as string)
+            : typeof (part as Record<string, unknown>).text === 'string'
+              ? ((part as Record<string, unknown>).text as string)
+              : typeof (part as Record<string, unknown>).textDelta === 'string'
+                ? ((part as Record<string, unknown>).textDelta as string)
+                : '';
+        if (chunk) {
+          reasoningText += chunk;
+          updateJobFromEvent(job, { type: 'step:reasoning', step: 'fixing', chunk });
+          broadcast(jobId, 'step:reasoning', { type: 'step:reasoning', step: 'fixing', chunk });
+        }
+      } else if (part.type === 'tool-call') {
+        const tcId = String(part.toolCallId || `fix-${Date.now()}`);
+        const tcName = String(part.toolName || 'unknown_tool');
+        const startTime = Date.now();
+        toolStartTimes.set(tcId, startTime);
+        updateJobFromEvent(job, {
+          type: 'step:tool-call',
+          step: 'fixing',
+          toolCallId: tcId,
+          toolName: tcName,
+          input: part.input,
+          startTime,
+        });
+        broadcast(jobId, 'step:tool-call', {
+          type: 'step:tool-call',
+          step: 'fixing',
+          toolCallId: tcId,
+          toolName: tcName,
+          input: part.input,
+          startTime,
+        });
+      } else if (part.type === 'tool-result') {
+        const tcId = String(part.toolCallId || `fix-${Date.now()}`);
+        const tcName = String(part.toolName || 'unknown_tool');
+        const startedAt = toolStartTimes.get(tcId) || Date.now();
+        const output = part.output;
+        const resultObj =
+          output && typeof output === 'object' && !Array.isArray(output)
+            ? (output as Record<string, unknown>)
+            : {};
+        const tcError =
+          typeof resultObj.errorMessage === 'string' ? resultObj.errorMessage : undefined;
+        const tcWarning =
+          resultObj.success === false
+            ? typeof resultObj.errorMessage === 'string'
+              ? resultObj.errorMessage
+              : 'Tool returned no usable result.'
+            : typeof resultObj.warning === 'string'
+              ? resultObj.warning
+              : undefined;
+        updateJobFromEvent(job, {
+          type: 'step:tool-result',
+          step: 'fixing',
+          toolCallId: tcId,
+          toolName: tcName,
+          output,
+          error: tcError,
+          warning: tcWarning,
+          duration: Date.now() - startedAt,
+        });
+        broadcast(jobId, 'step:tool-result', {
+          type: 'step:tool-result',
+          step: 'fixing',
+          toolCallId: tcId,
+          toolName: tcName,
+          output,
+          error: tcError,
+          warning: tcWarning,
+          duration: Date.now() - startedAt,
+        });
+      }
+    }
+
+    const fixedYaml = stripMarkdownFences(fullText);
+    if (!fixedYaml) {
+      const message = 'Fix produced empty output';
+      updateJobFromEvent(job, {
+        type: 'step:error',
+        step: 'fixing',
+        error: message,
+        willRetry: false,
+      });
+      broadcast(jobId, 'step:error', {
+        type: 'step:error',
+        step: 'fixing',
+        error: message,
+        willRetry: false,
+      });
+      runLogger.error({ error: message, rawText: fullText }, 'AI fix produced empty output');
+      res.status(500).json({ code: 500, message });
+      return;
+    }
+
+    job.result = { yaml: fixedYaml, scores: scores || {} };
+
+    const duration = Date.now() - fixStepStart;
+    updateJobFromEvent(job, {
+      type: 'step:complete',
+      step: 'fixing',
+      duration,
+      summary: 'Revision notes applied',
+      result: { yaml: fixedYaml },
+      rawText: fullText,
+      reasoningText: reasoningText || undefined,
+    });
+    broadcast(jobId, 'step:complete', {
+      type: 'step:complete',
+      step: 'fixing',
+      duration,
+      summary: 'Revision notes applied',
+      result: { yaml: fixedYaml },
+      rawText: fullText,
+      reasoningText: reasoningText || undefined,
+    });
+
+    runLogger.info({ event: 'fix:complete', durationMs: duration }, 'AI fix complete');
+    res.json({ yaml: fixedYaml });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const userCancelled = fixController.signal.aborted;
+    updateJobFromEvent(job, {
+      type: 'step:error',
+      step: 'fixing',
+      error: userCancelled ? 'User cancelled' : message,
+      willRetry: false,
+    });
+    broadcast(jobId, 'step:error', {
+      type: 'step:error',
+      step: 'fixing',
+      error: userCancelled ? 'User cancelled' : message,
+      willRetry: false,
+    });
+    runLogger.error({ error: message, userCancelled }, 'AI fix failed');
+    res.status(500).json({ code: 500, message });
+  } finally {
+    clearTimeout(fixTimeoutId);
+  }
+}
+
 module.exports = {
   handleGenerateSingle,
   handleStream,
   handleCancelJob,
   handleResumeJob,
+  handleFixJob,
   _internal: { selectPipeline, buildResumeState, updateJobFromEvent },
 };

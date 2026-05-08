@@ -181,6 +181,7 @@ function buildPrompt(stage: PipelineStage, ctx: PipelineContext): string {
     stage: stage.id,
     researchYaml: ctx.researchYaml || '',
     searchSummary: ctx.searchSummary || '',
+    userScore: ctx.userScore !== undefined ? String(ctx.userScore) : '',
   };
 
   return loadSystemPrompt(stage.systemPromptFile || 'content-reviewer.md', vars);
