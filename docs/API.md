@@ -183,7 +183,7 @@ Content-Type: application/json
 
 ## Config
 
-### Get Config
+### Get Core Config
 
 ```http
 GET /api/core/config
@@ -191,11 +191,207 @@ GET /api/core/config
 
 数据库 URL 不返回明文，仅返回 `hasDatabaseUrl: true/false`。
 
-### Update Config
+### Update Core Config
 
 ```http
 POST /api/core/config
 X-Admin-Token: <token>
+```
+
+---
+
+## AI Config
+
+### Get AI Config
+
+```http
+GET /api/v2/config/ai
+```
+
+返回 AI 配置，所有 API Key 做掩码处理（仅显示后 4 位）。
+
+Response:
+
+```json
+{
+  "providers": [
+    {
+      "id": "deepseek",
+      "name": "deepseek",
+      "type": "openai",
+      "baseUrl": "https://api.deepseek.com",
+      "apiKey": "****yz12",
+      "models": [
+        { "id": "deepseek-v4-pro", "name": "deepseek-v4-pro[1m]" }
+      ]
+    }
+  ],
+  "search": {
+    "provider": "brave",
+    "apiKey": "****ab34",
+    "autoDomains": true,
+    "domains": { "common": ["etymonline.com"], "en": [], "de": [] }
+  },
+  "stages": {
+    "fast": { "provider": "deepseek", "model": "deepseek-v4-flash", "reasoningEffort": "low" },
+    "balanced": { "provider": "deepseek", "model": "deepseek-v4-pro", "reasoningEffort": "medium" },
+    "expert": { "provider": "deepseek", "model": "deepseek-v4-pro", "reasoningEffort": "high" }
+  },
+  "review": {
+    "threshold": 6,
+    "thresholdByLanguage": { "en": 6, "de": 6 }
+  }
+}
+```
+
+### Update AI Config
+
+```http
+PUT /api/v2/config/ai
+X-Admin-Token: <token>
+Content-Type: application/json
+
+{ ... }  // 完整或部分 AI 配置，与 GET 结构相同
+```
+
+### Test Provider Connectivity
+
+```http
+POST /api/v2/config/ai/test-provider
+X-Admin-Token: <token>
+Content-Type: application/json
+
+{
+  "providerId": "deepseek",
+  "baseUrl": "https://api.deepseek.com",
+  "apiKey": "sk-xxx",
+  "type": "openai"
+}
+```
+
+超时 15 秒。成功返回 `{ "success": true }`，失败返回错误信息。
+
+### Test Search API
+
+```http
+POST /api/v2/config/ai/test-search
+X-Admin-Token: <token>
+Content-Type: application/json
+
+{
+  "provider": "brave",
+  "apiKey": "BSA-xxx"
+}
+```
+
+超时 15 秒。成功返回 `{ "success": true }`，失败返回错误信息。
+
+---
+
+## AI Generation
+
+多阶段流水线 API，用于从零生成或完善词条 YAML。
+
+### Start Generation
+
+```http
+POST /api/v2/generate/single
+X-Admin-Token: <token>
+Content-Type: application/json
+
+{
+  "word": "ephemeral",
+  "context": "出现在 19 世纪自然文学中",
+  "language": "en",
+  "notes": "重点关注词根的视觉意象"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| word | string | yes | 要生成的目标单词 |
+| language | string | yes | 语言：`en` 或 `de` |
+| context | string | no | 用户提供的上下文句子 |
+| notes | string | no | 额外的生成指示 |
+
+Response:
+
+```json
+{
+  "jobId": "uuid",
+  "queued": true,
+  "position": 1
+}
+```
+
+`queued` 为 false 且无 `position` 时表示立即开始执行。
+
+### Stream Progress (SSE)
+
+```http
+GET /api/v2/generate/:jobId/stream
+```
+
+Server-Sent Events 端点，实时推送流水线进度。事件类型：
+
+| Event | Data | Description |
+|-------|------|-------------|
+| `job:queued` | `{ position: number }` | 任务排队中 |
+| `job:started` | `{}` | 任务开始执行 |
+| `step:start` | `{ step: string, message: string }` | 阶段开始（searching / pondering / auditing / fixing） |
+| `step:tokens` | `{ step: string, chunk: string }` | LLM 输出文本流 |
+| `step:reasoning` | `{ step: string, chunk: string }` | LLM 推理/思考过程流 |
+| `step:tool-call` | `{ step: string, toolCallId: string, toolName: string, input?: any, startTime: number }` | Tool call 开始 |
+| `step:tool-result` | `{ step: string, toolCallId: string, toolName: string, output?: any, error?: string, warning?: string, duration: number }` | Tool call 结果 |
+| `step:complete` | `{ step: string, duration: number, summary: string, result?: any, rawText?: string, reasoningText?: string }` | 阶段完成 |
+| `step:error` | `{ step: string, error: string, willRetry?: boolean }` | 阶段失败（非 fixing 阶段将终止流水线） |
+| `pipeline:complete` | `{ yaml: string, scores: object }` | 流水线完成，含完整 YAML 和评分 |
+| `pipeline:stopped` | `{ yaml: string, stoppedAtStage: string, reason: string }` | 流水线因止损机制提前终止（保留部分结果） |
+
+### Cancel Job
+
+```http
+POST /api/v2/generate/:jobId/cancel
+X-Admin-Token: <token>
+```
+
+取消正在运行或排队中的任务。
+
+### Resume Job
+
+```http
+POST /api/v2/generate/:jobId/resume
+X-Admin-Token: <token>
+Content-Type: application/json
+
+{
+  "fromStage": "pondering",
+  "notes": "重新生成视觉意象部分",
+  "userScore": 7
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| fromStage | string | no | 从哪个阶段重新开始：`searching` / `pondering` / `auditing` |
+| notes | string | no | 更新的生成指示 |
+| userScore | number | no | 用户评分（0-10），回传给审核阶段 |
+
+### Auto Fix
+
+```http
+POST /api/v2/generate/:jobId/fix
+X-Admin-Token: <token>
+```
+
+根据审核阶段（auditing）的 `revision_notes` 自动修复 YAML。超时 180 秒。修复过程通过 SSE 流式返回（复用 stream 端点）。
+
+Response:
+
+```json
+{
+  "yaml": "yield:\n  lemma: ...\n..."
+}
 ```
 
 ---

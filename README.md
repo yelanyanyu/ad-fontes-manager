@@ -60,51 +60,77 @@ Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持 YAML 
 
 ## 功能概览
 
-- 词条管理：搜索、排序、分页、多语言支持（英语 / 德语）
-- YAML 编辑器：实时语法校验 + 服务端 Schema 验证（300ms 防抖）
-- 保存时自动冲突检测，支持差异对比和强制覆盖
-- 预览单词卡片的 HTML 效果
-- 单个词条导出到 AnkiConnect 或下载为 `.apkg`
-- 批量操作：跨页选择、重复检测、批量导入/导出
-- 批量任务在后台执行，关闭弹窗或切换页面不丢失进度
-- 桌面模式下可自定义数据目录
+- **AI 智能生成**：多阶段流水线（结构化研究 → 创意富化 → 质量审核），支持 SSE 实时进度、断点续传、自动修复
+- **词条管理**：搜索、排序、分页、多语言支持（英语 / 德语）
+- **YAML 编辑器**：实时语法校验 + 服务端 Schema 验证（300ms 防抖）
+- **编辑器增强**：YAML 层级面包屑导航、缩进深度标记、Tab/Shift+Tab 智能缩进
+- **冲突检测**：保存时自动冲突检测，支持差异对比和强制覆盖
+- **单词预览**：预览单词卡片的 HTML 效果
+- **Anki 导出**：单个词条导出到 AnkiConnect 或下载为 `.apkg`；批量跨页选择、后台执行
+- **桌面模式**：Electron 桌面程序，可自定义数据目录
 
 项目同时支持 **Web 应用** 和 **Windows / Mac 桌面程序**（Electron）两种运行模式，共享同一套后端和前端代码。
 
 ## 开发计划
 
 - [ ] 公告系统与新手指引
+- [x] AI 智能生成词条 YAML（多阶段流水线）
 - [ ] LLM 集成批量生成 YAML
 
 ## 使用流程
 
 ### 1. 生成词条 YAML
 
-通过 [ad-fontes-prompts](https://github.com/yelanyanyu/ad-fontes-prompts)（搭配 LLM 的提示词工程工具）生成符合 Ad Fontes 规范的单词 YAML。例如，向 LLM 提交一个英语单词，得到如下结构化 YAML (下面的不全)：
+**方式一：内置 AI 生成**（推荐）
+
+点击编辑器顶部的「AI Generate」按钮，输入单词和上下文，选择语言（英语/德语），即可启动多阶段 AI 流水线：
+
+1. **结构化研究**（searching）— 在线搜索词源信息，生成结构化 YAML
+2. **创意富化**（pondering）— 补充视觉意象、语义演变、同源词等内容
+3. **质量审核**（auditing）— 评分并给出修改建议，不达标可自动修复（auto-fix）
+
+支持 SSE 实时进度、断点续传、自定义评分、字段局部重新生成。
+
+**方式二：外部 Prompt 工具**
+
+通过 [ad-fontes-prompts](https://github.com/yelanyanyu/ad-fontes-prompts)（搭配 LLM 的提示词工程工具）手动生成。例如，向 LLM 提交一个英语单词，得到如下结构化 YAML：
 
 ```yaml
-lemma: ephemeral
-language: en
-part_of_speech: adjective
-root_and_affixes:
-  etymology: Greek ἐφήμερος (ephēmeros) — epi (upon) + hēmera (day)
-  root: hēmer- (day)
-  affixes:
-    prefix: epi- (upon)
-    suffix: -al (adjectival)
-contextual_meaning:
-  en: lasting for a very short time
-  zh: 短暂的，转瞬即逝的
-morphology:
-  comparative: more ephemeral
-  superlative: most ephemeral
-historical_origins: ...
-visual_imagery_zh: ...
-collocations: ...
-example_sentences: ...
+yield:
+  lemma: ephemeral
+  language: en
+  part_of_speech: adjective
+etymology:
+  root_and_affixes:
+    prefix: epi-
+    root: hēmer-
+    suffix: -al
+    structure_analysis: "Greek ἐφήμερος (ephēmeros) — epi (upon) + hēmera (day)"
+  historical_origins:
+    history_myth: "..."
+    source_word: "ἐφήμερος"
+    pie_root: "*h₂eh₁-mr-"
+  visual_imagery_zh: |
+    清晨，石板路还凉着...
+  meaning_evolution_zh: |
+    从"仅活一天"的身体感受，...
+cognate_family:
+  cognates:
+    - word: "ephemeral"
+      logic: "..."
+application:
+  selected_examples:
+    - type: "Literal"
+      sentence: "..."
+      translation_zh: "..."
+nuance:
+  image_differentiation_zh: "..."
+  synonyms:
+    - word: "transient"
+      meaning_zh: "短暂的"
 ```
 
-英语和德语词条的字段规范由 [ad-fontes-prompts](https://github.com/yelanyanyu/ad-fontes-prompts) 项目定义（不在本项目的 API 文档中），具体字段含义和生成规则请参考该项目的 prompt 模板。
+英语和德语词条的字段规范由 [ad-fontes-prompts](https://github.com/yelanyanyu/ad-fontes-prompts) 项目定义，具体字段含义和生成规则请参考该项目的 prompt 模板。
 
 ### 2. 粘贴到 YAML 编辑器
 
@@ -188,15 +214,23 @@ npm run dev:desktop          # Electron 桌面开发模式
 npm run dev:server           # 仅 Express 后端
 npm run dev:renderer         # 仅 Vite 前端
 
+# 构建
+npm run build:web            # Web 前端构建
+npm run build:desktop:win    # Windows 桌面程序（NSIS 安装包）
+npm run build:desktop:mac    # Mac 桌面程序（DMG）
+
 # 质量检查
-npm run type-check           # TypeScript 类型检查
+npm run type-check           # TypeScript 类型检查（vue-tsc + tsc）
 npm run lint                 # ESLint 检查
 npm run lint:fix             # ESLint 自动修复
 npm run test                 # Vitest 单元测试
 npm run format               # Prettier 格式化
 
-# 数据库迁移
-npm run import:pg-v2         # 从 PostgreSQL 迁移数据到 SQLite
+# 数据库
+npm run db:init              # 初始化数据库
+npm run db:import            # 导入 YAML 文件到数据库
+npm run db:view              # 查看数据库中词条的 YAML
+npm run db:diff              # 对比数据库与 YAML 文件的差异
 ```
 
 ## 文件目录说明
@@ -207,20 +241,24 @@ ad-fontes-manager/
 │   ├── main/                # Electron 主进程
 │   ├── preload/             # contextBridge 预加载脚本
 │   ├── renderer/            # Vue 3 前端（Vite 7）
-│   └── server/              # Express 5 后端入口
-├── web/                     # 后端业务代码
-│   ├── services/            # 业务逻辑层
-│   ├── routes/              # API 路由
-│   ├── controllers/         # 控制器
-│   ├── middleware/          # Express 中间件
-│   ├── db/                  # Drizzle ORM Schema + 连接管理
-│   ├── schemas/             # Zod 校验 Schema
-│   ├── utils/               # 工具函数 / 配置
-│   ├── data/                # SQLite 数据库文件
-│   └── tests/               # 集成测试
+│   │   ├── components/      # 组件（WordEditor, AiGenerate 等）
+│   │   ├── composables/     # 组合式函数（useAiGenerate, useYamlHierarchy 等）
+│   │   └── stores/          # Pinia 状态管理
+│   └── server/              # Express 5 后端
+│       ├── services/        # 业务逻辑层（word, ai 等）
+│       │   └── ai/          # AI 流水线（pipe, agents, tools, prompts）
+│       ├── routes/          # API 路由
+│       ├── controllers/     # 控制器
+│       ├── middleware/       # Express 中间件
+│       ├── db/              # Drizzle ORM Schema + 连接管理
+│       ├── schemas/         # Zod 校验 Schema（word 等）
+│       ├── utils/           # 工具函数 / 配置
+│       └── tests/           # 集成测试
+├── data/                    # SQLite 数据库文件
 ├── node/                    # CLI 维护脚本
 ├── drizzle/                 # Drizzle 迁移文件
 ├── docs/                    # 项目文档
+│   └── prompts/             # AI Prompt 模板
 ├── scripts/                 # Docker / 部署脚本
 ├── assets/                  # 应用图标等静态资源
 ├── electron-builder.yml     # electron-builder 配置
@@ -237,6 +275,7 @@ ad-fontes-manager/
 | 桌面框架 | Electron 39 |
 | CSS | Tailwind CSS 3 |
 | 后端框架 | Express 5 |
+| AI SDK | Vercel AI SDK 6 (streamText, tool use, reasoning) |
 | 数据库 | SQLite (better-sqlite3 + Drizzle ORM) |
 | 校验 | Zod 4 |
 | 日志 | Pino |
@@ -254,7 +293,7 @@ UNIQUE(lemma, language)
 ```
 
 数据库文件位置：
-- Web 开发：`web/data/ad_fontes.db`
+- Web 开发：`data/ad_fontes.db`
 - 桌面程序：`%APPDATA%/ad-fontes-manager/data/ad_fontes.db`（可在设置中自定义）
 
 ## 配置

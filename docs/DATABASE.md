@@ -5,7 +5,7 @@
 
 ## Overview
 
-Single-file SQLite database with Drizzle ORM. Schema defined in `web/db/schema.ts`, migrations managed via `drizzle-kit` in `drizzle/`.
+Single-file SQLite database with Drizzle ORM. Schema defined in `src/server/db/schema.ts`, migrations managed via `drizzle-kit` in `drizzle/`.
 
 WAL journal mode is enabled for better concurrent read performance.
 
@@ -51,7 +51,7 @@ German entries use `morphological_analysis` instead of `root_and_affixes`, plus 
 ## Schema Management
 
 ```bash
-# Generate migration after editing web/db/schema.ts
+# Generate migration after editing src/server/db/schema.ts
 npx drizzle-kit generate
 
 # Migrations run automatically on server start (pushMigration())
@@ -61,7 +61,7 @@ npx drizzle-kit generate
 
 | Mode | Path |
 |------|------|
-| Web dev | `web/data/ad_fontes.db` (or `DATABASE_URL` env var) |
+| Web dev | `data/ad_fontes.db` (or `DATABASE_URL` env var) |
 | Desktop (Windows) | `%APPDATA%/ad-fontes-manager/data/ad_fontes.db` |
 | Desktop (Mac) | `~/Library/Application Support/ad-fontes-manager/data/ad_fontes.db` |
 | Docker | `/app/data/ad_fontes.db` (volume mount) |
@@ -78,7 +78,7 @@ These are normal and automatically cleaned up on clean shutdown. When copying or
 
 ```bash
 PG_DATABASE_URL=postgresql://user:pass@host:5432/db \
-DATABASE_URL=./web/data/ad_fontes.db \
+DATABASE_URL=./data/ad_fontes.db \
 npm run import:pg-v2
 ```
 
@@ -88,6 +88,6 @@ The old 6-table schema (`words`, `etymologies`, `cognates`, `examples`, `synonym
 
 ## See Also
 
-- [web/db/schema.ts](../web/db/schema.ts) — Drizzle schema definition
-- [web/db/index.ts](../web/db/index.ts) — DB connection management
+- [src/server/db/schema.ts](../src/server/db/schema.ts) — Drizzle schema definition
+- [src/server/db/index.ts](../src/server/db/index.ts) — DB connection management
 - [API Documentation](./API.md) — API endpoints
