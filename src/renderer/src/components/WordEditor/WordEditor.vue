@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onUnmounted } from 'vue';
+import { ref, watch, computed, onUnmounted, nextTick } from 'vue';
 import type { Ref } from 'vue';
 import yaml from 'js-yaml';
 import { useWordStore } from '@/stores/wordStore';
@@ -9,6 +9,7 @@ import ConflictModal from '@/components/ui/ConflictModal.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import type { ConflictData, EditorStatus } from '@/types/word-editor';
 import request from '@/utils/request';
+import { useYamlHierarchy } from '@/composables/useYamlHierarchy';
 
 const emit = defineEmits<{
   'ai-generate-open': [];
@@ -35,11 +36,14 @@ const { editorYaml, editorReloadToken } = storeToRefs(wordStore as any) as {
 const input = ref<string>('');
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const lineNumberRef = ref<HTMLElement | null>(null);
+const cursorPos = ref(0);
 const status = ref<EditorStatus>('');
 const conflictData = ref<ConflictData | null>(null);
 const schemaErrors = ref<string[]>([]);
 const validating = ref(false);
 let validateTimer: ReturnType<typeof setTimeout> | null = null;
+
+const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
 
 const syncScroll = () => {
   if (textareaRef.value && lineNumberRef.value) {
@@ -47,12 +51,73 @@ const syncScroll = () => {
   }
 };
 
-const isEmpty = computed(() => !input.value || input.value.trim().length === 0);
+function updateCursorPos(): void {
+  cursorPos.value = textareaRef.value?.selectionStart ?? 0;
+}
 
-const lineCount = computed(() => {
-  if (!input.value) return 1;
-  return input.value.split('\n').length;
-});
+function handleKeydown(e: KeyboardEvent): void {
+  if (e.key !== 'Tab') return;
+  e.preventDefault();
+
+  const ta = textareaRef.value;
+  if (!ta) return;
+
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  const indent = '  ';
+
+  if (e.shiftKey) {
+    const lines = input.value.split('\n');
+    const startLine = input.value.slice(0, start).split('\n').length - 1;
+    const endLine = input.value.slice(0, end).split('\n').length - 1;
+
+    let newStart = start;
+    let newEnd = end;
+
+    for (let i = startLine; i <= endLine; i++) {
+      const line = lines[i];
+      const leadingSpaces = line.length - line.trimStart().length;
+      const removeCount = Math.min(leadingSpaces, 2);
+
+      if (removeCount > 0) {
+        lines[i] = line.slice(removeCount);
+        if (i === startLine) newStart = Math.max(0, newStart - removeCount);
+        newEnd = Math.max(0, newEnd - removeCount);
+      }
+    }
+
+    input.value = lines.join('\n');
+    void nextTick(() => {
+      ta.selectionStart = newStart;
+      ta.selectionEnd = newEnd;
+    });
+  } else {
+    if (start === end) {
+      input.value = input.value.slice(0, start) + indent + input.value.slice(end);
+      void nextTick(() => {
+        ta.selectionStart = ta.selectionEnd = start + indent.length;
+      });
+    } else {
+      const lines = input.value.split('\n');
+      const startLine = input.value.slice(0, start).split('\n').length - 1;
+      const endLine = input.value.slice(0, end).split('\n').length - 1;
+
+      let addedChars = 0;
+      for (let i = startLine; i <= endLine; i++) {
+        lines[i] = indent + lines[i];
+        addedChars += indent.length;
+      }
+
+      input.value = lines.join('\n');
+      void nextTick(() => {
+        ta.selectionStart = start + indent.length;
+        ta.selectionEnd = end + addedChars;
+      });
+    }
+  }
+}
+
+const isEmpty = computed(() => !input.value || input.value.trim().length === 0);
 
 const saveLabel = 'Save';
 
@@ -117,6 +182,7 @@ watch(
   () => {
     if (typeof editorYaml.value === 'string') {
       input.value = editorYaml.value;
+      cursorPos.value = 0;
       handleInput();
     }
   },
@@ -214,9 +280,42 @@ defineExpose({ applyGeneratedYaml });
       </div>
     </div>
 
+    <div class="breadcrumb-bar">
+      <template v-if="breadcrumbPath.length > 0">
+        <span class="breadcrumb-root">/</span>
+        <span
+          v-for="(seg, i) in breadcrumbPath"
+          :key="i"
+          class="breadcrumb-segment"
+        >
+          <span class="breadcrumb-sep">&#x25B8;</span>
+          <span
+            class="breadcrumb-label"
+            :class="{ 'is-list-item': seg.isListItem }"
+          >{{ seg.key }}</span>
+        </span>
+      </template>
+      <span v-else class="breadcrumb-empty">---</span>
+    </div>
+
     <div class="editor-area">
       <div ref="lineNumberRef" class="line-number">
-        <template v-for="n in lineCount" :key="n">{{ n }}<br /></template>
+        <div
+          v-for="(info, idx) in lineDepths"
+          :key="idx"
+          class="ln-row"
+          :class="{ 'ln-row-active': idx === cursorLine }"
+        >
+          <span class="ln-num">{{ idx + 1 }}</span>
+          <span v-if="info.depth > 0" class="ln-dots">
+            <span
+              v-for="d in Math.min(info.depth, 8)"
+              :key="d"
+              class="ln-dot"
+              :style="{ opacity: 0.2 + (d / 8) * 0.5 }"
+            />
+          </span>
+        </div>
       </div>
       <div class="editor-input">
         <textarea
@@ -226,6 +325,9 @@ defineExpose({ applyGeneratedYaml });
           placeholder="每行输入 YAML 内容，例如：lemma: apple..."
           @input="handleInput"
           @scroll="syncScroll"
+          @click="updateCursorPos"
+          @keyup="updateCursorPos"
+          @keydown="handleKeydown"
         />
       </div>
     </div>
@@ -269,7 +371,7 @@ defineExpose({ applyGeneratedYaml });
 
 .editor-panel {
   display: grid;
-  grid-template-rows: 48px 1fr auto 56px;
+  grid-template-rows: 48px auto 1fr auto 56px;
 }
 
 .panel-head {
@@ -387,9 +489,55 @@ defineExpose({ applyGeneratedYaml });
   color: #d8d0c5;
 }
 
+.breadcrumb-bar {
+  height: 22px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  background: var(--editor-field);
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .breadcrumb-bar {
+  background: #1b1814;
+}
+
+.breadcrumb-root {
+  color: var(--faint);
+  margin-right: 3px;
+}
+
+.breadcrumb-sep {
+  margin: 0 3px;
+  color: var(--border-strong);
+  font-size: 10px;
+}
+
+.breadcrumb-label {
+  color: var(--muted);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.breadcrumb-label.is-list-item {
+  color: var(--blue);
+}
+
+.breadcrumb-empty {
+  color: var(--border-strong);
+  font-style: italic;
+}
+
 .line-number {
   padding-top: 18px;
-  text-align: center;
   color: #b5ada2;
   border-right: 1px solid var(--line);
   user-select: none;
@@ -401,6 +549,46 @@ defineExpose({ applyGeneratedYaml });
 [data-theme="dark"] .line-number {
   color: #706961;
   background: #1b1814;
+}
+
+.ln-row {
+  display: flex;
+  align-items: center;
+  height: calc(1em * 1.72);
+  padding: 0 4px;
+}
+
+.ln-row-active {
+  background: rgba(36, 114, 83, 0.06);
+}
+
+[data-theme="dark"] .ln-row-active {
+  background: rgba(67, 179, 127, 0.08);
+}
+
+.ln-num {
+  width: 22px;
+  text-align: right;
+  color: var(--faint);
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.ln-dots {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  min-width: 10px;
+  flex-shrink: 0;
+}
+
+.ln-dot {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--faint);
+  flex-shrink: 0;
 }
 
 .editor-input {
