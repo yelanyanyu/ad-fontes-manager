@@ -37,11 +37,15 @@
     "npm": ">=10.0.0"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.75",
+    "@ai-sdk/openai": "^3.0.62",
     "@fortawesome/fontawesome-free": "^7.1.0",
+    "ai": "^6.0.175",
     "anki-apkg-export": "^4.0.3",
     "axios": "^1.13.3",
     "better-sqlite3": "^12.9.0",
     "bottleneck": "^2.19.5",
+    "cheerio": "^1.2.0",
     "compromise": "^14.14.5",
     "consola": "^3.4.2",
     "cors": "^2.8.5",

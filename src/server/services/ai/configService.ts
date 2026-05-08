@@ -65,6 +65,10 @@ interface AIConfig {
 type AIConfigUpdate = Partial<AIConfig>;
 type AIConfigMasked = AIConfig;
 
+const knownAnthropicBaseUrls: Record<string, string> = {
+  deepseek: 'https://api.deepseek.com/anthropic',
+};
+
 const defaultAIConfig = (): AIConfig => ({
   providers: [],
   stages: {},
@@ -86,10 +90,27 @@ function containsMask(value: string): boolean {
   return value.includes('***');
 }
 
+function withProviderEndpointDefaults(provider: AIProvider): AIProvider {
+  if (provider.anthropicBaseUrl) return provider;
+  const knownBaseUrl = knownAnthropicBaseUrls[provider.id];
+  if (!knownBaseUrl) return provider;
+  return {
+    ...provider,
+    anthropicBaseUrl: knownBaseUrl,
+  };
+}
+
+function withAIEndpointDefaults(ai: AIConfig): AIConfig {
+  return {
+    ...ai,
+    providers: ai.providers.map(withProviderEndpointDefaults),
+  };
+}
+
 function getAIConfig(): AIConfig {
   const ai = config.get<AIConfig | undefined>('ai');
   if (!ai) return defaultAIConfig();
-  return AIConfigSchema.parse(ai);
+  return withAIEndpointDefaults(AIConfigSchema.parse(ai));
 }
 
 function getAIConfigMasked(): AIConfigMasked {
@@ -163,7 +184,7 @@ function updateAIConfig(input: unknown): AIConfigMasked {
     review: validated.review ? { ...existing.review, ...validated.review } : existing.review,
   };
 
-  const fullValidated = AIConfigSchema.parse(merged);
+  const fullValidated = withAIEndpointDefaults(AIConfigSchema.parse(merged));
   config.saveConfigFile({ ...config.loadConfigFile(), ai: fullValidated });
 
   loggers.ai.info(

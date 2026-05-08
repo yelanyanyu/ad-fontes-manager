@@ -6,6 +6,7 @@ import { useWordStore } from '@/stores/wordStore';
 import { useAppStore } from '@/stores/appStore';
 import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
+import AiGenerateBar from '@/components/AiGenerate/AiGenerateBar.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import type { ConflictData, EditorStatus } from '@/types/word-editor';
 import request from '@/utils/request';
@@ -159,10 +160,17 @@ const overwrite = async () => {
   const ok = await wordStore.saveWord(input.value, true);
   if (ok) closeConflict();
 };
+
+const applyGeneratedYaml = (yamlContent: string) => {
+  input.value = yamlContent;
+  handleInput();
+};
 </script>
 
 <template>
   <div class="panel editor-panel">
+    <AiGenerateBar @yaml-ready="applyGeneratedYaml" />
+
     <ConflictModal
       :open="!!conflictData"
       title="Conflict Detected"
@@ -253,7 +261,7 @@ const overwrite = async () => {
 
 .editor-panel {
   display: grid;
-  grid-template-rows: 48px 1fr auto 56px;
+  grid-template-rows: auto 48px 1fr auto 56px;
 }
 
 .panel-head {

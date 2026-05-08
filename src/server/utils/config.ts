@@ -18,6 +18,28 @@ interface ConfigObject {
   [key: string]: ConfigValue | undefined;
 }
 
+interface AIConfigShape extends ConfigObject {
+  providers?: Array<{
+    id: string;
+    name?: string;
+    type?: string;
+    baseUrl?: string;
+    anthropicBaseUrl?: string;
+    apiKey?: string;
+    models?: Array<{ id: string; name?: string; endpointType?: string }>;
+  }>;
+  search?: {
+    provider?: string;
+    apiKey?: string;
+    domains?: Record<string, string[]>;
+  };
+  stages?: Record<string, { provider?: string; model?: string } | undefined>;
+  review?: {
+    threshold?: number;
+    thresholdByLanguage?: Record<string, number>;
+  };
+}
+
 const isDesktop = process.env.ADFONTES_DESKTOP === '1';
 const isProduction = process.env.NODE_ENV === 'production' && !isDesktop;
 
@@ -313,11 +335,34 @@ function reload(): ConfigObject {
   return loadConfig();
 }
 
+function getAIConfig(): AIConfigShape | undefined {
+  return get<AIConfigShape | undefined>('ai', undefined);
+}
+
+function getAPIKeyMasked(config: AIConfigShape): AIConfigShape {
+  return {
+    ...config,
+    providers:
+      config.providers?.map(provider => ({
+        ...provider,
+        apiKey: provider.apiKey ? `sk-***${provider.apiKey.slice(-4)}` : '',
+      })) || [],
+    search: config.search
+      ? {
+          ...config.search,
+          apiKey: config.search.apiKey ? `***${config.search.apiKey.slice(-4)}` : '',
+        }
+      : undefined,
+  };
+}
+
 loadConfig();
 
 module.exports = {
   get,
   getAll,
+  getAIConfig,
+  getAPIKeyMasked,
   reload,
   clearCache,
   defaultConfig,

@@ -120,6 +120,7 @@ export function createApp(options: CreateAppOptions): Express {
   app.use('/api', require('./routes/announcement'));
   app.use('/api/v2/words', require('./routes/wordsV2'));
   app.use('/api/v2', require('./routes/aiConfig'));
+  app.use('/api/v2', require('./routes/generate'));
 
   if (options.isProduction && options.distDir) {
     app.use(express.static(options.distDir));
