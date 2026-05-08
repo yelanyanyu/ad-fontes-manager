@@ -6,10 +6,13 @@ import { useWordStore } from '@/stores/wordStore';
 import { useAppStore } from '@/stores/appStore';
 import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
-import AiGenerateBar from '@/components/AiGenerate/AiGenerateBar.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import type { ConflictData, EditorStatus } from '@/types/word-editor';
 import request from '@/utils/request';
+
+const emit = defineEmits<{
+  'ai-generate-open': [];
+}>();
 
 interface WordStoreLike {
   editorYaml: string;
@@ -165,12 +168,12 @@ const applyGeneratedYaml = (yamlContent: string) => {
   input.value = yamlContent;
   handleInput();
 };
+
+defineExpose({ applyGeneratedYaml });
 </script>
 
 <template>
   <div class="panel editor-panel">
-    <AiGenerateBar @yaml-ready="applyGeneratedYaml" />
-
     <ConflictModal
       :open="!!conflictData"
       title="Conflict Detected"
@@ -203,7 +206,12 @@ const applyGeneratedYaml = (yamlContent: string) => {
           {{ status || 'Ready' }}
         </span>
       </div>
-      <button class="head-link" @click="clear">Clear</button>
+      <div class="head-actions">
+        <button class="head-link" type="button" @click="emit('ai-generate-open')">
+          AI Generate
+        </button>
+        <button class="head-link" type="button" @click="clear">Clear</button>
+      </div>
     </div>
 
     <div class="editor-area">
@@ -261,7 +269,7 @@ const applyGeneratedYaml = (yamlContent: string) => {
 
 .editor-panel {
   display: grid;
-  grid-template-rows: auto 48px 1fr auto 56px;
+  grid-template-rows: 48px 1fr auto 56px;
 }
 
 .panel-head {
@@ -347,6 +355,12 @@ const applyGeneratedYaml = (yamlContent: string) => {
   font-size: 13px;
   padding: 0;
   cursor: pointer;
+}
+
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 [data-theme="dark"] .head-link {

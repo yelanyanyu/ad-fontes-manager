@@ -25,6 +25,7 @@ import { requestOnboardingReplay } from '@/components/Onboarding/onboardingState
 
 type AnkiStatus = 'connected' | 'disconnected' | 'testing';
 type StageKey = 'fast' | 'balanced' | 'expert';
+type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'auto';
 type DomainGroup = 'common' | 'en' | 'de';
 type SettingsPage = 'about' | 'api';
 type ApiSection = 'providers' | 'stages' | 'search' | 'review';
@@ -70,6 +71,15 @@ const newModelEndpointType = ref<'' | AIProviderMasked['type']>('');
 const testModelId = ref('');
 
 const stageKeys: StageKey[] = ['fast', 'balanced', 'expert'];
+const reasoningEffortOptions: Array<{ value: ReasoningEffort; label: string }> = [
+  { value: 'auto', label: 'Auto' },
+  { value: 'none', label: 'None' },
+  { value: 'minimal', label: 'Minimal' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'xhigh', label: 'XHigh' },
+];
 const domainGroups: Array<{ key: DomainGroup; label: string }> = [
   { key: 'common', label: '通用域名' },
   { key: 'en', label: '英文域名' },
@@ -218,10 +228,16 @@ const getModelEndpointLabel = (provider: AIProviderMasked, modelId: string): str
   getModelEndpointType(provider, modelId) === 'anthropic' ? 'Anthropic' : 'OpenAI';
 
 const getStage = (stageKey: StageKey): AIStageConfig => {
-  if (!aiConfig.value) return { provider: '', model: '' };
+  if (!aiConfig.value) return { provider: '', model: '', reasoningEffort: 'auto' };
   const stages = aiConfig.value.stages as Record<StageKey, AIStageConfig | undefined>;
   if (!stages[stageKey]) {
-    stages[stageKey] = { provider: '', model: '' };
+    stages[stageKey] = {
+      provider: '',
+      model: '',
+      reasoningEffort: stageKey === 'expert' ? 'high' : 'auto',
+    };
+  } else if (!stages[stageKey].reasoningEffort) {
+    stages[stageKey].reasoningEffort = stageKey === 'expert' ? 'high' : 'auto';
   }
   return stages[stageKey] as AIStageConfig;
 };
@@ -235,6 +251,13 @@ const updateStageProvider = (stageKey: StageKey, providerId: string): void => {
 
 const updateStageModel = (stageKey: StageKey, modelId: string): void => {
   getStage(stageKey).model = modelId;
+  triggerAutoSave();
+};
+
+const updateStageReasoningEffort = (stageKey: StageKey, effort: string): void => {
+  const allowed = reasoningEffortOptions.map(option => option.value);
+  if (!allowed.includes(effort as ReasoningEffort)) return;
+  getStage(stageKey).reasoningEffort = effort as ReasoningEffort;
   triggerAutoSave();
 };
 
@@ -967,6 +990,19 @@ onMounted(() => {
                       :value="model.id"
                     >
                       {{ model.name }}
+                    </option>
+                  </select>
+                  <select
+                    class="field-control reasoning-select"
+                    :value="getStage(stageKey).reasoningEffort || 'auto'"
+                    @change="updateStageReasoningEffort(stageKey, ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option
+                      v-for="option in reasoningEffortOptions"
+                      :key="option.value"
+                      :value="option.value"
+                    >
+                      {{ option.label }}
                     </option>
                   </select>
                 </div>
@@ -1976,6 +2012,10 @@ onMounted(() => {
   color: var(--faint);
   font-size: 12px;
   flex-shrink: 0;
+}
+
+.reasoning-select {
+  flex: 0 0 116px;
 }
 
 /* Search config */

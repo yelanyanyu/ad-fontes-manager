@@ -8,7 +8,10 @@ const { getAIConfig } = require('./configService') as {
       apiKey: string;
       models: Array<{ id: string; endpointType?: 'openai' | 'anthropic' }>;
     }>;
-    stages: Record<string, { provider?: string; model?: string } | undefined>;
+    stages: Record<
+      string,
+      { provider?: string; model?: string; reasoningEffort?: string } | undefined
+    >;
   };
 };
 const { resolveAIEndpoint } = require('./endpointResolver') as {
@@ -26,6 +29,7 @@ export interface ResolvedModel {
   apiKey: string;
   baseUrl: string;
   format: 'openai' | 'anthropic';
+  reasoningEffort: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'auto';
   isMock: boolean;
 }
 
@@ -60,6 +64,9 @@ function resolveModel(stageName: 'fast' | 'balanced' | 'expert' = 'balanced'): R
     apiKey: provider.apiKey,
     baseUrl: endpoint.baseUrl,
     format: endpoint.endpointType,
+    reasoningEffort:
+      (stage.reasoningEffort as ResolvedModel['reasoningEffort'] | undefined) ||
+      (stageName === 'expert' ? 'high' : 'auto'),
     isMock: provider.apiKey === '' || provider.apiKey.startsWith('sk-test'),
   };
 }

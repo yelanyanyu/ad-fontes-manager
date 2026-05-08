@@ -33,7 +33,10 @@ interface AIConfigShape extends ConfigObject {
     apiKey?: string;
     domains?: Record<string, string[]>;
   };
-  stages?: Record<string, { provider?: string; model?: string } | undefined>;
+  stages?: Record<
+    string,
+    { provider?: string; model?: string; reasoningEffort?: string } | undefined
+  >;
   review?: {
     threshold?: number;
     thresholdByLanguage?: Record<string, number>;
@@ -197,10 +200,13 @@ const envMapping: Record<string, string> = {
   AI_REVIEW_THRESHOLD: 'ai.review.threshold',
   AI_FAST_PROVIDER: 'ai.stages.fast.provider',
   AI_FAST_MODEL: 'ai.stages.fast.model',
+  AI_FAST_REASONING_EFFORT: 'ai.stages.fast.reasoningEffort',
   AI_BALANCED_PROVIDER: 'ai.stages.balanced.provider',
   AI_BALANCED_MODEL: 'ai.stages.balanced.model',
+  AI_BALANCED_REASONING_EFFORT: 'ai.stages.balanced.reasoningEffort',
   AI_EXPERT_PROVIDER: 'ai.stages.expert.provider',
   AI_EXPERT_MODEL: 'ai.stages.expert.model',
+  AI_EXPERT_REASONING_EFFORT: 'ai.stages.expert.reasoningEffort',
 };
 
 function parseEnvValue(value: string | undefined): ConfigValue | undefined {

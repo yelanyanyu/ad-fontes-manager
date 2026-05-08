@@ -24,6 +24,7 @@ export interface AISearchConfigMasked {
 export interface AIStageConfig {
   provider: string;
   model: string;
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'auto';
 }
 
 export interface AIConfigMasked {

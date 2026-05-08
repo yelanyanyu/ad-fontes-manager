@@ -6,20 +6,20 @@ interface SearchResult {
   snippet: string;
 }
 
-const RATE_LIMIT = { perSecond: 1, perMonth: 15000 };
-const requestCount = { second: 0, month: 0, lastReset: Date.now() };
+const BRAVE_RATE = { perSecond: 1, perMonth: 15000 };
+const braveCount = { second: 0, month: 0, lastReset: Date.now() };
 
 function checkBraveRateLimit(): void {
   const now = Date.now();
-  if (now - requestCount.lastReset > 1000) {
-    requestCount.second = 0;
-    requestCount.lastReset = now;
+  if (now - braveCount.lastReset > 1000) {
+    braveCount.second = 0;
+    braveCount.lastReset = now;
   }
-  if (requestCount.second >= RATE_LIMIT.perSecond || requestCount.month >= RATE_LIMIT.perMonth) {
+  if (braveCount.second >= BRAVE_RATE.perSecond || braveCount.month >= BRAVE_RATE.perMonth) {
     throw new Error('Brave Search API rate limit exceeded');
   }
-  requestCount.second += 1;
-  requestCount.month += 1;
+  braveCount.second += 1;
+  braveCount.month += 1;
 }
 
 async function braveSearch(
@@ -28,7 +28,7 @@ async function braveSearch(
   domains: string[]
 ): Promise<SearchResult[]> {
   checkBraveRateLimit();
-  const siteFilter = domains.length > 0 ? domains.map(domain => `site:${domain}`).join(' OR ') : '';
+  const siteFilter = domains.length > 0 ? domains.map(d => `site:${d}`).join(' OR ') : '';
   const fullQuery = `${query} ${siteFilter}`.trim();
   const response = await fetch(
     `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(fullQuery)}&count=5`,
@@ -49,14 +49,50 @@ async function braveSearch(
     web?: { results?: Array<{ title: string; url: string; description?: string }> };
   };
 
-  return (data.web?.results || []).map(result => ({
-    title: result.title,
-    url: result.url,
-    snippet: result.description || '',
+  return (data.web?.results || []).map(r => ({
+    title: r.title,
+    url: r.url,
+    snippet: r.description || '',
   }));
 }
 
-const searchEtymologyTool = buildTool({
+async function tavilySearch(
+  query: string,
+  apiKey: string,
+  domains: string[]
+): Promise<SearchResult[]> {
+  const body: Record<string, unknown> = {
+    query,
+    api_key: apiKey,
+    search_depth: 'basic',
+    max_results: 5,
+  };
+  if (domains.length > 0) {
+    body.include_domains = domains;
+  }
+
+  const response = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Tavily Search API returned ${response.status}: ${response.statusText}`);
+  }
+
+  const data = (await response.json()) as {
+    results?: Array<{ title: string; url: string; content: string }>;
+  };
+
+  return (data.results || []).map(r => ({
+    title: r.title,
+    url: r.url,
+    snippet: r.content || '',
+  }));
+}
+
+export const searchEtymologyTool = buildTool({
   id: 'search_etymology',
   description: 'Search configured etymology sources for a word.',
   inputSchema: {
@@ -70,7 +106,11 @@ const searchEtymologyTool = buildTool({
   execute: async (input: { query: string; language: string }) => {
     const { getAIConfig } = require('../configService') as {
       getAIConfig: () => {
-        search?: { apiKey?: string; domains?: Record<string, string[]> };
+        search?: {
+          provider?: 'brave' | 'tavily';
+          apiKey?: string;
+          domains?: Record<string, string[]>;
+        };
       };
     };
     const aiConfig = getAIConfig();
@@ -82,6 +122,11 @@ const searchEtymologyTool = buildTool({
       ...(domains.common || []),
       ...(input.language === 'de' ? domains.de || [] : domains.en || []),
     ];
+
+    const provider = aiConfig.search.provider || 'brave';
+    if (provider === 'tavily') {
+      return { results: await tavilySearch(input.query, aiConfig.search.apiKey, allDomains) };
+    }
     return { results: await braveSearch(input.query, aiConfig.search.apiKey, allDomains) };
   },
 });

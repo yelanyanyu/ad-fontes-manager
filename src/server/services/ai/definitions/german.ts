@@ -10,16 +10,16 @@ const { parseReviewOutput } = require('../agents/reviewer') as {
   parseReviewOutput: (text: string) => Record<string, unknown>;
 };
 
-export const englishPipeline: PipelineDefinition = {
-  id: 'single-word-en-v2',
-  language: 'en',
+export const germanPipeline: PipelineDefinition = {
+  id: 'single-word-de-v2',
+  language: 'de',
   stages: [
     {
       id: 'searching',
       description: 'Searching',
       type: 'llm',
       modelKey: 'fast',
-      systemPromptFile: 'english-structural.md',
+      systemPromptFile: 'de-structural.md',
       toolNames: ['search_etymology', 'fetch_page'],
       outputParser: parseResearchOutput,
     },
@@ -28,7 +28,7 @@ export const englishPipeline: PipelineDefinition = {
       description: 'Pondering',
       type: 'llm',
       modelKey: 'expert',
-      systemPromptFile: 'english-creative.md',
+      systemPromptFile: 'de-creative.md',
       outputParser: parseEnrichmentOutput,
     },
     {
@@ -42,4 +42,4 @@ export const englishPipeline: PipelineDefinition = {
   ],
 };
 
-module.exports = { englishPipeline };
+module.exports = { germanPipeline };

@@ -40,6 +40,9 @@ const AISearchConfigSchema = z.object({
 const AIStageConfigSchema = z.object({
   provider: z.string().trim().min(1, 'Provider is required'),
   model: z.string().trim().min(1, 'Model is required'),
+  reasoningEffort: z
+    .enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'auto'])
+    .default('auto'),
 });
 
 const AIStageMapSchema = z

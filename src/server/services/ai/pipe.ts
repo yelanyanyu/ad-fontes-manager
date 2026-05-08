@@ -1,4 +1,5 @@
-import type { PipelineContext, PipelineRunner } from './types';
+import type { PipelineContext, PipelineRunner, PipelineStage } from './types';
+import type { Tool } from 'ai';
 
 const yaml = require('js-yaml') as typeof import('js-yaml');
 const { streamText } = require('ai') as typeof import('ai');
@@ -24,11 +25,60 @@ const { resolveModel } = require('./modelResolver') as {
     apiKey: string;
     baseUrl: string;
     format: 'openai' | 'anthropic';
+    reasoningEffort: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'auto';
     isMock: boolean;
   };
 };
+const { deepMerge } = require('./utils') as typeof import('./utils');
+const { resolveTools } = require('./tools/adapter') as {
+  resolveTools: (toolNames?: string[]) => Record<string, Tool>;
+};
+const { buildReasoningParams } = require('./tools/reasoning') as typeof import('./tools/reasoning');
 
-function buildWordYaml(word: string, language: string, context: string): string {
+function buildStructuralMock(word: string, language: string, context: string): string {
+  if (language === 'de') {
+    return yaml.dump(
+      {
+        yield: {
+          user_word: word,
+          lemma: word,
+          genus: 'der',
+          syllabification: word,
+          kasus: 'Nominativ',
+          user_context_sentence: context || `Der ${word} steht im Satz.`,
+          part_of_speech: 'Nomen',
+          contextual_meaning: {
+            de: `Eine Testbedeutung fuer ${word}.`,
+            zh: `${word} 的测试释义`,
+          },
+          other_common_meanings: ['Mock secondary meaning'],
+          language,
+        },
+        etymology: {
+          morphological_analysis: {
+            word_formation: 'Mock formation',
+            components: [
+              {
+                element: word.toLowerCase(),
+                type: 'Wortstamm',
+                de_meaning: 'Mock root meaning',
+              },
+            ],
+            structure_analysis: 'Mock German structure analysis for the MVP pipeline.',
+          },
+          historical_origins: {
+            earliest_attestation: 'Mock OHG',
+            source_form: `${word.toLowerCase()} (mock source)`,
+            pgmc_root: 'N/A',
+            pie_root: 'N/A',
+            sound_changes: 'N/A',
+          },
+        },
+      },
+      { lineWidth: -1, noRefs: true }
+    );
+  }
+
   return yaml.dump(
     {
       yield: {
@@ -56,6 +106,16 @@ function buildWordYaml(word: string, language: string, context: string): string 
           source_word: `${word.toLowerCase()} (mock source)`,
           pie_root: 'N/A',
         },
+      },
+    },
+    { lineWidth: -1, noRefs: true }
+  );
+}
+
+function buildCreativeMock(word: string, language: string, context: string): string {
+  return yaml.dump(
+    {
+      etymology: {
         visual_imagery_zh: '测试视觉意象：我把这个词先当作一张可检查的词源草图。',
         meaning_evolution_zh:
           'HELLO FROM ENRICHMENT AGENT：这里展示从词源画面到现代含义的测试路径。',
@@ -68,7 +128,10 @@ function buildWordYaml(word: string, language: string, context: string): string 
           {
             type: 'Current Context',
             sentence: context || `The word ${word} appears in a learning note.`,
-            translation_zh: '这是用于验证生成管道的例句。',
+            translation_zh:
+              language === 'de'
+                ? '这是用于验证德语生成管道的例句。'
+                : '这是用于验证生成管道的例句。',
           },
         ],
       },
@@ -108,33 +171,19 @@ function buildMockReview(): string {
   });
 }
 
-function buildPrompt(stageId: string, ctx: PipelineContext): string {
+function buildPrompt(stage: PipelineStage, ctx: PipelineContext): string {
   const vars: Record<string, string> = {
     word: ctx.word,
     context: ctx.context || '',
     language: ctx.language,
     notes: ctx.notes || '',
     yaml: ctx.fullYaml || ctx.researchYaml || '',
-    stage: stageId,
+    stage: stage.id,
     researchYaml: ctx.researchYaml || '',
     searchSummary: ctx.searchSummary || '',
   };
 
-  if (stageId === 'review') {
-    return loadSystemPrompt('content-reviewer.md', vars);
-  }
-
-  const base = loadSystemPrompt('english-generation.md', vars);
-  if (stageId === 'research') return base;
-
-  return [
-    base,
-    '',
-    '## Research Output',
-    ctx.researchYaml || '',
-    '',
-    'Now generate the full YAML including all zh creative fields.',
-  ].join('\n');
+  return loadSystemPrompt(stage.systemPromptFile || 'content-reviewer.md', vars);
 }
 
 function createProvider(model: ReturnType<typeof resolveModel>) {
@@ -148,9 +197,9 @@ function createProvider(model: ReturnType<typeof resolveModel>) {
 }
 
 const STAGE_TIMEOUT_MS: Record<string, number> = {
-  research: 120_000,
-  enrichment: 300_000,
-  review: 180_000,
+  searching: 120_000,
+  pondering: 300_000,
+  auditing: 180_000,
 };
 
 const BACKOFF_SCHEDULE = [2000, 8000];
@@ -173,30 +222,60 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function runStageText(
-  stageId: string,
-  prompt: string,
-  ctx: PipelineContext,
-  onChunk: (chunk: string) => void,
-  externalSignal?: globalThis.AbortSignal,
+interface RunStageTextOptions {
+  stage: PipelineStage;
+  prompt: string;
+  ctx: PipelineContext;
+  onChunk: (chunk: string) => void;
+  onToolCall?: (event: {
+    toolCallId: string;
+    toolName: string;
+    input?: unknown;
+    startTime: number;
+  }) => void;
+  onToolResult?: (event: {
+    toolCallId: string;
+    toolName: string;
+    output?: unknown;
+    error?: string;
+    warning?: string;
+    duration: number;
+  }) => void;
+  onReasoning?: (chunk: string) => void;
+  externalSignal?: globalThis.AbortSignal;
   runLogger?: {
     info: (payload: Record<string, unknown>, msg?: string) => void;
     error: (payload: Record<string, unknown>, msg?: string) => void;
-  }
-): Promise<string> {
-  const model = resolveModel(
-    stageId === 'research' ? 'fast' : stageId === 'review' ? 'expert' : 'balanced'
-  );
+  };
+}
+
+async function runStageText(options: RunStageTextOptions): Promise<string> {
+  const {
+    stage,
+    prompt,
+    ctx,
+    onChunk,
+    onToolCall,
+    onToolResult,
+    onReasoning,
+    externalSignal,
+    runLogger,
+  } = options;
+  const model = resolveModel(stage.modelKey || 'balanced');
   if (model.isMock) {
-    if (stageId === 'review') return buildMockReview();
-    return buildWordYaml(ctx.word, ctx.language, ctx.context);
+    if (stage.id === 'auditing') return buildMockReview();
+    if (stage.id === 'searching') return buildStructuralMock(ctx.word, ctx.language, ctx.context);
+    return buildCreativeMock(ctx.word, ctx.language, ctx.context);
   }
 
   const maxRetries = 1;
   let lastError: unknown;
+  const toolStartTimes = new Map<string, number>();
+  const tools = resolveTools(stage.toolNames);
+  const reasoningParams = buildReasoningParams(model.format, model.reasoningEffort);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const timeoutMs = STAGE_TIMEOUT_MS[stageId] || 60_000;
+    const timeoutMs = STAGE_TIMEOUT_MS[stage.id] || 60_000;
     const stageController = new globalThis.AbortController();
     const timeoutId = setTimeout(() => stageController.abort(), timeoutMs);
     const signals: globalThis.AbortSignal[] = [stageController.signal];
@@ -207,34 +286,103 @@ async function runStageText(
       const result = streamText({
         model: createProvider(model),
         system: prompt,
-        prompt: `Generate the ${stageId} output for "${ctx.word}".`,
+        prompt: `Generate the ${stage.id} output for "${ctx.word}".`,
         maxOutputTokens: 4096,
         abortSignal: combinedSignal,
-      });
+        ...(Object.keys(tools).length > 0 ? { tools } : {}),
+        ...(Object.keys(reasoningParams.providerOptions).length > 0
+          ? {
+              providerOptions: reasoningParams.providerOptions as Record<
+                string,
+                Record<string, unknown>
+              >,
+            }
+          : {}),
+      } as Parameters<typeof streamText>[0]);
 
       let fullText = '';
-      for await (const part of result.fullStream) {
+      for await (const part of result.fullStream as AsyncIterable<Record<string, unknown>>) {
         if (part.type === 'text-delta') {
-          fullText += part.text;
-          onChunk(part.text);
+          const text =
+            typeof part.delta === 'string'
+              ? part.delta
+              : typeof part.text === 'string'
+                ? part.text
+                : typeof part.textDelta === 'string'
+                  ? part.textDelta
+                  : '';
+          fullText += text;
+          onChunk(text);
+        } else if (part.type === 'reasoning-delta' || part.type === 'reasoning') {
+          const reasoningText =
+            typeof (part as Record<string, unknown>).delta === 'string'
+              ? ((part as Record<string, unknown>).delta as string)
+              : typeof (part as Record<string, unknown>).text === 'string'
+                ? ((part as Record<string, unknown>).text as string)
+                : typeof (part as Record<string, unknown>).textDelta === 'string'
+                  ? ((part as Record<string, unknown>).textDelta as string)
+                  : '';
+          if (reasoningText) onReasoning?.(reasoningText);
+        } else if (part.type === 'tool-call') {
+          const toolCallId = String(part.toolCallId || `${stage.id}-${Date.now()}`);
+          const toolName = String(part.toolName || 'unknown_tool');
+          const startTime = Date.now();
+          toolStartTimes.set(toolCallId, startTime);
+          onToolCall?.({
+            toolCallId,
+            toolName,
+            input: part.input,
+            startTime,
+          });
+        } else if (part.type === 'tool-result') {
+          const toolCallId = String(part.toolCallId || `${stage.id}-${Date.now()}`);
+          const toolName = String(part.toolName || 'unknown_tool');
+          const startedAt = toolStartTimes.get(toolCallId) || Date.now();
+          const output = part.output;
+          const resultObject =
+            output && typeof output === 'object' && !Array.isArray(output)
+              ? (output as Record<string, unknown>)
+              : {};
+          onToolResult?.({
+            toolCallId,
+            toolName,
+            output,
+            error:
+              typeof resultObject.errorMessage === 'string' ? resultObject.errorMessage : undefined,
+            warning:
+              resultObject.success === false
+                ? typeof resultObject.errorMessage === 'string'
+                  ? resultObject.errorMessage
+                  : 'Tool returned no usable result.'
+                : typeof resultObject.warning === 'string'
+                  ? resultObject.warning
+                  : undefined,
+            duration: Date.now() - startedAt,
+          });
         }
       }
 
       if (attempt > 0) {
-        runLogger?.info({ stageId, attempt: attempt + 1 }, 'LLM call succeeded after retry');
+        runLogger?.info(
+          { stageId: stage.id, attempt: attempt + 1 },
+          'LLM call succeeded after retry'
+        );
       }
       return fullText;
     } catch (error) {
       lastError = error;
       const { code, willRetry } = classifyLLMError(error);
       runLogger?.error(
-        { stageId, attempt: attempt + 1, errorCode: code, willRetry },
+        { stageId: stage.id, attempt: attempt + 1, errorCode: code, willRetry },
         `LLM call failed: ${error instanceof Error ? error.message : String(error)}`
       );
 
       if (willRetry && attempt < maxRetries) {
         const delay = BACKOFF_SCHEDULE[attempt] || 2000;
-        runLogger?.info({ stageId, attempt: attempt + 1, delayMs: delay }, 'Retrying LLM call');
+        runLogger?.info(
+          { stageId: stage.id, attempt: attempt + 1, delayMs: delay },
+          'Retrying LLM call'
+        );
         await sleep(delay);
         continue;
       }
@@ -247,15 +395,84 @@ async function runStageText(
   throw lastError;
 }
 
-function shouldSkipStage(stageId: string, resumeFrom?: string): boolean {
+function shouldSkipStage(stages: PipelineStage[], stageId: string, resumeFrom?: string): boolean {
   if (!resumeFrom) return false;
-  const stageOrder = ['research', 'enrichment', 'review'];
+  const stageOrder = stages.map(stage => stage.id);
   const resumeIdx = stageOrder.indexOf(resumeFrom);
   const stageIdx = stageOrder.indexOf(stageId);
   return stageIdx < resumeIdx;
 }
 
-class SequentialRunner implements PipelineRunner {
+function mergeCreativeYaml(
+  ctx: PipelineContext,
+  runLogger?: {
+    info: (payload: Record<string, unknown>, msg?: string) => void;
+    error: (payload: Record<string, unknown>, msg?: string) => void;
+  }
+): void {
+  if (!ctx.researchYaml || !ctx.creativeYaml) {
+    runLogger?.info(
+      {
+        hasResearchYaml: Boolean(ctx.researchYaml),
+        hasCreativeYaml: Boolean(ctx.creativeYaml),
+      },
+      'mergeCreativeYaml: missing input YAML, skipping merge'
+    );
+    return;
+  }
+
+  try {
+    const structural = yaml.load(ctx.researchYaml) as Record<string, unknown>;
+    const creative = yaml.load(ctx.creativeYaml) as Record<string, unknown>;
+
+    if (!structural || typeof structural !== 'object') {
+      runLogger?.error(
+        { reason: 'structural YAML parsed to non-object' },
+        'mergeCreativeYaml failed'
+      );
+      return;
+    }
+    if (!creative || typeof creative !== 'object') {
+      runLogger?.error(
+        { reason: 'creative YAML parsed to non-object' },
+        'mergeCreativeYaml failed'
+      );
+      return;
+    }
+
+    const merged = deepMerge(structural, creative);
+    ctx.fullYaml = yaml.dump(merged, { lineWidth: -1, noRefs: true });
+    runLogger?.info(
+      { fullYamlChars: ctx.fullYaml.length },
+      'mergeCreativeYaml: merged YAML successfully'
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    runLogger?.error({ error: msg }, 'mergeCreativeYaml: yaml.load or deepMerge threw');
+  }
+}
+
+function checkStopLoss(
+  stage: PipelineStage,
+  text: string,
+  parsed: Partial<PipelineContext>
+): { stopped: boolean; reason?: string } {
+  if (stage.id !== 'searching' && stage.id !== 'pondering') return { stopped: false };
+
+  if (!text.trim()) {
+    return { stopped: true, reason: `${stage.id}: LLM returned empty text` };
+  }
+
+  const key = stage.id === 'searching' ? 'researchYaml' : 'creativeYaml';
+  const value = (parsed as Record<string, unknown>)[key];
+  if (!value || (typeof value === 'string' && !value.trim())) {
+    return { stopped: true, reason: `${stage.id}: parsed ${key} is empty after fence stripping` };
+  }
+
+  return { stopped: false };
+}
+
+export class SequentialRunner implements PipelineRunner {
   async run({
     definition,
     input,
@@ -280,6 +497,9 @@ class SequentialRunner implements PipelineRunner {
         { event: 'pipeline:resume', fromStage: resumeFromStage },
         'AI pipeline resuming'
       );
+      if (ctx.researchYaml && ctx.creativeYaml && !ctx.fullYaml) {
+        mergeCreativeYaml(ctx, runLogger);
+      }
       if (previousSteps) {
         for (const step of previousSteps) {
           onProgress({
@@ -296,7 +516,7 @@ class SequentialRunner implements PipelineRunner {
     }
 
     for (const stage of definition.stages) {
-      if (shouldSkipStage(stage.id, resumeFromStage)) {
+      if (shouldSkipStage(definition.stages, stage.id, resumeFromStage)) {
         continue;
       }
 
@@ -305,16 +525,92 @@ class SequentialRunner implements PipelineRunner {
       runLogger.info({ step: stage.id, event: 'start' }, 'AI pipeline step started');
 
       try {
-        const text = await runStageText(
-          stage.id,
-          buildPrompt(stage.id, ctx),
+        let text = await runStageText({
+          stage,
+          prompt: buildPrompt(stage, ctx),
           ctx,
-          chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
-          abortSignal as globalThis.AbortSignal | undefined,
-          runLogger
-        );
-        const parsed = stage.outputParser ? stage.outputParser(text) : { fullYaml: text };
+          onChunk: chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
+          onToolCall: event => onProgress({ type: 'step:tool-call', step: stage.id, ...event }),
+          onToolResult: event => onProgress({ type: 'step:tool-result', step: stage.id, ...event }),
+          onReasoning: chunk => onProgress({ type: 'step:reasoning', step: stage.id, chunk }),
+          externalSignal: abortSignal as globalThis.AbortSignal | undefined,
+          runLogger,
+        });
+        let parsed = stage.outputParser ? stage.outputParser(text) : { fullYaml: text };
         Object.assign(ctx, parsed);
+
+        let stopResult = checkStopLoss(stage, text, parsed);
+        if (stopResult.stopped) {
+          let fallbackText = text;
+          let fallbackParsed = parsed;
+
+          if (stage.id === 'searching' && stage.toolNames?.length) {
+            runLogger.info(
+              { step: stage.id, reason: stopResult.reason },
+              'Retrying searching stage without tools'
+            );
+
+            const fallbackStage: PipelineStage = { ...stage, toolNames: [] };
+            try {
+              fallbackText = await runStageText({
+                stage: fallbackStage,
+                prompt: buildPrompt(fallbackStage, ctx),
+                ctx,
+                onChunk: chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
+                onReasoning: chunk => onProgress({ type: 'step:reasoning', step: stage.id, chunk }),
+                externalSignal: abortSignal as globalThis.AbortSignal | undefined,
+                runLogger,
+              });
+              fallbackParsed = stage.outputParser
+                ? stage.outputParser(fallbackText)
+                : { fullYaml: fallbackText };
+              stopResult = checkStopLoss(stage, fallbackText, fallbackParsed);
+            } catch (err) {
+              runLogger.error(
+                { step: stage.id, error: err instanceof Error ? err.message : String(err) },
+                'Fallback searching stage also failed'
+              );
+            }
+          }
+
+          if (stopResult.stopped) {
+            const duration = Date.now() - stepStart;
+            onProgress({
+              type: 'step:complete',
+              step: stage.id,
+              duration,
+              summary: `Stopped: ${stopResult.reason}`,
+              result: fallbackParsed,
+              rawText: fallbackText,
+            });
+            runLogger.info(
+              { step: stage.id, event: 'stopped', reason: stopResult.reason, durationMs: duration },
+              'AI step stopped by stop-loss'
+            );
+
+            const partialYaml = ctx.researchYaml || '';
+            onProgress({
+              type: 'pipeline:stopped',
+              yaml: partialYaml,
+              stoppedAtStage: stage.id,
+              reason: stopResult.reason || 'unknown',
+            });
+            runLogger.info(
+              { event: 'pipeline:stopped', stoppedAtStage: stage.id },
+              'AI pipeline stopped by stop-loss'
+            );
+            return { yaml: partialYaml, scores: ctx.scores || {} };
+          }
+
+          Object.assign(ctx, fallbackParsed);
+          text = fallbackText;
+          parsed = fallbackParsed;
+          runLogger.info({ step: stage.id }, 'Fallback searching stage succeeded');
+        }
+
+        if (stage.id === 'pondering') {
+          mergeCreativeYaml(ctx, runLogger);
+        }
         const duration = Date.now() - stepStart;
         onProgress({
           type: 'step:complete',
@@ -322,6 +618,7 @@ class SequentialRunner implements PipelineRunner {
           duration,
           summary: `${stage.description} 完成`,
           result: parsed,
+          rawText: text,
         });
         runLogger.info(
           { step: stage.id, event: 'complete', durationMs: duration },

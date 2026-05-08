@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import WordEditor from '@/components/WordEditor/WordEditor.vue';
 import WordList from '@/components/WordList/WordList.vue';
 import WordPreview from '@/components/WordPreview/WordPreview.vue';
+import AiGenerateDrawer from '@/components/AiGenerate/AiGenerateDrawer.vue';
 
 defineOptions({
   name: 'HomeView',
@@ -11,7 +12,9 @@ defineOptions({
 const leftPanel = ref<HTMLElement | null>(null);
 const dragHandle = ref<HTMLElement | null>(null);
 const container = ref<HTMLElement | null>(null);
+const wordEditorRef = ref<InstanceType<typeof WordEditor> | null>(null);
 const previewId = ref<string | null>(null);
+const aiDrawerOpen = ref(false);
 
 const showPreview = (id: string) => {
   previewId.value = id;
@@ -19,6 +22,11 @@ const showPreview = (id: string) => {
 
 const closePreview = () => {
   previewId.value = null;
+};
+
+const applyGeneratedYaml = (yamlContent: string) => {
+  wordEditorRef.value?.applyGeneratedYaml(yamlContent);
+  aiDrawerOpen.value = false;
 };
 
 let handleResizeMove: ((e: MouseEvent) => void) | null = null;
@@ -81,7 +89,7 @@ onUnmounted(() => {
       class="left-panel"
       style="width: 45%"
     >
-      <WordEditor />
+      <WordEditor ref="wordEditorRef" @ai-generate-open="aiDrawerOpen = true" />
     </div>
 
     <div ref="dragHandle" class="resizer" />
@@ -91,6 +99,12 @@ onUnmounted(() => {
     </div>
 
     <WordPreview v-if="previewId" :word-id="previewId" @close="closePreview" />
+    <AiGenerateDrawer
+      v-show="aiDrawerOpen"
+      :open="aiDrawerOpen"
+      @close="aiDrawerOpen = false"
+      @yaml-ready="applyGeneratedYaml"
+    />
   </div>
 </template>
 

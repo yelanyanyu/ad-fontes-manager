@@ -7,6 +7,9 @@ const { sequentialRunner } = require('../services/ai/pipe') as {
 const { englishPipeline } = require('../services/ai/definitions/english') as {
   englishPipeline: import('../services/ai/types').PipelineDefinition;
 };
+const { germanPipeline } = require('../services/ai/definitions/german') as {
+  germanPipeline: import('../services/ai/types').PipelineDefinition;
+};
 const { loggers } = require('../utils/logger') as {
   loggers: {
     ai: {
@@ -26,10 +29,15 @@ const GenerateRequestSchema = z.object({
   language: z.enum(['en', 'de']).default('en'),
   notes: z.string().optional(),
 });
+const ResumeRequestSchema = z.object({
+  fromStage: z.enum(['searching', 'pondering', 'auditing']).optional(),
+});
 
 const jobs = new Map<string, PipelineJob>();
 const sseClients = new Map<string, Set<Response>>();
 const cancelControllers = new Map<string, InstanceType<typeof globalThis.AbortController>>();
+const queuedJobIds: string[] = [];
+let runningJobId: string | null = null;
 
 function generateJobId(): string {
   return `job-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -47,8 +55,8 @@ function broadcast(jobId: string, eventName: string, event: unknown): void {
   }
 }
 
-function selectPipeline(_language: string) {
-  return englishPipeline;
+function selectPipeline(language: string) {
+  return language === 'de' ? germanPipeline : englishPipeline;
 }
 
 function firstParam(value: string | string[] | undefined): string {
@@ -56,6 +64,18 @@ function firstParam(value: string | string[] | undefined): string {
 }
 
 function updateJobFromEvent(job: PipelineJob, event: PipelineProgressEvent): void {
+  if (event.type === 'job:queued') {
+    job.status = 'queued';
+    job.queuePosition = event.position;
+    return;
+  }
+
+  if (event.type === 'job:started') {
+    job.status = 'running';
+    job.queuePosition = undefined;
+    return;
+  }
+
   if (event.type === 'step:start') {
     job.steps.push({
       step: event.step,
@@ -75,6 +95,8 @@ function updateJobFromEvent(job: PipelineJob, event: PipelineProgressEvent): voi
       step.durationMs = event.duration;
       step.summary = event.summary;
       step.result = event.result;
+      step.rawText = event.rawText;
+      if (event.reasoningText) step.reasoningText = event.reasoningText;
     }
     return;
   }
@@ -99,12 +121,155 @@ function updateJobFromEvent(job: PipelineJob, event: PipelineProgressEvent): voi
     return;
   }
 
+  if (event.type === 'step:reasoning') {
+    const step = job.steps.find(item => item.step === event.step && item.status === 'running');
+    if (step) {
+      step.reasoningText = (step.reasoningText || '') + event.chunk;
+    }
+    return;
+  }
+
+  if (event.type === 'step:tool-call') {
+    const step = job.steps.find(item => item.step === event.step && item.status === 'running');
+    if (step) {
+      step.toolCalls = step.toolCalls || [];
+      step.toolCalls.push({
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        status: 'running',
+        input: event.input,
+        startTime: event.startTime,
+      });
+    }
+    return;
+  }
+
+  if (event.type === 'step:tool-result') {
+    const step = job.steps.find(item => item.step === event.step && item.status === 'running');
+    const toolCall = step?.toolCalls?.find(item => item.toolCallId === event.toolCallId);
+    if (toolCall) {
+      toolCall.status = event.error ? 'error' : 'complete';
+      toolCall.output = event.output;
+      toolCall.error = event.error;
+      toolCall.warning = event.warning;
+      toolCall.endTime = Date.now();
+      toolCall.durationMs = event.duration;
+    }
+    return;
+  }
+
   if (event.type === 'pipeline:complete') {
     job.status = 'complete';
     job.completedAt = Date.now();
     job.currentStep = undefined;
     job.result = { yaml: event.yaml, scores: event.scores };
   }
+
+  if (event.type === 'pipeline:stopped') {
+    job.status = 'partial';
+    job.completedAt = Date.now();
+    job.currentStep = undefined;
+    job.result = { yaml: event.yaml, scores: {} };
+  }
+}
+
+function updateQueuePositions(): void {
+  queuedJobIds.forEach((jobId, index) => {
+    const job = jobs.get(jobId);
+    if (!job) return;
+    job.queuePosition = index + 1;
+    broadcast(jobId, 'job:queued', { type: 'job:queued', position: job.queuePosition });
+  });
+}
+
+function buildResumeState(job: PipelineJob, fromStage: string) {
+  const pipeline = selectPipeline(job.language);
+  const stageOrder = pipeline.stages.map(stage => stage.id);
+  const resumeIndex = stageOrder.indexOf(fromStage);
+  const previousContext: Record<string, unknown> = {};
+  const previousSteps = job.steps
+    .filter(step => step.status === 'complete' && stageOrder.indexOf(step.step) < resumeIndex)
+    .map(step => {
+      if (step.result && typeof step.result === 'object' && !Array.isArray(step.result)) {
+        Object.assign(previousContext, step.result);
+      }
+      return {
+        step: step.step,
+        summary: step.summary,
+        duration: step.durationMs,
+        result: step.result,
+      };
+    });
+
+  return { previousContext, previousSteps };
+}
+
+function finishRunningJob(jobId: string): void {
+  if (runningJobId === jobId) runningJobId = null;
+  startNextQueuedJob();
+}
+
+function startPipelineJob(
+  jobId: string,
+  resumeFromStage?: string,
+  previousJob?: PipelineJob
+): void {
+  const job = jobs.get(jobId);
+  if (!job) return;
+
+  runningJobId = jobId;
+  const abortController = new globalThis.AbortController();
+  cancelControllers.set(jobId, abortController);
+  updateJobFromEvent(job, { type: 'job:started' });
+  broadcast(jobId, 'job:started', { type: 'job:started' });
+
+  const runLogger = loggers.ai.child({ jobId, word: job.word, language: job.language });
+  const resumeState =
+    resumeFromStage && previousJob ? buildResumeState(previousJob, resumeFromStage) : undefined;
+
+  void sequentialRunner
+    .run({
+      definition: selectPipeline(job.language),
+      input: {
+        word: job.word,
+        context: job.context,
+        language: job.language,
+        notes: job.notes,
+      },
+      onProgress: event => {
+        updateJobFromEvent(job, event);
+        broadcast(jobId, event.type, event);
+      },
+      abortSignal: abortController.signal,
+      resumeFromStage,
+      previousContext: resumeState?.previousContext,
+      previousSteps: resumeState?.previousSteps,
+    })
+    .catch(error => {
+      const message = error instanceof Error ? error.message : String(error);
+      const isUserCancelled = abortController.signal.aborted;
+      job.status = 'error';
+      job.error = isUserCancelled ? 'User cancelled' : message;
+      job.completedAt = Date.now();
+      runLogger.error({ error: message, userCancelled: isUserCancelled }, 'AI pipeline failed');
+      broadcast(jobId, 'step:error', {
+        type: 'step:error',
+        step: 'pipeline',
+        error: job.error,
+        willRetry: !isUserCancelled,
+      });
+    })
+    .finally(() => {
+      cancelControllers.delete(jobId);
+      finishRunningJob(jobId);
+    });
+}
+
+function startNextQueuedJob(): void {
+  const nextJobId = queuedJobIds.shift();
+  if (!nextJobId) return;
+  updateQueuePositions();
+  startPipelineJob(nextJobId);
 }
 
 function scheduleJobCleanup(jobId: string): void {
@@ -134,51 +299,27 @@ async function handleGenerateSingle(req: Request, res: Response): Promise<void> 
     language,
     context,
     notes,
-    status: 'running',
+    status: runningJobId ? 'queued' : 'running',
     steps: [],
     startedAt: Date.now(),
   };
   jobs.set(jobId, job);
   scheduleJobCleanup(jobId);
 
-  const abortController = new globalThis.AbortController();
-  cancelControllers.set(jobId, abortController);
+  if (runningJobId) {
+    queuedJobIds.push(jobId);
+    updateQueuePositions();
+    runLogger.info(
+      { event: 'job:queued', position: job.queuePosition },
+      'AI generation job queued'
+    );
+    res.status(202).json({ jobId, queued: true, position: job.queuePosition });
+    return;
+  }
 
-  void sequentialRunner
-    .run({
-      definition: selectPipeline(language),
-      input: { word, context, language, notes },
-      onProgress: event => {
-        updateJobFromEvent(job, event);
-        broadcast(jobId, event.type, event);
-      },
-      abortSignal: abortController.signal,
-    })
-    .catch(error => {
-      const message = error instanceof Error ? error.message : String(error);
-      const isUserCancelled = abortController.signal.aborted;
-      if (isUserCancelled) {
-        job.status = 'error';
-        job.error = 'User cancelled';
-      } else {
-        job.status = 'error';
-        job.error = message;
-      }
-      job.completedAt = Date.now();
-      runLogger.error({ error: message, userCancelled: isUserCancelled }, 'AI pipeline failed');
-      broadcast(jobId, 'step:error', {
-        type: 'step:error',
-        step: 'pipeline',
-        error: job.error,
-        willRetry: !isUserCancelled,
-      });
-    })
-    .finally(() => {
-      cancelControllers.delete(jobId);
-    });
-
+  startPipelineJob(jobId);
   runLogger.info({ event: 'job:accepted' }, 'AI generation job accepted');
-  res.status(202).json({ jobId });
+  res.status(202).json({ jobId, queued: false });
 }
 
 async function handleStream(req: Request, res: Response): Promise<void> {
@@ -201,12 +342,42 @@ async function handleStream(req: Request, res: Response): Promise<void> {
   sseClients.get(jobId)!.add(res);
 
   for (const step of job.steps) {
+    for (const toolCall of step.toolCalls || []) {
+      sendSSE(res, 'step:tool-call', {
+        type: 'step:tool-call',
+        step: step.step,
+        toolCallId: toolCall.toolCallId,
+        toolName: toolCall.toolName,
+        input: toolCall.input,
+        startTime: toolCall.startTime,
+      });
+      if (toolCall.status !== 'running') {
+        sendSSE(res, 'step:tool-result', {
+          type: 'step:tool-result',
+          step: step.step,
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          output: toolCall.output,
+          error: toolCall.error,
+          warning: toolCall.warning,
+          duration: toolCall.durationMs || 0,
+        });
+      }
+    }
+
     if (step.status === 'running') {
       sendSSE(res, 'step:start', {
         type: 'step:start',
         step: step.step,
         message: step.summary || step.step,
       });
+      if (step.reasoningText) {
+        sendSSE(res, 'step:reasoning', {
+          type: 'step:reasoning',
+          step: step.step,
+          chunk: step.reasoningText,
+        });
+      }
     } else if (step.status === 'complete') {
       sendSSE(res, 'step:complete', {
         type: 'step:complete',
@@ -214,6 +385,8 @@ async function handleStream(req: Request, res: Response): Promise<void> {
         duration: step.durationMs || 0,
         summary: step.summary || '',
         result: step.result,
+        rawText: step.rawText,
+        reasoningText: step.reasoningText,
       });
     } else if (step.status === 'error') {
       sendSSE(res, 'step:error', {
@@ -232,12 +405,25 @@ async function handleStream(req: Request, res: Response): Promise<void> {
       scores: job.result.scores,
       totalDuration: job.completedAt ? job.completedAt - job.startedAt : 0,
     });
+  } else if (job.status === 'partial' && job.result) {
+    const stoppedStep = job.steps.find(s => s.status === 'complete' || s.status === 'error');
+    sendSSE(res, 'pipeline:stopped', {
+      type: 'pipeline:stopped',
+      yaml: job.result.yaml,
+      stoppedAtStage: stoppedStep?.step || 'unknown',
+      reason: stoppedStep?.summary || 'Pipeline stopped early',
+    });
   } else if (job.status === 'error') {
     sendSSE(res, 'step:error', {
       type: 'step:error',
       step: 'pipeline',
       error: job.error || 'Unknown error',
       willRetry: false,
+    });
+  } else if (job.status === 'queued') {
+    sendSSE(res, 'job:queued', {
+      type: 'job:queued',
+      position: job.queuePosition || 1,
     });
   }
 
@@ -269,6 +455,23 @@ async function handleCancelJob(req: Request, res: Response): Promise<void> {
     return;
   }
   const controller = cancelControllers.get(jobId);
+  if (job.status === 'queued') {
+    const index = queuedJobIds.indexOf(jobId);
+    if (index >= 0) queuedJobIds.splice(index, 1);
+    job.status = 'error';
+    job.error = 'User cancelled';
+    job.completedAt = Date.now();
+    updateQueuePositions();
+    broadcast(jobId, 'step:error', {
+      type: 'step:error',
+      step: 'pipeline',
+      error: 'User cancelled',
+      willRetry: false,
+    });
+    res.json({ ok: true, jobId });
+    return;
+  }
+
   if (controller && !controller.signal.aborted) {
     controller.abort();
     job.status = 'error';
@@ -293,32 +496,27 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
     res.status(404).json({ code: 404, message: 'Job not found' });
     return;
   }
-  if (oldJob.status !== 'error') {
-    res.status(400).json({ code: 400, message: 'Only failed jobs can be resumed' });
+  if (oldJob.status === 'running' || oldJob.status === 'queued') {
+    res.status(400).json({ code: 400, message: 'Only finished jobs can be resumed' });
+    return;
+  }
+
+  const parsed = ResumeRequestSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    res.status(400).json({ code: 400, message: 'Invalid request', errors: parsed.error.issues });
     return;
   }
 
   const failedStep = oldJob.steps.find(step => step.status === 'error');
-  const resumeFromStage = failedStep?.step || oldJob.steps[0]?.step || 'research';
-
-  const previousSteps = oldJob.steps
-    .filter(step => step.status === 'complete')
-    .map(step => ({
-      step: step.step,
-      summary: step.summary,
-      duration: step.durationMs,
-      result: step.result,
-    }));
-
-  const lastCompleteStep = oldJob.steps.filter(step => step.status === 'complete').at(-1);
-  const previousContext = (lastCompleteStep?.result as Record<string, unknown> | undefined) || {};
+  const resumeFromStage = parsed.data.fromStage || failedStep?.step || 'searching';
+  const resumeState = buildResumeState(oldJob, resumeFromStage);
 
   oldJob.status = 'running';
   oldJob.error = undefined;
   oldJob.completedAt = undefined;
   oldJob.currentStep = resumeFromStage;
 
-  const newSteps = previousSteps.map(s => ({
+  const newSteps = resumeState.previousSteps.map(s => ({
     step: s.step,
     status: 'complete' as const,
     startTime: Date.now(),
@@ -329,57 +527,16 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
   }));
   oldJob.steps = newSteps;
 
-  const abortController = new globalThis.AbortController();
-  cancelControllers.set(jobId, abortController);
-
+  startPipelineJob(jobId, resumeFromStage, oldJob);
   const runLogger = loggers.ai.child({ jobId, word: oldJob.word, language: oldJob.language });
-
-  void sequentialRunner
-    .run({
-      definition: selectPipeline(oldJob.language),
-      input: {
-        word: oldJob.word,
-        context: oldJob.context,
-        language: oldJob.language,
-        notes: oldJob.notes,
-      },
-      onProgress: event => {
-        updateJobFromEvent(oldJob, event);
-        broadcast(jobId, event.type, event);
-      },
-      abortSignal: abortController.signal,
-      resumeFromStage,
-      previousContext: previousContext as Record<string, unknown>,
-      previousSteps,
-    })
-    .catch(error => {
-      const message = error instanceof Error ? error.message : String(error);
-      const isUserCancelled = abortController.signal.aborted;
-      if (isUserCancelled) {
-        oldJob.status = 'error';
-        oldJob.error = 'User cancelled';
-      } else {
-        oldJob.status = 'error';
-        oldJob.error = message;
-      }
-      oldJob.completedAt = Date.now();
-      runLogger.error(
-        { error: message, userCancelled: isUserCancelled },
-        'AI pipeline resume failed'
-      );
-      broadcast(jobId, 'step:error', {
-        type: 'step:error',
-        step: 'pipeline',
-        error: oldJob.error,
-        willRetry: !isUserCancelled,
-      });
-    })
-    .finally(() => {
-      cancelControllers.delete(jobId);
-    });
-
   runLogger.info({ event: 'job:resumed', fromStage: resumeFromStage }, 'AI generation job resumed');
   res.status(202).json({ jobId });
 }
 
-module.exports = { handleGenerateSingle, handleStream, handleCancelJob, handleResumeJob };
+module.exports = {
+  handleGenerateSingle,
+  handleStream,
+  handleCancelJob,
+  handleResumeJob,
+  _internal: { selectPipeline, buildResumeState, updateJobFromEvent },
+};

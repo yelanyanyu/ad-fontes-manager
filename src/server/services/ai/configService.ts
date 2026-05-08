@@ -46,6 +46,7 @@ interface AISearchConfig {
 interface AIStageConfig {
   provider: string;
   model: string;
+  reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'auto';
 }
 
 interface AIConfig {

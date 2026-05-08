@@ -12,7 +12,7 @@ function cleanText(html: string, maxLength = 4000): string {
   return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength)}...` : cleaned;
 }
 
-const fetchPageTool = buildTool({
+export const fetchPageTool = buildTool({
   id: 'fetch_page',
   description: 'Fetch and extract clean text from a web page URL.',
   inputSchema: {

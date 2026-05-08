@@ -10,6 +10,19 @@ export interface PipelineStage {
   retry?: { maxAttempts: number; fixerStageId?: string };
 }
 
+export interface ToolCallRecord {
+  toolCallId: string;
+  toolName: string;
+  status: 'running' | 'complete' | 'error';
+  input?: unknown;
+  output?: unknown;
+  error?: string;
+  startTime: number;
+  endTime?: number;
+  durationMs?: number;
+  warning?: string;
+}
+
 export interface PipelineDefinition {
   id: string;
   language: string;
@@ -25,6 +38,9 @@ export interface StepResult {
   summary?: string;
   tokens?: string;
   result?: unknown;
+  rawText?: string;
+  reasoningText?: string;
+  toolCalls?: ToolCallRecord[];
   error?: string;
 }
 
@@ -35,6 +51,7 @@ export interface PipelineContext {
   notes: string;
   searchSummary?: string;
   researchYaml?: string;
+  creativeYaml?: string;
   fullYaml?: string;
   scores?: Record<string, unknown>;
 }
@@ -45,7 +62,8 @@ export interface PipelineJob {
   language: string;
   context?: string;
   notes?: string;
-  status: 'queued' | 'running' | 'complete' | 'error';
+  status: 'queued' | 'running' | 'complete' | 'partial' | 'error';
+  queuePosition?: number;
   steps: StepResult[];
   currentStep?: string;
   startedAt: number;
@@ -58,14 +76,37 @@ export interface PipelineJob {
 }
 
 export type PipelineProgressEvent =
+  | { type: 'job:queued'; position: number }
+  | { type: 'job:started' }
   | { type: 'step:start'; step: string; message: string }
   | { type: 'step:tokens'; step: string; chunk: string }
+  | { type: 'step:reasoning'; step: string; chunk: string }
+  | {
+      type: 'step:tool-call';
+      step: string;
+      toolCallId: string;
+      toolName: string;
+      input?: unknown;
+      startTime: number;
+    }
+  | {
+      type: 'step:tool-result';
+      step: string;
+      toolCallId: string;
+      toolName: string;
+      output?: unknown;
+      error?: string;
+      warning?: string;
+      duration: number;
+    }
   | {
       type: 'step:complete';
       step: string;
       duration: number;
       summary: string;
       result?: unknown;
+      rawText?: string;
+      reasoningText?: string;
     }
   | { type: 'step:error'; step: string; error: string; willRetry: boolean }
   | {
@@ -73,6 +114,12 @@ export type PipelineProgressEvent =
       yaml: string;
       scores: Record<string, unknown>;
       totalDuration: number;
+    }
+  | {
+      type: 'pipeline:stopped';
+      yaml: string;
+      stoppedAtStage: string;
+      reason: string;
     };
 
 export interface PipelineRunner {

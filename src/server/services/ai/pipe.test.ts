@@ -57,7 +57,8 @@ void describe('SequentialRunner', () => {
   void it('runs the English mock pipeline as searching, pondering, auditing and deep-merges YAML', async () => {
     writeMockAIConfig();
     const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
-    const { englishPipeline } = require('./definitions/english') as typeof import('./definitions/english');
+    const { englishPipeline } =
+      require('./definitions/english') as typeof import('./definitions/english');
     const events: PipelineProgressEvent[] = [];
 
     const result = await new SequentialRunner().run({
@@ -67,8 +68,9 @@ void describe('SequentialRunner', () => {
     });
 
     const completedSteps = events
-      .filter((event): event is Extract<PipelineProgressEvent, { type: 'step:complete' }> =>
-        event.type === 'step:complete'
+      .filter(
+        (event): event is Extract<PipelineProgressEvent, { type: 'step:complete' }> =>
+          event.type === 'step:complete'
       )
       .map(event => event.step);
 
@@ -88,7 +90,8 @@ void describe('SequentialRunner', () => {
   void it('selects German structural keys in the German mock pipeline', async () => {
     writeMockAIConfig();
     const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
-    const { germanPipeline } = require('./definitions/german') as typeof import('./definitions/german');
+    const { germanPipeline } =
+      require('./definitions/german') as typeof import('./definitions/german');
 
     const result = await new SequentialRunner().run({
       definition: germanPipeline,
