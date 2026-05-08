@@ -11,9 +11,9 @@ regenerating. Write them as actionable instructions to the next LLM, not as poli
 
 # Input YAML
 
-```yaml
+yaml 如下所示：
 {{yaml}}
-```
+
 
 User notes: {{notes}}
 
