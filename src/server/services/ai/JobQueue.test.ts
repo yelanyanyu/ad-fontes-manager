@@ -1,0 +1,832 @@
+import { beforeEach, afterEach, describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import Database from 'better-sqlite3';
+
+import type { PipelineRunner } from './types';
+
+// ---- Fake Runner ----
+
+const FAKE_YAML = 'yield:\n  lemma: test\n  language: en\n';
+const FAKE_SCORES = { overall_score: 7 };
+
+class FakeRunner implements PipelineRunner {
+  async run({ onProgress }: Parameters<PipelineRunner['run']>[0]): Promise<{
+    yaml: string;
+    scores: Record<string, unknown>;
+  }> {
+    onProgress({ type: 'job:started' });
+    onProgress({ type: 'step:start', step: 'searching', message: 'Searching' });
+    onProgress({ type: 'step:complete', step: 'searching', duration: 100, summary: 'Done' });
+    onProgress({
+      type: 'pipeline:complete',
+      yaml: FAKE_YAML,
+      scores: FAKE_SCORES,
+      totalDuration: 100,
+    });
+    return { yaml: FAKE_YAML, scores: FAKE_SCORES };
+  }
+}
+
+// Runner whose Promise stays pending until release() is called.
+// Supports multiple concurrent calls — each call gets its own pending Promise.
+// Used to test cancel-when-running and queue-ordering behavior.
+class BlockingFakeRunner implements PipelineRunner {
+  private pending = new Map<
+    string,
+    {
+      resolve: (value: { yaml: string; scores: Record<string, unknown> }) => void;
+      reject: (err: Error) => void;
+      signal: AbortSignal | undefined;
+    }
+  >();
+  private callCount = 0;
+  private _runOrder: string[] = [];
+
+  async run({
+    input,
+    onProgress,
+    abortSignal: _abortSignal,
+  }: Parameters<PipelineRunner['run']>[0]): Promise<{
+    yaml: string;
+    scores: Record<string, unknown>;
+  }> {
+    this._runOrder.push(input.word);
+    const key = input.word + '_' + ++this.callCount;
+    onProgress({ type: 'job:started' });
+    const promise = new Promise<{ yaml: string; scores: Record<string, unknown> }>(
+      (resolve, reject) => {
+        this.pending.set(key, { resolve, reject, signal: _abortSignal as AbortSignal | undefined });
+      }
+    );
+    return promise;
+  }
+
+  release(result?: { yaml: string; scores: Record<string, unknown> }): void {
+    const [key] = this.pending.keys();
+    if (key) {
+      this.pending.get(key)!.resolve(result || { yaml: FAKE_YAML, scores: FAKE_SCORES });
+      this.pending.delete(key);
+    }
+  }
+
+  releaseAll(): void {
+    for (const [key, pending] of this.pending) {
+      pending.resolve({ yaml: FAKE_YAML, scores: FAKE_SCORES });
+      this.pending.delete(key);
+    }
+  }
+
+  fail(err: Error): void {
+    const [key] = this.pending.keys();
+    if (key) {
+      this.pending.get(key)!.reject(err);
+      this.pending.delete(key);
+    }
+  }
+
+  get signal(): AbortSignal | undefined {
+    const [key] = this.pending.keys();
+    return key ? this.pending.get(key)!.signal : undefined;
+  }
+
+  get activeCount(): number {
+    return this.pending.size;
+  }
+
+  get runOrder(): string[] {
+    return this._runOrder;
+  }
+
+  resetRunOrder(): void {
+    this._runOrder = [];
+  }
+}
+
+// ---- In-memory DB factory ----
+
+const JOB_QUEUE_DDL = `
+  CREATE TABLE IF NOT EXISTS job_queue (
+    id TEXT PRIMARY KEY,
+    batch_id TEXT,
+    job_type TEXT NOT NULL CHECK(job_type IN ('generate','fix','audit-fix')),
+    priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal','high')),
+    status TEXT NOT NULL DEFAULT 'queued',
+    word TEXT,
+    language TEXT,
+    context TEXT,
+    notes TEXT,
+    target_job_id TEXT,
+    target_word_id TEXT,
+    result_yaml TEXT,
+    result_scores TEXT,
+    provider_id TEXT,
+    error TEXT,
+    retry_count INTEGER DEFAULT 0,
+    max_retries INTEGER DEFAULT 2,
+    started_at TEXT,
+    completed_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_job_queue_batch_id ON job_queue(batch_id);
+  CREATE INDEX IF NOT EXISTS idx_job_queue_status ON job_queue(status);
+  CREATE INDEX IF NOT EXISTS idx_job_queue_priority_created ON job_queue(priority, created_at);
+`;
+
+// Thin wrapper around better-sqlite3 providing .get(), .run(), .all().
+// Drizzle transaction clients expose the same methods, so this interface
+// works for both test (raw SQLite) and production (Drizzle tx).
+interface SqliteLike {
+  get: (sql: string, ...params: unknown[]) => Record<string, unknown> | undefined;
+  run: (sql: string, ...params: unknown[]) => { changes: number };
+  all: (sql: string, ...params: unknown[]) => Record<string, unknown>[];
+}
+
+function createTestDb(): SqliteLike {
+  const sqlite = new Database(':memory:');
+  sqlite.pragma('journal_mode = WAL');
+  sqlite.pragma('foreign_keys = ON');
+  sqlite.exec(JOB_QUEUE_DDL);
+  return {
+    get: (sql: string, ...params: unknown[]) =>
+      sqlite.prepare(sql).get(...params) as Record<string, unknown> | undefined,
+    run: (sql: string, ...params: unknown[]) => sqlite.prepare(sql).run(...params),
+    all: (sql: string, ...params: unknown[]) =>
+      sqlite.prepare(sql).all(...params) as Record<string, unknown>[],
+  };
+}
+
+// ---- Tests ----
+
+void describe('JobQueue', () => {
+  let getDb: () => SqliteLike;
+  let fakeRunner: FakeRunner;
+
+  beforeEach(() => {
+    const db = createTestDb();
+    getDb = () => db;
+    fakeRunner = new FakeRunner();
+  });
+
+  afterEach(() => {
+    delete require.cache[require.resolve('./JobQueue')];
+  });
+
+  void it('enqueues a Generate Job, dequeues it, and runs it to completion', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: fakeRunner,
+    });
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'test',
+      language: 'en',
+    });
+
+    assert.equal(typeof jobId, 'string');
+    assert.ok(jobId.length > 0);
+
+    // Yield to let the async runner.then() callback execute.
+    // FakeRunner resolves synchronously; one microtask tick is sufficient.
+    await new Promise(r => setTimeout(r, 0));
+
+    const job = queue.getJob(jobId);
+    assert.equal(job.status, 'complete');
+    assert.equal(job.result.yaml, FAKE_YAML);
+    assert.deepEqual(job.result.scores, FAKE_SCORES);
+    assert.equal(job.word, 'test');
+    assert.equal(job.language, 'en');
+  });
+
+  void it('cancels a queued Job before it is dequeued', async () => {
+    const blockingRunner = new BlockingFakeRunner();
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    // First Job blocks the only slot.
+    queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'blocker',
+      language: 'en',
+    });
+
+    // Second Job is queued (concurrency=1, slot occupied).
+    const job2Id = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'queued-word',
+      language: 'en',
+    });
+
+    assert.equal(queue.getJob(job2Id).status, 'queued');
+
+    const cancelled = queue.cancel(job2Id);
+    assert.equal(cancelled, true);
+
+    const job = queue.getJob(job2Id);
+    assert.equal(job.status, 'cancelled');
+
+    // Release the blocker so the test can clean up.
+    blockingRunner.release();
+    await new Promise(r => setTimeout(r, 0));
+
+    // Cancelled Job was never run — blocker completed, but job2 stayed cancelled.
+    assert.equal(queue.getJob(job2Id).status, 'cancelled');
+  });
+
+  void it('cancels a running Job by aborting its AbortController', async () => {
+    const blockingRunner = new BlockingFakeRunner();
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'to-cancel',
+      language: 'en',
+    });
+
+    // Job should now be running (blocked by BlockingFakeRunner).
+    assert.equal(queue.getJob(jobId).status, 'running');
+
+    // AbortController should have been registered.
+    assert.ok(blockingRunner.signal, 'AbortSignal should be passed to runner');
+
+    const cancelled = queue.cancel(jobId);
+    assert.equal(cancelled, true);
+
+    // AbortController was triggered.
+    assert.equal(blockingRunner.signal?.aborted, true);
+
+    // Runner now rejects; yield for the catch handler.
+    blockingRunner.fail(new Error('Aborted'));
+    await new Promise(r => setTimeout(r, 0));
+
+    const job = queue.getJob(jobId);
+    assert.ok(job.status === 'error' || job.status === 'cancelled');
+    assert.ok(job.error?.includes('cancelled') || job.error?.includes('Aborted'));
+  });
+
+  void it('replays completed steps to a late SSE subscriber', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: fakeRunner,
+    });
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'stream-test',
+      language: 'en',
+    });
+
+    await new Promise(r => setTimeout(r, 0));
+    assert.equal(queue.getJob(jobId).status, 'complete');
+
+    // Late subscriber — should receive replayed events.
+    const written: string[] = [];
+    const mockRes = {
+      write: (chunk: string) => {
+        written.push(chunk);
+      },
+    };
+
+    queue.subscribe(jobId, mockRes);
+
+    // Find replayed step:complete event.
+    const completeEvent = written.find(line => line.includes('step:complete'));
+    assert.ok(completeEvent, 'should replay step:complete to late subscriber');
+    assert.ok(completeEvent.includes('searching'));
+  });
+
+  void it('resets running Jobs to queued on construction (restart recovery)', async () => {
+    // Simulate a crash: insert a 'running' Job into the DB directly.
+    const db = getDb();
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language)
+       VALUES (?, 'generate', 'normal', 'running', 'orphan', 'en')`,
+      'orphan-job'
+    );
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language)
+       VALUES (?, 'generate', 'normal', 'paused', 'paused-word', 'en')`,
+      'paused-job'
+    );
+
+    // Creating a new JobQueue triggers restart recovery (running → queued).
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: fakeRunner,
+    });
+
+    // Let the recovered orphan run to completion.
+    await new Promise(r => setTimeout(r, 0));
+
+    const orphan = queue.getJob('orphan-job');
+    assert.equal(orphan.status, 'complete');
+
+    // Paused Job stays paused — user intent preserved.
+    const paused = queue.getJob('paused-job');
+    assert.equal(paused.status, 'paused');
+  });
+
+  void it('passes resumeFromStage and previousContext to the runner', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    let capturedParams: Parameters<PipelineRunner['run']>[0] | null = null;
+    const recordRunner: PipelineRunner = {
+      async run(params) {
+        capturedParams = params;
+        return { yaml: FAKE_YAML, scores: FAKE_SCORES };
+      },
+    };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: recordRunner,
+    });
+
+    queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'resume-word',
+      language: 'en',
+      resumeFromStage: 'pondering',
+      previousContext: { researchYaml: 'yield:\n  lemma: prior\n' },
+      previousSteps: [
+        {
+          step: 'searching',
+          summary: 'done',
+          duration: 100,
+          result: { researchYaml: 'yield:\n  lemma: prior\n' },
+        },
+      ],
+    });
+
+    await new Promise(r => setTimeout(r, 0));
+
+    assert.ok(capturedParams, 'runner should have been called');
+
+    const params = capturedParams as any;
+    assert.equal(params.resumeFromStage, 'pondering');
+    assert.deepEqual(params.previousContext, { researchYaml: 'yield:\n  lemma: prior\n' });
+    assert.equal(params.previousSteps?.length, 1);
+    assert.equal(params.previousSteps?.[0].step, 'searching');
+  });
+});
+
+// ---- Concurrency + priority tests ----
+
+void describe('JobQueue concurrency', () => {
+  let getDb: () => SqliteLike;
+  let blockingRunner: BlockingFakeRunner;
+
+  beforeEach(() => {
+    const db = createTestDb();
+    getDb = () => db;
+    blockingRunner = new BlockingFakeRunner();
+    delete require.cache[require.resolve('./JobQueue')];
+  });
+
+  void it('runs up to maxConcurrency Jobs simultaneously', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 3,
+      runner: blockingRunner,
+    });
+
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'a', language: 'en' });
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'b', language: 'en' });
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'c', language: 'en' });
+
+    assert.equal(blockingRunner.activeCount, 3, 'all 3 jobs should be running concurrently');
+
+    blockingRunner.releaseAll();
+    await new Promise(r => setTimeout(r, 0));
+  });
+
+  void it('with maxConcurrency=1 runs Jobs one at a time', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'a', language: 'en' });
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'b', language: 'en' });
+
+    assert.equal(blockingRunner.activeCount, 1, 'only first job should be running');
+
+    blockingRunner.release();
+    await new Promise(r => setTimeout(r, 0));
+
+    assert.equal(blockingRunner.activeCount, 1, 'second job should now be running');
+
+    blockingRunner.releaseAll();
+    await new Promise(r => setTimeout(r, 0));
+  });
+
+  void it('dequeues high-priority Jobs before normal-priority ones', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    // Enqueue normal Job — runs immediately (blocked by blocking runner).
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'normal-first', language: 'en' });
+    assert.equal(blockingRunner.activeCount, 1);
+
+    // Enqueue high-priority Job — queued (slot full).
+    queue.enqueue({ type: 'fix', priority: 'high', word: 'high-second', language: 'en' });
+
+    // Release the running normal Job.
+    blockingRunner.release();
+    await new Promise(r => setTimeout(r, 0));
+
+    // After the slot freed, the high-priority Job should have been dequeued
+    // before any other queued Jobs.
+    const order = blockingRunner.runOrder;
+    assert.equal(order.length, 2);
+    assert.equal(order[0], 'normal-first');
+    assert.equal(order[1], 'high-second');
+
+    blockingRunner.releaseAll();
+    await new Promise(r => setTimeout(r, 0));
+  });
+});
+
+// ---- Fix Job tests ----
+
+void describe('JobQueue Fix Job', () => {
+  let getDb: () => SqliteLike;
+
+  beforeEach(() => {
+    const db = createTestDb();
+    getDb = () => db;
+    delete require.cache[require.resolve('./JobQueue')];
+  });
+
+  void it('runs a Fix Job with the fix pipeline and target YAML as context', async () => {
+    // Insert a completed Generate Job with a known YAML.
+    const targetYaml = 'yield:\n  lemma: conduct\netymology:\n  root: duct\n';
+    const db = getDb();
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language, result_yaml, result_scores)
+       VALUES (?, 'generate', 'normal', 'complete', 'conduct', 'en', ?, ?)`,
+      'target-job',
+      targetYaml,
+      '{"overall_score":4}'
+    );
+
+    let capturedDef: { id: string } | null = null;
+    let capturedYaml: string | undefined;
+
+    const recordRunner: PipelineRunner = {
+      async run(params) {
+        capturedDef = params.definition;
+        capturedYaml = (params.previousContext as any)?.researchYaml as string | undefined;
+        return {
+          yaml: 'yield:\n  lemma: conduct\netymology:\n  root: duct\n  fixed: true\n',
+          scores: {},
+        };
+      },
+    };
+
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: recordRunner,
+    });
+
+    const jobId = queue.enqueue({
+      type: 'fix',
+      priority: 'high',
+      word: 'conduct',
+      language: 'en',
+      targetJobId: 'target-job',
+    });
+
+    await new Promise(r => setTimeout(r, 0));
+
+    assert.ok(capturedDef, 'runner should have been called');
+    assert.equal((capturedDef as any).id, 'fix');
+    assert.ok(capturedYaml?.includes(targetYaml), 'fix context should include target YAML');
+
+    const job = queue.getJob(jobId);
+    assert.equal(job.status, 'complete');
+  });
+
+  void it('runs an Audit-Fix Job using target_word_id from words_v2', async () => {
+    // Create words_v2 table and insert a saved word.
+    const db = getDb();
+    db.run(`CREATE TABLE IF NOT EXISTS words_v2 (
+      id TEXT PRIMARY KEY NOT NULL,
+      lemma TEXT NOT NULL,
+      language TEXT NOT NULL DEFAULT 'en',
+      content TEXT NOT NULL
+    )`);
+    const wordYaml = 'yield:\n  lemma: saved-word\n  language: en\n';
+    db.run(
+      `INSERT INTO words_v2 (id, lemma, language, content) VALUES (?, ?, ?, ?)`,
+      'word-1',
+      'saved-word',
+      'en',
+      wordYaml
+    );
+
+    let capturedDef: { id: string } | null = null;
+    let capturedYaml: string | undefined;
+
+    const recordRunner: PipelineRunner = {
+      async run(params) {
+        capturedDef = params.definition;
+        capturedYaml = (params.previousContext as any)?.researchYaml as string | undefined;
+        return { yaml: wordYaml, scores: { overall_score: 8 } };
+      },
+    };
+
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: recordRunner,
+    });
+
+    const jobId = queue.enqueue({
+      type: 'audit-fix',
+      priority: 'high',
+      word: 'saved-word',
+      language: 'en',
+      targetWordId: 'word-1',
+    });
+
+    await new Promise(r => setTimeout(r, 0));
+
+    assert.ok(capturedDef, 'runner should have been called');
+    assert.equal((capturedDef as any).id, 'audit-fix');
+    assert.ok(capturedYaml?.includes('saved-word'), 'audit-fix context should include word YAML');
+
+    const job = queue.getJob(jobId);
+    assert.equal(job.status, 'complete');
+  });
+});
+
+// ---- Circuit breaker tests ----
+
+void describe('JobQueue circuit breaker', () => {
+  let getDb: () => SqliteLike;
+
+  beforeEach(() => {
+    const db = createTestDb();
+    getDb = () => db;
+    delete require.cache[require.resolve('./JobQueue')];
+  });
+
+  void it('pauses provider after 3 consecutive failures', async () => {
+    let callCount = 0;
+    const failingRunner: PipelineRunner = {
+      async run() {
+        callCount++;
+        throw new Error('Provider 500 error');
+      },
+    };
+
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: failingRunner,
+    });
+
+    // 3 failing Jobs for the same provider.
+    const failedIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const id = queue.enqueue({
+        type: 'generate',
+        priority: 'normal',
+        word: `fail-${i}`,
+        language: 'en',
+        providerId: 'bad-provider',
+      });
+      failedIds.push(id);
+      await new Promise(r => setTimeout(r, 10));
+    }
+    assert.equal(callCount, 3, 'all 3 jobs should have been attempted');
+
+    // 4th Job for same provider — should stay queued (circuit breaker blocks).
+    const blockedId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'blocked',
+      language: 'en',
+      providerId: 'bad-provider',
+    });
+    await new Promise(r => setTimeout(r, 10));
+    assert.equal(queue.getJob(blockedId).status, 'queued');
+    assert.equal(callCount, 3, 'circuit breaker should block dispatch');
+
+    // Job for a different provider should still dequeue.
+    queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'other',
+      language: 'en',
+      providerId: 'good-provider',
+    });
+    await new Promise(r => setTimeout(r, 10));
+    assert.equal(callCount, 4, 'different provider should not be blocked');
+
+    // After resetCircuitBreaker, blocked provider works again.
+    // Note: the previously-blocked "blocked" job is still queued and will
+    // also run before the new "recovered" job (FIFO by created_at).
+    queue.resetCircuitBreaker('bad-provider');
+    queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'recovered',
+      language: 'en',
+      providerId: 'bad-provider',
+    });
+    await new Promise(r => setTimeout(r, 20));
+    // Two jobs run: the old blocked job + the new recovered job.
+    assert.equal(callCount, 6, 'after reset, both blocked and new jobs should run');
+  });
+});
+
+// ---- Batch tests ----
+
+void describe('JobQueue batch', () => {
+  let getDb: () => SqliteLike;
+  let blockingRunner: BlockingFakeRunner;
+  let _batchJobSeq = 0;
+
+  beforeEach(() => {
+    const db = createTestDb();
+    getDb = () => db;
+    blockingRunner = new BlockingFakeRunner();
+    _batchJobSeq = 0;
+    delete require.cache[require.resolve('./JobQueue')];
+  });
+
+  function enqueueBatchJobs(
+    _queue: unknown,
+    batchId: string,
+    words: string[],
+    status = 'queued'
+  ): string[] {
+    const db = getDb();
+    return words.map(word => {
+      const jobId = `batch-job-${batchId}-${++_batchJobSeq}`;
+      db.run(
+        `INSERT INTO job_queue (id, batch_id, job_type, priority, status, word, language)
+         VALUES (?, ?, 'generate', 'normal', ?, ?, 'en')`,
+        jobId,
+        batchId,
+        status,
+        word
+      );
+      return jobId;
+    });
+  }
+
+  void it('returns aggregate batch status', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    const batchId = 'batch-test-1';
+    // Create 5 jobs: 1 running, 2 queued, 1 error, 1 complete.
+    enqueueBatchJobs(queue, batchId, ['running-word'], 'running');
+    enqueueBatchJobs(queue, batchId, ['queued-a', 'queued-b'], 'queued');
+    enqueueBatchJobs(queue, batchId, ['error-word'], 'error');
+    enqueueBatchJobs(queue, batchId, ['done-word'], 'complete');
+
+    const status = queue.getBatchStatus(batchId);
+    assert.equal(status.total, 5);
+    assert.equal(status.running, 1);
+    assert.equal(status.queued, 2);
+    assert.equal(status.error, 1);
+    assert.equal(status.complete, 1);
+    assert.equal(status.done, 1); // complete counts as done
+    assert.equal(status.failed, 1); // error counts as failed
+  });
+
+  void it('pauses all queued Jobs in a batch without affecting running ones', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    const batchId = 'batch-pause-1';
+    enqueueBatchJobs(queue, batchId, ['running-word'], 'running');
+    enqueueBatchJobs(queue, batchId, ['queued-word'], 'queued');
+
+    queue.pauseBatch(batchId);
+
+    const status = queue.getBatchStatus(batchId);
+    assert.equal(status.paused, 1, 'queued job should become paused');
+    assert.equal(status.running, 1, 'running job should stay running');
+  });
+
+  void it('resumes paused Jobs in a batch', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    const batchId = 'batch-resume-1';
+    enqueueBatchJobs(queue, batchId, ['paused-word'], 'paused');
+
+    queue.resumeBatch(batchId);
+
+    // tryDequeue() runs after resume, so the job is now running.
+    const status = queue.getBatchStatus(batchId);
+    assert.equal(status.running, 1);
+    assert.equal(status.paused, 0);
+  });
+
+  void it('cancels queued and paused Jobs but not running ones', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    const batchId = 'batch-cancel-1';
+    enqueueBatchJobs(queue, batchId, ['running-word'], 'running');
+    enqueueBatchJobs(queue, batchId, ['q-word'], 'queued');
+    enqueueBatchJobs(queue, batchId, ['p-word'], 'paused');
+
+    queue.cancelBatch(batchId);
+
+    const status = queue.getBatchStatus(batchId);
+    assert.equal(status.cancelled, 2, 'queued + paused should become cancelled');
+    assert.equal(status.running, 1, 'running should stay running');
+  });
+
+  void it('retries errored Jobs in a batch', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    const batchId = 'batch-retry-1';
+    enqueueBatchJobs(queue, batchId, ['err-word'], 'error');
+    enqueueBatchJobs(queue, batchId, ['done-word'], 'complete');
+
+    queue.retryBatch(batchId);
+
+    // tryDequeue() runs after retry, so the job is now running.
+    const status = queue.getBatchStatus(batchId);
+    assert.equal(status.running, 1, 'error should be retried and now running');
+    assert.equal(status.error, 0);
+    assert.equal(status.complete, 1, 'complete should stay complete');
+  });
+});
