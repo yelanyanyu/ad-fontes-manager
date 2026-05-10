@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { onMounted, onUnmounted, provide, ref } from 'vue';
 import WordEditor from '@/components/WordEditor/WordEditor.vue';
 import WordList from '@/components/WordList/WordList.vue';
 import WordPreview from '@/components/WordPreview/WordPreview.vue';
 import AiGenerateDrawer from '@/components/AiGenerate/AiGenerateDrawer.vue';
+import AiQueueBar from '@/components/AiGenerate/AiQueueBar.vue';
+import { useAiGenerate, AI_STATE_KEY } from '@/composables/useAiGenerate';
+
+const aiState = useAiGenerate();
+provide(AI_STATE_KEY, aiState);
 
 defineOptions({
   name: 'HomeView',
@@ -15,6 +20,7 @@ const container = ref<HTMLElement | null>(null);
 const wordEditorRef = ref<InstanceType<typeof WordEditor> | null>(null);
 const previewId = ref<string | null>(null);
 const aiDrawerOpen = ref(false);
+const queueExpanded = ref(false);
 
 const showPreview = (id: string) => {
   previewId.value = id;
@@ -27,6 +33,10 @@ const closePreview = () => {
 const applyGeneratedYaml = (yamlContent: string) => {
   wordEditorRef.value?.applyGeneratedYaml(yamlContent);
   aiDrawerOpen.value = false;
+};
+
+const openAiJob = () => {
+  aiDrawerOpen.value = true;
 };
 
 let handleResizeMove: ((e: MouseEvent) => void) | null = null;
@@ -87,9 +97,17 @@ onUnmounted(() => {
       ref="leftPanel"
       data-tour="word-editor"
       class="left-panel"
+      :class="{ 'queue-expanded': queueExpanded }"
       style="width: 45%"
     >
-      <WordEditor ref="wordEditorRef" @ai-generate-open="aiDrawerOpen = true" />
+      <div class="editor-shell">
+        <WordEditor ref="wordEditorRef" @ai-generate-open="aiDrawerOpen = true" />
+      </div>
+      <AiQueueBar
+        class="queue-shell"
+        @expanded-change="queueExpanded = $event"
+        @job-selected="openAiJob"
+      />
     </div>
 
     <div ref="dragHandle" class="resizer" />
@@ -122,6 +140,35 @@ onUnmounted(() => {
   min-width: 300px;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-shell {
+  flex: 1 1 auto;
+  min-height: 220px;
+  display: flex;
+  transition:
+    flex-basis 0.22s ease,
+    min-height 0.22s ease,
+    opacity 0.18s ease,
+    transform 0.22s ease;
+}
+
+.queue-shell {
+  flex: 0 0 29px;
+}
+
+.left-panel.queue-expanded .editor-shell {
+  flex: 0 0 0;
+  min-height: 0;
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+}
+
+.left-panel.queue-expanded .queue-shell {
+  flex: 1 1 auto;
 }
 
 .right-panel {

@@ -55,6 +55,7 @@ export interface PipelineContext {
   fullYaml?: string;
   scores?: Record<string, unknown>;
   userScore?: number;
+  revisionNotes?: string;
 }
 
 export interface PipelineJob {
@@ -63,7 +64,7 @@ export interface PipelineJob {
   language: string;
   context?: string;
   notes?: string;
-  status: 'queued' | 'running' | 'complete' | 'partial' | 'error';
+  status: 'queued' | 'running' | 'paused' | 'complete' | 'partial' | 'error';
   queuePosition?: number;
   steps: StepResult[];
   currentStep?: string;
@@ -79,6 +80,7 @@ export interface PipelineJob {
 export type PipelineProgressEvent =
   | { type: 'job:queued'; position: number }
   | { type: 'job:started' }
+  | { type: 'job:paused'; step?: string }
   | { type: 'step:start'; step: string; message: string }
   | { type: 'step:tokens'; step: string; chunk: string }
   | { type: 'step:reasoning'; step: string; chunk: string }

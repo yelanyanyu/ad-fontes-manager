@@ -646,5 +646,49 @@ void describe('generateController with JobQueue', () => {
 
       assert.equal(res._status, 400);
     });
+
+    void it('enqueues a high-priority fix job so it appears in the queue overview', async () => {
+      const blockingRunner = new BlockingFakeRunner();
+      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      _resetQueue();
+      initQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+      delete require.cache[require.resolve('./generateController')];
+
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (id, job_type, priority, status, word, language, result_yaml, result_scores)
+         VALUES (?, 'generate', 'normal', 'complete', 'needs-fix', 'en', ?, ?)`,
+        'job-needs-fix',
+        FAKE_YAML,
+        JSON.stringify(FAKE_SCORES)
+      );
+
+      const { handleFixJob, handleQueueOverview } = require('./generateController') as {
+        handleFixJob: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+        handleQueueOverview: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const fixReq = fakeReq({ params: { jobId: 'job-needs-fix' } });
+      const fixRes = fakeRes();
+
+      await handleFixJob(fixReq, fixRes);
+
+      assert.equal(fixRes._status, 202);
+      const fixJobId = (fixRes._body as any).jobId as string;
+      assert.ok(fixJobId);
+
+      const overviewRes = fakeRes();
+      await handleQueueOverview(fakeReq(), overviewRes);
+
+      const jobs = (overviewRes._body as any).jobs as Array<Record<string, unknown>>;
+      const fixJob = jobs.find(job => job.jobId === fixJobId);
+      assert.ok(fixJob, 'fix job should be visible in queue overview while running');
+      assert.equal(fixJob.status, 'running');
+      assert.equal(fixJob.jobType, 'fix');
+      assert.equal(fixJob.priority, 'high');
+
+      blockingRunner.releaseAll();
+      await new Promise(r => setTimeout(r, 0));
+    });
   });
 });

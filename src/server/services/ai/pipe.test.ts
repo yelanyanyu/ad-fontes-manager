@@ -104,4 +104,38 @@ void describe('SequentialRunner', () => {
     assert.match(result.yaml, /morphological_analysis:/);
     assert.doesNotMatch(result.yaml, /root_and_affixes:/);
   });
+
+  void it('returns prior YAML as a partial fallback when fixing is interrupted', async () => {
+    writeMockAIConfig();
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const events: PipelineProgressEvent[] = [];
+    const priorYaml = 'yield:\n  lemma: dignity\n  language: en\n';
+
+    const result = await new SequentialRunner().run({
+      definition: {
+        id: 'fix',
+        language: '*',
+        stages: [
+          {
+            id: 'fixing',
+            description: 'Applying revision notes',
+            type: 'llm',
+            systemPromptFile: 'missing-fixer-prompt.md',
+          },
+        ],
+      },
+      input: { word: 'dignity', language: 'en', notes: 'Make it less generic.' },
+      previousContext: { researchYaml: priorYaml },
+      onProgress: event => events.push(event),
+    });
+
+    assert.equal(result.yaml, priorYaml);
+    assert.equal(result.scores.fix_fallback, true);
+    assert.ok(
+      events.some(
+        (event): event is Extract<PipelineProgressEvent, { type: 'pipeline:stopped' }> =>
+          event.type === 'pipeline:stopped' && event.stoppedAtStage === 'fixing'
+      )
+    );
+  });
 });

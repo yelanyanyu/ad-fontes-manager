@@ -91,6 +91,8 @@ export class JobQueue {
     }
   >();
 
+  private readonly defaultStageOrder = ['searching', 'pondering', 'auditing', 'fixing'];
+
   constructor(config: QueueConfig) {
     if (config.maxConcurrency < 1) {
       throw new Error(`maxConcurrency must be >= 1, got ${config.maxConcurrency}`);
@@ -224,6 +226,14 @@ export class JobQueue {
     if (statusRow && statusRow.status === 'queued') {
       const position = this.computeQueuePosition(db, jobId);
       res.write(`event: job:queued\ndata: ${JSON.stringify({ type: 'job:queued', position })}\n\n`);
+    } else if (statusRow && statusRow.status === 'paused') {
+      const snapshot = this.resumeState.get(jobId) || this.buildResumeSnapshot(jobId);
+      res.write(
+        `event: job:paused\ndata: ${JSON.stringify({
+          type: 'job:paused',
+          step: snapshot.resumeFromStage,
+        })}\n\n`
+      );
     }
 
     // Replay already-completed steps from memory.
@@ -355,6 +365,107 @@ export class JobQueue {
     this.tryDequeue();
   }
 
+  // ---- Queue-wide overview & batch operations ----
+
+  /** Returns a snapshot of every job in the queue for UI display. */
+  getQueueOverview(): Array<{
+    jobId: string;
+    jobType: string;
+    status: string;
+    word: string;
+    language: string;
+    priority: string;
+    createdAt: string;
+    error?: string;
+  }> {
+    const db = this.getDb();
+    const rows = db.all(
+      `SELECT id, job_type, status, word, language, priority, created_at, error
+       FROM job_queue
+       WHERE status IN ('queued', 'running', 'paused', 'error')
+       ORDER BY CASE priority WHEN 'high' THEN 1 ELSE 0 END DESC, created_at ASC, rowid ASC`
+    );
+    return rows.map(row => ({
+      jobId: row.id as string,
+      jobType: row.job_type as string,
+      status: row.status as string,
+      word: row.word as string,
+      language: row.language as string,
+      priority: row.priority as string,
+      createdAt: row.created_at as string,
+      error: row.error as string | undefined,
+    }));
+  }
+
+  /** Cancel every queued, paused, and running job.  Requires confirmation from caller. */
+  cancelAll(): void {
+    const db = this.getDb();
+    const rows = db.all(
+      `SELECT id, status FROM job_queue
+       WHERE status IN ('queued', 'paused', 'running', 'error')`
+    );
+
+    // Abort running jobs first.
+    for (const ctrl of this.abortControllers.values()) {
+      if (!ctrl.signal.aborted) ctrl.abort();
+    }
+
+    // Cancel all non-terminal jobs.
+    db.run(
+      `UPDATE job_queue SET status = 'cancelled', completed_at = datetime('now')
+       WHERE status IN ('queued', 'paused', 'running', 'error')`
+    );
+
+    // Queued/paused/error jobs have no running promise that will emit done later.
+    // Running jobs keep their in-memory state until their runner promise settles,
+    // so activeCount cannot be released early.
+    for (const row of rows) {
+      if (row.status === 'running') continue;
+      const jobId = row.id as string;
+      const emitter = this.emitters.get(jobId);
+      if (emitter) {
+        emitter.emit('done');
+        this.emitters.delete(jobId);
+      }
+      this.completedSteps.delete(jobId);
+      this.abortControllers.delete(jobId);
+      this.resumeState.delete(jobId);
+      this.subscribers.delete(jobId);
+    }
+  }
+
+  /** Pause all queued jobs and safely abort running jobs (they re-queue at tail on resume). */
+  pauseAll(): void {
+    const db = this.getDb();
+    // Set running jobs to 'paused' in DB BEFORE aborting.
+    // This prevents a race where the runner completes (complete/partial/error)
+    // before the abort signal propagates, which would make them disappear from
+    // the overview.  The .then()/.catch() use WHERE status = 'running' guards
+    // so they won't overwrite a paused status.
+    for (const [jobId, ctrl] of this.abortControllers) {
+      if (!ctrl.signal.aborted) {
+        this.pauseFlags.add(jobId);
+        const snapshot = this.buildResumeSnapshot(jobId);
+        this.resumeState.set(jobId, snapshot);
+        db.run(`UPDATE job_queue SET status = 'paused' WHERE id = ?`, jobId);
+        this.emitProgress(jobId, { type: 'job:paused', step: snapshot.resumeFromStage });
+        ctrl.abort();
+      }
+    }
+    // Pause queued jobs.
+    db.run(`UPDATE job_queue SET status = 'paused' WHERE status = 'queued'`);
+  }
+
+  /** Resume all paused jobs. */
+  resumeAll(): void {
+    const db = this.getDb();
+    db.run(
+      `UPDATE job_queue SET status = 'queued', created_at = datetime('now')
+       WHERE status = 'paused'`
+    );
+    this.tryDequeue();
+  }
+
   unsubscribe(jobId: string, res: unknown): void {
     const emitter = this.emitters.get(jobId);
     if (!emitter) return;
@@ -426,6 +537,19 @@ export class JobQueue {
     return this.completedSteps.get(jobId) || [];
   }
 
+  /** Returns true if a queued or running job with this word+language already exists. */
+  isDuplicate(word: string, language: string): boolean {
+    const db = this.getDb();
+    const row = db.get(
+      `SELECT 1 FROM job_queue
+       WHERE word = ? AND language = ? AND status IN ('queued', 'running')
+       LIMIT 1`,
+      word,
+      language
+    );
+    return !!row;
+  }
+
   getQueuePosition(jobId: string): number {
     const db = this.getDb();
     return this.computeQueuePosition(db, jobId);
@@ -453,10 +577,79 @@ export class JobQueue {
   private computeQueuePosition(db: SqliteLike, jobId: string): number {
     const posRow = db.get(
       `SELECT COUNT(*) as cnt FROM job_queue
-       WHERE status = 'queued' AND created_at <= (SELECT created_at FROM job_queue WHERE id = ?)`,
+       WHERE status = 'queued'
+         AND (
+           CASE priority WHEN 'high' THEN 1 ELSE 0 END >
+             (SELECT CASE priority WHEN 'high' THEN 1 ELSE 0 END FROM job_queue WHERE id = ?)
+           OR (
+             CASE priority WHEN 'high' THEN 1 ELSE 0 END =
+               (SELECT CASE priority WHEN 'high' THEN 1 ELSE 0 END FROM job_queue WHERE id = ?)
+             AND (
+               created_at < (SELECT created_at FROM job_queue WHERE id = ?)
+               OR (
+                 created_at = (SELECT created_at FROM job_queue WHERE id = ?)
+                 AND rowid <= (SELECT rowid FROM job_queue WHERE id = ?)
+               )
+             )
+           )
+         )`,
+      jobId,
+      jobId,
+      jobId,
+      jobId,
       jobId
     );
     return (posRow?.cnt as number) || 1;
+  }
+
+  private buildResumeSnapshot(jobId: string): {
+    resumeFromStage?: string;
+    previousContext?: Record<string, unknown>;
+    previousSteps?: Array<{
+      step: string;
+      summary?: string;
+      duration?: number;
+      result?: unknown;
+    }>;
+  } {
+    const steps = this.completedSteps.get(jobId) || [];
+    const completedStepResults = steps
+      .filter(event => event.type === 'step:complete')
+      .map(event => ({
+        step: event.step,
+        summary: event.summary,
+        duration: event.duration,
+        result: event.result,
+      }));
+
+    const previousContext: Record<string, unknown> = {};
+    for (const step of completedStepResults) {
+      if (step.result && typeof step.result === 'object' && !Array.isArray(step.result)) {
+        Object.assign(previousContext, step.result as Record<string, unknown>);
+      }
+    }
+
+    const lastStarted = [...steps].reverse().find(event => event.type === 'step:start');
+    const currentStage = lastStarted?.type === 'step:start' ? lastStarted.step : undefined;
+    const completedStages = new Set(completedStepResults.map(step => step.step));
+    const resumeFromStage =
+      currentStage && !completedStages.has(currentStage)
+        ? currentStage
+        : this.defaultStageOrder.find(stage => !completedStages.has(stage));
+    const resumeIndex = resumeFromStage ? this.defaultStageOrder.indexOf(resumeFromStage) : -1;
+    const previousSteps =
+      resumeIndex >= 0
+        ? completedStepResults.filter(step => {
+            const stepIndex = this.defaultStageOrder.indexOf(step.step);
+            return stepIndex >= 0 && stepIndex < resumeIndex;
+          })
+        : completedStepResults;
+
+    return {
+      resumeFromStage,
+      previousContext,
+      previousSteps,
+    };
   }
 
   private tryDequeue(): void {
@@ -469,7 +662,7 @@ export class JobQueue {
         `SELECT * FROM job_queue
          WHERE status = 'queued'
          ${brokenList.length > 0 ? `AND (provider_id IS NULL OR provider_id NOT IN (${brokenList}))` : ''}
-         ORDER BY priority DESC, created_at ASC
+         ORDER BY CASE priority WHEN 'high' THEN 1 ELSE 0 END DESC, created_at ASC, rowid ASC
          LIMIT 1`,
         ...this.brokenProviders
       );
@@ -584,6 +777,9 @@ export class JobQueue {
         previousContext: effectivePreviousContext,
         previousSteps: resume?.previousSteps,
         onProgress: event => {
+          if (this.pauseFlags.has(jobId) && event.type !== 'job:paused') {
+            return;
+          }
           emitter.emit('progress', event);
           // Store all non-token events for replay to late subscribers.
           if (event.type !== 'step:tokens' && event.type !== 'step:reasoning') {
@@ -593,6 +789,10 @@ export class JobQueue {
         abortSignal: abortController.signal,
       })
       .then(result => {
+        const isPaused = this.pauseFlags.has(jobId);
+        if (isPaused) {
+          return;
+        }
         const yamlText = result.yaml || '';
         const scores = result.scores || {};
         // If the pipeline stopped early (stop-loss), mark as partial.
@@ -600,7 +800,7 @@ export class JobQueue {
         const status = stoppedEvent ? 'partial' : 'complete';
         db.run(
           `UPDATE job_queue SET status = ?, result_yaml = ?, result_scores = ?, completed_at = datetime('now')
-           WHERE id = ?`,
+           WHERE id = ? AND status = 'running'`,
           status,
           yamlText,
           JSON.stringify(scores),
@@ -614,26 +814,35 @@ export class JobQueue {
         }
       })
       .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        const wasCancelled = abortController.signal.aborted;
-        db.run(
-          `UPDATE job_queue SET status = 'error', error = ?, completed_at = datetime('now') WHERE id = ?`,
-          wasCancelled ? 'User cancelled' : message,
-          jobId
-        );
+        const isPaused = this.pauseFlags.has(jobId);
+        this.pauseFlags.delete(jobId);
+        const wasAborted = abortController.signal.aborted;
+        if (isPaused) {
+          // Pause-all: keep completed steps so resume can continue from breakpoint.
+          db.run(`UPDATE job_queue SET status = 'paused', error = NULL WHERE id = ?`, jobId);
+        } else {
+          const message = err instanceof Error ? err.message : String(err);
+          db.run(
+            `UPDATE job_queue SET status = 'error', error = ?, completed_at = datetime('now')
+             WHERE id = ? AND status = 'running'`,
+            wasAborted ? 'User cancelled' : message,
+            jobId
+          );
 
-        // Circuit breaker: track consecutive failures per provider.
-        const providerId = row.provider_id as string | undefined;
-        if (!wasCancelled && providerId) {
-          const failures = (this.providerFailures.get(providerId) || 0) + 1;
-          this.providerFailures.set(providerId, failures);
-          if (failures >= 3) {
-            this.brokenProviders.add(providerId);
+          // Circuit breaker: track consecutive failures per provider.
+          const providerId = row.provider_id as string | undefined;
+          if (!wasAborted && providerId) {
+            const failures = (this.providerFailures.get(providerId) || 0) + 1;
+            this.providerFailures.set(providerId, failures);
+            if (failures >= 3) {
+              this.brokenProviders.add(providerId);
+            }
           }
         }
       })
       .finally(() => {
         emitter.emit('done');
+        this.pauseFlags.delete(jobId);
         this.abortControllers.delete(jobId);
         this.activeCount--;
         this.tryDequeue();

@@ -10,6 +10,7 @@ const { getQueue } = require('../services/ai/queue') as {
       language: string;
       context?: string;
       notes?: string;
+      targetJobId?: string;
       resumeFromStage?: string;
       previousContext?: Record<string, unknown>;
       previousSteps?: Array<{
@@ -42,6 +43,20 @@ const { getQueue } = require('../services/ai/queue') as {
       [key: string]: unknown;
     }>;
     getQueuePosition: (jobId: string) => number;
+    isDuplicate: (word: string, language: string) => boolean;
+    getQueueOverview: () => Array<{
+      jobId: string;
+      jobType: string;
+      status: string;
+      word: string;
+      language: string;
+      priority: string;
+      createdAt: string;
+      error?: string;
+    }>;
+    cancelAll: () => void;
+    pauseAll: () => void;
+    resumeAll: () => void;
     emitProgress: (
       jobId: string,
       event: {
@@ -69,23 +84,6 @@ const { loggers } = require('../utils/logger') as {
         error: (payload: Record<string, unknown>, message?: string) => void;
       };
     };
-  };
-};
-
-const { loadSystemPrompt } = require('../services/ai/prompts/loader') as {
-  loadSystemPrompt: (filename: string, variables: Record<string, string>) => string;
-};
-const { stripMarkdownFences } = require('../services/ai/utils') as {
-  stripMarkdownFences: (text: string) => string;
-};
-const { resolveModel } = require('../services/ai/modelResolver') as {
-  resolveModel: (stageName: string) => {
-    provider: string;
-    modelId: string;
-    apiKey: string;
-    baseUrl: string;
-    format: 'openai' | 'anthropic';
-    isMock: boolean;
   };
 };
 
@@ -120,6 +118,15 @@ async function handleGenerateSingle(req: Request, res: Response): Promise<void> 
 
   const { word, context, language, notes } = parsed.data;
   const queue = getQueue();
+
+  // Reject if a job with the same word+language is already queued or running.
+  if (queue.isDuplicate(word, language)) {
+    res
+      .status(409)
+      .json({ code: 409, message: 'A job for this word is already queued or running.' });
+    return;
+  }
+
   const jobId = queue.enqueue({
     type: 'generate',
     priority: 'normal',
@@ -264,13 +271,17 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
     previousSteps,
   });
 
+  const newJob = queue.getJob(newJobId);
+  const isQueued = newJob?.status === 'queued';
+  const position = isQueued ? queue.getQueuePosition(newJobId) : undefined;
+
   const runLogger = loggers.ai.child({
     jobId: newJobId,
     word: oldJob.word,
     language: oldJob.language,
   });
   runLogger.info({ event: 'job:resumed', fromStage: resumeFromStage }, 'AI generation job resumed');
-  res.status(202).json({ jobId: newJobId });
+  res.status(202).json({ jobId: newJobId, queued: isQueued, position });
 }
 
 async function handleFixJob(req: Request, res: Response): Promise<void> {
@@ -296,122 +307,50 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  res.setTimeout(0);
-
-  const runLogger = loggers.ai.child({ jobId, word: job.word, language: job.language });
-  runLogger.info({ event: 'fix:started' }, 'AI fix started');
-
-  const fixController = new globalThis.AbortController();
-  const fixTimeoutMs = 180_000;
-  const fixTimeoutId = setTimeout(() => fixController.abort(), fixTimeoutMs);
-  fixTimeoutId.unref();
-
-  res.on('close', () => fixController.abort());
-  req.on('aborted', () => fixController.abort());
-
-  const fixStepStart = Date.now();
-
-  // Emit step:start via JobQueue so SSE subscribers see the fix progress.
-  queue.emitProgress(jobId, {
-    type: 'step:start',
-    step: 'fixing',
-    message: 'Applying revision notes',
+  const fixJobId = queue.enqueue({
+    type: 'fix',
+    priority: 'high',
+    word: job.word,
+    language: job.language,
+    context: job.context,
+    notes: revisionNotes,
+    targetJobId: jobId,
   });
 
-  try {
-    const prompt = loadSystemPrompt('content-fixer.md', {
-      word: job.word,
-      context: job.context || '',
-      language: job.language,
-      notes: job.notes || '',
-      yaml: yamlText,
-      revisionNotes,
-    });
+  const fixJob = queue.getJob(fixJobId);
+  const isQueued = fixJob?.status === 'queued';
+  const position = isQueued ? queue.getQueuePosition(fixJobId) : undefined;
 
-    const model = resolveModel('expert');
-    const { createOpenAI } = require('@ai-sdk/openai') as typeof import('@ai-sdk/openai');
-    const { createAnthropic } = require('@ai-sdk/anthropic') as typeof import('@ai-sdk/anthropic');
-    const { streamText } = require('ai') as typeof import('ai');
+  const runLogger = loggers.ai.child({ jobId: fixJobId, targetJobId: jobId, word: job.word });
+  runLogger.info(
+    { event: isQueued ? 'fix:queued' : 'fix:accepted' },
+    isQueued ? 'AI fix job queued' : 'AI fix job accepted'
+  );
 
-    const provider =
-      model.format === 'openai'
-        ? createOpenAI({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.modelId)
-        : createAnthropic({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.modelId);
+  res.status(202).json({ jobId: fixJobId, queued: isQueued, position });
+}
 
-    const result = streamText({
-      model: provider,
-      messages: [{ role: 'user', content: prompt }],
-      abortSignal: fixController.signal,
-    } as Parameters<typeof streamText>[0]);
+async function handleQueueOverview(_req: Request, res: Response): Promise<void> {
+  const queue = getQueue();
+  res.json({ jobs: queue.getQueueOverview() });
+}
 
-    let fullText = '';
-    let reasoningText = '';
-    for await (const part of result.fullStream as AsyncIterable<Record<string, unknown>>) {
-      if (part.type === 'text-delta') {
-        const text =
-          typeof part.delta === 'string'
-            ? part.delta
-            : typeof part.text === 'string'
-              ? part.text
-              : typeof part.textDelta === 'string'
-                ? part.textDelta
-                : '';
-        fullText += text;
-        queue.emitProgress(jobId, { type: 'step:tokens', step: 'fixing', chunk: text });
-      } else if (part.type === 'reasoning-delta' || part.type === 'reasoning') {
-        const chunk =
-          typeof (part as Record<string, unknown>).delta === 'string'
-            ? ((part as Record<string, unknown>).delta as string)
-            : typeof (part as Record<string, unknown>).textDelta === 'string'
-              ? ((part as Record<string, unknown>).textDelta as string)
-              : '';
-        if (chunk) {
-          reasoningText += chunk;
-          queue.emitProgress(jobId, { type: 'step:reasoning', step: 'fixing', chunk });
-        }
-      }
-    }
+async function handleQueueCancelAll(_req: Request, res: Response): Promise<void> {
+  const queue = getQueue();
+  queue.cancelAll();
+  res.json({ ok: true });
+}
 
-    const fixedYaml = stripMarkdownFences(fullText);
-    if (!fixedYaml) {
-      const errMsg = 'Fix produced empty output';
-      queue.emitProgress(jobId, {
-        type: 'step:error',
-        step: 'fixing',
-        error: errMsg,
-        willRetry: false,
-      });
-      runLogger.error({ error: errMsg, rawText: fullText }, 'AI fix produced empty output');
-      res.status(500).json({ code: 500, message: errMsg });
-      return;
-    }
+async function handleQueuePauseAll(_req: Request, res: Response): Promise<void> {
+  const queue = getQueue();
+  queue.pauseAll();
+  res.json({ ok: true });
+}
 
-    const duration = Date.now() - fixStepStart;
-    queue.emitProgress(jobId, {
-      type: 'step:complete',
-      step: 'fixing',
-      duration,
-      summary: 'Revision notes applied',
-      result: { yaml: fixedYaml },
-      rawText: fullText,
-      reasoningText: reasoningText || undefined,
-    });
-
-    runLogger.info({ event: 'fix:complete', durationMs: duration }, 'AI fix complete');
-    res.json({ yaml: fixedYaml, scores });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    queue.emitProgress(jobId, {
-      type: 'step:error',
-      step: 'fixing',
-      error: fixController.signal.aborted ? 'User cancelled' : message,
-      willRetry: false,
-    });
-    runLogger.error({ error: message }, 'AI fix failed');
-    res.status(500).json({ code: 500, message });
-  } finally {
-    clearTimeout(fixTimeoutId);
-  }
+async function handleQueueResumeAll(_req: Request, res: Response): Promise<void> {
+  const queue = getQueue();
+  queue.resumeAll();
+  res.json({ ok: true });
 }
 
 module.exports = {
@@ -420,4 +359,8 @@ module.exports = {
   handleCancelJob,
   handleResumeJob,
   handleFixJob,
+  handleQueueOverview,
+  handleQueueCancelAll,
+  handleQueuePauseAll,
+  handleQueueResumeAll,
 };

@@ -104,6 +104,18 @@ _Avoid_: Bulk, group, collection
 A SQLite-backed durable scheduler that gates Job execution across a global Concurrency Pool. Dequeues by Priority then by `created_at`. Supports restart recovery (`running` → `queued`), pause/resume/cancel per Job and per Batch, and automatic retry with circuit breaker.
 _Avoid_: Job pool, task queue
 
+**Active Queue** (活动队列):
+The operational Queue view containing Jobs that can still affect execution: `queued`, `running`, `paused`, and `error`. It is used for live control actions such as pause, resume, cancel, and selecting an active Job.
+_Avoid_: Queue history, completed queue
+
+**Job History** (任务历史):
+The review-oriented Queue view containing non-active Jobs worth revisiting: `complete`, `partial`, and `error`. It is backed by persisted rows in `job_queue`, not by in-memory SSE replay state. It is paginated for display, with 20 Jobs per page by default, and orders statuses by recovery urgency: `error` before `partial` before `complete`. `cancelled` Jobs are hidden by default because they represent intentionally discarded work. Users can hard-delete individual History Jobs or use **Clear History** to hard-delete the current filtered History set, preventing unbounded clutter without forcing page-by-page cleanup. Hard deletion is only allowed for non-executing Jobs, never for `queued`, `running`, or `paused` Jobs.
+_Avoid_: Archive, completed tasks
+
+**Job Result Preview** (任务结果预览):
+A read-only detail view for a `complete` Job's generated YAML before or after it is saved as a Word. It is distinct from a saved Word preview because a completed Job may not yet have been persisted to `words_v2`.
+_Avoid_: Word detail, saved preview
+
 **Circuit Breaker** (熔断):
 A safety mechanism that pauses all Jobs assigned to a specific Provider after 3 consecutive failures from that Provider. The user is notified; manual intervention is required to resume.
 _Avoid_: Rate limiter, throttle
@@ -137,6 +149,10 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - A **Pipeline** contains 3 **Stages**: searching → pondering → auditing
 - A **Job** is one run of a **Pipeline** for one **Word**
 - A **Batch** contains N **Jobs**, executed by the **Queue** with configurable concurrency
+- The **Active Queue** is for controlling live Jobs; **Job History** is for revisiting completed, partial, or failed Jobs
+- Clicking a **Job History** item opens a status-specific detail: `complete` Jobs open a **Job Result Preview**, while `partial` and `error` Jobs reuse the AI drawer so the user can inspect stages and retry or recover
+- The Queue panel presents **Active Queue** and **Job History** as two modes in the same UI surface; execution controls belong only to Active Queue, while review and filtering controls belong to Job History
+- Saving or overwriting a **Word** remains an Editor responsibility; **Job History** may fill the Editor from a complete Job, but does not write directly to `words_v2`
 - Each **Stage** may use one **Provider** + model and zero or more **Tools**
 - A **Field Mapping** connects a **Data Source** (from a Word's YAML) to an Anki **Field**
 - **AnkiConnect** and **APKG** are two export paths; both use the same **Field Mapping** and **Card Template**

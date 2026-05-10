@@ -1,4 +1,4 @@
-import { computed, onUnmounted, ref } from 'vue';
+import { computed, onUnmounted, ref, type InjectionKey } from 'vue';
 import request from '@/utils/request';
 
 export interface StepState {
@@ -32,7 +32,8 @@ export interface JobState {
   word: string;
   language: 'en' | 'de';
   context?: string;
-  status: 'queued' | 'running' | 'complete' | 'partial' | 'error';
+  notes?: string;
+  status: 'queued' | 'running' | 'paused' | 'complete' | 'partial' | 'error';
   queuePosition?: number;
   steps: StepState[];
   currentStep?: string;
@@ -56,10 +57,26 @@ interface GenerateResponse {
 
 export type ResumeStage = 'searching' | 'pondering' | 'auditing';
 
+export interface QueueJobOverview {
+  jobId: string;
+  jobType: string;
+  status: string;
+  word: string;
+  language: string;
+  priority: string;
+  createdAt: string;
+  error?: string;
+}
+
+export type AiGenerateState = ReturnType<typeof useAiGenerate>;
+
+export const AI_STATE_KEY: InjectionKey<AiGenerateState> = Symbol('ai-state');
+
 export function useAiGenerate() {
   const jobs = ref<Map<string, JobState>>(new Map());
   const selectedJobId = ref<string | null>(null);
   const eventSources = new Map<string, EventSource>();
+  const queueOverview = ref<QueueJobOverview[]>([]);
 
   const currentJob = computed(() => {
     if (!selectedJobId.value) return null;
@@ -82,6 +99,7 @@ export function useAiGenerate() {
       word: params.word,
       language: params.language,
       context: params.context,
+      notes: params.notes,
       status: response.queued ? 'queued' : 'running',
       queuePosition: response.position,
       steps: [],
@@ -94,7 +112,33 @@ export function useAiGenerate() {
     const response = await request.post<GenerateResponse>('/v2/generate/single', params);
     registerJob(response.jobId, params, response);
     subscribeToJob(response.jobId);
+    await fetchQueueOverview();
     return response.jobId;
+  }
+
+  function ensureJobFromOverview(item: QueueJobOverview): JobState {
+    const existing = jobs.value.get(item.jobId);
+    if (existing) return existing;
+
+    const language = item.language === 'de' ? 'de' : 'en';
+    const job: JobState = {
+      jobId: item.jobId,
+      word: item.word,
+      language,
+      status:
+        item.status === 'paused'
+          ? 'paused'
+          : item.status === 'queued'
+            ? 'queued'
+            : item.status === 'error'
+              ? 'error'
+              : 'running',
+      steps: item.jobType === 'fix' ? [{ step: 'fixing', status: 'pending' }] : [],
+      error: item.error,
+    };
+    jobs.value.set(item.jobId, job);
+    touchJobs();
+    return job;
   }
 
   function subscribeToJob(jobId: string): void {
@@ -109,6 +153,7 @@ export function useAiGenerate() {
       job.status = 'queued';
       job.queuePosition = data.position;
       touchJobs();
+      void fetchQueueOverview();
     });
 
     es.addEventListener('job:started', () => {
@@ -117,6 +162,23 @@ export function useAiGenerate() {
       job.status = 'running';
       job.queuePosition = undefined;
       touchJobs();
+      void fetchQueueOverview();
+    });
+
+    es.addEventListener('job:paused', event => {
+      const data = JSON.parse(event.data) as { step?: string };
+      const job = jobs.value.get(jobId);
+      if (!job) return;
+      job.status = 'paused';
+      job.queuePosition = undefined;
+      job.currentStep = data.step;
+      const runningStep = job.steps.find(step => step.status === 'running');
+      if (runningStep) {
+        runningStep.status = 'pending';
+        runningStep.summary = 'Paused';
+      }
+      touchJobs();
+      void fetchQueueOverview();
     });
 
     es.addEventListener('step:start', event => {
@@ -245,21 +307,21 @@ export function useAiGenerate() {
         step.status = 'error';
         step.error = data.error;
       }
-      if (data.step !== 'fixing' && job.error !== 'User cancelled') {
+      if (job.error !== 'User cancelled') {
         job.status = 'error';
         job.error = data.error;
       }
-      if (data.step !== 'fixing') {
-        es.close();
-        eventSources.delete(jobId);
-      }
+      es.close();
+      eventSources.delete(jobId);
       touchJobs();
+      void fetchQueueOverview();
     });
 
     es.addEventListener('pipeline:complete', event => {
       const data = JSON.parse(event.data) as { yaml: string; scores: Record<string, unknown> };
       const job = jobs.value.get(jobId);
       if (!job) return;
+      if (job.status === 'paused') return;
       job.status = 'complete';
       job.currentStep = undefined;
       job.yaml = data.yaml;
@@ -270,6 +332,7 @@ export function useAiGenerate() {
         eventSources.delete(jobId);
       }
       touchJobs();
+      void fetchQueueOverview();
     });
 
     es.addEventListener('pipeline:stopped', event => {
@@ -280,6 +343,7 @@ export function useAiGenerate() {
       };
       const job = jobs.value.get(jobId);
       if (!job) return;
+      if (job.status === 'paused') return;
       job.status = 'partial';
       job.currentStep = undefined;
       job.yaml = data.yaml;
@@ -287,11 +351,15 @@ export function useAiGenerate() {
       es.close();
       eventSources.delete(jobId);
       touchJobs();
+      void fetchQueueOverview();
     });
 
     es.onerror = () => {
       const job = jobs.value.get(jobId);
-      if (!job || job.status === 'complete' || job.status === 'error') {
+      if (!job || job.status === 'complete' || job.status === 'partial' || job.status === 'error') {
+        es.close();
+        eventSources.delete(jobId);
+      } else if (job.status === 'paused') {
         es.close();
         eventSources.delete(jobId);
       }
@@ -305,18 +373,37 @@ export function useAiGenerate() {
     userScore?: number
   ): Promise<void> {
     eventSources.get(jobId)?.close();
+    const oldJob = jobs.value.get(jobId);
     const body: Record<string, unknown> = {};
     if (fromStage) body.fromStage = fromStage;
     if (notes !== undefined) body.notes = notes;
     if (userScore !== undefined) body.userScore = userScore;
-    const response = await request.post<{ jobId: string }>(`/v2/generate/${jobId}/resume`, body);
-    const job = jobs.value.get(response.jobId);
-    if (job) {
-      job.status = 'running';
-      job.error = undefined;
-      touchJobs();
+    const response = await request.post<GenerateResponse>(`/v2/generate/${jobId}/resume`, body);
+    if (oldJob) {
+      const previousSteps = oldJob.steps.filter(step => {
+        if (!fromStage) return false;
+        const order: ResumeStage[] = ['searching', 'pondering', 'auditing'];
+        return order.indexOf(step.step as ResumeStage) < order.indexOf(fromStage);
+      });
+      registerJob(
+        response.jobId,
+        {
+          word: oldJob.word,
+          context: oldJob.context,
+          language: oldJob.language,
+          notes: notes ?? oldJob.notes,
+        },
+        response
+      );
+      const newJob = jobs.value.get(response.jobId);
+      if (newJob) {
+        newJob.error = undefined;
+        newJob.steps = previousSteps.map(step => ({ ...step }));
+        touchJobs();
+      }
     }
     subscribeToJob(response.jobId);
+    await fetchQueueOverview();
   }
 
   async function cancelGeneration(jobId: string): Promise<void> {
@@ -327,21 +414,29 @@ export function useAiGenerate() {
       job.error = 'User cancelled';
       touchJobs();
     }
+    await fetchQueueOverview();
   }
 
   async function fixGeneration(jobId: string): Promise<string> {
-    const response = await request.post<{ yaml: string }>(`/v2/generate/${jobId}/fix`, undefined, {
-      timeout: 180_000,
-    });
     const job = jobs.value.get(jobId);
+    const response = await request.post<GenerateResponse>(`/v2/generate/${jobId}/fix`);
     if (job) {
-      job.yaml = response.yaml;
-      if (job.scores)
-        job.scores =
-          ((response as Record<string, unknown>).scores as Record<string, unknown>) || job.scores;
+      registerJob(
+        response.jobId,
+        {
+          word: job.word,
+          context: job.context,
+          language: job.language,
+          notes: (job.scores?.revision_notes as string | undefined) || job.notes,
+        },
+        response
+      );
+      jobs.value.get(response.jobId)?.steps.push({ step: 'fixing', status: 'pending' });
       touchJobs();
+      subscribeToJob(response.jobId);
+      await fetchQueueOverview();
     }
-    return response.yaml;
+    return response.jobId;
   }
 
   function unsubscribeJob(jobId: string): void {
@@ -350,12 +445,77 @@ export function useAiGenerate() {
   }
 
   function selectJob(jobId: string | null): void {
+    if (jobId && !jobs.value.has(jobId)) {
+      const overviewItem = queueOverview.value.find(item => item.jobId === jobId);
+      if (overviewItem) {
+        ensureJobFromOverview(overviewItem);
+        if (
+          overviewItem.status === 'queued' ||
+          overviewItem.status === 'running' ||
+          overviewItem.status === 'paused'
+        ) {
+          subscribeToJob(jobId);
+        }
+      }
+    }
     selectedJobId.value = jobId;
   }
 
+  // ---- Queue overview ----
+
+  async function fetchQueueOverview(): Promise<void> {
+    try {
+      const res = await request.get<{ jobs: typeof queueOverview.value }>(
+        '/v2/generate/queue/overview'
+      );
+      queueOverview.value = res.jobs;
+    } catch {
+      // Non-critical.
+    }
+  }
+
+  async function queueCancelAll(): Promise<void> {
+    await request.post('/v2/generate/queue/cancel-all');
+    await fetchQueueOverview();
+  }
+
+  async function queuePauseAll(): Promise<void> {
+    await request.post('/v2/generate/queue/pause-all');
+    for (const job of jobs.value.values()) {
+      if (job.status === 'queued' || job.status === 'running') {
+        job.status = 'paused';
+        const runningStep = job.steps.find(step => step.status === 'running');
+        if (runningStep) {
+          runningStep.status = 'pending';
+          runningStep.summary = 'Paused';
+        }
+      }
+    }
+    touchJobs();
+    await fetchQueueOverview();
+  }
+
+  async function queueResumeAll(): Promise<void> {
+    const pausedIds = queueOverview.value
+      .filter(item => item.status === 'paused')
+      .map(item => item.jobId);
+    await request.post('/v2/generate/queue/resume-all');
+    await fetchQueueOverview();
+    for (const jobId of pausedIds) {
+      const overviewItem = queueOverview.value.find(item => item.jobId === jobId);
+      if (!overviewItem) continue;
+      const job = ensureJobFromOverview(overviewItem);
+      job.status = overviewItem.status === 'queued' ? 'queued' : 'running';
+      touchJobs();
+      if (overviewItem.status === 'queued' || overviewItem.status === 'running') {
+        subscribeToJob(jobId);
+      }
+    }
+  }
+
   onUnmounted(() => {
-    for (const es of eventSources.values()) {
-      es.close();
+    for (const source of eventSources.values()) {
+      source.close();
     }
     eventSources.clear();
   });
@@ -373,5 +533,10 @@ export function useAiGenerate() {
     subscribeToJob,
     unsubscribeJob,
     selectJob,
+    queueOverview,
+    fetchQueueOverview,
+    queueCancelAll,
+    queuePauseAll,
+    queueResumeAll,
   };
 }

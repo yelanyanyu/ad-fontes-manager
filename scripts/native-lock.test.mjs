@@ -28,9 +28,7 @@ void describe('checkFileRenameLock', () => {
   });
 
   void it('returns { locked: false } for a non-existent file', () => {
-    const result = checkFileRenameLock(
-      path.join(os.tmpdir(), `does-not-exist-${Date.now()}.node`)
-    );
+    const result = checkFileRenameLock(path.join(os.tmpdir(), `does-not-exist-${Date.now()}.node`));
     assert.equal(result.locked, false);
   });
 });
@@ -53,7 +51,9 @@ void describe('findProcessesLoadingFile', () => {
   });
 
   void it('returns array of process info objects with expected shape', () => {
-    const result = findProcessesLoadingFile('node_modules/better-sqlite3/build/Release/better_sqlite3.node');
+    const result = findProcessesLoadingFile(
+      'node_modules/better-sqlite3/build/Release/better_sqlite3.node'
+    );
     // May be empty or have entries — either is valid.
     assert.ok(Array.isArray(result), 'should return an array');
     for (const entry of result) {

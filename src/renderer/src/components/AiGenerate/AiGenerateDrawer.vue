@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, inject, ref } from 'vue';
 import { useAppStore, type LanguageCode } from '@/stores/appStore';
-import { useAiGenerate, type ResumeStage, type StepState } from '@/composables/useAiGenerate';
+import { AI_STATE_KEY, type ResumeStage, type StepState } from '@/composables/useAiGenerate';
 import AiGenerateStagePanel from './AiGenerateStagePanel.vue';
 
 defineProps<{
@@ -22,7 +22,7 @@ const {
   cancelGeneration,
   resumeGeneration,
   fixGeneration,
-} = useAiGenerate();
+} = inject(AI_STATE_KEY)!;
 
 const word = ref('');
 const fixing = ref(false);
@@ -55,6 +55,7 @@ const reviewScore = computed(() => {
   const score = currentJob.value?.scores?.overall_score;
   return typeof score === 'number' ? score : null;
 });
+const canStart = computed(() => word.value.trim().length > 0);
 
 const stageOptions = computed(() =>
   currentJob.value?.steps.filter(step => step.status === 'complete' || step.status === 'error') ||
@@ -176,23 +177,25 @@ function handleStageClick(step: StepState): void {
       <section class="input-grid">
         <label>
           <span>Word</span>
-          <input v-model="word" type="text" :disabled="isRunning" @keyup.enter="handleStart" />
+          <input v-model="word" type="text" @keyup.enter="handleStart" />
         </label>
         <label>
           <span>Context</span>
-          <input v-model="context" type="text" :disabled="isRunning" />
+          <input v-model="context" type="text" />
         </label>
         <label>
           <span>Notes</span>
-          <input v-model="notes" type="text" :disabled="isRunning" />
+          <input v-model="notes" type="text" />
         </label>
       </section>
 
       <div class="action-row">
-        <button v-if="!isRunning" type="button" class="primary-button" @click="handleStart">
+        <button type="button" class="primary-button" :disabled="!canStart" @click="handleStart">
           Generate
         </button>
-        <button v-else type="button" class="danger-button" @click="handleCancel">Cancel</button>
+        <button v-if="isRunning" type="button" class="danger-button" @click="handleCancel">
+          Cancel selected
+        </button>
         <span v-if="currentJob?.status === 'queued'" class="queue-pill">
           Queued {{ currentJob.queuePosition || 1 }}
         </span>
@@ -204,6 +207,10 @@ function handleStageClick(step: StepState): void {
 
       <section v-if="currentJob" class="progress-section">
         <div class="progress-head">
+          <div class="job-title">
+            <strong>{{ currentJob.word }}</strong>
+            <span>{{ currentJob.language === 'de' ? 'German' : 'English' }}</span>
+          </div>
           <span :class="`status-chip chip-${currentJob.status}`">{{ currentJob.status }}</span>
           <strong>{{ progressPercent }}%</strong>
         </div>
@@ -272,7 +279,7 @@ function handleStageClick(step: StepState): void {
           </button>
         </div>
       </section>
-    </div>
+</div>
   </aside>
 </template>
 
@@ -379,6 +386,27 @@ function handleStageClick(step: StepState): void {
   justify-content: space-between;
 }
 
+.job-title {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+}
+
+.job-title strong {
+  color: var(--text);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.job-title span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .score-input {
   width: 52px;
   height: 26px;
@@ -412,6 +440,11 @@ function handleStageClick(step: StepState): void {
 .primary-button {
   background: var(--green);
   color: #fff;
+}
+
+.primary-button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .secondary-button {
@@ -541,6 +574,11 @@ function handleStageClick(step: StepState): void {
   color: var(--blue, #1976d2);
 }
 
+.chip-paused {
+  background: var(--amber-soft, #fff8e1);
+  color: var(--amber);
+}
+
 .chip-error {
   background: var(--red-soft);
   color: var(--red);
@@ -550,4 +588,5 @@ function handleStageClick(step: StepState): void {
   background: var(--surface);
   color: var(--muted);
 }
+
 </style>

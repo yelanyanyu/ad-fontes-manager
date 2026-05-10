@@ -2,7 +2,7 @@ import { beforeEach, afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 
-import type { PipelineRunner } from './types';
+import type { PipelineProgressEvent, PipelineRunner } from './types';
 
 // ---- Fake Runner ----
 
@@ -42,11 +42,7 @@ class BlockingFakeRunner implements PipelineRunner {
   private callCount = 0;
   private _runOrder: string[] = [];
 
-  async run({
-    input,
-    onProgress,
-    abortSignal: _abortSignal,
-  }: Parameters<PipelineRunner['run']>[0]): Promise<{
+  async run({ input, abortSignal: _abortSignal }: Parameters<PipelineRunner['run']>[0]): Promise<{
     yaml: string;
     scores: Record<string, unknown>;
   }> {
@@ -477,6 +473,28 @@ void describe('JobQueue concurrency', () => {
     assert.equal(order.length, 2);
     assert.equal(order[0], 'normal-first');
     assert.equal(order[1], 'high-second');
+
+    blockingRunner.releaseAll();
+    await new Promise(r => setTimeout(r, 0));
+  });
+
+  void it('dequeues queued high-priority Jobs ahead of queued normal-priority Jobs', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+
+    const queue = new JobQueue({
+      getDb,
+      maxConcurrency: 1,
+      runner: blockingRunner,
+    });
+
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'blocker', language: 'en' });
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'normal-queued', language: 'en' });
+    queue.enqueue({ type: 'fix', priority: 'high', word: 'high-queued', language: 'en' });
+
+    blockingRunner.release();
+    await new Promise(r => setTimeout(r, 0));
+
+    assert.deepEqual(blockingRunner.runOrder.slice(0, 2), ['blocker', 'high-queued']);
 
     blockingRunner.releaseAll();
     await new Promise(r => setTimeout(r, 0));
@@ -986,7 +1004,10 @@ void describe('JobQueue lifecycle events and extended state', () => {
     queue.subscribe(jobId, mockRes);
 
     // Late subscriber should get job:started and pipeline:complete.
-    assert.ok(written.some(l => l.includes('job:started')), 'should replay job:started');
+    assert.ok(
+      written.some(l => l.includes('job:started')),
+      'should replay job:started'
+    );
     assert.ok(
       written.some(l => l.includes('pipeline:complete')),
       'should replay pipeline:complete'
@@ -1013,9 +1034,14 @@ void describe('JobQueue lifecycle events and extended state', () => {
     // Subscribe to the queued job.
     const written: string[] = [];
     queue.subscribe(job2Id, {
-      write: (chunk: string) => { written.push(chunk); },
+      write: (chunk: string) => {
+        written.push(chunk);
+      },
     });
-    assert.ok(written.some(l => l.includes('job:queued')), 'should emit job:queued');
+    assert.ok(
+      written.some(l => l.includes('job:queued')),
+      'should emit job:queued'
+    );
 
     // Cancel the queued job.
     assert.equal(queue.cancel(job2Id), true);
@@ -1024,11 +1050,202 @@ void describe('JobQueue lifecycle events and extended state', () => {
     // Late subscriber should get nothing — emitter was cleaned up.
     const lateWritten: string[] = [];
     queue.subscribe(job2Id, {
-      write: (chunk: string) => { lateWritten.push(chunk); },
+      write: (chunk: string) => {
+        lateWritten.push(chunk);
+      },
     });
     assert.equal(lateWritten.length, 0, 'late subscriber after cancel should receive no events');
 
     blockingRunner.releaseAll();
     await new Promise(r => setTimeout(r, 0));
+  });
+});
+
+// ---- Queue-wide operation stress tests ----
+
+void describe('JobQueue queue-wide operations', () => {
+  let getDb: () => SqliteLike;
+  let blockingRunner: BlockingFakeRunner;
+
+  beforeEach(() => {
+    const db = createTestDb();
+    getDb = () => db;
+    blockingRunner = new BlockingFakeRunner();
+    delete require.cache[require.resolve('./JobQueue')];
+  });
+
+  void it('does not exceed maxConcurrency after cancelAll while aborted jobs are still settling', () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+
+    const oldJobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'old-running',
+      language: 'en',
+    });
+    assert.equal(blockingRunner.activeCount, 1);
+
+    queue.cancelAll();
+    assert.equal(queue.getJob(oldJobId).status, 'cancelled');
+
+    const newJobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'new-job',
+      language: 'en',
+    });
+
+    assert.equal(
+      queue.getJob(newJobId).status,
+      'queued',
+      'new jobs should wait until the cancelled runner promise settles'
+    );
+    assert.equal(blockingRunner.activeCount, 1, 'only the old settling job should still be active');
+  });
+
+  void it('computes queue positions using priority and stable FIFO tie-breaks', () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'blocker', language: 'en' });
+    const normalFirst = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'normal-first',
+      language: 'en',
+    });
+    const normalSecond = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'normal-second',
+      language: 'en',
+    });
+    const highFirst = queue.enqueue({
+      type: 'fix',
+      priority: 'high',
+      word: 'high-first',
+      language: 'en',
+    });
+
+    assert.equal(queue.getQueuePosition(highFirst), 1);
+    assert.equal(queue.getQueuePosition(normalFirst), 2);
+    assert.equal(queue.getQueuePosition(normalSecond), 3);
+  });
+
+  void it('resumes a paused running job from the interrupted stage', async () => {
+    const calls: Array<Parameters<PipelineRunner['run']>[0]> = [];
+    const resumableRunner: PipelineRunner = {
+      async run(params) {
+        calls.push(params);
+        if (calls.length === 1) {
+          params.onProgress({ type: 'step:start', step: 'searching', message: 'Searching' });
+          params.onProgress({
+            type: 'step:complete',
+            step: 'searching',
+            duration: 100,
+            summary: 'Searched',
+            result: { researchYaml: 'yield:\n  lemma: pause-word\n' },
+          });
+          params.onProgress({ type: 'step:start', step: 'pondering', message: 'Pondering' });
+          params.onProgress({
+            type: 'step:complete',
+            step: 'pondering',
+            duration: 100,
+            summary: 'Pondered',
+            result: { creativeYaml: 'creative: true\n' },
+          });
+          params.onProgress({ type: 'step:start', step: 'auditing', message: 'Auditing' });
+          return await new Promise<{ yaml: string; scores: Record<string, unknown> }>(
+            (_resolve, reject) => {
+              params.abortSignal?.addEventListener('abort', () => reject(new Error('Aborted')));
+            }
+          );
+        }
+
+        return { yaml: FAKE_YAML, scores: FAKE_SCORES };
+      },
+    };
+
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: resumableRunner });
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'pause-word',
+      language: 'en',
+    });
+
+    assert.equal(queue.getJob(jobId).status, 'running');
+
+    queue.pauseAll();
+    await new Promise(r => setTimeout(r, 0));
+
+    assert.equal(queue.getJob(jobId).status, 'paused');
+    assert.equal(
+      queue
+        .getCompletedSteps(jobId)
+        .some((event: PipelineProgressEvent) => event.type === 'job:paused'),
+      true,
+      'paused jobs should emit and replay an explicit paused event'
+    );
+
+    queue.resumeAll();
+    await new Promise(r => setTimeout(r, 0));
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].resumeFromStage, 'auditing');
+    assert.deepEqual(
+      calls[1].previousSteps?.map(step => step.step),
+      ['searching', 'pondering']
+    );
+    assert.deepEqual(calls[1].previousContext, {
+      researchYaml: 'yield:\n  lemma: pause-word\n',
+      creativeYaml: 'creative: true\n',
+    });
+    assert.equal(queue.getJob(jobId).status, 'complete');
+  });
+
+  void it('ignores late terminal progress after pausing a running job', async () => {
+    let capturedProgress: ((event: any) => void) | undefined;
+    let release: ((value: { yaml: string; scores: Record<string, unknown> }) => void) | undefined;
+    const lateProgressRunner: PipelineRunner = {
+      async run(params) {
+        capturedProgress = params.onProgress;
+        params.onProgress({ type: 'step:start', step: 'auditing', message: 'Auditing' });
+        return await new Promise<{ yaml: string; scores: Record<string, unknown> }>(resolve => {
+          release = resolve;
+        });
+      },
+    };
+
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: lateProgressRunner });
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'late-finish',
+      language: 'en',
+    });
+
+    queue.pauseAll();
+    capturedProgress?.({
+      type: 'pipeline:complete',
+      yaml: FAKE_YAML,
+      scores: FAKE_SCORES,
+      totalDuration: 100,
+    });
+    release?.({ yaml: FAKE_YAML, scores: FAKE_SCORES });
+    await new Promise(r => setTimeout(r, 0));
+
+    assert.equal(queue.getJob(jobId).status, 'paused');
+    assert.equal(
+      queue
+        .getCompletedSteps(jobId)
+        .some((event: PipelineProgressEvent) => event.type === 'pipeline:complete'),
+      false,
+      'late completion events should not make a paused job look finished'
+    );
   });
 });

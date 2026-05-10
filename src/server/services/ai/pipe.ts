@@ -178,6 +178,7 @@ function buildPrompt(stage: PipelineStage, ctx: PipelineContext): string {
     language: ctx.language,
     notes: ctx.notes || '',
     yaml: ctx.fullYaml || ctx.researchYaml || '',
+    revisionNotes: ctx.revisionNotes || ctx.notes || '',
     stage: stage.id,
     researchYaml: ctx.researchYaml || '',
     searchSummary: ctx.searchSummary || '',
@@ -201,6 +202,7 @@ const STAGE_TIMEOUT_MS: Record<string, number> = {
   searching: 120_000,
   pondering: 300_000,
   auditing: 180_000,
+  fixing: 600_000,
 };
 
 const BACKOFF_SCHEDULE = [2000, 8000];
@@ -627,6 +629,31 @@ export class SequentialRunner implements PipelineRunner {
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        if (stage.id === 'fixing') {
+          const fallbackYaml = ctx.fullYaml || ctx.researchYaml || '';
+          const duration = Date.now() - stepStart;
+          onProgress({
+            type: 'step:complete',
+            step: stage.id,
+            duration,
+            summary: `Fix interrupted: ${message}. Kept prior YAML.`,
+            result: { fullYaml: fallbackYaml, fallback: true, error: message },
+          });
+          onProgress({
+            type: 'pipeline:stopped',
+            yaml: fallbackYaml,
+            stoppedAtStage: stage.id,
+            reason: message,
+          });
+          runLogger.error(
+            { step: stage.id, event: 'fallback', error: message },
+            'Fix step failed; returning prior YAML fallback'
+          );
+          return {
+            yaml: fallbackYaml,
+            scores: { ...ctx.scores, fix_fallback: true, fix_error: message },
+          };
+        }
         onProgress({ type: 'step:error', step: stage.id, error: message, willRetry: true });
         runLogger.error({ step: stage.id, event: 'error', error: message }, 'AI step failed');
         throw error;
