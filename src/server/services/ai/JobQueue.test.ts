@@ -14,7 +14,7 @@ class FakeRunner implements PipelineRunner {
     yaml: string;
     scores: Record<string, unknown>;
   }> {
-    onProgress({ type: 'job:started' });
+    // job:started is now emitted by JobQueue.startJob() — not by the runner.
     onProgress({ type: 'step:start', step: 'searching', message: 'Searching' });
     onProgress({ type: 'step:complete', step: 'searching', duration: 100, summary: 'Done' });
     onProgress({
@@ -52,7 +52,7 @@ class BlockingFakeRunner implements PipelineRunner {
   }> {
     this._runOrder.push(input.word);
     const key = input.word + '_' + ++this.callCount;
-    onProgress({ type: 'job:started' });
+    // job:started is now emitted by JobQueue.startJob() — not by the runner.
     const promise = new Promise<{ yaml: string; scores: Record<string, unknown> }>(
       (resolve, reject) => {
         this.pending.set(key, { resolve, reject, signal: _abortSignal as AbortSignal | undefined });
@@ -828,5 +828,207 @@ void describe('JobQueue batch', () => {
     assert.equal(status.running, 1, 'error should be retried and now running');
     assert.equal(status.error, 0);
     assert.equal(status.complete, 1, 'complete should stay complete');
+  });
+});
+
+// ---- Lifecycle events + getCompletedSteps tests ----
+
+void describe('JobQueue lifecycle events and extended state', () => {
+  let getDb: () => SqliteLike;
+  let fakeRunner: FakeRunner;
+
+  beforeEach(() => {
+    const db = createTestDb();
+    getDb = () => db;
+    fakeRunner = new FakeRunner();
+    delete require.cache[require.resolve('./JobQueue')];
+  });
+
+  void it('getCompletedSteps returns stored non-token events for a completed job', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: fakeRunner });
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'steps-test',
+      language: 'en',
+    });
+    await new Promise(r => setTimeout(r, 0));
+    assert.equal(queue.getJob(jobId).status, 'complete');
+
+    const steps = queue.getCompletedSteps(jobId);
+    assert.ok(steps.length > 0, 'should have stored steps');
+
+    const stepStart = steps.find((e: any) => e.type === 'step:start');
+    assert.ok(stepStart, 'should include step:start');
+    assert.equal(stepStart.step, 'searching');
+
+    const stepComplete = steps.find((e: any) => e.type === 'step:complete');
+    assert.ok(stepComplete, 'should include step:complete');
+  });
+
+  void it('getCompletedSteps returns empty array for unknown jobId', () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: fakeRunner });
+
+    assert.deepEqual(queue.getCompletedSteps('nonexistent'), []);
+  });
+
+  void it('getJob returns context and notes fields', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: fakeRunner });
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'context-test',
+      language: 'en',
+      context: 'He conducted the orchestra.',
+      notes: 'Focus on musical usage',
+    });
+    await new Promise(r => setTimeout(r, 0));
+
+    const job = queue.getJob(jobId);
+    assert.equal(job.context, 'He conducted the orchestra.');
+    assert.equal(job.notes, 'Focus on musical usage');
+  });
+
+  void it('subscribe writes job:queued event with position for a queued Job', async () => {
+    const blockingRunner = new BlockingFakeRunner();
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+
+    // First Job blocks the only slot.
+    queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'blocker',
+      language: 'en',
+    });
+
+    // Second Job is queued (concurrency=1, slot occupied).
+    const job2Id = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'queued-word',
+      language: 'en',
+    });
+    assert.equal(queue.getJob(job2Id).status, 'queued');
+
+    const written: string[] = [];
+    const mockRes = {
+      write: (chunk: string) => {
+        written.push(chunk);
+      },
+    };
+
+    queue.subscribe(job2Id, mockRes);
+
+    const queuedEvent = written.find(line => line.includes('job:queued'));
+    assert.ok(queuedEvent, 'should emit job:queued for a queued Job');
+    assert.ok(queuedEvent.includes('"position"'), 'should include position field');
+
+    blockingRunner.releaseAll();
+    await new Promise(r => setTimeout(r, 0));
+  });
+
+  void it('subscribe replays job:started for a running Job', async () => {
+    const blockingRunner = new BlockingFakeRunner();
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'running-word',
+      language: 'en',
+    });
+    assert.equal(queue.getJob(jobId).status, 'running');
+
+    const written: string[] = [];
+    const mockRes = {
+      write: (chunk: string) => {
+        written.push(chunk);
+      },
+    };
+
+    queue.subscribe(jobId, mockRes);
+
+    // job:started should be in replayed steps (emitted by JobQueue.startJob).
+    const startedEvent = written.find(line => line.includes('job:started'));
+    assert.ok(startedEvent, 'should replay job:started for a running Job');
+
+    blockingRunner.releaseAll();
+    await new Promise(r => setTimeout(r, 0));
+  });
+
+  void it('subscribe replays completed steps for a late subscriber even after job is done', async () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: fakeRunner });
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'late-sub',
+      language: 'en',
+    });
+    await new Promise(r => setTimeout(r, 0));
+    assert.equal(queue.getJob(jobId).status, 'complete');
+
+    const written: string[] = [];
+    const mockRes = {
+      write: (chunk: string) => {
+        written.push(chunk);
+      },
+    };
+
+    queue.subscribe(jobId, mockRes);
+
+    // Late subscriber should get job:started and pipeline:complete.
+    assert.ok(written.some(l => l.includes('job:started')), 'should replay job:started');
+    assert.ok(
+      written.some(l => l.includes('pipeline:complete')),
+      'should replay pipeline:complete'
+    );
+  });
+
+  void it('cancel cleans up emitter so late subscriber gets no events', async () => {
+    const blockingRunner = new BlockingFakeRunner();
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+
+    // Block the slot.
+    queue.enqueue({ type: 'generate', priority: 'normal', word: 'blocker', language: 'en' });
+
+    // Second job stays queued.
+    const job2Id = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'to-cancel',
+      language: 'en',
+    });
+    assert.equal(queue.getJob(job2Id).status, 'queued');
+
+    // Subscribe to the queued job.
+    const written: string[] = [];
+    queue.subscribe(job2Id, {
+      write: (chunk: string) => { written.push(chunk); },
+    });
+    assert.ok(written.some(l => l.includes('job:queued')), 'should emit job:queued');
+
+    // Cancel the queued job.
+    assert.equal(queue.cancel(job2Id), true);
+    assert.equal(queue.getJob(job2Id).status, 'cancelled');
+
+    // Late subscriber should get nothing — emitter was cleaned up.
+    const lateWritten: string[] = [];
+    queue.subscribe(job2Id, {
+      write: (chunk: string) => { lateWritten.push(chunk); },
+    });
+    assert.equal(lateWritten.length, 0, 'late subscriber after cancel should receive no events');
+
+    blockingRunner.releaseAll();
+    await new Promise(r => setTimeout(r, 0));
   });
 });

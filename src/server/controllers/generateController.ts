@@ -1,15 +1,66 @@
 import type { Request, Response } from 'express';
 
 const { z } = require('zod') as typeof import('zod');
-const { sequentialRunner } = require('../services/ai/pipe') as {
-  sequentialRunner: import('../services/ai/types').PipelineRunner;
+const { getQueue } = require('../services/ai/queue') as {
+  getQueue: () => {
+    enqueue: (params: {
+      type: 'generate' | 'fix' | 'audit-fix';
+      priority: 'normal' | 'high';
+      word: string;
+      language: string;
+      context?: string;
+      notes?: string;
+      resumeFromStage?: string;
+      previousContext?: Record<string, unknown>;
+      previousSteps?: Array<{
+        step: string;
+        summary?: string;
+        duration?: number;
+        result?: unknown;
+      }>;
+    }) => string;
+    cancel: (jobId: string) => boolean;
+    subscribe: (jobId: string, res: { write: (chunk: string) => void }) => void;
+    unsubscribe: (jobId: string, res: unknown) => void;
+    getJob: (jobId: string) =>
+      | {
+          jobId: string;
+          status: string;
+          word: string;
+          language: string;
+          context?: string;
+          notes?: string;
+          error?: string;
+          result?: { yaml: string; scores: Record<string, unknown> };
+        }
+      | undefined;
+    getCompletedSteps: (jobId: string) => Array<{
+      type: string;
+      step?: string;
+      summary?: string;
+      result?: unknown;
+      [key: string]: unknown;
+    }>;
+    getQueuePosition: (jobId: string) => number;
+    emitProgress: (
+      jobId: string,
+      event: {
+        type: string;
+        step?: string;
+        message?: string;
+        chunk?: string;
+        duration?: number;
+        summary?: string;
+        result?: unknown;
+        rawText?: string;
+        reasoningText?: string;
+        error?: string;
+        [key: string]: unknown;
+      }
+    ) => void;
+  };
 };
-const { englishPipeline } = require('../services/ai/definitions/english') as {
-  englishPipeline: import('../services/ai/types').PipelineDefinition;
-};
-const { germanPipeline } = require('../services/ai/definitions/german') as {
-  germanPipeline: import('../services/ai/types').PipelineDefinition;
-};
+
 const { loggers } = require('../utils/logger') as {
   loggers: {
     ai: {
@@ -20,9 +71,13 @@ const { loggers } = require('../utils/logger') as {
     };
   };
 };
-const { streamText } = require('ai') as typeof import('ai');
-const { createOpenAI } = require('@ai-sdk/openai') as typeof import('@ai-sdk/openai');
-const { createAnthropic } = require('@ai-sdk/anthropic') as typeof import('@ai-sdk/anthropic');
+
+const { loadSystemPrompt } = require('../services/ai/prompts/loader') as {
+  loadSystemPrompt: (filename: string, variables: Record<string, string>) => string;
+};
+const { stripMarkdownFences } = require('../services/ai/utils') as {
+  stripMarkdownFences: (text: string) => string;
+};
 const { resolveModel } = require('../services/ai/modelResolver') as {
   resolveModel: (stageName: string) => {
     provider: string;
@@ -33,14 +88,8 @@ const { resolveModel } = require('../services/ai/modelResolver') as {
     isMock: boolean;
   };
 };
-const { loadSystemPrompt } = require('../services/ai/prompts/loader') as {
-  loadSystemPrompt: (filename: string, variables: Record<string, string>) => string;
-};
-const { stripMarkdownFences } = require('../services/ai/utils') as {
-  stripMarkdownFences: (text: string) => string;
-};
 
-import type { PipelineJob, PipelineProgressEvent } from '../services/ai/types';
+// ---- Schemas ----
 
 const GenerateRequestSchema = z.object({
   word: z.string().trim().min(1),
@@ -54,257 +103,13 @@ const ResumeRequestSchema = z.object({
   userScore: z.number().min(0).max(10).optional(),
 });
 
-const jobs = new Map<string, PipelineJob>();
-const sseClients = new Map<string, Set<Response>>();
-const cancelControllers = new Map<string, InstanceType<typeof globalThis.AbortController>>();
-const queuedJobIds: string[] = [];
-let runningJobId: string | null = null;
-
-function generateJobId(): string {
-  return `job-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function sendSSE(res: Response, event: string, data: unknown): void {
-  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
-}
-
-function broadcast(jobId: string, eventName: string, event: unknown): void {
-  const clients = sseClients.get(jobId);
-  if (!clients) return;
-  for (const client of clients) {
-    sendSSE(client, eventName, event);
-  }
-}
-
-function selectPipeline(language: string) {
-  return language === 'de' ? germanPipeline : englishPipeline;
-}
+// ---- Helpers ----
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] || '' : value || '';
 }
 
-function updateJobFromEvent(job: PipelineJob, event: PipelineProgressEvent): void {
-  if (event.type === 'job:queued') {
-    job.status = 'queued';
-    job.queuePosition = event.position;
-    return;
-  }
-
-  if (event.type === 'job:started') {
-    job.status = 'running';
-    job.queuePosition = undefined;
-    return;
-  }
-
-  if (event.type === 'step:start') {
-    job.steps.push({
-      step: event.step,
-      status: 'running',
-      startTime: Date.now(),
-      summary: event.message,
-    });
-    job.currentStep = event.step;
-    return;
-  }
-
-  if (event.type === 'step:complete') {
-    const step = job.steps.find(item => item.step === event.step && item.status === 'running');
-    if (step) {
-      step.status = 'complete';
-      step.endTime = Date.now();
-      step.durationMs = event.duration;
-      step.summary = event.summary;
-      step.result = event.result;
-      step.rawText = event.rawText;
-      if (event.reasoningText) step.reasoningText = event.reasoningText;
-    }
-    return;
-  }
-
-  if (event.type === 'step:error') {
-    const step = job.steps.find(item => item.step === event.step && item.status === 'running');
-    if (step) {
-      step.status = 'error';
-      step.error = event.error;
-      step.endTime = Date.now();
-    }
-    if (event.step !== 'fixing') {
-      job.status = 'error';
-      job.error = event.error;
-    }
-    return;
-  }
-
-  if (event.type === 'step:tokens') {
-    const step = job.steps.find(item => item.step === event.step && item.status === 'running');
-    if (step) {
-      step.tokens = (step.tokens || '') + event.chunk;
-    }
-    return;
-  }
-
-  if (event.type === 'step:reasoning') {
-    const step = job.steps.find(item => item.step === event.step && item.status === 'running');
-    if (step) {
-      step.reasoningText = (step.reasoningText || '') + event.chunk;
-    }
-    return;
-  }
-
-  if (event.type === 'step:tool-call') {
-    const step = job.steps.find(item => item.step === event.step && item.status === 'running');
-    if (step) {
-      step.toolCalls = step.toolCalls || [];
-      step.toolCalls.push({
-        toolCallId: event.toolCallId,
-        toolName: event.toolName,
-        status: 'running',
-        input: event.input,
-        startTime: event.startTime,
-      });
-    }
-    return;
-  }
-
-  if (event.type === 'step:tool-result') {
-    const step = job.steps.find(item => item.step === event.step && item.status === 'running');
-    const toolCall = step?.toolCalls?.find(item => item.toolCallId === event.toolCallId);
-    if (toolCall) {
-      toolCall.status = event.error ? 'error' : 'complete';
-      toolCall.output = event.output;
-      toolCall.error = event.error;
-      toolCall.warning = event.warning;
-      toolCall.endTime = Date.now();
-      toolCall.durationMs = event.duration;
-    }
-    return;
-  }
-
-  if (event.type === 'pipeline:complete') {
-    job.status = 'complete';
-    job.completedAt = Date.now();
-    job.currentStep = undefined;
-    job.result = { yaml: event.yaml, scores: event.scores };
-  }
-
-  if (event.type === 'pipeline:stopped') {
-    job.status = 'partial';
-    job.completedAt = Date.now();
-    job.currentStep = undefined;
-    job.result = { yaml: event.yaml, scores: {} };
-  }
-}
-
-function updateQueuePositions(): void {
-  queuedJobIds.forEach((jobId, index) => {
-    const job = jobs.get(jobId);
-    if (!job) return;
-    job.queuePosition = index + 1;
-    broadcast(jobId, 'job:queued', { type: 'job:queued', position: job.queuePosition });
-  });
-}
-
-function buildResumeState(job: PipelineJob, fromStage: string) {
-  const pipeline = selectPipeline(job.language);
-  const stageOrder = pipeline.stages.map(stage => stage.id);
-  const resumeIndex = stageOrder.indexOf(fromStage);
-  const previousContext: Record<string, unknown> = {};
-  const previousSteps = job.steps
-    .filter(step => step.status === 'complete' && stageOrder.indexOf(step.step) < resumeIndex)
-    .map(step => {
-      if (step.result && typeof step.result === 'object' && !Array.isArray(step.result)) {
-        Object.assign(previousContext, step.result);
-      }
-      return {
-        step: step.step,
-        summary: step.summary,
-        duration: step.durationMs,
-        result: step.result,
-      };
-    });
-
-  return { previousContext, previousSteps };
-}
-
-function finishRunningJob(jobId: string): void {
-  if (runningJobId === jobId) runningJobId = null;
-  startNextQueuedJob();
-}
-
-function startPipelineJob(
-  jobId: string,
-  resumeFromStage?: string,
-  previousJob?: PipelineJob
-): void {
-  const job = jobs.get(jobId);
-  if (!job) return;
-
-  runningJobId = jobId;
-  const abortController = new globalThis.AbortController();
-  cancelControllers.set(jobId, abortController);
-  updateJobFromEvent(job, { type: 'job:started' });
-  broadcast(jobId, 'job:started', { type: 'job:started' });
-
-  const runLogger = loggers.ai.child({ jobId, word: job.word, language: job.language });
-  const resumeState =
-    resumeFromStage && previousJob ? buildResumeState(previousJob, resumeFromStage) : undefined;
-
-  void sequentialRunner
-    .run({
-      definition: selectPipeline(job.language),
-      input: {
-        word: job.word,
-        context: job.context,
-        language: job.language,
-        notes: job.notes,
-      },
-      onProgress: event => {
-        updateJobFromEvent(job, event);
-        broadcast(jobId, event.type, event);
-      },
-      abortSignal: abortController.signal,
-      resumeFromStage,
-      previousContext: resumeState?.previousContext,
-      previousSteps: resumeState?.previousSteps,
-    })
-    .catch(error => {
-      const message = error instanceof Error ? error.message : String(error);
-      const isUserCancelled = abortController.signal.aborted;
-      job.status = 'error';
-      job.error = isUserCancelled ? 'User cancelled' : message;
-      job.completedAt = Date.now();
-      runLogger.error({ error: message, userCancelled: isUserCancelled }, 'AI pipeline failed');
-      broadcast(jobId, 'step:error', {
-        type: 'step:error',
-        step: 'pipeline',
-        error: job.error,
-        willRetry: !isUserCancelled,
-      });
-    })
-    .finally(() => {
-      cancelControllers.delete(jobId);
-      finishRunningJob(jobId);
-    });
-}
-
-function startNextQueuedJob(): void {
-  const nextJobId = queuedJobIds.shift();
-  if (!nextJobId) return;
-  updateQueuePositions();
-  startPipelineJob(nextJobId);
-}
-
-function scheduleJobCleanup(jobId: string): void {
-  setTimeout(
-    () => {
-      if (!sseClients.has(jobId)) {
-        jobs.delete(jobId);
-      }
-    },
-    30 * 60 * 1000
-  );
-}
+// ---- Handlers ----
 
 async function handleGenerateSingle(req: Request, res: Response): Promise<void> {
   const parsed = GenerateRequestSchema.safeParse(req.body);
@@ -314,40 +119,34 @@ async function handleGenerateSingle(req: Request, res: Response): Promise<void> 
   }
 
   const { word, context, language, notes } = parsed.data;
-  const jobId = generateJobId();
-  const runLogger = loggers.ai.child({ jobId, word, language });
-  const job: PipelineJob = {
-    jobId,
+  const queue = getQueue();
+  const jobId = queue.enqueue({
+    type: 'generate',
+    priority: 'normal',
     word,
     language,
     context,
     notes,
-    status: runningJobId ? 'queued' : 'running',
-    steps: [],
-    startedAt: Date.now(),
-  };
-  jobs.set(jobId, job);
-  scheduleJobCleanup(jobId);
+  });
 
-  if (runningJobId) {
-    queuedJobIds.push(jobId);
-    updateQueuePositions();
-    runLogger.info(
-      { event: 'job:queued', position: job.queuePosition },
-      'AI generation job queued'
-    );
-    res.status(202).json({ jobId, queued: true, position: job.queuePosition });
-    return;
-  }
+  const job = queue.getJob(jobId);
+  const isQueued = job?.status === 'queued';
+  const position = isQueued ? queue.getQueuePosition(jobId) : undefined;
 
-  startPipelineJob(jobId);
-  runLogger.info({ event: 'job:accepted' }, 'AI generation job accepted');
-  res.status(202).json({ jobId, queued: false });
+  const runLogger = loggers.ai.child({ jobId, word, language });
+  runLogger.info(
+    { event: isQueued ? 'job:queued' : 'job:accepted' },
+    isQueued ? 'AI generation job queued' : 'AI generation job accepted'
+  );
+
+  res.status(202).json({ jobId, queued: isQueued, position });
 }
 
 async function handleStream(req: Request, res: Response): Promise<void> {
   const jobId = firstParam(req.params.jobId);
-  const job = jobs.get(jobId);
+  const queue = getQueue();
+  const job = queue.getJob(jobId);
+
   if (!job) {
     res.status(404).json({ code: 404, message: 'Job not found' });
     return;
@@ -361,95 +160,11 @@ async function handleStream(req: Request, res: Response): Promise<void> {
     'X-Accel-Buffering': 'no',
   });
 
-  if (!sseClients.has(jobId)) sseClients.set(jobId, new Set());
-  sseClients.get(jobId)!.add(res);
+  // Delegate SSE event replay + live forwarding to JobQueue.
+  queue.subscribe(jobId, res);
 
-  for (const step of job.steps) {
-    for (const toolCall of step.toolCalls || []) {
-      sendSSE(res, 'step:tool-call', {
-        type: 'step:tool-call',
-        step: step.step,
-        toolCallId: toolCall.toolCallId,
-        toolName: toolCall.toolName,
-        input: toolCall.input,
-        startTime: toolCall.startTime,
-      });
-      if (toolCall.status !== 'running') {
-        sendSSE(res, 'step:tool-result', {
-          type: 'step:tool-result',
-          step: step.step,
-          toolCallId: toolCall.toolCallId,
-          toolName: toolCall.toolName,
-          output: toolCall.output,
-          error: toolCall.error,
-          warning: toolCall.warning,
-          duration: toolCall.durationMs || 0,
-        });
-      }
-    }
-
-    if (step.status === 'running') {
-      sendSSE(res, 'step:start', {
-        type: 'step:start',
-        step: step.step,
-        message: step.summary || step.step,
-      });
-      if (step.reasoningText) {
-        sendSSE(res, 'step:reasoning', {
-          type: 'step:reasoning',
-          step: step.step,
-          chunk: step.reasoningText,
-        });
-      }
-    } else if (step.status === 'complete') {
-      sendSSE(res, 'step:complete', {
-        type: 'step:complete',
-        step: step.step,
-        duration: step.durationMs || 0,
-        summary: step.summary || '',
-        result: step.result,
-        rawText: step.rawText,
-        reasoningText: step.reasoningText,
-      });
-    } else if (step.status === 'error') {
-      sendSSE(res, 'step:error', {
-        type: 'step:error',
-        step: step.step,
-        error: step.error || 'Unknown error',
-        willRetry: false,
-      });
-    }
-  }
-
-  if (job.status === 'complete' && job.result) {
-    sendSSE(res, 'pipeline:complete', {
-      type: 'pipeline:complete',
-      yaml: job.result.yaml,
-      scores: job.result.scores,
-      totalDuration: job.completedAt ? job.completedAt - job.startedAt : 0,
-    });
-  } else if (job.status === 'partial' && job.result) {
-    const stoppedStep = job.steps.find(s => s.status === 'complete' || s.status === 'error');
-    sendSSE(res, 'pipeline:stopped', {
-      type: 'pipeline:stopped',
-      yaml: job.result.yaml,
-      stoppedAtStage: stoppedStep?.step || 'unknown',
-      reason: stoppedStep?.summary || 'Pipeline stopped early',
-    });
-  } else if (job.status === 'error') {
-    sendSSE(res, 'step:error', {
-      type: 'step:error',
-      step: 'pipeline',
-      error: job.error || 'Unknown error',
-      willRetry: false,
-    });
-  } else if (job.status === 'queued') {
-    sendSSE(res, 'job:queued', {
-      type: 'job:queued',
-      position: job.queuePosition || 1,
-    });
-  }
-
+  // Keepalive to prevent proxy/client timeouts.
+  // unref() prevents this timer from blocking test runner / process exit.
   const keepaliveTimer = setInterval(() => {
     try {
       res.write(': keepalive\n\n');
@@ -457,13 +172,11 @@ async function handleStream(req: Request, res: Response): Promise<void> {
       clearInterval(keepaliveTimer);
     }
   }, 15000);
+  keepaliveTimer.unref();
 
   const cleanup = () => {
     clearInterval(keepaliveTimer);
-    const clients = sseClients.get(jobId);
-    if (!clients) return;
-    clients.delete(res);
-    if (clients.size === 0) sseClients.delete(jobId);
+    queue.unsubscribe(jobId, res);
   };
 
   req.on('close', cleanup);
@@ -472,49 +185,23 @@ async function handleStream(req: Request, res: Response): Promise<void> {
 
 async function handleCancelJob(req: Request, res: Response): Promise<void> {
   const jobId = firstParam(req.params.jobId);
-  const job = jobs.get(jobId);
+  const queue = getQueue();
+  const job = queue.getJob(jobId);
+
   if (!job) {
     res.status(404).json({ code: 404, message: 'Job not found' });
     return;
   }
-  const controller = cancelControllers.get(jobId);
-  if (job.status === 'queued') {
-    const index = queuedJobIds.indexOf(jobId);
-    if (index >= 0) queuedJobIds.splice(index, 1);
-    job.status = 'error';
-    job.error = 'User cancelled';
-    job.completedAt = Date.now();
-    updateQueuePositions();
-    broadcast(jobId, 'step:error', {
-      type: 'step:error',
-      step: 'pipeline',
-      error: 'User cancelled',
-      willRetry: false,
-    });
-    res.json({ ok: true, jobId });
-    return;
-  }
 
-  if (controller && !controller.signal.aborted) {
-    controller.abort();
-    job.status = 'error';
-    job.error = 'User cancelled';
-    job.completedAt = Date.now();
-    broadcast(jobId, 'step:error', {
-      type: 'step:error',
-      step: 'pipeline',
-      error: 'User cancelled',
-      willRetry: false,
-    });
-    res.json({ ok: true, jobId });
-  } else {
-    res.json({ ok: false, message: 'Job is no longer running' });
-  }
+  const cancelled = queue.cancel(jobId);
+  res.json({ ok: cancelled, jobId });
 }
 
 async function handleResumeJob(req: Request, res: Response): Promise<void> {
   const jobId = firstParam(req.params.jobId);
-  const oldJob = jobs.get(jobId);
+  const queue = getQueue();
+  const oldJob = queue.getJob(jobId);
+
   if (!oldJob) {
     res.status(404).json({ code: 404, message: 'Job not found' });
     return;
@@ -530,41 +217,67 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const failedStep = oldJob.steps.find(step => step.status === 'error');
-  const resumeFromStage = parsed.data.fromStage || failedStep?.step || 'searching';
-  if (parsed.data.notes !== undefined) {
-    oldJob.notes = parsed.data.notes;
+  // Reconstruct resume state from the old job's completed steps.
+  const completedSteps = queue.getCompletedSteps(jobId);
+  const completedStepResults = completedSteps
+    .filter(e => e.type === 'step:complete')
+    .map(e => ({
+      step: e.step as string,
+      summary: e.summary as string | undefined,
+      duration: e.duration as number | undefined,
+      result: e.result,
+    }));
+
+  // Merge context from completed step results.
+  const previousContext: Record<string, unknown> = {};
+  for (const step of completedStepResults) {
+    if (step.result && typeof step.result === 'object' && !Array.isArray(step.result)) {
+      Object.assign(previousContext, step.result as Record<string, unknown>);
+    }
   }
-  const resumeState = buildResumeState(oldJob, resumeFromStage);
+  // Also include the old job's YAML as researchYaml.
+  if (oldJob.result?.yaml) {
+    previousContext.researchYaml = oldJob.result.yaml;
+  }
   if (parsed.data.userScore !== undefined) {
-    resumeState.previousContext.userScore = parsed.data.userScore;
+    previousContext.userScore = parsed.data.userScore;
   }
 
-  oldJob.status = 'running';
-  oldJob.error = undefined;
-  oldJob.completedAt = undefined;
-  oldJob.currentStep = resumeFromStage;
+  // Determine resume stage from request or last completed/errored step.
+  const errorEvent = completedSteps.find(e => e.type === 'step:error');
+  const resumeFromStage = parsed.data.fromStage || (errorEvent?.step as string) || 'searching';
 
-  const newSteps = resumeState.previousSteps.map(s => ({
-    step: s.step,
-    status: 'complete' as const,
-    startTime: Date.now(),
-    endTime: Date.now(),
-    durationMs: s.duration,
-    summary: s.summary,
-    result: s.result,
-  }));
-  oldJob.steps = newSteps;
+  // Filter steps up to (but not including) the resume stage.
+  const stageOrder = ['searching', 'pondering', 'auditing'];
+  const resumeIndex = stageOrder.indexOf(resumeFromStage);
+  const previousSteps = completedStepResults.filter(s => stageOrder.indexOf(s.step) < resumeIndex);
 
-  startPipelineJob(jobId, resumeFromStage, oldJob);
-  const runLogger = loggers.ai.child({ jobId, word: oldJob.word, language: oldJob.language });
+  const newJobId = queue.enqueue({
+    type: 'generate',
+    priority: 'high',
+    word: oldJob.word,
+    language: oldJob.language,
+    context: oldJob.context,
+    notes: parsed.data.notes ?? oldJob.notes,
+    resumeFromStage,
+    previousContext,
+    previousSteps,
+  });
+
+  const runLogger = loggers.ai.child({
+    jobId: newJobId,
+    word: oldJob.word,
+    language: oldJob.language,
+  });
   runLogger.info({ event: 'job:resumed', fromStage: resumeFromStage }, 'AI generation job resumed');
-  res.status(202).json({ jobId });
+  res.status(202).json({ jobId: newJobId });
 }
 
 async function handleFixJob(req: Request, res: Response): Promise<void> {
   const jobId = firstParam(req.params.jobId);
-  const job = jobs.get(jobId);
+  const queue = getQueue();
+  const job = queue.getJob(jobId);
+
   if (!job) {
     res.status(404).json({ code: 404, message: 'Job not found' });
     return;
@@ -591,16 +304,15 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
   const fixController = new globalThis.AbortController();
   const fixTimeoutMs = 180_000;
   const fixTimeoutId = setTimeout(() => fixController.abort(), fixTimeoutMs);
+  fixTimeoutId.unref();
 
   res.on('close', () => fixController.abort());
   req.on('aborted', () => fixController.abort());
 
-  updateJobFromEvent(job, {
-    type: 'step:start',
-    step: 'fixing',
-    message: 'Applying revision notes',
-  });
-  broadcast(jobId, 'step:start', {
+  const fixStepStart = Date.now();
+
+  // Emit step:start via JobQueue so SSE subscribers see the fix progress.
+  queue.emitProgress(jobId, {
     type: 'step:start',
     step: 'fixing',
     message: 'Applying revision notes',
@@ -617,6 +329,10 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
     });
 
     const model = resolveModel('expert');
+    const { createOpenAI } = require('@ai-sdk/openai') as typeof import('@ai-sdk/openai');
+    const { createAnthropic } = require('@ai-sdk/anthropic') as typeof import('@ai-sdk/anthropic');
+    const { streamText } = require('ai') as typeof import('ai');
+
     const provider =
       model.format === 'openai'
         ? createOpenAI({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.modelId)
@@ -630,9 +346,6 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
 
     let fullText = '';
     let reasoningText = '';
-    const toolStartTimes = new Map<string, number>();
-    const fixStepStart = Date.now();
-
     for await (const part of result.fullStream as AsyncIterable<Record<string, unknown>>) {
       if (part.type === 'text-delta') {
         const text =
@@ -644,118 +357,37 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
                 ? part.textDelta
                 : '';
         fullText += text;
-        updateJobFromEvent(job, { type: 'step:tokens', step: 'fixing', chunk: text });
-        broadcast(jobId, 'step:tokens', { type: 'step:tokens', step: 'fixing', chunk: text });
+        queue.emitProgress(jobId, { type: 'step:tokens', step: 'fixing', chunk: text });
       } else if (part.type === 'reasoning-delta' || part.type === 'reasoning') {
         const chunk =
           typeof (part as Record<string, unknown>).delta === 'string'
             ? ((part as Record<string, unknown>).delta as string)
-            : typeof (part as Record<string, unknown>).text === 'string'
-              ? ((part as Record<string, unknown>).text as string)
-              : typeof (part as Record<string, unknown>).textDelta === 'string'
-                ? ((part as Record<string, unknown>).textDelta as string)
-                : '';
+            : typeof (part as Record<string, unknown>).textDelta === 'string'
+              ? ((part as Record<string, unknown>).textDelta as string)
+              : '';
         if (chunk) {
           reasoningText += chunk;
-          updateJobFromEvent(job, { type: 'step:reasoning', step: 'fixing', chunk });
-          broadcast(jobId, 'step:reasoning', { type: 'step:reasoning', step: 'fixing', chunk });
+          queue.emitProgress(jobId, { type: 'step:reasoning', step: 'fixing', chunk });
         }
-      } else if (part.type === 'tool-call') {
-        const tcId = String(part.toolCallId || `fix-${Date.now()}`);
-        const tcName = String(part.toolName || 'unknown_tool');
-        const startTime = Date.now();
-        toolStartTimes.set(tcId, startTime);
-        updateJobFromEvent(job, {
-          type: 'step:tool-call',
-          step: 'fixing',
-          toolCallId: tcId,
-          toolName: tcName,
-          input: part.input,
-          startTime,
-        });
-        broadcast(jobId, 'step:tool-call', {
-          type: 'step:tool-call',
-          step: 'fixing',
-          toolCallId: tcId,
-          toolName: tcName,
-          input: part.input,
-          startTime,
-        });
-      } else if (part.type === 'tool-result') {
-        const tcId = String(part.toolCallId || `fix-${Date.now()}`);
-        const tcName = String(part.toolName || 'unknown_tool');
-        const startedAt = toolStartTimes.get(tcId) || Date.now();
-        const output = part.output;
-        const resultObj =
-          output && typeof output === 'object' && !Array.isArray(output)
-            ? (output as Record<string, unknown>)
-            : {};
-        const tcError =
-          typeof resultObj.errorMessage === 'string' ? resultObj.errorMessage : undefined;
-        const tcWarning =
-          resultObj.success === false
-            ? typeof resultObj.errorMessage === 'string'
-              ? resultObj.errorMessage
-              : 'Tool returned no usable result.'
-            : typeof resultObj.warning === 'string'
-              ? resultObj.warning
-              : undefined;
-        updateJobFromEvent(job, {
-          type: 'step:tool-result',
-          step: 'fixing',
-          toolCallId: tcId,
-          toolName: tcName,
-          output,
-          error: tcError,
-          warning: tcWarning,
-          duration: Date.now() - startedAt,
-        });
-        broadcast(jobId, 'step:tool-result', {
-          type: 'step:tool-result',
-          step: 'fixing',
-          toolCallId: tcId,
-          toolName: tcName,
-          output,
-          error: tcError,
-          warning: tcWarning,
-          duration: Date.now() - startedAt,
-        });
       }
     }
 
     const fixedYaml = stripMarkdownFences(fullText);
     if (!fixedYaml) {
-      const message = 'Fix produced empty output';
-      updateJobFromEvent(job, {
+      const errMsg = 'Fix produced empty output';
+      queue.emitProgress(jobId, {
         type: 'step:error',
         step: 'fixing',
-        error: message,
+        error: errMsg,
         willRetry: false,
       });
-      broadcast(jobId, 'step:error', {
-        type: 'step:error',
-        step: 'fixing',
-        error: message,
-        willRetry: false,
-      });
-      runLogger.error({ error: message, rawText: fullText }, 'AI fix produced empty output');
-      res.status(500).json({ code: 500, message });
+      runLogger.error({ error: errMsg, rawText: fullText }, 'AI fix produced empty output');
+      res.status(500).json({ code: 500, message: errMsg });
       return;
     }
 
-    job.result = { yaml: fixedYaml, scores: scores || {} };
-
     const duration = Date.now() - fixStepStart;
-    updateJobFromEvent(job, {
-      type: 'step:complete',
-      step: 'fixing',
-      duration,
-      summary: 'Revision notes applied',
-      result: { yaml: fixedYaml },
-      rawText: fullText,
-      reasoningText: reasoningText || undefined,
-    });
-    broadcast(jobId, 'step:complete', {
+    queue.emitProgress(jobId, {
       type: 'step:complete',
       step: 'fixing',
       duration,
@@ -766,23 +398,16 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
     });
 
     runLogger.info({ event: 'fix:complete', durationMs: duration }, 'AI fix complete');
-    res.json({ yaml: fixedYaml });
+    res.json({ yaml: fixedYaml, scores });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const userCancelled = fixController.signal.aborted;
-    updateJobFromEvent(job, {
+    queue.emitProgress(jobId, {
       type: 'step:error',
       step: 'fixing',
-      error: userCancelled ? 'User cancelled' : message,
+      error: fixController.signal.aborted ? 'User cancelled' : message,
       willRetry: false,
     });
-    broadcast(jobId, 'step:error', {
-      type: 'step:error',
-      step: 'fixing',
-      error: userCancelled ? 'User cancelled' : message,
-      willRetry: false,
-    });
-    runLogger.error({ error: message, userCancelled }, 'AI fix failed');
+    runLogger.error({ error: message }, 'AI fix failed');
     res.status(500).json({ code: 500, message });
   } finally {
     clearTimeout(fixTimeoutId);
@@ -795,5 +420,4 @@ module.exports = {
   handleCancelJob,
   handleResumeJob,
   handleFixJob,
-  _internal: { selectPipeline, buildResumeState, updateJobFromEvent },
 };

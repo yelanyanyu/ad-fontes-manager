@@ -4,6 +4,10 @@ import autoprefixer from 'autoprefixer';
 import tailwindcss from 'tailwindcss';
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 
+// Desktop server port — shared with src/main/index.ts via env var.
+// Keep in sync: both default to 19876.
+const DESKTOP_SERVER_PORT = Number(process.env.DESKTOP_SERVER_PORT || 19876);
+
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
@@ -33,7 +37,7 @@ export default defineConfig({
     server: {
       proxy: {
         '/api': {
-          target: 'http://localhost:17387',
+          target: `http://localhost:${DESKTOP_SERVER_PORT}`,
           changeOrigin: true,
         },
       },

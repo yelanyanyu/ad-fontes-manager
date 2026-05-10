@@ -43,6 +43,8 @@ interface JobState {
   status: string;
   word: string;
   language: string;
+  context?: string;
+  notes?: string;
   error?: string;
   result?: { yaml: string; scores: Record<string, unknown> };
 }
@@ -68,8 +70,13 @@ export class JobQueue {
   private abortControllers = new Map<string, AbortController>();
   private emitters = new Map<string, EventEmitter>();
   private completedSteps = new Map<string, PipelineProgressEvent[]>();
+  private subscribers = new Map<
+    string,
+    Array<{ res: unknown; listener: (event: PipelineProgressEvent) => void }>
+  >();
   private brokenProviders = new Set<string>();
   private providerFailures = new Map<string, number>();
+  private pauseFlags = new Set<string>();
   private resumeState = new Map<
     string,
     {
@@ -92,9 +99,16 @@ export class JobQueue {
     this.maxConcurrency = config.maxConcurrency;
     this.runner = config.runner;
 
-    // Restart recovery: reset running Jobs to queued.
+    // Clean up stale state from previous sessions.
+    // 1. Cancel queued Jobs — they have no in-memory state and would inflate
+    //    queue-position counts.
+    // 2. Reset running Jobs to queued so they can be retried.
     // Paused Jobs stay paused (user intent preserved).
     const db = this.getDb();
+    db.run(
+      `UPDATE job_queue SET status = 'cancelled', completed_at = datetime('now')
+       WHERE status = 'queued'`
+    );
     db.run(
       `UPDATE job_queue SET status = 'queued', started_at = NULL
        WHERE status = 'running'`
@@ -134,6 +148,16 @@ export class JobQueue {
 
     this.tryDequeue();
 
+    // If job was not immediately dequeued, create an emitter so SSE subscribers
+    // can attach and receive job:queued. startJob will reuse it when the job starts.
+    const row = db.get('SELECT status FROM job_queue WHERE id = ?', jobId);
+    if (row && row.status === 'queued') {
+      if (!this.emitters.has(jobId)) {
+        this.emitters.set(jobId, new EventEmitter());
+        this.completedSteps.set(jobId, []);
+      }
+    }
+
     return jobId;
   }
 
@@ -149,7 +173,19 @@ export class JobQueue {
         jobId,
         row.status
       );
-      return result.changes > 0;
+      if (result.changes > 0) {
+        // Clean up emitter so SSE subscribers don't hang.
+        const emitter = this.emitters.get(jobId);
+        if (emitter) {
+          emitter.emit('done');
+          this.emitters.delete(jobId);
+        }
+        this.completedSteps.delete(jobId);
+        this.abortControllers.delete(jobId);
+        this.resumeState.delete(jobId);
+        return true;
+      }
+      return false;
     }
 
     if (row.status === 'running') {
@@ -158,12 +194,38 @@ export class JobQueue {
         controller.abort();
         return true;
       }
+      // Race: tryDequeue set status='running' but startJob hasn't set the controller.
+      if (!controller) {
+        const result = db.run(
+          `UPDATE job_queue SET status = 'cancelled', completed_at = datetime('now')
+           WHERE id = ? AND status = 'running'`,
+          jobId
+        );
+        if (result.changes > 0) {
+          const emitter = this.emitters.get(jobId);
+          if (emitter) {
+            emitter.emit('done');
+            this.emitters.delete(jobId);
+          }
+          this.completedSteps.delete(jobId);
+          this.resumeState.delete(jobId);
+          return true;
+        }
+      }
     }
 
     return false;
   }
 
   subscribe(jobId: string, res: { write: (chunk: string) => void }): void {
+    // Emit initial lifecycle event based on DB status.
+    const db = this.getDb();
+    const statusRow = db.get('SELECT status FROM job_queue WHERE id = ?', jobId);
+    if (statusRow && statusRow.status === 'queued') {
+      const position = this.computeQueuePosition(db, jobId);
+      res.write(`event: job:queued\ndata: ${JSON.stringify({ type: 'job:queued', position })}\n\n`);
+    }
+
     // Replay already-completed steps from memory.
     const steps = this.completedSteps.get(jobId) || [];
     for (const event of steps) {
@@ -171,17 +233,27 @@ export class JobQueue {
     }
 
     // Attach to live emitter for future events.
-    const emitter = this.emitters.get(jobId);
-    if (!emitter) return;
+    // Create on demand if this is a completed job being re-subscribed
+    // (e.g. after an app restart, or reconnecting for fix progress).
+    let emitter = this.emitters.get(jobId);
+    if (!emitter) {
+      emitter = new EventEmitter();
+      this.emitters.set(jobId, emitter);
+      if (!this.completedSteps.has(jobId)) {
+        this.completedSteps.set(jobId, []);
+      }
+    }
 
     const onProgress = (event: PipelineProgressEvent): void => {
       res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     };
     emitter.on('progress', onProgress);
+    this.trackSubscriber(jobId, res, onProgress);
 
-    emitter.once('done', () => {
-      emitter.off('progress', onProgress);
-    });
+    // Don't detach on 'done' — the emitter stays alive for 30 min
+    // so that fix progress events can reach the same SSE connection.
+    // Cleanup happens when the client disconnects (unsubscribe) or the
+    // emitter is deleted by the 30-min timer.
   }
 
   resetCircuitBreaker(providerId: string): void {
@@ -219,10 +291,25 @@ export class JobQueue {
 
   pauseBatch(batchId: string): void {
     const db = this.getDb();
+    // Collect jobIds before updating so we can clean up emitters.
+    const rows = db.all(
+      `SELECT id FROM job_queue WHERE batch_id = ? AND status = 'queued'`,
+      batchId
+    );
     db.run(
       `UPDATE job_queue SET status = 'paused' WHERE batch_id = ? AND status = 'queued'`,
       batchId
     );
+    // Notify SSE subscribers that these jobs are now paused.
+    for (const row of rows) {
+      const jobId = row.id as string;
+      const emitter = this.emitters.get(jobId);
+      if (emitter) {
+        emitter.emit('done');
+        this.emitters.delete(jobId);
+      }
+      this.completedSteps.delete(jobId);
+    }
   }
 
   resumeBatch(batchId: string): void {
@@ -237,11 +324,26 @@ export class JobQueue {
 
   cancelBatch(batchId: string): void {
     const db = this.getDb();
+    // Collect jobIds before updating so we can clean up emitters.
+    const rows = db.all(
+      `SELECT id FROM job_queue WHERE batch_id = ? AND status IN ('queued', 'paused')`,
+      batchId
+    );
     db.run(
       `UPDATE job_queue SET status = 'cancelled', completed_at = datetime('now')
        WHERE batch_id = ? AND status IN ('queued', 'paused')`,
       batchId
     );
+    for (const row of rows) {
+      const jobId = row.id as string;
+      const emitter = this.emitters.get(jobId);
+      if (emitter) {
+        emitter.emit('done');
+        this.emitters.delete(jobId);
+      }
+      this.completedSteps.delete(jobId);
+      this.abortControllers.delete(jobId);
+    }
   }
 
   retryBatch(batchId: string): void {
@@ -253,8 +355,43 @@ export class JobQueue {
     this.tryDequeue();
   }
 
-  unsubscribe(_jobId: string, _res: unknown): void {
-    // Cleanup happens when emitter fires 'done' and listeners are removed.
+  unsubscribe(jobId: string, res: unknown): void {
+    const emitter = this.emitters.get(jobId);
+    if (!emitter) return;
+    // Find and remove the specific listener for this response object.
+    const listeners = this.subscribers.get(jobId);
+    if (!listeners) return;
+    const idx = listeners.findIndex(l => l.res === res);
+    if (idx >= 0) {
+      emitter.off('progress', listeners[idx].listener);
+      listeners.splice(idx, 1);
+    }
+    if (listeners.length === 0) {
+      this.subscribers.delete(jobId);
+    }
+  }
+
+  private trackSubscriber(
+    jobId: string,
+    res: unknown,
+    listener: (event: PipelineProgressEvent) => void
+  ): void {
+    if (!this.subscribers.has(jobId)) {
+      this.subscribers.set(jobId, []);
+    }
+    this.subscribers.get(jobId)!.push({ res, listener });
+  }
+
+  private untrackSubscriber(jobId: string, res: unknown): void {
+    const listeners = this.subscribers.get(jobId);
+    if (!listeners) return;
+    const idx = listeners.findIndex(l => l.res === res);
+    if (idx >= 0) {
+      listeners.splice(idx, 1);
+    }
+    if (listeners.length === 0) {
+      this.subscribers.delete(jobId);
+    }
   }
 
   getJob(jobId: string): JobState | undefined {
@@ -267,11 +404,59 @@ export class JobQueue {
       status: row.status as string,
       word: row.word as string,
       language: row.language as string,
+      context: row.context as string | undefined,
+      notes: row.notes as string | undefined,
       error: row.error as string | undefined,
       result: row.result_yaml
-        ? { yaml: row.result_yaml as string, scores: JSON.parse(row.result_scores as string) }
+        ? {
+            yaml: row.result_yaml as string,
+            scores: (() => {
+              try {
+                return JSON.parse(row.result_scores as string);
+              } catch {
+                return {};
+              }
+            })(),
+          }
         : undefined,
     };
+  }
+
+  getCompletedSteps(jobId: string): PipelineProgressEvent[] {
+    return this.completedSteps.get(jobId) || [];
+  }
+
+  getQueuePosition(jobId: string): number {
+    const db = this.getDb();
+    return this.computeQueuePosition(db, jobId);
+  }
+
+  /** Emit a progress event to all SSE subscribers of this job. */
+  emitProgress(jobId: string, event: PipelineProgressEvent): void {
+    // Create emitter + steps on demand if they don't exist yet
+    // (e.g. after an app restart for a previously-completed job).
+    let emitter = this.emitters.get(jobId);
+    if (!emitter) {
+      emitter = new EventEmitter();
+      this.emitters.set(jobId, emitter);
+      this.completedSteps.set(jobId, []);
+    }
+    emitter.emit('progress', event);
+    if (event.type !== 'step:tokens' && event.type !== 'step:reasoning') {
+      const steps = this.completedSteps.get(jobId);
+      if (steps) {
+        steps.push(event);
+      }
+    }
+  }
+
+  private computeQueuePosition(db: SqliteLike, jobId: string): number {
+    const posRow = db.get(
+      `SELECT COUNT(*) as cnt FROM job_queue
+       WHERE status = 'queued' AND created_at <= (SELECT created_at FROM job_queue WHERE id = ?)`,
+      jobId
+    );
+    return (posRow?.cnt as number) || 1;
   }
 
   private tryDequeue(): void {
@@ -319,13 +504,33 @@ export class JobQueue {
     const row = db.get('SELECT * FROM job_queue WHERE id = ?', jobId);
     if (!row) return false;
 
+    // Guard against cancel() racing between tryDequeue's status='running' update
+    // and the abortController being set. If cancel already updated the DB, abort.
+    if (row.status !== 'running') {
+      const emitter = this.emitters.get(jobId);
+      if (emitter) {
+        emitter.emit('done');
+        this.emitters.delete(jobId);
+      }
+      this.completedSteps.delete(jobId);
+      return false;
+    }
+
     const abortController = new globalThis.AbortController();
     this.abortControllers.set(jobId, abortController);
 
-    const emitter = new EventEmitter();
+    // Reuse emitter if already created in enqueue() for a queued Job.
+    // Always start with a fresh steps array — previous run's events must not leak
+    // into a retry (retryBatch reuses the same jobId).
+    const emitter = this.emitters.get(jobId) || new EventEmitter();
     this.emitters.set(jobId, emitter);
     const steps: PipelineProgressEvent[] = [];
     this.completedSteps.set(jobId, steps);
+
+    // Emit job:started for both live and late SSE subscribers.
+    const jobStartedEvent: PipelineProgressEvent = { type: 'job:started' };
+    emitter.emit('progress', jobStartedEvent);
+    steps.push(jobStartedEvent);
 
     const resume = this.resumeState.get(jobId);
     this.resumeState.delete(jobId);
@@ -412,8 +617,7 @@ export class JobQueue {
         const message = err instanceof Error ? err.message : String(err);
         const wasCancelled = abortController.signal.aborted;
         db.run(
-          `UPDATE job_queue SET status = ?, error = ?, completed_at = datetime('now') WHERE id = ?`,
-          wasCancelled ? 'error' : 'error',
+          `UPDATE job_queue SET status = 'error', error = ?, completed_at = datetime('now') WHERE id = ?`,
           wasCancelled ? 'User cancelled' : message,
           jobId
         );
@@ -430,15 +634,15 @@ export class JobQueue {
       })
       .finally(() => {
         emitter.emit('done');
-        this.emitters.delete(jobId);
         this.abortControllers.delete(jobId);
         this.activeCount--;
         this.tryDequeue();
 
-        // Keep completedSteps for late subscribers; schedule cleanup after 30 min.
-        // unref() prevents this timer from blocking test runner / process exit.
+        // Keep emitter + completedSteps alive for 30 min so fix progress can be
+        // broadcast to still-connected SSE subscribers.
         setTimeout(
           () => {
+            this.emitters.delete(jobId);
             this.completedSteps.delete(jobId);
           },
           30 * 60 * 1000

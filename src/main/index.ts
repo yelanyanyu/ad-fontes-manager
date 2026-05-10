@@ -17,7 +17,9 @@ const { createApp } = require('../server/app') as {
 let mainWindow: BrowserWindow | null = null;
 let serverInstance: http.Server | null = null;
 
-const DESKTOP_SERVER_PORT = 17387;
+// Desktop server port — shared with electron.vite.config.mts via env var.
+// Keep in sync with the proxy target in electron.vite.config.mts.
+const DESKTOP_SERVER_PORT = Number(process.env.DESKTOP_SERVER_PORT || 19876);
 const CONFIG_FILE = path.join(electronApp.getPath('userData'), 'config.json');
 const DIAGNOSTIC_LOG_FILE = path.join(electronApp.getPath('userData'), 'desktop-runtime.log');
 

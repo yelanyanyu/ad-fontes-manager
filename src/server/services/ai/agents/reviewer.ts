@@ -7,8 +7,14 @@ function parseReviewOutput(text: string): Partial<PipelineContext> {
     .replace(/^```\s*/i, '')
     .replace(/```$/i, '')
     .trim();
-  const parsed = JSON.parse(cleaned) as Record<string, unknown>;
-  return { scores: parsed };
+  try {
+    const parsed = JSON.parse(cleaned) as Record<string, unknown>;
+    return { scores: parsed };
+  } catch {
+    // LLM returned truncated / malformed JSON — pass raw text so
+    // the audit-fix pipeline can still work with partial output.
+    return { scores: { _raw: cleaned, _parse_error: true } };
+  }
 }
 
 module.exports = { parseReviewOutput };

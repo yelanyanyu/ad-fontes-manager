@@ -28,6 +28,10 @@ export interface CreateAppOptions {
 export function createApp(options: CreateAppOptions): Express {
   process.env.DATABASE_URL = options.dbPath;
 
+  // Initialize the AI Job Queue singleton with the live DB connection.
+  const { initQueue } = require('./services/ai/queue');
+  initQueue();
+
   const app = express();
   const corsOrigins = config.get<string[] | string>('server.cors_origins', ['*']);
   const normalizedCorsOrigins = (Array.isArray(corsOrigins) ? corsOrigins : [corsOrigins]).map(
