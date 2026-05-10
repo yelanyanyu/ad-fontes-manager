@@ -1,24 +1,40 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref } from 'vue';
-import { AI_STATE_KEY } from '@/composables/useAiGenerate';
+import {
+  AI_STATE_KEY,
+  type QueueHistoryJob,
+  type QueueHistoryStatus,
+} from '@/composables/useAiGenerate';
 
 const emit = defineEmits<{
   'expanded-change': [expanded: boolean];
   'job-selected': [jobId: string];
+  'history-job-selected': [job: QueueHistoryJob];
 }>();
 
 const {
   queueOverview,
+  queueHistory,
+  queueHistoryTotal,
+  queueHistoryPage,
+  queueHistoryPageSize,
+  queueHistoryStatus,
+  queueHistoryQuery,
   fetchQueueOverview,
+  fetchQueueHistory,
   queueCancelAll,
   queuePauseAll,
   queueResumeAll,
   cancelGeneration,
+  deleteHistoryJob,
+  clearQueueHistory,
   selectJob,
   selectedJobId,
 } = inject(AI_STATE_KEY)!;
 
 const expanded = ref(false);
+const mode = ref<'active' | 'history'>('active');
+const historySearch = ref('');
 
 onMounted(() => {
   fetchQueueOverview();
@@ -37,11 +53,27 @@ const counts = computed(() => {
 });
 
 const total = computed(() => queueOverview.value.length);
+const historyPages = computed(() =>
+  Math.max(1, Math.ceil(queueHistoryTotal.value / queueHistoryPageSize.value))
+);
 
 function toggleExpand(): void {
   expanded.value = !expanded.value;
   emit('expanded-change', expanded.value);
-  if (expanded.value) fetchQueueOverview();
+  if (expanded.value) {
+    if (mode.value === 'active') fetchQueueOverview();
+    else fetchQueueHistory();
+  }
+}
+
+async function setMode(nextMode: 'active' | 'history'): Promise<void> {
+  mode.value = nextMode;
+  if (nextMode === 'active') {
+    await fetchQueueOverview();
+  } else {
+    await fetchQueueHistory({ page: 1 });
+    historySearch.value = queueHistoryQuery.value;
+  }
 }
 
 async function handleCancelAll(): Promise<void> {
@@ -61,6 +93,33 @@ function handleSelect(jobId: string): void {
   selectJob(jobId);
   emit('job-selected', jobId);
 }
+
+async function applyHistorySearch(): Promise<void> {
+  await fetchQueueHistory({ page: 1, query: historySearch.value });
+}
+
+async function setHistoryStatus(status: QueueHistoryStatus | null): Promise<void> {
+  await fetchQueueHistory({ page: 1, status });
+}
+
+async function gotoHistoryPage(page: number): Promise<void> {
+  const next = Math.max(1, Math.min(historyPages.value, page));
+  await fetchQueueHistory({ page: next });
+}
+
+function handleHistorySelect(job: QueueHistoryJob): void {
+  emit('history-job-selected', job);
+}
+
+async function handleDeleteHistoryJob(jobId: string): Promise<void> {
+  await deleteHistoryJob(jobId);
+}
+
+async function handleClearHistory(): Promise<void> {
+  const totalLabel = queueHistoryTotal.value || queueHistory.value.length;
+  if (!confirm(`Delete ${totalLabel} history jobs?`)) return;
+  await clearQueueHistory();
+}
 </script>
 
 <template>
@@ -79,12 +138,32 @@ function handleSelect(jobId: string): void {
     </div>
 
     <div v-if="expanded" class="bar-panel">
-      <div class="bar-actions">
+      <div class="mode-row">
+        <div class="mode-control" aria-label="Queue mode">
+          <button
+            type="button"
+            :class="{ active: mode === 'active' }"
+            @click="setMode('active')"
+          >
+            Active
+          </button>
+          <button
+            type="button"
+            :class="{ active: mode === 'history' }"
+            @click="setMode('history')"
+          >
+            History
+          </button>
+        </div>
+      </div>
+
+      <div v-if="mode === 'active'" class="bar-actions">
         <button type="button" class="qbtn" @click="handlePauseAll">Pause</button>
         <button type="button" class="qbtn" @click="handleResumeAll">Resume</button>
         <button type="button" class="qbtn danger" @click="handleCancelAll">Clear</button>
       </div>
-      <div class="bar-list">
+
+      <div v-if="mode === 'active'" class="bar-list">
         <div
           v-for="qj in queueOverview"
           :key="qj.jobId"
@@ -107,6 +186,96 @@ function handleSelect(jobId: string): void {
           </button>
         </div>
         <div v-if="queueOverview.length === 0" class="bar-empty-list">No active jobs</div>
+      </div>
+
+      <div v-else class="history-panel">
+        <div class="history-tools">
+          <form class="history-search" @submit.prevent="applyHistorySearch">
+            <input v-model="historySearch" type="search" placeholder="Search lemma" />
+            <button type="submit" class="qbtn">Search</button>
+          </form>
+          <button type="button" class="qbtn danger" @click="handleClearHistory">
+            Clear History
+          </button>
+        </div>
+
+        <div class="status-tabs">
+          <button
+            type="button"
+            :class="{ active: !queueHistoryStatus }"
+            @click="setHistoryStatus(null)"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            :class="{ active: queueHistoryStatus === 'error' }"
+            @click="setHistoryStatus('error')"
+          >
+            Error
+          </button>
+          <button
+            type="button"
+            :class="{ active: queueHistoryStatus === 'partial' }"
+            @click="setHistoryStatus('partial')"
+          >
+            Partial
+          </button>
+          <button
+            type="button"
+            :class="{ active: queueHistoryStatus === 'complete' }"
+            @click="setHistoryStatus('complete')"
+          >
+            Complete
+          </button>
+        </div>
+
+        <div class="bar-list history-list">
+          <div
+            v-for="job in queueHistory"
+            :key="job.jobId"
+            class="bar-row history-row"
+            :class="`q-${job.status}`"
+            @click="handleHistorySelect(job)"
+          >
+            <span class="q-dot" :class="job.status" />
+            <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
+            <span class="q-word">{{ job.word }}</span>
+            <span class="q-status">{{ job.status }}</span>
+            <button
+              type="button"
+              class="qbtn danger q-close"
+              title="Delete"
+              @click.stop="handleDeleteHistoryJob(job.jobId)"
+            >
+              ×
+            </button>
+          </div>
+          <div v-if="queueHistory.length === 0" class="bar-empty-list">No history jobs</div>
+        </div>
+
+        <div class="history-pager">
+          <span>{{ queueHistoryTotal }} jobs</span>
+          <div>
+            <button
+              type="button"
+              class="qbtn"
+              :disabled="queueHistoryPage <= 1"
+              @click="gotoHistoryPage(queueHistoryPage - 1)"
+            >
+              Prev
+            </button>
+            <span>{{ queueHistoryPage }} / {{ historyPages }}</span>
+            <button
+              type="button"
+              class="qbtn"
+              :disabled="queueHistoryPage >= historyPages"
+              @click="gotoHistoryPage(queueHistoryPage + 1)"
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -187,6 +356,36 @@ function handleSelect(jobId: string): void {
   flex: 0 0 auto;
 }
 
+.mode-row {
+  padding: 8px 14px 0;
+}
+
+.mode-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.mode-control button,
+.status-tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+  height: 26px;
+}
+
+.mode-control button.active,
+.status-tabs button.active {
+  background: var(--green-soft, #e8f5e9);
+  color: var(--green);
+}
+
 .qbtn {
   padding: 2px 10px;
   border: 1px solid var(--line);
@@ -195,6 +394,11 @@ function handleSelect(jobId: string): void {
   cursor: pointer;
   font-size: 11px;
   color: var(--text);
+}
+
+.qbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .qbtn.danger {
@@ -259,6 +463,8 @@ function handleSelect(jobId: string): void {
 
 .q-running .q-status { color: var(--blue, #1976d2); }
 .q-error .q-status { color: var(--red); }
+.q-partial .q-status { color: var(--amber); }
+.q-complete .q-status { color: var(--green); }
 
 .q-close {
   visibility: hidden;
@@ -274,5 +480,80 @@ function handleSelect(jobId: string): void {
   color: var(--muted);
   font-size: 12px;
   padding: 16px;
+}
+
+.history-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.history-tools {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  padding: 6px 14px;
+}
+
+.history-search {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.history-search input {
+  min-width: 0;
+  flex: 1;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 8px;
+  font-size: 11px;
+  outline: 0;
+}
+
+.history-search input:focus {
+  border-color: var(--green-border);
+  box-shadow: 0 0 0 2px var(--green-soft);
+}
+
+.status-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  padding: 0 14px 6px;
+}
+
+.status-tabs button {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+
+.history-list {
+  padding-bottom: 4px;
+}
+
+.history-row {
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+}
+
+.history-pager {
+  border-top: 1px solid var(--line);
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.history-pager div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

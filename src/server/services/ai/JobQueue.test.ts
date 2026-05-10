@@ -1248,4 +1248,90 @@ void describe('JobQueue queue-wide operations', () => {
       'late completion events should not make a paused job look finished'
     );
   });
+
+  void it('paginates history by error, partial, then complete without cancelled jobs', () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+    const db = getDb();
+
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language, completed_at)
+       VALUES
+       ('hist-complete', 'generate', 'normal', 'complete', 'alpha', 'en', '2026-05-01 10:00:00'),
+       ('hist-error', 'generate', 'normal', 'error', 'beta', 'en', '2026-05-01 09:00:00'),
+       ('hist-partial', 'generate', 'normal', 'partial', 'gamma', 'en', '2026-05-01 11:00:00'),
+       ('hist-cancelled', 'generate', 'normal', 'cancelled', 'delta', 'en', '2026-05-01 12:00:00')`
+    );
+
+    const history = queue.getQueueHistory({ page: 1, pageSize: 20 });
+
+    assert.equal(history.total, 3);
+    assert.deepEqual(
+      history.jobs.map((job: { jobId: string }) => job.jobId),
+      ['hist-error', 'hist-partial', 'hist-complete']
+    );
+  });
+
+  void it('keeps errored jobs in history rather than active overview', () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+    const db = getDb();
+
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language)
+       VALUES ('errored-overview', 'generate', 'normal', 'error', 'bad', 'en')`
+    );
+
+    assert.equal(
+      queue.getQueueOverview().some((job: { jobId: string }) => job.jobId === 'errored-overview'),
+      false
+    );
+    assert.equal(
+      queue
+        .getQueueHistory({ page: 1, pageSize: 20 })
+        .jobs.some((job: { jobId: string }) => job.jobId === 'errored-overview'),
+      true
+    );
+  });
+
+  void it('hard-deletes history jobs but refuses active jobs', () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+    const db = getDb();
+
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language)
+       VALUES
+       ('done-delete', 'generate', 'normal', 'complete', 'done', 'en'),
+       ('active-delete', 'generate', 'normal', 'paused', 'active', 'en')`
+    );
+
+    assert.equal(queue.deleteHistoryJob('active-delete'), 'active');
+    assert.equal(queue.getJob('active-delete').status, 'paused');
+    assert.equal(queue.deleteHistoryJob('done-delete'), 'deleted');
+    assert.equal(queue.getJob('done-delete'), undefined);
+  });
+
+  void it('clears the current filtered history set only', () => {
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+    const db = getDb();
+
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language)
+       VALUES
+       ('error-a', 'generate', 'normal', 'error', 'alpha', 'en'),
+       ('error-b', 'generate', 'normal', 'error', 'beta', 'en'),
+       ('partial-a', 'generate', 'normal', 'partial', 'alpha', 'en'),
+       ('complete-a', 'generate', 'normal', 'complete', 'alpha', 'en')`
+    );
+
+    const deleted = queue.clearHistory({ status: 'error' });
+
+    assert.equal(deleted, 2);
+    assert.equal(queue.getJob('error-a'), undefined);
+    assert.equal(queue.getJob('error-b'), undefined);
+    assert.equal(queue.getJob('partial-a').status, 'partial');
+    assert.equal(queue.getJob('complete-a').status, 'complete');
+  });
 });

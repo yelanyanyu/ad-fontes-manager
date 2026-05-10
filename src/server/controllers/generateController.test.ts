@@ -691,4 +691,96 @@ void describe('generateController with JobQueue', () => {
       await new Promise(r => setTimeout(r, 0));
     });
   });
+
+  // ---- queue history ----
+
+  void describe('queue history', () => {
+    void it('returns paginated persisted history jobs', async () => {
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (id, job_type, priority, status, word, language, completed_at)
+         VALUES
+         ('hist-controller-error', 'generate', 'normal', 'error', 'error-word', 'en', '2026-05-01 09:00:00'),
+         ('hist-controller-complete', 'generate', 'normal', 'complete', 'done-word', 'en', '2026-05-01 10:00:00')`
+      );
+
+      const { handleQueueHistory } = require('./generateController') as {
+        handleQueueHistory: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const res = fakeRes();
+      await handleQueueHistory(fakeReq({ query: { page: '1', pageSize: '20' } }), res);
+
+      assert.equal(res._status, 200);
+      const body = res._body as any;
+      assert.equal(body.total, 2);
+      assert.deepEqual(
+        body.jobs.map((job: Record<string, unknown>) => job.status),
+        ['error', 'complete']
+      );
+    });
+
+    void it('returns a completed history job detail with YAML result', async () => {
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (id, job_type, priority, status, word, language, result_yaml, result_scores)
+         VALUES (?, 'generate', 'normal', 'complete', 'preview-word', 'en', ?, ?)`,
+        'hist-detail',
+        FAKE_YAML,
+        JSON.stringify(FAKE_SCORES)
+      );
+
+      const { handleQueueHistoryJob } = require('./generateController') as {
+        handleQueueHistoryJob: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const res = fakeRes();
+      await handleQueueHistoryJob(fakeReq({ params: { jobId: 'hist-detail' } }), res);
+
+      assert.equal(res._status, 200);
+      assert.equal((res._body as any).job.result.yaml, FAKE_YAML);
+    });
+
+    void it('deletes individual history jobs and refuses active jobs', async () => {
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (id, job_type, priority, status, word, language)
+         VALUES
+         ('hist-delete', 'generate', 'normal', 'complete', 'old', 'en'),
+         ('hist-active', 'generate', 'normal', 'paused', 'active', 'en')`
+      );
+
+      const { handleDeleteHistoryJob } = require('./generateController') as {
+        handleDeleteHistoryJob: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const activeRes = fakeRes();
+      await handleDeleteHistoryJob(fakeReq({ params: { jobId: 'hist-active' } }), activeRes);
+      assert.equal(activeRes._status, 409);
+
+      const deleteRes = fakeRes();
+      await handleDeleteHistoryJob(fakeReq({ params: { jobId: 'hist-delete' } }), deleteRes);
+      assert.equal(deleteRes._status, 200);
+    });
+
+    void it('clears the filtered history set', async () => {
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (id, job_type, priority, status, word, language)
+         VALUES
+         ('hist-clear-error', 'generate', 'normal', 'error', 'bad', 'en'),
+         ('hist-clear-complete', 'generate', 'normal', 'complete', 'good', 'en')`
+      );
+
+      const { handleClearQueueHistory } = require('./generateController') as {
+        handleClearQueueHistory: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const res = fakeRes();
+      await handleClearQueueHistory(fakeReq({ body: { status: 'error' } }), res);
+
+      assert.equal(res._status, 200);
+      assert.equal((res._body as any).deleted, 1);
+    });
+  });
 });

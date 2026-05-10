@@ -27,6 +27,7 @@ const { getQueue } = require('../services/ai/queue') as {
       | {
           jobId: string;
           status: string;
+          jobType?: string;
           word: string;
           language: string;
           context?: string;
@@ -54,6 +55,30 @@ const { getQueue } = require('../services/ai/queue') as {
       createdAt: string;
       error?: string;
     }>;
+    getQueueHistory: (params: {
+      page: number;
+      pageSize: number;
+      status?: 'complete' | 'partial' | 'error';
+      query?: string;
+    }) => {
+      jobs: Array<{
+        jobId: string;
+        jobType: string;
+        status: string;
+        word: string;
+        language: string;
+        priority: string;
+        createdAt: string;
+        completedAt?: string;
+        error?: string;
+        hasResult: boolean;
+      }>;
+      total: number;
+      page: number;
+      pageSize: number;
+    };
+    deleteHistoryJob: (jobId: string) => 'deleted' | 'not-found' | 'active';
+    clearHistory: (params: { status?: 'complete' | 'partial' | 'error'; query?: string }) => number;
     cancelAll: () => void;
     pauseAll: () => void;
     resumeAll: () => void;
@@ -99,6 +124,12 @@ const ResumeRequestSchema = z.object({
   fromStage: z.enum(['searching', 'pondering', 'auditing']).optional(),
   notes: z.string().optional(),
   userScore: z.number().min(0).max(10).optional(),
+});
+const HistoryQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  status: z.enum(['complete', 'partial', 'error']).optional(),
+  query: z.string().trim().optional(),
 });
 
 // ---- Helpers ----
@@ -335,6 +366,63 @@ async function handleQueueOverview(_req: Request, res: Response): Promise<void> 
   res.json({ jobs: queue.getQueueOverview() });
 }
 
+async function handleQueueHistory(req: Request, res: Response): Promise<void> {
+  const parsed = HistoryQuerySchema.safeParse(req.query || {});
+  if (!parsed.success) {
+    res.status(400).json({ code: 400, message: 'Invalid request', errors: parsed.error.issues });
+    return;
+  }
+
+  const queue = getQueue();
+  res.json(queue.getQueueHistory(parsed.data));
+}
+
+async function handleQueueHistoryJob(req: Request, res: Response): Promise<void> {
+  const jobId = firstParam(req.params.jobId);
+  const queue = getQueue();
+  const job = queue.getJob(jobId);
+
+  if (!job) {
+    res.status(404).json({ code: 404, message: 'Job not found' });
+    return;
+  }
+  if (job.status === 'queued' || job.status === 'running' || job.status === 'paused') {
+    res.status(409).json({ code: 409, message: 'Job is still active' });
+    return;
+  }
+
+  res.json({ job });
+}
+
+async function handleDeleteHistoryJob(req: Request, res: Response): Promise<void> {
+  const jobId = firstParam(req.params.jobId);
+  const queue = getQueue();
+  const result = queue.deleteHistoryJob(jobId);
+
+  if (result === 'not-found') {
+    res.status(404).json({ code: 404, message: 'Job not found' });
+    return;
+  }
+  if (result === 'active') {
+    res.status(409).json({ code: 409, message: 'Cannot delete an active job' });
+    return;
+  }
+
+  res.json({ ok: true, jobId });
+}
+
+async function handleClearQueueHistory(req: Request, res: Response): Promise<void> {
+  const parsed = HistoryQuerySchema.pick({ status: true, query: true }).safeParse(req.body || {});
+  if (!parsed.success) {
+    res.status(400).json({ code: 400, message: 'Invalid request', errors: parsed.error.issues });
+    return;
+  }
+
+  const queue = getQueue();
+  const deleted = queue.clearHistory(parsed.data);
+  res.json({ ok: true, deleted });
+}
+
 async function handleQueueCancelAll(_req: Request, res: Response): Promise<void> {
   const queue = getQueue();
   queue.cancelAll();
@@ -360,6 +448,10 @@ module.exports = {
   handleResumeJob,
   handleFixJob,
   handleQueueOverview,
+  handleQueueHistory,
+  handleQueueHistoryJob,
+  handleDeleteHistoryJob,
+  handleClearQueueHistory,
   handleQueueCancelAll,
   handleQueuePauseAll,
   handleQueueResumeAll,

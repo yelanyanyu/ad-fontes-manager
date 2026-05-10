@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const requestGetMock = vi.hoisted(() => vi.fn());
 const requestPostMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/utils/request', () => ({
   default: {
+    get: requestGetMock,
     post: requestPostMock,
   },
 }));
@@ -35,6 +37,7 @@ describe('useAiGenerate', () => {
 
   beforeEach(async () => {
     vi.resetModules();
+    requestGetMock.mockReset();
     requestPostMock.mockReset();
     MockEventSource.instances = [];
     vi.stubGlobal('EventSource', MockEventSource);
@@ -93,5 +96,18 @@ describe('useAiGenerate', () => {
     expect(requestPostMock).toHaveBeenLastCalledWith('/v2/generate/job-1/resume', {
       fromStage: 'pondering',
     });
+  });
+
+  it('can clear the queue history status filter back to all', async () => {
+    requestGetMock.mockResolvedValue({ jobs: [], total: 0, page: 1, pageSize: 20 });
+    const ai = useAiGenerate();
+
+    await ai.fetchQueueHistory({ status: 'error' });
+    await ai.fetchQueueHistory({ status: null });
+
+    expect(ai.queueHistoryStatus.value).toBeUndefined();
+    expect(requestGetMock).toHaveBeenLastCalledWith(
+      '/v2/generate/queue/history?page=1&pageSize=20'
+    );
   });
 });

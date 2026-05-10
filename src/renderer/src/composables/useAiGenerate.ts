@@ -68,6 +68,20 @@ export interface QueueJobOverview {
   error?: string;
 }
 
+export type QueueHistoryStatus = 'complete' | 'partial' | 'error';
+
+export interface QueueHistoryJob extends QueueJobOverview {
+  completedAt?: string;
+  hasResult: boolean;
+}
+
+interface QueueHistoryResponse {
+  jobs: QueueHistoryJob[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export type AiGenerateState = ReturnType<typeof useAiGenerate>;
 
 export const AI_STATE_KEY: InjectionKey<AiGenerateState> = Symbol('ai-state');
@@ -77,6 +91,12 @@ export function useAiGenerate() {
   const selectedJobId = ref<string | null>(null);
   const eventSources = new Map<string, EventSource>();
   const queueOverview = ref<QueueJobOverview[]>([]);
+  const queueHistory = ref<QueueHistoryJob[]>([]);
+  const queueHistoryTotal = ref(0);
+  const queueHistoryPage = ref(1);
+  const queueHistoryPageSize = ref(20);
+  const queueHistoryStatus = ref<QueueHistoryStatus | undefined>();
+  const queueHistoryQuery = ref('');
 
   const currentJob = computed(() => {
     if (!selectedJobId.value) return null;
@@ -139,6 +159,33 @@ export function useAiGenerate() {
     jobs.value.set(item.jobId, job);
     touchJobs();
     return job;
+  }
+
+  function upsertJobFromServer(
+    job: JobState & {
+      jobType?: string;
+      result?: { yaml: string; scores: Record<string, unknown> };
+    }
+  ): JobState {
+    const language = job.language === 'de' ? 'de' : 'en';
+    const existing = jobs.value.get(job.jobId);
+    const next: JobState = {
+      ...(existing || {
+        steps: job.jobType === 'fix' ? [{ step: 'fixing', status: 'pending' as const }] : [],
+      }),
+      jobId: job.jobId,
+      word: job.word,
+      language,
+      context: job.context,
+      notes: job.notes,
+      status: job.status,
+      error: job.error,
+      yaml: job.yaml || job.result?.yaml,
+      scores: job.scores || job.result?.scores,
+    };
+    jobs.value.set(job.jobId, next);
+    touchJobs();
+    return next;
   }
 
   function subscribeToJob(jobId: string): void {
@@ -474,6 +521,75 @@ export function useAiGenerate() {
     }
   }
 
+  async function fetchQueueHistory(
+    options: {
+      page?: number;
+      pageSize?: number;
+      status?: QueueHistoryStatus | null;
+      query?: string;
+    } = {}
+  ): Promise<void> {
+    const page = options.page ?? queueHistoryPage.value;
+    const pageSize = options.pageSize ?? queueHistoryPageSize.value;
+    const status =
+      'status' in options
+        ? options.status === null
+          ? undefined
+          : options.status
+        : queueHistoryStatus.value;
+    const query = options.query !== undefined ? options.query : queueHistoryQuery.value;
+    const params = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (status) params.set('status', status);
+    if (query.trim()) params.set('query', query.trim());
+
+    const res = await request.get<QueueHistoryResponse>(
+      `/v2/generate/queue/history?${params.toString()}`
+    );
+    queueHistory.value = res.jobs;
+    queueHistoryTotal.value = res.total;
+    queueHistoryPage.value = res.page;
+    queueHistoryPageSize.value = res.pageSize;
+    queueHistoryStatus.value = status;
+    queueHistoryQuery.value = query;
+  }
+
+  async function loadHistoryJob(jobId: string): Promise<JobState | null> {
+    const res = await request.get<{
+      job: JobState & {
+        jobType?: string;
+        result?: { yaml: string; scores: Record<string, unknown> };
+      };
+    }>(`/v2/generate/queue/history/${jobId}`);
+    return upsertJobFromServer(res.job);
+  }
+
+  async function deleteHistoryJob(jobId: string): Promise<void> {
+    await request.delete(`/v2/generate/queue/history/${jobId}`);
+    jobs.value.delete(jobId);
+    if (selectedJobId.value === jobId) selectedJobId.value = null;
+    touchJobs();
+    await fetchQueueHistory();
+  }
+
+  async function clearQueueHistory(): Promise<number> {
+    const res = await request.post<{ deleted: number }>('/v2/generate/queue/history/clear', {
+      status: queueHistoryStatus.value,
+      query: queueHistoryQuery.value.trim() || undefined,
+    });
+    for (const job of queueHistory.value) {
+      jobs.value.delete(job.jobId);
+    }
+    if (selectedJobId.value && !jobs.value.has(selectedJobId.value)) {
+      selectedJobId.value = null;
+    }
+    touchJobs();
+    await fetchQueueHistory({ page: 1 });
+    return res.deleted;
+  }
+
   async function queueCancelAll(): Promise<void> {
     await request.post('/v2/generate/queue/cancel-all');
     await fetchQueueOverview();
@@ -535,6 +651,16 @@ export function useAiGenerate() {
     selectJob,
     queueOverview,
     fetchQueueOverview,
+    queueHistory,
+    queueHistoryTotal,
+    queueHistoryPage,
+    queueHistoryPageSize,
+    queueHistoryStatus,
+    queueHistoryQuery,
+    fetchQueueHistory,
+    loadHistoryJob,
+    deleteHistoryJob,
+    clearQueueHistory,
     queueCancelAll,
     queuePauseAll,
     queueResumeAll,

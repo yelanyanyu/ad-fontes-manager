@@ -105,7 +105,7 @@ A SQLite-backed durable scheduler that gates Job execution across a global Concu
 _Avoid_: Job pool, task queue
 
 **Active Queue** (活动队列):
-The operational Queue view containing Jobs that can still affect execution: `queued`, `running`, `paused`, and `error`. It is used for live control actions such as pause, resume, cancel, and selecting an active Job.
+The operational Queue view containing Jobs that can still affect execution: `queued`, `running`, and `paused`. It is used for live control actions such as pause, resume, cancel, and selecting an active Job.
 _Avoid_: Queue history, completed queue
 
 **Job History** (任务历史):

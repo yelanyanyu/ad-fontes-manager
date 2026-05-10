@@ -41,6 +41,7 @@ interface EnqueueParams {
 interface JobState {
   jobId: string;
   status: string;
+  jobType?: string;
   word: string;
   language: string;
   context?: string;
@@ -382,7 +383,7 @@ export class JobQueue {
     const rows = db.all(
       `SELECT id, job_type, status, word, language, priority, created_at, error
        FROM job_queue
-       WHERE status IN ('queued', 'running', 'paused', 'error')
+       WHERE status IN ('queued', 'running', 'paused')
        ORDER BY CASE priority WHEN 'high' THEN 1 ELSE 0 END DESC, created_at ASC, rowid ASC`
     );
     return rows.map(row => ({
@@ -395,6 +396,128 @@ export class JobQueue {
       createdAt: row.created_at as string,
       error: row.error as string | undefined,
     }));
+  }
+
+  /** Returns a paginated snapshot of persisted finished/failed jobs for review. */
+  getQueueHistory(params: {
+    page: number;
+    pageSize: number;
+    status?: 'complete' | 'partial' | 'error';
+    query?: string;
+  }): {
+    jobs: Array<{
+      jobId: string;
+      jobType: string;
+      status: string;
+      word: string;
+      language: string;
+      priority: string;
+      createdAt: string;
+      completedAt?: string;
+      error?: string;
+      hasResult: boolean;
+    }>;
+    total: number;
+    page: number;
+    pageSize: number;
+  } {
+    const db = this.getDb();
+    const page = Math.max(1, Math.floor(params.page || 1));
+    const pageSize = Math.min(100, Math.max(1, Math.floor(params.pageSize || 20)));
+    const where: string[] = [`status IN ('complete', 'partial', 'error')`];
+    const values: unknown[] = [];
+
+    if (params.status) {
+      where.push('status = ?');
+      values.push(params.status);
+    }
+    if (params.query?.trim()) {
+      where.push('word LIKE ?');
+      values.push(`%${params.query.trim()}%`);
+    }
+
+    const whereSql = where.join(' AND ');
+    const totalRow = db.get(`SELECT COUNT(*) as total FROM job_queue WHERE ${whereSql}`, ...values);
+    const rows = db.all(
+      `SELECT id, job_type, status, word, language, priority, created_at, completed_at, error,
+              CASE WHEN result_yaml IS NULL OR result_yaml = '' THEN 0 ELSE 1 END as has_result
+       FROM job_queue
+       WHERE ${whereSql}
+       ORDER BY CASE status WHEN 'error' THEN 3 WHEN 'partial' THEN 2 ELSE 1 END DESC,
+                COALESCE(completed_at, created_at) DESC,
+                rowid DESC
+       LIMIT ? OFFSET ?`,
+      ...values,
+      pageSize,
+      (page - 1) * pageSize
+    );
+
+    return {
+      jobs: rows.map(row => ({
+        jobId: row.id as string,
+        jobType: row.job_type as string,
+        status: row.status as string,
+        word: row.word as string,
+        language: row.language as string,
+        priority: row.priority as string,
+        createdAt: row.created_at as string,
+        completedAt: row.completed_at as string | undefined,
+        error: row.error as string | undefined,
+        hasResult: Boolean(row.has_result),
+      })),
+      total: (totalRow?.total as number) || 0,
+      page,
+      pageSize,
+    };
+  }
+
+  deleteHistoryJob(jobId: string): 'deleted' | 'not-found' | 'active' {
+    const db = this.getDb();
+    const row = db.get('SELECT status FROM job_queue WHERE id = ?', jobId);
+    if (!row) return 'not-found';
+    if (row.status === 'queued' || row.status === 'running' || row.status === 'paused') {
+      return 'active';
+    }
+
+    const result = db.run(
+      `DELETE FROM job_queue
+       WHERE id = ? AND status NOT IN ('queued', 'running', 'paused')`,
+      jobId
+    );
+    if (result.changes <= 0) return 'not-found';
+    this.emitters.delete(jobId);
+    this.completedSteps.delete(jobId);
+    this.abortControllers.delete(jobId);
+    this.resumeState.delete(jobId);
+    this.subscribers.delete(jobId);
+    return 'deleted';
+  }
+
+  clearHistory(params: { status?: 'complete' | 'partial' | 'error'; query?: string }): number {
+    const db = this.getDb();
+    const where: string[] = [`status IN ('complete', 'partial', 'error')`];
+    const values: unknown[] = [];
+
+    if (params.status) {
+      where.push('status = ?');
+      values.push(params.status);
+    }
+    if (params.query?.trim()) {
+      where.push('word LIKE ?');
+      values.push(`%${params.query.trim()}%`);
+    }
+
+    const rows = db.all(`SELECT id FROM job_queue WHERE ${where.join(' AND ')}`, ...values);
+    const result = db.run(`DELETE FROM job_queue WHERE ${where.join(' AND ')}`, ...values);
+    for (const row of rows) {
+      const jobId = row.id as string;
+      this.emitters.delete(jobId);
+      this.completedSteps.delete(jobId);
+      this.abortControllers.delete(jobId);
+      this.resumeState.delete(jobId);
+      this.subscribers.delete(jobId);
+    }
+    return result.changes;
   }
 
   /** Cancel every queued, paused, and running job.  Requires confirmation from caller. */
@@ -512,6 +635,7 @@ export class JobQueue {
 
     return {
       jobId: row.id as string,
+      jobType: row.job_type as string | undefined,
       status: row.status as string,
       word: row.word as string,
       language: row.language as string,

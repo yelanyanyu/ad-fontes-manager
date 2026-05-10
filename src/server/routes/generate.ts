@@ -15,6 +15,10 @@ const {
   handleResumeJob,
   handleFixJob,
   handleQueueOverview,
+  handleQueueHistory,
+  handleQueueHistoryJob,
+  handleDeleteHistoryJob,
+  handleClearQueueHistory,
   handleQueueCancelAll,
   handleQueuePauseAll,
   handleQueueResumeAll,
@@ -25,6 +29,10 @@ const {
   handleResumeJob: (req: Request, res: Response) => Promise<void>;
   handleFixJob: (req: Request, res: Response) => Promise<void>;
   handleQueueOverview: (req: Request, res: Response) => Promise<void>;
+  handleQueueHistory: (req: Request, res: Response) => Promise<void>;
+  handleQueueHistoryJob: (req: Request, res: Response) => Promise<void>;
+  handleDeleteHistoryJob: (req: Request, res: Response) => Promise<void>;
+  handleClearQueueHistory: (req: Request, res: Response) => Promise<void>;
   handleQueueCancelAll: (req: Request, res: Response) => Promise<void>;
   handleQueuePauseAll: (req: Request, res: Response) => Promise<void>;
   handleQueueResumeAll: (req: Request, res: Response) => Promise<void>;
@@ -38,8 +46,20 @@ router.post('/generate/:jobId/fix', requireWriteAccess, asyncHandler(handleFixJo
 
 // Queue management
 router.get('/generate/queue/overview', asyncHandler(handleQueueOverview));
+router.get('/generate/queue/history', asyncHandler(handleQueueHistory));
+router.post(
+  '/generate/queue/history/clear',
+  requireWriteAccess,
+  asyncHandler(handleClearQueueHistory)
+);
 router.post('/generate/queue/cancel-all', requireWriteAccess, asyncHandler(handleQueueCancelAll));
 router.post('/generate/queue/pause-all', requireWriteAccess, asyncHandler(handleQueuePauseAll));
 router.post('/generate/queue/resume-all', requireWriteAccess, asyncHandler(handleQueueResumeAll));
+router.get('/generate/queue/history/:jobId', asyncHandler(handleQueueHistoryJob));
+router.delete(
+  '/generate/queue/history/:jobId',
+  requireWriteAccess,
+  asyncHandler(handleDeleteHistoryJob)
+);
 
 module.exports = router;

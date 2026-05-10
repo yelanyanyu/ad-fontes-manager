@@ -5,7 +5,13 @@ import WordList from '@/components/WordList/WordList.vue';
 import WordPreview from '@/components/WordPreview/WordPreview.vue';
 import AiGenerateDrawer from '@/components/AiGenerate/AiGenerateDrawer.vue';
 import AiQueueBar from '@/components/AiGenerate/AiQueueBar.vue';
-import { useAiGenerate, AI_STATE_KEY } from '@/composables/useAiGenerate';
+import JobResultPreview from '@/components/AiGenerate/JobResultPreview.vue';
+import {
+  useAiGenerate,
+  AI_STATE_KEY,
+  type JobState,
+  type QueueHistoryJob,
+} from '@/composables/useAiGenerate';
 
 const aiState = useAiGenerate();
 provide(AI_STATE_KEY, aiState);
@@ -19,6 +25,7 @@ const dragHandle = ref<HTMLElement | null>(null);
 const container = ref<HTMLElement | null>(null);
 const wordEditorRef = ref<InstanceType<typeof WordEditor> | null>(null);
 const previewId = ref<string | null>(null);
+const previewJob = ref<JobState | null>(null);
 const aiDrawerOpen = ref(false);
 const queueExpanded = ref(false);
 
@@ -30,12 +37,29 @@ const closePreview = () => {
   previewId.value = null;
 };
 
+const closeJobPreview = () => {
+  previewJob.value = null;
+};
+
 const applyGeneratedYaml = (yamlContent: string) => {
   wordEditorRef.value?.applyGeneratedYaml(yamlContent);
   aiDrawerOpen.value = false;
+  previewJob.value = null;
 };
 
 const openAiJob = () => {
+  aiDrawerOpen.value = true;
+};
+
+const openHistoryJob = async (job: QueueHistoryJob) => {
+  const loaded = await aiState.loadHistoryJob(job.jobId);
+  if (!loaded) return;
+  if (job.status === 'complete' && loaded.yaml) {
+    previewJob.value = loaded;
+    aiDrawerOpen.value = false;
+    return;
+  }
+  aiState.selectJob(job.jobId);
   aiDrawerOpen.value = true;
 };
 
@@ -107,6 +131,7 @@ onUnmounted(() => {
         class="queue-shell"
         @expanded-change="queueExpanded = $event"
         @job-selected="openAiJob"
+        @history-job-selected="openHistoryJob"
       />
     </div>
 
@@ -117,6 +142,12 @@ onUnmounted(() => {
     </div>
 
     <WordPreview v-if="previewId" :word-id="previewId" @close="closePreview" />
+    <JobResultPreview
+      v-if="previewJob"
+      :job="previewJob"
+      @close="closeJobPreview"
+      @yaml-ready="applyGeneratedYaml"
+    />
     <AiGenerateDrawer
       v-show="aiDrawerOpen"
       :open="aiDrawerOpen"
