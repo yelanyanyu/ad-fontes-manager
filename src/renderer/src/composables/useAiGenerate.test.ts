@@ -85,6 +85,48 @@ describe('useAiGenerate', () => {
     });
   });
 
+  it('restores completed replay steps even when no running step exists', async () => {
+    const ai = useAiGenerate();
+
+    ai.queueOverview.value = [
+      {
+        jobId: 'job-paused',
+        jobType: 'generate',
+        status: 'paused',
+        word: 'crate',
+        language: 'en',
+        priority: 'normal',
+        createdAt: '2026-05-11 10:00:00',
+      },
+    ];
+
+    ai.selectJob('job-paused');
+    const source = MockEventSource.instances[0];
+    source.emit('job:paused', { step: 'pondering' });
+    source.emit('step:complete', {
+      step: 'searching',
+      duration: 100,
+      summary: 'Searched',
+      result: { researchYaml: 'yield:\n  lemma: crate\n' },
+      rawText: 'yield:\n  lemma: crate\n',
+      reasoningText: 'search thinking',
+    });
+    source.emit('step:start', { step: 'pondering', message: 'Pondering' });
+    source.emit('job:paused', { step: 'pondering' });
+
+    expect(ai.currentJob.value?.status).toBe('paused');
+    expect(ai.currentJob.value?.steps).toMatchObject([
+      {
+        step: 'searching',
+        status: 'complete',
+        result: { researchYaml: 'yield:\n  lemma: crate\n' },
+        rawText: 'yield:\n  lemma: crate\n',
+        reasoningText: 'search thinking',
+      },
+      { step: 'pondering', status: 'pending' },
+    ]);
+  });
+
   it('posts the requested resume stage', async () => {
     requestPostMock.mockResolvedValueOnce({ jobId: 'job-1', queued: false });
     requestPostMock.mockResolvedValueOnce({ jobId: 'job-1' });
@@ -96,6 +138,44 @@ describe('useAiGenerate', () => {
     expect(requestPostMock).toHaveBeenLastCalledWith('/v2/generate/job-1/resume', {
       fromStage: 'pondering',
     });
+  });
+
+  it('keeps completed target steps visible when starting an auto fix job', async () => {
+    requestPostMock.mockResolvedValue({ jobId: 'fix-job-1', queued: false });
+    const ai = useAiGenerate();
+
+    ai.jobs.value.set('source-job', {
+      jobId: 'source-job',
+      word: 'crate',
+      language: 'en',
+      status: 'complete',
+      steps: [
+        {
+          step: 'searching',
+          status: 'complete',
+          result: { researchYaml: 'yield:\n  lemma: crate\n' },
+          rawText: 'yield:\n  lemma: crate\n',
+          reasoningText: 'search thinking',
+        },
+        {
+          step: 'auditing',
+          status: 'complete',
+          result: { overall_score: 5 },
+          rawText: '{"overall_score":5}',
+          reasoningText: 'audit thinking',
+        },
+      ],
+      yaml: 'yield:\n  lemma: crate\n',
+      scores: { revision_notes: 'Fix the weak fields.' },
+    });
+
+    await ai.fixGeneration('source-job');
+
+    expect(ai.jobs.value.get('fix-job-1')?.steps).toMatchObject([
+      { step: 'searching', status: 'complete', rawText: 'yield:\n  lemma: crate\n' },
+      { step: 'auditing', status: 'complete', reasoningText: 'audit thinking' },
+      { step: 'fixing', status: 'pending' },
+    ]);
   });
 
   it('can clear the queue history status filter back to all', async () => {

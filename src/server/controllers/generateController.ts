@@ -18,6 +18,8 @@ const { getQueue } = require('../services/ai/queue') as {
         summary?: string;
         duration?: number;
         result?: unknown;
+        rawText?: string;
+        reasoningText?: string;
       }>;
     }) => string;
     cancel: (jobId: string) => boolean;
@@ -264,6 +266,8 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
       summary: e.summary as string | undefined,
       duration: e.duration as number | undefined,
       result: e.result,
+      rawText: e.rawText as string | undefined,
+      reasoningText: e.reasoningText as string | undefined,
     }));
 
   // Merge context from completed step results.
@@ -338,6 +342,18 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
     return;
   }
 
+  const completedSteps = queue.getCompletedSteps(jobId);
+  const previousSteps = completedSteps
+    .filter(e => e.type === 'step:complete')
+    .map(e => ({
+      step: e.step as string,
+      summary: e.summary as string | undefined,
+      duration: e.duration as number | undefined,
+      result: e.result,
+      rawText: e.rawText as string | undefined,
+      reasoningText: e.reasoningText as string | undefined,
+    }));
+
   const fixJobId = queue.enqueue({
     type: 'fix',
     priority: 'high',
@@ -346,6 +362,8 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
     context: job.context,
     notes: revisionNotes,
     targetJobId: jobId,
+    resumeFromStage: 'fixing',
+    previousSteps,
   });
 
   const fixJob = queue.getJob(fixJobId);

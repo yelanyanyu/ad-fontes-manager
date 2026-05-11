@@ -28,6 +28,8 @@ const { JobQueue } = require('./JobQueue') as {
         summary?: string;
         duration?: number;
         result?: unknown;
+        rawText?: string;
+        reasoningText?: string;
       }>;
     }) => string;
     cancel: (jobId: string) => boolean;

@@ -20,6 +20,7 @@ export const jobQueue = sqliteTable(
     providerId: text('provider_id'),
     resultYaml: text('result_yaml'),
     resultScores: text('result_scores'),
+    progressEvents: text('progress_events'),
     error: text('error'),
     retryCount: integer('retry_count').default(0),
     maxRetries: integer('max_retries').default(2),

@@ -173,6 +173,9 @@ export function useAiGenerate() {
       ...(existing || {
         steps: job.jobType === 'fix' ? [{ step: 'fixing', status: 'pending' as const }] : [],
       }),
+      steps: job.steps?.length
+        ? job.steps
+        : existing?.steps || (job.jobType === 'fix' ? [{ step: 'fixing', status: 'pending' }] : []),
       jobId: job.jobId,
       word: job.word,
       language,
@@ -285,7 +288,14 @@ export function useAiGenerate() {
       };
       const job = jobs.value.get(jobId);
       if (!job) return;
-      const step = job.steps.find(item => item.step === data.step && item.status === 'running');
+      let step = job.steps.find(item => item.step === data.step && item.status === 'running');
+      if (!step) {
+        step = job.steps.find(item => item.step === data.step);
+      }
+      if (!step) {
+        step = { step: data.step, status: 'pending' };
+        job.steps.push(step);
+      }
       if (step) {
         step.status = 'complete';
         step.duration = data.duration;
@@ -468,6 +478,9 @@ export function useAiGenerate() {
     const job = jobs.value.get(jobId);
     const response = await request.post<GenerateResponse>(`/v2/generate/${jobId}/fix`);
     if (job) {
+      const previousSteps = job.steps
+        .filter(step => step.status === 'complete')
+        .map(step => ({ ...step }));
       registerJob(
         response.jobId,
         {
@@ -478,7 +491,10 @@ export function useAiGenerate() {
         },
         response
       );
-      jobs.value.get(response.jobId)?.steps.push({ step: 'fixing', status: 'pending' });
+      const newJob = jobs.value.get(response.jobId);
+      if (newJob) {
+        newJob.steps = [...previousSteps, { step: 'fixing', status: 'pending' }];
+      }
       touchJobs();
       subscribeToJob(response.jobId);
       await fetchQueueOverview();

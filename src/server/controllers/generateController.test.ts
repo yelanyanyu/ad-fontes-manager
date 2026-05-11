@@ -92,6 +92,7 @@ const JOB_QUEUE_DDL = `
     result_scores TEXT,
     provider_id TEXT,
     error TEXT,
+    progress_events TEXT,
     retry_count INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 2,
     started_at TEXT,
@@ -689,6 +690,69 @@ void describe('generateController with JobQueue', () => {
 
       blockingRunner.releaseAll();
       await new Promise(r => setTimeout(r, 0));
+    });
+
+    void it('carries target job completed stages into the fix job detail', async () => {
+      const calls: Array<Parameters<PipelineRunner['run']>[0]> = [];
+      const captureRunner: PipelineRunner = {
+        async run(params) {
+          calls.push(params);
+          return { yaml: FAKE_YAML, scores: FAKE_SCORES };
+        },
+      };
+      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      _resetQueue();
+      initQueue({ getDb, maxConcurrency: 1, runner: captureRunner });
+      delete require.cache[require.resolve('./generateController')];
+
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (
+          id, job_type, priority, status, word, language, result_yaml, result_scores, progress_events
+        )
+         VALUES (?, 'generate', 'normal', 'complete', 'crate', 'en', ?, ?, ?)`,
+        'job-fix-source',
+        FAKE_YAML,
+        JSON.stringify(FAKE_SCORES),
+        JSON.stringify([
+          {
+            type: 'step:complete',
+            step: 'searching',
+            duration: 10,
+            summary: 'Searched',
+            result: { researchYaml: 'yield:\n  lemma: crate\n' },
+            rawText: 'yield:\n  lemma: crate\n',
+            reasoningText: 'search thinking',
+          },
+          {
+            type: 'step:complete',
+            step: 'auditing',
+            duration: 20,
+            summary: 'Audited',
+            result: { overall_score: 5 },
+            rawText: '{"overall_score":5}',
+            reasoningText: 'audit thinking',
+          },
+        ])
+      );
+
+      const { handleFixJob } = require('./generateController') as {
+        handleFixJob: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const res = fakeRes();
+      await handleFixJob(fakeReq({ params: { jobId: 'job-fix-source' } }), res);
+      await new Promise(r => setTimeout(r, 0));
+
+      assert.equal(res._status, 202);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].resumeFromStage, 'fixing');
+      assert.deepEqual(
+        calls[0].previousSteps?.map(step => step.step),
+        ['searching', 'auditing']
+      );
+      assert.equal(calls[0].previousSteps?.[0].rawText, 'yield:\n  lemma: crate\n');
+      assert.equal(calls[0].previousSteps?.[0].reasoningText, 'search thinking');
     });
   });
 

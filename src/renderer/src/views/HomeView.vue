@@ -54,11 +54,7 @@ const openAiJob = () => {
 const openHistoryJob = async (job: QueueHistoryJob) => {
   const loaded = await aiState.loadHistoryJob(job.jobId);
   if (!loaded) return;
-  if (job.status === 'complete' && loaded.yaml) {
-    previewJob.value = loaded;
-    aiDrawerOpen.value = false;
-    return;
-  }
+  previewJob.value = null;
   aiState.selectJob(job.jobId);
   aiDrawerOpen.value = true;
 };

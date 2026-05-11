@@ -2,7 +2,7 @@ import type { PipelineContext, PipelineRunner, PipelineStage } from './types';
 import type { Tool } from 'ai';
 
 const yaml = require('js-yaml') as typeof import('js-yaml');
-const { streamText } = require('ai') as typeof import('ai');
+const { streamText, stepCountIs } = require('ai') as typeof import('ai');
 const { createOpenAI } = require('@ai-sdk/openai') as typeof import('@ai-sdk/openai');
 const { createAnthropic } = require('@ai-sdk/anthropic') as typeof import('@ai-sdk/anthropic');
 const { loggers } = require('../../utils/logger') as {
@@ -292,7 +292,7 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
         prompt: `Generate the ${stage.id} output for "${ctx.word}".`,
         maxOutputTokens: 4096,
         abortSignal: combinedSignal,
-        ...(Object.keys(tools).length > 0 ? { tools } : {}),
+        ...(Object.keys(tools).length > 0 ? { tools, stopWhen: stepCountIs(3) } : {}),
         ...(Object.keys(reasoningParams.providerOptions).length > 0
           ? {
               providerOptions: reasoningParams.providerOptions as Record<
@@ -511,6 +511,8 @@ export class SequentialRunner implements PipelineRunner {
             duration: step.duration || 0,
             summary: step.summary || step.step,
             result: step.result,
+            rawText: step.rawText,
+            reasoningText: step.reasoningText,
           });
         }
       }
@@ -528,6 +530,7 @@ export class SequentialRunner implements PipelineRunner {
       runLogger.info({ step: stage.id, event: 'start' }, 'AI pipeline step started');
 
       try {
+        let reasoningText = '';
         let text = await runStageText({
           stage,
           prompt: buildPrompt(stage, ctx),
@@ -535,7 +538,10 @@ export class SequentialRunner implements PipelineRunner {
           onChunk: chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
           onToolCall: event => onProgress({ type: 'step:tool-call', step: stage.id, ...event }),
           onToolResult: event => onProgress({ type: 'step:tool-result', step: stage.id, ...event }),
-          onReasoning: chunk => onProgress({ type: 'step:reasoning', step: stage.id, chunk }),
+          onReasoning: chunk => {
+            reasoningText += chunk;
+            onProgress({ type: 'step:reasoning', step: stage.id, chunk });
+          },
           externalSignal: abortSignal as globalThis.AbortSignal | undefined,
           runLogger,
         });
@@ -555,12 +561,16 @@ export class SequentialRunner implements PipelineRunner {
 
             const fallbackStage: PipelineStage = { ...stage, toolNames: [] };
             try {
+              reasoningText = '';
               fallbackText = await runStageText({
                 stage: fallbackStage,
                 prompt: buildPrompt(fallbackStage, ctx),
                 ctx,
                 onChunk: chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
-                onReasoning: chunk => onProgress({ type: 'step:reasoning', step: stage.id, chunk }),
+                onReasoning: chunk => {
+                  reasoningText += chunk;
+                  onProgress({ type: 'step:reasoning', step: stage.id, chunk });
+                },
                 externalSignal: abortSignal as globalThis.AbortSignal | undefined,
                 runLogger,
               });
@@ -585,6 +595,7 @@ export class SequentialRunner implements PipelineRunner {
               summary: `Stopped: ${stopResult.reason}`,
               result: fallbackParsed,
               rawText: fallbackText,
+              reasoningText,
             });
             runLogger.info(
               { step: stage.id, event: 'stopped', reason: stopResult.reason, durationMs: duration },
@@ -622,6 +633,7 @@ export class SequentialRunner implements PipelineRunner {
           summary: `${stage.description} 完成`,
           result: parsed,
           rawText: text,
+          reasoningText,
         });
         runLogger.info(
           { step: stage.id, event: 'complete', durationMs: duration },

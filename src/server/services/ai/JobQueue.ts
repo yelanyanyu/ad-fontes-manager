@@ -1,5 +1,10 @@
 import { EventEmitter } from 'node:events';
-import type { PipelineRunner, PipelineProgressEvent, PipelineDefinition } from './types';
+import type {
+  PipelineRunner,
+  PipelineProgressEvent,
+  PipelineDefinition,
+  StepResult,
+} from './types';
 import { fixPipeline } from './definitions/fix';
 import { auditFixPipeline } from './definitions/audit-fix';
 import { englishPipeline } from './definitions/english';
@@ -35,6 +40,8 @@ interface EnqueueParams {
     summary?: string;
     duration?: number;
     result?: unknown;
+    rawText?: string;
+    reasoningText?: string;
   }>;
 }
 
@@ -47,6 +54,7 @@ interface JobState {
   context?: string;
   notes?: string;
   error?: string;
+  steps: StepResult[];
   result?: { yaml: string; scores: Record<string, unknown> };
 }
 
@@ -88,6 +96,8 @@ export class JobQueue {
         summary?: string;
         duration?: number;
         result?: unknown;
+        rawText?: string;
+        reasoningText?: string;
       }>;
     }
   >();
@@ -582,6 +592,11 @@ export class JobQueue {
   /** Resume all paused jobs. */
   resumeAll(): void {
     const db = this.getDb();
+    const rows = db.all(`SELECT id FROM job_queue WHERE status = 'paused'`);
+    for (const row of rows) {
+      const jobId = row.id as string;
+      this.resumeState.set(jobId, this.buildResumeSnapshot(jobId));
+    }
     db.run(
       `UPDATE job_queue SET status = 'queued', created_at = datetime('now')
        WHERE status = 'paused'`
@@ -642,6 +657,7 @@ export class JobQueue {
       context: row.context as string | undefined,
       notes: row.notes as string | undefined,
       error: row.error as string | undefined,
+      steps: this.buildStepResults(this.getPersistedEvents(row)),
       result: row.result_yaml
         ? {
             yaml: row.result_yaml as string,
@@ -658,7 +674,10 @@ export class JobQueue {
   }
 
   getCompletedSteps(jobId: string): PipelineProgressEvent[] {
-    return this.completedSteps.get(jobId) || [];
+    const inMemory = this.completedSteps.get(jobId);
+    if (inMemory) return inMemory;
+    const row = this.getDb().get('SELECT progress_events FROM job_queue WHERE id = ?', jobId);
+    return row ? this.getPersistedEvents(row) : [];
   }
 
   /** Returns true if a queued or running job with this word+language already exists. */
@@ -694,8 +713,97 @@ export class JobQueue {
       const steps = this.completedSteps.get(jobId);
       if (steps) {
         steps.push(event);
+        this.persistProgressEvents(jobId, steps);
       }
     }
+  }
+
+  private getPersistedEvents(row: Record<string, unknown>): PipelineProgressEvent[] {
+    const raw = row.progress_events;
+    if (typeof raw !== 'string' || !raw.trim()) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as PipelineProgressEvent[]) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private persistProgressEvents(jobId: string, events: PipelineProgressEvent[]): void {
+    this.getDb().run(
+      'UPDATE job_queue SET progress_events = ? WHERE id = ?',
+      JSON.stringify(events),
+      jobId
+    );
+  }
+
+  private buildStepResults(events: PipelineProgressEvent[]): StepResult[] {
+    const steps: StepResult[] = [];
+    for (const event of events) {
+      if (event.type === 'step:start') {
+        const existingIndex = steps.findIndex(step => step.step === event.step);
+        const next: StepResult = {
+          step: event.step,
+          status: 'running',
+          startTime: Date.now(),
+          summary: event.message,
+        };
+        if (existingIndex >= 0) {
+          steps[existingIndex] = { ...steps[existingIndex], ...next };
+        } else {
+          steps.push(next);
+        }
+      } else if (event.type === 'step:tool-call') {
+        let step = steps.find(item => item.step === event.step);
+        if (!step) {
+          step = { step: event.step, status: 'running', startTime: Date.now() };
+          steps.push(step);
+        }
+        step.toolCalls = step.toolCalls || [];
+        if (!step.toolCalls.some(item => item.toolCallId === event.toolCallId)) {
+          step.toolCalls.push({
+            toolCallId: event.toolCallId,
+            toolName: event.toolName,
+            status: 'running',
+            input: event.input,
+            startTime: event.startTime,
+          });
+        }
+      } else if (event.type === 'step:tool-result') {
+        const step = steps.find(item => item.step === event.step);
+        const toolCall = step?.toolCalls?.find(item => item.toolCallId === event.toolCallId);
+        if (toolCall) {
+          toolCall.status = event.error ? 'error' : 'complete';
+          toolCall.output = event.output;
+          toolCall.error = event.error;
+          toolCall.warning = event.warning;
+          toolCall.durationMs = event.duration;
+          toolCall.endTime = toolCall.startTime + event.duration;
+        }
+      } else if (event.type === 'step:complete') {
+        let step = steps.find(item => item.step === event.step);
+        if (!step) {
+          step = { step: event.step, status: 'running', startTime: Date.now() };
+          steps.push(step);
+        }
+        step.status = 'complete';
+        step.durationMs = event.duration;
+        step.endTime = step.startTime + event.duration;
+        step.summary = event.summary;
+        step.result = event.result;
+        step.rawText = event.rawText;
+        step.reasoningText = event.reasoningText;
+      } else if (event.type === 'step:error') {
+        let step = steps.find(item => item.step === event.step);
+        if (!step) {
+          step = { step: event.step, status: 'running', startTime: Date.now() };
+          steps.push(step);
+        }
+        step.status = 'error';
+        step.error = event.error;
+      }
+    }
+    return steps;
   }
 
   private computeQueuePosition(db: SqliteLike, jobId: string): number {
@@ -734,9 +842,11 @@ export class JobQueue {
       summary?: string;
       duration?: number;
       result?: unknown;
+      rawText?: string;
+      reasoningText?: string;
     }>;
   } {
-    const steps = this.completedSteps.get(jobId) || [];
+    const steps = this.getCompletedSteps(jobId);
     const completedStepResults = steps
       .filter(event => event.type === 'step:complete')
       .map(event => ({
@@ -744,6 +854,8 @@ export class JobQueue {
         summary: event.summary,
         duration: event.duration,
         result: event.result,
+        rawText: event.rawText,
+        reasoningText: event.reasoningText,
       }));
 
     const previousContext: Record<string, unknown> = {};
@@ -848,6 +960,7 @@ export class JobQueue {
     const jobStartedEvent: PipelineProgressEvent = { type: 'job:started' };
     emitter.emit('progress', jobStartedEvent);
     steps.push(jobStartedEvent);
+    this.persistProgressEvents(jobId, steps);
 
     const resume = this.resumeState.get(jobId);
     this.resumeState.delete(jobId);
@@ -908,6 +1021,7 @@ export class JobQueue {
           // Store all non-token events for replay to late subscribers.
           if (event.type !== 'step:tokens' && event.type !== 'step:reasoning') {
             steps.push(event);
+            this.persistProgressEvents(jobId, steps);
           }
         },
         abortSignal: abortController.signal,

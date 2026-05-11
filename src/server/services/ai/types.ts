@@ -138,6 +138,8 @@ export interface PipelineRunner {
       summary?: string;
       duration?: number;
       result?: unknown;
+      rawText?: string;
+      reasoningText?: string;
     }>;
   }): Promise<{ yaml: string; scores: Record<string, unknown> }>;
 }

@@ -117,6 +117,7 @@ const JOB_QUEUE_DDL = `
     result_scores TEXT,
     provider_id TEXT,
     error TEXT,
+    progress_events TEXT,
     retry_count INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 2,
     started_at TEXT,
@@ -196,6 +197,75 @@ void describe('JobQueue', () => {
     assert.deepEqual(job.result.scores, FAKE_SCORES);
     assert.equal(job.word, 'test');
     assert.equal(job.language, 'en');
+  });
+
+  void it('persists stage events and parsed context for history and later resume', async () => {
+    const partialRunner: PipelineRunner = {
+      async run({ onProgress }) {
+        const researchYaml = 'yield:\n  lemma: partial-word\n  language: en\n';
+        onProgress({ type: 'step:start', step: 'searching', message: 'Searching' });
+        onProgress({
+          type: 'step:complete',
+          step: 'searching',
+          duration: 100,
+          summary: 'Searched',
+          result: { researchYaml },
+          rawText: researchYaml,
+        });
+        onProgress({ type: 'step:start', step: 'pondering', message: 'Pondering' });
+        onProgress({
+          type: 'step:complete',
+          step: 'pondering',
+          duration: 50,
+          summary: 'Stopped: pondering empty',
+          result: {},
+          rawText: '',
+        });
+        onProgress({
+          type: 'pipeline:stopped',
+          yaml: researchYaml,
+          stoppedAtStage: 'pondering',
+          reason: 'pondering: LLM returned empty text',
+        });
+        return { yaml: researchYaml, scores: {} };
+      },
+    };
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: partialRunner });
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word: 'partial-word',
+      language: 'en',
+    });
+    await new Promise(r => setTimeout(r, 0));
+
+    const reloadedQueue = new JobQueue({ getDb, maxConcurrency: 1, runner: partialRunner });
+    const job = reloadedQueue.getJob(jobId);
+    assert.equal(job.status, 'partial');
+    assert.deepEqual(
+      job.steps.map((step: { step: string; status: string; result?: unknown }) => ({
+        step: step.step,
+        status: step.status,
+        result: step.result,
+      })),
+      [
+        {
+          step: 'searching',
+          status: 'complete',
+          result: { researchYaml: 'yield:\n  lemma: partial-word\n  language: en\n' },
+        },
+        { step: 'pondering', status: 'complete', result: {} },
+      ]
+    );
+    assert.deepEqual(
+      reloadedQueue
+        .getCompletedSteps(jobId)
+        .filter((event: PipelineProgressEvent) => event.type === 'step:complete')
+        .map((event: Extract<PipelineProgressEvent, { type: 'step:complete' }>) => event.result),
+      [{ researchYaml: 'yield:\n  lemma: partial-word\n  language: en\n' }, {}]
+    );
   });
 
   void it('cancels a queued Job before it is dequeued', async () => {
@@ -1205,6 +1275,55 @@ void describe('JobQueue queue-wide operations', () => {
       creativeYaml: 'creative: true\n',
     });
     assert.equal(queue.getJob(jobId).status, 'complete');
+  });
+
+  void it('resumes a persisted paused job with prior stage context after restart', async () => {
+    const calls: Array<Parameters<PipelineRunner['run']>[0]> = [];
+    const resumableRunner: PipelineRunner = {
+      async run(params) {
+        calls.push(params);
+        return { yaml: FAKE_YAML, scores: FAKE_SCORES };
+      },
+    };
+    const db = getDb();
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language, progress_events)
+       VALUES (?, 'generate', 'normal', 'paused', 'crate', 'en', ?)`,
+      'persisted-paused',
+      JSON.stringify([
+        { type: 'job:started' },
+        { type: 'step:start', step: 'searching', message: 'Searching' },
+        {
+          type: 'step:complete',
+          step: 'searching',
+          duration: 100,
+          summary: 'Searched',
+          result: { researchYaml: 'yield:\n  lemma: crate\n  language: en\n' },
+          rawText: 'yield:\n  lemma: crate\n  language: en\n',
+          reasoningText: 'search thinking',
+        },
+        { type: 'step:start', step: 'pondering', message: 'Pondering' },
+        { type: 'job:paused', step: 'pondering' },
+      ])
+    );
+
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: resumableRunner });
+
+    queue.resumeAll();
+    await new Promise(r => setTimeout(r, 0));
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].resumeFromStage, 'pondering');
+    assert.deepEqual(calls[0].previousContext, {
+      researchYaml: 'yield:\n  lemma: crate\n  language: en\n',
+    });
+    assert.deepEqual(
+      calls[0].previousSteps?.map(step => step.step),
+      ['searching']
+    );
+    assert.equal(calls[0].previousSteps?.[0].rawText, 'yield:\n  lemma: crate\n  language: en\n');
+    assert.equal(calls[0].previousSteps?.[0].reasoningText, 'search thinking');
   });
 
   void it('ignores late terminal progress after pausing a running job', async () => {

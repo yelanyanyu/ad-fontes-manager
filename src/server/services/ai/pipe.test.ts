@@ -54,6 +54,198 @@ void describe('SequentialRunner', () => {
     delete require.cache[require.resolve('./definitions/german')];
   });
 
+  void it('allows tool-enabled searching to continue after tool results before stop-loss', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-fast', name: 'model-fast' }],
+            },
+          ],
+          stages: {
+            fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const stopMarker = { kind: 'three-steps' };
+    const calls: Array<Record<string, unknown>> = [];
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: (count: number) => ({ ...stopMarker, count }),
+      streamText: (options: Record<string, unknown>) => {
+        calls.push(options);
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'yield:\n  lemma: crate\n  language: en\n' };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      await new SequentialRunner().run({
+        definition: {
+          id: 'tool-search',
+          language: 'en',
+          stages: [
+            {
+              id: 'searching',
+              description: 'Searching',
+              type: 'llm',
+              modelKey: 'fast',
+              systemPromptFile: 'english-structural.md',
+              toolNames: ['search_etymology'],
+              outputParser: (text: string) => ({ researchYaml: text }),
+            },
+          ],
+        },
+        input: { word: 'crate', language: 'en' },
+        onProgress: () => undefined,
+      });
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].stopWhen, { ...stopMarker, count: 3 });
+  });
+
+  void it('stores accumulated reasoning and raw text on completed stages', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-fast', name: 'model-fast' }],
+            },
+          ],
+          stages: {
+            fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: () => ({
+        fullStream: (async function* () {
+          yield { type: 'reasoning-delta', text: 'thinking ' };
+          yield { type: 'reasoning-delta', text: 'about crate' };
+          yield { type: 'text-delta', text: 'yield:\n  lemma: crate\n  language: en\n' };
+        })(),
+      }),
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const events: PipelineProgressEvent[] = [];
+
+    try {
+      await new SequentialRunner().run({
+        definition: {
+          id: 'single-stage',
+          language: 'en',
+          stages: [
+            {
+              id: 'searching',
+              description: 'Searching',
+              type: 'llm',
+              modelKey: 'fast',
+              systemPromptFile: 'english-structural.md',
+              outputParser: (text: string) => ({ researchYaml: text }),
+            },
+          ],
+        },
+        input: { word: 'crate', language: 'en' },
+        onProgress: event => events.push(event),
+      });
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    const complete = events.find(
+      (event): event is Extract<PipelineProgressEvent, { type: 'step:complete' }> =>
+        event.type === 'step:complete'
+    );
+    assert.ok(complete);
+    assert.equal(complete.reasoningText, 'thinking about crate');
+    assert.equal(complete.rawText, 'yield:\n  lemma: crate\n  language: en\n');
+  });
+
+  void it('replays previous steps with raw text and reasoning intact', async () => {
+    writeMockAIConfig();
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const events: PipelineProgressEvent[] = [];
+
+    await new SequentialRunner().run({
+      definition: {
+        id: 'resume-replay',
+        language: 'en',
+        stages: [],
+      },
+      input: { word: 'crate', language: 'en' },
+      resumeFromStage: 'pondering',
+      previousSteps: [
+        {
+          step: 'searching',
+          duration: 12,
+          summary: 'Searched',
+          result: { researchYaml: 'yield:\n  lemma: crate\n' },
+          rawText: 'yield:\n  lemma: crate\n',
+          reasoningText: 'search thinking',
+        },
+      ],
+      onProgress: event => events.push(event),
+    });
+
+    const complete = events.find(
+      (event): event is Extract<PipelineProgressEvent, { type: 'step:complete' }> =>
+        event.type === 'step:complete' && event.step === 'searching'
+    );
+    assert.ok(complete);
+    assert.equal(complete.rawText, 'yield:\n  lemma: crate\n');
+    assert.equal(complete.reasoningText, 'search thinking');
+  });
+
   void it('runs the English mock pipeline as searching, pondering, auditing and deep-merges YAML', async () => {
     writeMockAIConfig();
     const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
