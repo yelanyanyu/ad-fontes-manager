@@ -1,20 +1,11 @@
-import { EventEmitter } from 'node:events';
-import type {
-  PipelineRunner,
-  PipelineProgressEvent,
-  PipelineDefinition,
-  StepResult,
-} from './types';
+import type { PipelineRunner, PipelineProgressEvent, PipelineDefinition } from './types';
 import { fixPipeline } from './definitions/fix';
 import { auditFixPipeline } from './definitions/audit-fix';
 import { englishPipeline } from './definitions/english';
 import { germanPipeline } from './definitions/german';
-
-interface SqliteLike {
-  get: (sql: string, ...params: unknown[]) => Record<string, unknown> | undefined;
-  run: (sql: string, ...params: unknown[]) => { changes: number };
-  all: (sql: string, ...params: unknown[]) => Record<string, unknown>[];
-}
+import { QueueStore, type SqliteLike, type BatchStatus, type JobState } from './QueueStore';
+import { JobLifecycle } from './JobLifecycle';
+import { QueueGate } from './QueueGate';
 
 interface QueueConfig {
   getDb: () => SqliteLike;
@@ -45,47 +36,11 @@ interface EnqueueParams {
   }>;
 }
 
-interface JobState {
-  jobId: string;
-  status: string;
-  jobType?: string;
-  word: string;
-  language: string;
-  context?: string;
-  notes?: string;
-  error?: string;
-  steps: StepResult[];
-  result?: { yaml: string; scores: Record<string, unknown> };
-}
-
-interface BatchStatus {
-  total: number;
-  queued: number;
-  running: number;
-  complete: number;
-  error: number;
-  partial: number;
-  cancelled: number;
-  paused: number;
-  done: number;
-  failed: number;
-}
-
 export class JobQueue {
-  private getDb: () => SqliteLike;
-  private maxConcurrency: number;
+  private store: QueueStore;
+  private lifecycle: JobLifecycle;
+  private gate: QueueGate;
   private runner: PipelineRunner;
-  private activeCount = 0;
-  private abortControllers = new Map<string, AbortController>();
-  private emitters = new Map<string, EventEmitter>();
-  private completedSteps = new Map<string, PipelineProgressEvent[]>();
-  private subscribers = new Map<
-    string,
-    Array<{ res: unknown; listener: (event: PipelineProgressEvent) => void }>
-  >();
-  private brokenProviders = new Set<string>();
-  private providerFailures = new Map<string, number>();
-  private pauseFlags = new Set<string>();
   private resumeState = new Map<
     string,
     {
@@ -105,11 +60,9 @@ export class JobQueue {
   private readonly defaultStageOrder = ['searching', 'pondering', 'auditing', 'fixing'];
 
   constructor(config: QueueConfig) {
-    if (config.maxConcurrency < 1) {
-      throw new Error(`maxConcurrency must be >= 1, got ${config.maxConcurrency}`);
-    }
-    this.getDb = config.getDb;
-    this.maxConcurrency = config.maxConcurrency;
+    this.store = new QueueStore(config.getDb);
+    this.lifecycle = new JobLifecycle(this.store);
+    this.gate = new QueueGate(config.maxConcurrency);
     this.runner = config.runner;
 
     // Clean up stale state from previous sessions.
@@ -117,39 +70,14 @@ export class JobQueue {
     //    queue-position counts.
     // 2. Reset running Jobs to queued so they can be retried.
     // Paused Jobs stay paused (user intent preserved).
-    const db = this.getDb();
-    db.run(
-      `UPDATE job_queue SET status = 'cancelled', completed_at = datetime('now')
-       WHERE status = 'queued'`
-    );
-    db.run(
-      `UPDATE job_queue SET status = 'queued', started_at = NULL
-       WHERE status = 'running'`
-    );
+    this.store.recoverStaleJobs();
 
     // Kick off any recovered Jobs.
     this.tryDequeue();
   }
 
   enqueue(params: EnqueueParams): string {
-    const jobId = `job-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const db = this.getDb();
-
-    db.run(
-      `INSERT INTO job_queue (id, job_type, priority, status, word, language, context, notes, batch_id, target_job_id, target_word_id, provider_id)
-       VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?)`,
-      jobId,
-      params.type,
-      params.priority,
-      params.word,
-      params.language,
-      params.context || null,
-      params.notes || null,
-      params.batchId || null,
-      params.targetJobId || null,
-      params.targetWordId || null,
-      params.providerId || null
-    );
+    const jobId = this.store.insert(params);
 
     if (params.resumeFromStage || params.previousContext || params.previousSteps) {
       this.resumeState.set(jobId, {
@@ -163,64 +91,41 @@ export class JobQueue {
 
     // If job was not immediately dequeued, create an emitter so SSE subscribers
     // can attach and receive job:queued. startJob will reuse it when the job starts.
-    const row = db.get('SELECT status FROM job_queue WHERE id = ?', jobId);
-    if (row && row.status === 'queued') {
-      if (!this.emitters.has(jobId)) {
-        this.emitters.set(jobId, new EventEmitter());
-        this.completedSteps.set(jobId, []);
-      }
+    if (this.store.getStatus(jobId) === 'queued') {
+      this.lifecycle.ensureQueuedEmitter(jobId);
     }
 
     return jobId;
   }
 
   cancel(jobId: string): boolean {
-    const db = this.getDb();
-    const row = db.get('SELECT status FROM job_queue WHERE id = ?', jobId);
-    if (!row) return false;
+    const status = this.store.getStatus(jobId);
+    if (!status) return false;
 
-    if (row.status === 'queued' || row.status === 'paused') {
-      const result = db.run(
-        `UPDATE job_queue SET status = 'cancelled', completed_at = datetime('now')
-         WHERE id = ? AND status = ?`,
-        jobId,
-        row.status
-      );
+    if (status === 'queued' || status === 'paused') {
+      const result = this.store.cancelByStatus(jobId, status);
       if (result.changes > 0) {
-        // Clean up emitter so SSE subscribers don't hang.
-        const emitter = this.emitters.get(jobId);
-        if (emitter) {
-          emitter.emit('done');
-          this.emitters.delete(jobId);
-        }
-        this.completedSteps.delete(jobId);
-        this.abortControllers.delete(jobId);
+        this.lifecycle.finishEmitter(jobId);
+        this.lifecycle.cleanup(jobId);
+        this.gate.deleteAbortController(jobId);
         this.resumeState.delete(jobId);
         return true;
       }
       return false;
     }
 
-    if (row.status === 'running') {
-      const controller = this.abortControllers.get(jobId);
+    if (status === 'running') {
+      const controller = this.gate.getAbortController(jobId);
       if (controller && !controller.signal.aborted) {
         controller.abort();
         return true;
       }
       // Race: tryDequeue set status='running' but startJob hasn't set the controller.
       if (!controller) {
-        const result = db.run(
-          `UPDATE job_queue SET status = 'cancelled', completed_at = datetime('now')
-           WHERE id = ? AND status = 'running'`,
-          jobId
-        );
+        const result = this.store.cancelRunning(jobId);
         if (result.changes > 0) {
-          const emitter = this.emitters.get(jobId);
-          if (emitter) {
-            emitter.emit('done');
-            this.emitters.delete(jobId);
-          }
-          this.completedSteps.delete(jobId);
+          this.lifecycle.finishEmitter(jobId);
+          this.lifecycle.cleanup(jobId);
           this.resumeState.delete(jobId);
           return true;
         }
@@ -232,147 +137,58 @@ export class JobQueue {
 
   subscribe(jobId: string, res: { write: (chunk: string) => void }): void {
     // Emit initial lifecycle event based on DB status.
-    const db = this.getDb();
-    const statusRow = db.get('SELECT status FROM job_queue WHERE id = ?', jobId);
-    if (statusRow && statusRow.status === 'queued') {
-      const position = this.computeQueuePosition(db, jobId);
-      res.write(`event: job:queued\ndata: ${JSON.stringify({ type: 'job:queued', position })}\n\n`);
-    } else if (statusRow && statusRow.status === 'paused') {
+    const status = this.store.getStatus(jobId);
+    if (status === 'queued') {
+      const position = this.store.getQueuePosition(jobId);
+      this.lifecycle.subscribe(jobId, res, { type: 'job:queued', position });
+      return;
+    } else if (status === 'paused') {
       const snapshot = this.resumeState.get(jobId) || this.buildResumeSnapshot(jobId);
-      res.write(
-        `event: job:paused\ndata: ${JSON.stringify({
-          type: 'job:paused',
-          step: snapshot.resumeFromStage,
-        })}\n\n`
-      );
+      this.lifecycle.subscribe(jobId, res, {
+        type: 'job:paused',
+        step: snapshot.resumeFromStage,
+      });
+      return;
     }
-
-    // Replay already-completed steps from memory.
-    const steps = this.completedSteps.get(jobId) || [];
-    for (const event of steps) {
-      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-    }
-
-    // Attach to live emitter for future events.
-    // Create on demand if this is a completed job being re-subscribed
-    // (e.g. after an app restart, or reconnecting for fix progress).
-    let emitter = this.emitters.get(jobId);
-    if (!emitter) {
-      emitter = new EventEmitter();
-      this.emitters.set(jobId, emitter);
-      if (!this.completedSteps.has(jobId)) {
-        this.completedSteps.set(jobId, []);
-      }
-    }
-
-    const onProgress = (event: PipelineProgressEvent): void => {
-      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-    };
-    emitter.on('progress', onProgress);
-    this.trackSubscriber(jobId, res, onProgress);
-
-    // Don't detach on 'done' — the emitter stays alive for 30 min
-    // so that fix progress events can reach the same SSE connection.
-    // Cleanup happens when the client disconnects (unsubscribe) or the
-    // emitter is deleted by the 30-min timer.
+    this.lifecycle.subscribe(jobId, res);
   }
 
   resetCircuitBreaker(providerId: string): void {
-    this.brokenProviders.delete(providerId);
-    this.providerFailures.delete(providerId);
+    this.gate.resetCircuitBreaker(providerId);
     // Try to dequeue any Jobs that were blocked by this provider's breaker.
     this.tryDequeue();
   }
 
   getBatchStatus(batchId: string): BatchStatus {
-    const db = this.getDb();
-    const rows = db.all(
-      'SELECT status, COUNT(*) as cnt FROM job_queue WHERE batch_id = ? GROUP BY status',
-      batchId
-    );
-    const counts: Record<string, number> = {};
-    let total = 0;
-    for (const row of rows) {
-      counts[row.status as string] = row.cnt as number;
-      total += row.cnt as number;
-    }
-    return {
-      total,
-      queued: counts.queued || 0,
-      running: counts.running || 0,
-      complete: counts.complete || 0,
-      error: counts.error || 0,
-      partial: counts.partial || 0,
-      cancelled: counts.cancelled || 0,
-      paused: counts.paused || 0,
-      done: (counts.complete || 0) + (counts.partial || 0),
-      failed: counts.error || 0,
-    };
+    return this.store.getBatchStatus(batchId);
   }
 
   pauseBatch(batchId: string): void {
-    const db = this.getDb();
-    // Collect jobIds before updating so we can clean up emitters.
-    const rows = db.all(
-      `SELECT id FROM job_queue WHERE batch_id = ? AND status = 'queued'`,
-      batchId
-    );
-    db.run(
-      `UPDATE job_queue SET status = 'paused' WHERE batch_id = ? AND status = 'queued'`,
-      batchId
-    );
+    const jobIds = this.store.pauseQueuedBatch(batchId);
     // Notify SSE subscribers that these jobs are now paused.
-    for (const row of rows) {
-      const jobId = row.id as string;
-      const emitter = this.emitters.get(jobId);
-      if (emitter) {
-        emitter.emit('done');
-        this.emitters.delete(jobId);
-      }
-      this.completedSteps.delete(jobId);
+    for (const jobId of jobIds) {
+      this.lifecycle.finishEmitter(jobId);
+      this.lifecycle.cleanup(jobId);
     }
   }
 
   resumeBatch(batchId: string): void {
-    const db = this.getDb();
-    db.run(
-      `UPDATE job_queue SET status = 'queued' WHERE batch_id = ? AND status = 'paused'`,
-      batchId
-    );
+    this.store.resumePausedBatch(batchId);
     // Try to dequeue any newly queued Jobs.
     this.tryDequeue();
   }
 
   cancelBatch(batchId: string): void {
-    const db = this.getDb();
-    // Collect jobIds before updating so we can clean up emitters.
-    const rows = db.all(
-      `SELECT id FROM job_queue WHERE batch_id = ? AND status IN ('queued', 'paused')`,
-      batchId
-    );
-    db.run(
-      `UPDATE job_queue SET status = 'cancelled', completed_at = datetime('now')
-       WHERE batch_id = ? AND status IN ('queued', 'paused')`,
-      batchId
-    );
-    for (const row of rows) {
-      const jobId = row.id as string;
-      const emitter = this.emitters.get(jobId);
-      if (emitter) {
-        emitter.emit('done');
-        this.emitters.delete(jobId);
-      }
-      this.completedSteps.delete(jobId);
-      this.abortControllers.delete(jobId);
+    const jobIds = this.store.cancelQueuedOrPausedBatch(batchId);
+    for (const jobId of jobIds) {
+      this.lifecycle.finishEmitter(jobId);
+      this.lifecycle.cleanup(jobId);
+      this.gate.deleteAbortController(jobId);
     }
   }
 
   retryBatch(batchId: string): void {
-    const db = this.getDb();
-    db.run(
-      `UPDATE job_queue SET status = 'queued', error = NULL WHERE batch_id = ? AND status = 'error'`,
-      batchId
-    );
+    this.store.retryErroredBatch(batchId);
     this.tryDequeue();
   }
 
@@ -389,23 +205,7 @@ export class JobQueue {
     createdAt: string;
     error?: string;
   }> {
-    const db = this.getDb();
-    const rows = db.all(
-      `SELECT id, job_type, status, word, language, priority, created_at, error
-       FROM job_queue
-       WHERE status IN ('queued', 'running', 'paused')
-       ORDER BY CASE priority WHEN 'high' THEN 1 ELSE 0 END DESC, created_at ASC, rowid ASC`
-    );
-    return rows.map(row => ({
-      jobId: row.id as string,
-      jobType: row.job_type as string,
-      status: row.status as string,
-      word: row.word as string,
-      language: row.language as string,
-      priority: row.priority as string,
-      createdAt: row.created_at as string,
-      error: row.error as string | undefined,
-    }));
+    return this.store.getQueueOverview();
   }
 
   /** Returns a paginated snapshot of persisted finished/failed jobs for review. */
@@ -431,221 +231,90 @@ export class JobQueue {
     page: number;
     pageSize: number;
   } {
-    const db = this.getDb();
-    const page = Math.max(1, Math.floor(params.page || 1));
-    const pageSize = Math.min(100, Math.max(1, Math.floor(params.pageSize || 20)));
-    const where: string[] = [`status IN ('complete', 'partial', 'error')`];
-    const values: unknown[] = [];
-
-    if (params.status) {
-      where.push('status = ?');
-      values.push(params.status);
-    }
-    if (params.query?.trim()) {
-      where.push('word LIKE ?');
-      values.push(`%${params.query.trim()}%`);
-    }
-
-    const whereSql = where.join(' AND ');
-    const totalRow = db.get(`SELECT COUNT(*) as total FROM job_queue WHERE ${whereSql}`, ...values);
-    const rows = db.all(
-      `SELECT id, job_type, status, word, language, priority, created_at, completed_at, error,
-              CASE WHEN result_yaml IS NULL OR result_yaml = '' THEN 0 ELSE 1 END as has_result
-       FROM job_queue
-       WHERE ${whereSql}
-       ORDER BY CASE status WHEN 'error' THEN 3 WHEN 'partial' THEN 2 ELSE 1 END DESC,
-                COALESCE(completed_at, created_at) DESC,
-                rowid DESC
-       LIMIT ? OFFSET ?`,
-      ...values,
-      pageSize,
-      (page - 1) * pageSize
-    );
-
-    return {
-      jobs: rows.map(row => ({
-        jobId: row.id as string,
-        jobType: row.job_type as string,
-        status: row.status as string,
-        word: row.word as string,
-        language: row.language as string,
-        priority: row.priority as string,
-        createdAt: row.created_at as string,
-        completedAt: row.completed_at as string | undefined,
-        error: row.error as string | undefined,
-        hasResult: Boolean(row.has_result),
-      })),
-      total: (totalRow?.total as number) || 0,
-      page,
-      pageSize,
-    };
+    return this.store.getQueueHistory(params);
   }
 
   deleteHistoryJob(jobId: string): 'deleted' | 'not-found' | 'active' {
-    const db = this.getDb();
-    const row = db.get('SELECT status FROM job_queue WHERE id = ?', jobId);
-    if (!row) return 'not-found';
-    if (row.status === 'queued' || row.status === 'running' || row.status === 'paused') {
-      return 'active';
+    const result = this.store.deleteHistoryJob(jobId);
+    if (result === 'deleted') {
+      this.cleanupJobMemory(jobId);
     }
-
-    const result = db.run(
-      `DELETE FROM job_queue
-       WHERE id = ? AND status NOT IN ('queued', 'running', 'paused')`,
-      jobId
-    );
-    if (result.changes <= 0) return 'not-found';
-    this.emitters.delete(jobId);
-    this.completedSteps.delete(jobId);
-    this.abortControllers.delete(jobId);
-    this.resumeState.delete(jobId);
-    this.subscribers.delete(jobId);
-    return 'deleted';
+    return result;
   }
 
   clearHistory(params: { status?: 'complete' | 'partial' | 'error'; query?: string }): number {
-    const db = this.getDb();
-    const where: string[] = [`status IN ('complete', 'partial', 'error')`];
-    const values: unknown[] = [];
-
-    if (params.status) {
-      where.push('status = ?');
-      values.push(params.status);
+    const result = this.store.clearHistory(params);
+    for (const jobId of result.jobIds) {
+      this.cleanupJobMemory(jobId);
     }
-    if (params.query?.trim()) {
-      where.push('word LIKE ?');
-      values.push(`%${params.query.trim()}%`);
-    }
-
-    const rows = db.all(`SELECT id FROM job_queue WHERE ${where.join(' AND ')}`, ...values);
-    const result = db.run(`DELETE FROM job_queue WHERE ${where.join(' AND ')}`, ...values);
-    for (const row of rows) {
-      const jobId = row.id as string;
-      this.emitters.delete(jobId);
-      this.completedSteps.delete(jobId);
-      this.abortControllers.delete(jobId);
-      this.resumeState.delete(jobId);
-      this.subscribers.delete(jobId);
-    }
-    return result.changes;
+    return result.deleted;
   }
 
   /** Cancel every queued, paused, and running job.  Requires confirmation from caller. */
   cancelAll(): void {
-    const db = this.getDb();
-    const rows = db.all(
-      `SELECT id, status FROM job_queue
-       WHERE status IN ('queued', 'paused', 'running', 'error')`
-    );
+    const rows = this.store.getCancelableRows();
 
     // Abort running jobs first.
-    for (const ctrl of this.abortControllers.values()) {
-      if (!ctrl.signal.aborted) ctrl.abort();
-    }
+    this.gate.abortAll();
 
     // Cancel all non-terminal jobs.
-    db.run(
-      `UPDATE job_queue SET status = 'cancelled', completed_at = datetime('now')
-       WHERE status IN ('queued', 'paused', 'running', 'error')`
-    );
+    this.store.cancelAllActiveRows();
 
     // Queued/paused/error jobs have no running promise that will emit done later.
     // Running jobs keep their in-memory state until their runner promise settles,
     // so activeCount cannot be released early.
     for (const row of rows) {
       if (row.status === 'running') continue;
-      const jobId = row.id as string;
-      const emitter = this.emitters.get(jobId);
-      if (emitter) {
-        emitter.emit('done');
-        this.emitters.delete(jobId);
-      }
-      this.completedSteps.delete(jobId);
-      this.abortControllers.delete(jobId);
+      const jobId = row.id;
+      this.lifecycle.finishEmitter(jobId);
+      this.lifecycle.cleanup(jobId);
+      this.gate.deleteAbortController(jobId);
       this.resumeState.delete(jobId);
-      this.subscribers.delete(jobId);
     }
   }
 
   /** Pause all queued jobs and safely abort running jobs (they re-queue at tail on resume). */
   pauseAll(): void {
-    const db = this.getDb();
     // Set running jobs to 'paused' in DB BEFORE aborting.
     // This prevents a race where the runner completes (complete/partial/error)
     // before the abort signal propagates, which would make them disappear from
     // the overview.  The .then()/.catch() use WHERE status = 'running' guards
     // so they won't overwrite a paused status.
-    for (const [jobId, ctrl] of this.abortControllers) {
+    for (const [jobId, ctrl] of this.gate.abortControllerEntries()) {
       if (!ctrl.signal.aborted) {
-        this.pauseFlags.add(jobId);
+        this.gate.markPaused(jobId);
         const snapshot = this.buildResumeSnapshot(jobId);
         this.resumeState.set(jobId, snapshot);
-        db.run(`UPDATE job_queue SET status = 'paused' WHERE id = ?`, jobId);
+        this.store.pauseRunningJob(jobId);
         this.emitProgress(jobId, { type: 'job:paused', step: snapshot.resumeFromStage });
         ctrl.abort();
       }
     }
     // Pause queued jobs.
-    db.run(`UPDATE job_queue SET status = 'paused' WHERE status = 'queued'`);
+    this.store.pauseQueuedJobs();
   }
 
   /** Resume all paused jobs. */
   resumeAll(): void {
-    const db = this.getDb();
-    const rows = db.all(`SELECT id FROM job_queue WHERE status = 'paused'`);
-    for (const row of rows) {
-      const jobId = row.id as string;
+    for (const jobId of this.store.getPausedJobIds()) {
       this.resumeState.set(jobId, this.buildResumeSnapshot(jobId));
     }
-    db.run(
-      `UPDATE job_queue SET status = 'queued', created_at = datetime('now')
-       WHERE status = 'paused'`
-    );
+    this.store.resumePausedJobs();
     this.tryDequeue();
   }
 
   unsubscribe(jobId: string, res: unknown): void {
-    const emitter = this.emitters.get(jobId);
-    if (!emitter) return;
-    // Find and remove the specific listener for this response object.
-    const listeners = this.subscribers.get(jobId);
-    if (!listeners) return;
-    const idx = listeners.findIndex(l => l.res === res);
-    if (idx >= 0) {
-      emitter.off('progress', listeners[idx].listener);
-      listeners.splice(idx, 1);
-    }
-    if (listeners.length === 0) {
-      this.subscribers.delete(jobId);
-    }
+    this.lifecycle.unsubscribe(jobId, res);
   }
 
-  private trackSubscriber(
-    jobId: string,
-    res: unknown,
-    listener: (event: PipelineProgressEvent) => void
-  ): void {
-    if (!this.subscribers.has(jobId)) {
-      this.subscribers.set(jobId, []);
-    }
-    this.subscribers.get(jobId)!.push({ res, listener });
-  }
-
-  private untrackSubscriber(jobId: string, res: unknown): void {
-    const listeners = this.subscribers.get(jobId);
-    if (!listeners) return;
-    const idx = listeners.findIndex(l => l.res === res);
-    if (idx >= 0) {
-      listeners.splice(idx, 1);
-    }
-    if (listeners.length === 0) {
-      this.subscribers.delete(jobId);
-    }
+  private cleanupJobMemory(jobId: string): void {
+    this.lifecycle.cleanup(jobId);
+    this.gate.deleteAbortController(jobId);
+    this.resumeState.delete(jobId);
   }
 
   getJob(jobId: string): JobState | undefined {
-    const db = this.getDb();
-    const row = db.get('SELECT * FROM job_queue WHERE id = ?', jobId);
+    const row = this.store.getRow(jobId);
     if (!row) return undefined;
 
     return {
@@ -657,7 +326,7 @@ export class JobQueue {
       context: row.context as string | undefined,
       notes: row.notes as string | undefined,
       error: row.error as string | undefined,
-      steps: this.buildStepResults(this.getPersistedEvents(row)),
+      steps: this.lifecycle.buildStepResults(this.store.getPersistedEvents(row)),
       result: row.result_yaml
         ? {
             yaml: row.result_yaml as string,
@@ -674,164 +343,21 @@ export class JobQueue {
   }
 
   getCompletedSteps(jobId: string): PipelineProgressEvent[] {
-    const inMemory = this.completedSteps.get(jobId);
-    if (inMemory) return inMemory;
-    const row = this.getDb().get('SELECT progress_events FROM job_queue WHERE id = ?', jobId);
-    return row ? this.getPersistedEvents(row) : [];
+    return this.lifecycle.getCompletedSteps(jobId);
   }
 
   /** Returns true if a queued or running job with this word+language already exists. */
   isDuplicate(word: string, language: string): boolean {
-    const db = this.getDb();
-    const row = db.get(
-      `SELECT 1 FROM job_queue
-       WHERE word = ? AND language = ? AND status IN ('queued', 'running')
-       LIMIT 1`,
-      word,
-      language
-    );
-    return !!row;
+    return this.store.isDuplicate(word, language);
   }
 
   getQueuePosition(jobId: string): number {
-    const db = this.getDb();
-    return this.computeQueuePosition(db, jobId);
+    return this.store.getQueuePosition(jobId);
   }
 
   /** Emit a progress event to all SSE subscribers of this job. */
   emitProgress(jobId: string, event: PipelineProgressEvent): void {
-    // Create emitter + steps on demand if they don't exist yet
-    // (e.g. after an app restart for a previously-completed job).
-    let emitter = this.emitters.get(jobId);
-    if (!emitter) {
-      emitter = new EventEmitter();
-      this.emitters.set(jobId, emitter);
-      this.completedSteps.set(jobId, []);
-    }
-    emitter.emit('progress', event);
-    if (event.type !== 'step:tokens' && event.type !== 'step:reasoning') {
-      const steps = this.completedSteps.get(jobId);
-      if (steps) {
-        steps.push(event);
-        this.persistProgressEvents(jobId, steps);
-      }
-    }
-  }
-
-  private getPersistedEvents(row: Record<string, unknown>): PipelineProgressEvent[] {
-    const raw = row.progress_events;
-    if (typeof raw !== 'string' || !raw.trim()) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? (parsed as PipelineProgressEvent[]) : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private persistProgressEvents(jobId: string, events: PipelineProgressEvent[]): void {
-    this.getDb().run(
-      'UPDATE job_queue SET progress_events = ? WHERE id = ?',
-      JSON.stringify(events),
-      jobId
-    );
-  }
-
-  private buildStepResults(events: PipelineProgressEvent[]): StepResult[] {
-    const steps: StepResult[] = [];
-    for (const event of events) {
-      if (event.type === 'step:start') {
-        const existingIndex = steps.findIndex(step => step.step === event.step);
-        const next: StepResult = {
-          step: event.step,
-          status: 'running',
-          startTime: Date.now(),
-          summary: event.message,
-        };
-        if (existingIndex >= 0) {
-          steps[existingIndex] = { ...steps[existingIndex], ...next };
-        } else {
-          steps.push(next);
-        }
-      } else if (event.type === 'step:tool-call') {
-        let step = steps.find(item => item.step === event.step);
-        if (!step) {
-          step = { step: event.step, status: 'running', startTime: Date.now() };
-          steps.push(step);
-        }
-        step.toolCalls = step.toolCalls || [];
-        if (!step.toolCalls.some(item => item.toolCallId === event.toolCallId)) {
-          step.toolCalls.push({
-            toolCallId: event.toolCallId,
-            toolName: event.toolName,
-            status: 'running',
-            input: event.input,
-            startTime: event.startTime,
-          });
-        }
-      } else if (event.type === 'step:tool-result') {
-        const step = steps.find(item => item.step === event.step);
-        const toolCall = step?.toolCalls?.find(item => item.toolCallId === event.toolCallId);
-        if (toolCall) {
-          toolCall.status = event.error ? 'error' : 'complete';
-          toolCall.output = event.output;
-          toolCall.error = event.error;
-          toolCall.warning = event.warning;
-          toolCall.durationMs = event.duration;
-          toolCall.endTime = toolCall.startTime + event.duration;
-        }
-      } else if (event.type === 'step:complete') {
-        let step = steps.find(item => item.step === event.step);
-        if (!step) {
-          step = { step: event.step, status: 'running', startTime: Date.now() };
-          steps.push(step);
-        }
-        step.status = 'complete';
-        step.durationMs = event.duration;
-        step.endTime = step.startTime + event.duration;
-        step.summary = event.summary;
-        step.result = event.result;
-        step.rawText = event.rawText;
-        step.reasoningText = event.reasoningText;
-      } else if (event.type === 'step:error') {
-        let step = steps.find(item => item.step === event.step);
-        if (!step) {
-          step = { step: event.step, status: 'running', startTime: Date.now() };
-          steps.push(step);
-        }
-        step.status = 'error';
-        step.error = event.error;
-      }
-    }
-    return steps;
-  }
-
-  private computeQueuePosition(db: SqliteLike, jobId: string): number {
-    const posRow = db.get(
-      `SELECT COUNT(*) as cnt FROM job_queue
-       WHERE status = 'queued'
-         AND (
-           CASE priority WHEN 'high' THEN 1 ELSE 0 END >
-             (SELECT CASE priority WHEN 'high' THEN 1 ELSE 0 END FROM job_queue WHERE id = ?)
-           OR (
-             CASE priority WHEN 'high' THEN 1 ELSE 0 END =
-               (SELECT CASE priority WHEN 'high' THEN 1 ELSE 0 END FROM job_queue WHERE id = ?)
-             AND (
-               created_at < (SELECT created_at FROM job_queue WHERE id = ?)
-               OR (
-                 created_at = (SELECT created_at FROM job_queue WHERE id = ?)
-                 AND rowid <= (SELECT rowid FROM job_queue WHERE id = ?)
-               )
-             )
-           )
-         )`,
-      jobId,
-      jobId,
-      jobId,
-      jobId,
-      jobId
-    );
-    return (posRow?.cnt as number) || 1;
+    this.lifecycle.emitProgress(jobId, event);
   }
 
   private buildResumeSnapshot(jobId: string): {
@@ -889,39 +415,23 @@ export class JobQueue {
   }
 
   private tryDequeue(): void {
-    while (this.activeCount < this.maxConcurrency) {
-      const db = this.getDb();
-
-      // Skip Jobs whose provider is circuit-broken.
-      const brokenList = [...this.brokenProviders].map(() => '?').join(',');
-      const row = db.get(
-        `SELECT * FROM job_queue
-         WHERE status = 'queued'
-         ${brokenList.length > 0 ? `AND (provider_id IS NULL OR provider_id NOT IN (${brokenList}))` : ''}
-         ORDER BY CASE priority WHEN 'high' THEN 1 ELSE 0 END DESC, created_at ASC, rowid ASC
-         LIMIT 1`,
-        ...this.brokenProviders
-      );
+    while (this.gate.hasCapacity()) {
+      const row = this.store.dequeue(this.gate.getExcludedProviders());
 
       if (!row) break;
 
       const jobId = row.id as string;
-      db.run(
-        `UPDATE job_queue SET status = 'running', started_at = datetime('now')
-         WHERE id = ? AND status = 'queued'`,
-        jobId
-      );
 
-      this.activeCount++;
+      this.gate.reserveSlot();
       try {
         if (!this.startJob(jobId)) {
           // Setup failed — release the reserved slot and try the next Job.
-          this.activeCount--;
+          this.gate.releaseSlot();
           continue;
         }
       } catch {
         // Synchronous exception in startJob — release the reserved slot.
-        this.activeCount--;
+        this.gate.releaseSlot();
         continue;
       }
     }
@@ -929,38 +439,24 @@ export class JobQueue {
 
   // Returns true if the job was started successfully, false if setup failed.
   private startJob(jobId: string): boolean {
-    const db = this.getDb();
-    const row = db.get('SELECT * FROM job_queue WHERE id = ?', jobId);
+    const row = this.store.getRow(jobId);
     if (!row) return false;
 
     // Guard against cancel() racing between tryDequeue's status='running' update
     // and the abortController being set. If cancel already updated the DB, abort.
     if (row.status !== 'running') {
-      const emitter = this.emitters.get(jobId);
-      if (emitter) {
-        emitter.emit('done');
-        this.emitters.delete(jobId);
-      }
-      this.completedSteps.delete(jobId);
+      this.lifecycle.finishEmitter(jobId);
+      this.lifecycle.cleanup(jobId);
       return false;
     }
 
     const abortController = new globalThis.AbortController();
-    this.abortControllers.set(jobId, abortController);
+    this.gate.setAbortController(jobId, abortController);
 
     // Reuse emitter if already created in enqueue() for a queued Job.
     // Always start with a fresh steps array — previous run's events must not leak
     // into a retry (retryBatch reuses the same jobId).
-    const emitter = this.emitters.get(jobId) || new EventEmitter();
-    this.emitters.set(jobId, emitter);
-    const steps: PipelineProgressEvent[] = [];
-    this.completedSteps.set(jobId, steps);
-
-    // Emit job:started for both live and late SSE subscribers.
-    const jobStartedEvent: PipelineProgressEvent = { type: 'job:started' };
-    emitter.emit('progress', jobStartedEvent);
-    steps.push(jobStartedEvent);
-    this.persistProgressEvents(jobId, steps);
+    const { steps } = this.lifecycle.prepareStartedJob(jobId);
 
     const resume = this.resumeState.get(jobId);
     this.resumeState.delete(jobId);
@@ -979,20 +475,12 @@ export class JobQueue {
 
     // For Fix Jobs: load the target Job's YAML.
     if (row.job_type === 'fix' && row.target_job_id) {
-      const targetRow = db.get(
-        'SELECT result_yaml FROM job_queue WHERE id = ?',
-        row.target_job_id as string
-      );
-      targetYaml = targetRow?.result_yaml as string | undefined;
+      targetYaml = this.store.getTargetJobYaml(row.target_job_id);
     }
 
     // For Audit-Fix Jobs: load the Word's YAML from words_v2.
     if (row.job_type === 'audit-fix' && row.target_word_id) {
-      const wordRow = db.get(
-        'SELECT content FROM words_v2 WHERE id = ?',
-        row.target_word_id as string
-      );
-      targetYaml = wordRow?.content as string | undefined;
+      targetYaml = this.store.getWordContent(row.target_word_id);
     }
 
     // Pass target YAML via previousContext so the runner's buildPrompt
@@ -1014,20 +502,15 @@ export class JobQueue {
         previousContext: effectivePreviousContext,
         previousSteps: resume?.previousSteps,
         onProgress: event => {
-          if (this.pauseFlags.has(jobId) && event.type !== 'job:paused') {
+          if (this.gate.isPaused(jobId) && event.type !== 'job:paused') {
             return;
           }
-          emitter.emit('progress', event);
-          // Store all non-token events for replay to late subscribers.
-          if (event.type !== 'step:tokens' && event.type !== 'step:reasoning') {
-            steps.push(event);
-            this.persistProgressEvents(jobId, steps);
-          }
+          this.lifecycle.recordProgress(jobId, event, steps);
         },
         abortSignal: abortController.signal,
       })
       .then(result => {
-        const isPaused = this.pauseFlags.has(jobId);
+        const isPaused = this.gate.isPaused(jobId);
         if (isPaused) {
           return;
         }
@@ -1036,61 +519,45 @@ export class JobQueue {
         // If the pipeline stopped early (stop-loss), mark as partial.
         const stoppedEvent = steps.find(e => e.type === 'pipeline:stopped');
         const status = stoppedEvent ? 'partial' : 'complete';
-        db.run(
-          `UPDATE job_queue SET status = ?, result_yaml = ?, result_scores = ?, completed_at = datetime('now')
-           WHERE id = ? AND status = 'running'`,
+        this.store.completeRunningJob({
+          jobId,
           status,
           yamlText,
-          JSON.stringify(scores),
-          jobId
-        );
+          scores,
+        });
 
         // Reset failure count on success.
         const providerId = row.provider_id as string | undefined;
-        if (providerId) {
-          this.providerFailures.delete(providerId);
-        }
+        this.gate.recordProviderSuccess(providerId);
       })
       .catch((err: unknown) => {
-        const isPaused = this.pauseFlags.has(jobId);
-        this.pauseFlags.delete(jobId);
+        const isPaused = this.gate.isPaused(jobId);
+        this.gate.clearPause(jobId);
         const wasAborted = abortController.signal.aborted;
         if (isPaused) {
           // Pause-all: keep completed steps so resume can continue from breakpoint.
-          db.run(`UPDATE job_queue SET status = 'paused', error = NULL WHERE id = ?`, jobId);
+          this.store.markRunningJobPaused(jobId);
         } else {
           const message = err instanceof Error ? err.message : String(err);
-          db.run(
-            `UPDATE job_queue SET status = 'error', error = ?, completed_at = datetime('now')
-             WHERE id = ? AND status = 'running'`,
-            wasAborted ? 'User cancelled' : message,
-            jobId
-          );
+          this.store.errorRunningJob(jobId, wasAborted ? 'User cancelled' : message);
 
           // Circuit breaker: track consecutive failures per provider.
           const providerId = row.provider_id as string | undefined;
-          if (!wasAborted && providerId) {
-            const failures = (this.providerFailures.get(providerId) || 0) + 1;
-            this.providerFailures.set(providerId, failures);
-            if (failures >= 3) {
-              this.brokenProviders.add(providerId);
-            }
-          }
+          this.gate.recordProviderFailure(providerId, { wasAborted });
         }
       })
       .finally(() => {
-        emitter.emit('done');
-        this.pauseFlags.delete(jobId);
-        this.abortControllers.delete(jobId);
-        this.activeCount--;
+        this.lifecycle.finishEmitter(jobId);
+        this.gate.clearPause(jobId);
+        this.gate.deleteAbortController(jobId);
+        this.gate.releaseSlot();
         this.tryDequeue();
 
         // Keep emitter + completedSteps alive for 30 min so fix progress can be
         // broadcast to still-connected SSE subscribers.
         setTimeout(
           () => {
-            this.emitters.delete(jobId);
-            this.completedSteps.delete(jobId);
+            this.lifecycle.cleanup(jobId);
           },
           30 * 60 * 1000
         ).unref();
