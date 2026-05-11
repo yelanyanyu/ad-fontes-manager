@@ -258,6 +258,9 @@ ad-fontes-manager/
 ├── node/                    # CLI 维护脚本
 ├── drizzle/                 # Drizzle 迁移文件
 ├── docs/                    # 项目文档
+│   ├── JOB_QUEUE.md         # AI 作业队列系统
+│   ├── adr/                 # 架构决策记录
+│   ├── agents/              # Agent 技能配置
 │   └── prompts/             # AI Prompt 模板
 ├── scripts/                 # Docker / 部署脚本
 ├── assets/                  # 应用图标等静态资源
@@ -372,6 +375,10 @@ docker compose --env-file .env.production up -d --force-recreate app
 - [docs/API.md](./docs/API.md) — API 文档
 - [docs/DATABASE.md](./docs/DATABASE.md) — 数据库 Schema
 - [docs/CONFIGURATION.md](./docs/CONFIGURATION.md) — 配置系统
+- [docs/JOB_QUEUE.md](./docs/JOB_QUEUE.md) — AI 作业队列系统（状态机、调度、SSE 协议、批量操作）
+- [docs/ELECTRON_NATIVE_MODULES.md](./docs/ELECTRON_NATIVE_MODULES.md) — Electron 原生模块 ABI 管理
+- [docs/LOGGING.md](./docs/LOGGING.md) — 日志系统
+- [docs/SECURITY.md](./docs/SECURITY.md) — 安全策略
 - [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) — 部署指南
 - [docs/SECURITY.md](./docs/SECURITY.md) — 安全说明
 - [docs/LOGGING.md](./docs/LOGGING.md) — 日志系统
