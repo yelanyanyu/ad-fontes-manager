@@ -26,6 +26,8 @@ const {
   queuePauseAll,
   queueResumeAll,
   cancelGeneration,
+  pauseGeneration,
+  resumeActiveGeneration,
   deleteHistoryJob,
   clearQueueHistory,
   selectJob,
@@ -87,6 +89,14 @@ async function handlePauseAll(): Promise<void> {
 
 async function handleResumeAll(): Promise<void> {
   await queueResumeAll();
+}
+
+async function handlePauseJob(jobId: string): Promise<void> {
+  await pauseGeneration(jobId);
+}
+
+async function handleResumeJob(jobId: string): Promise<void> {
+  await resumeActiveGeneration(jobId);
 }
 
 function handleSelect(jobId: string): void {
@@ -176,6 +186,30 @@ async function handleClearHistory(): Promise<void> {
           <span class="q-word">{{ qj.word }}</span>
           <span class="q-lang">{{ qj.language === 'de' ? 'DE' : 'EN' }}</span>
           <span class="q-status">{{ qj.status }}</span>
+          <button
+            v-if="qj.status === 'running' || qj.status === 'queued'"
+            type="button"
+            class="q-icon-btn"
+            title="Pause"
+            aria-label="Pause job"
+            @click.stop="handlePauseJob(qj.jobId)"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
+            </svg>
+          </button>
+          <button
+            v-else-if="qj.status === 'paused'"
+            type="button"
+            class="q-icon-btn"
+            title="Resume"
+            aria-label="Resume job"
+            @click.stop="handleResumeJob(qj.jobId)"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
           <button
             type="button"
             class="qbtn danger q-close"
@@ -469,6 +503,29 @@ async function handleClearHistory(): Promise<void> {
 .q-close {
   visibility: hidden;
   padding: 0 5px;
+}
+
+.q-icon-btn {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--green);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.q-icon-btn:hover {
+  border-color: var(--green-border);
+  background: var(--green-soft);
+}
+
+.q-icon-btn svg {
+  width: 12px;
+  height: 12px;
 }
 
 .bar-row:hover .q-close {

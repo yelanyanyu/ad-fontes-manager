@@ -285,6 +285,13 @@ export class QueueStore {
     this.getDb().run(`UPDATE job_queue SET status = 'paused' WHERE id = ?`, jobId);
   }
 
+  pauseQueuedJob(jobId: string): { changes: number } {
+    return this.getDb().run(
+      `UPDATE job_queue SET status = 'paused' WHERE id = ? AND status = 'queued'`,
+      jobId
+    );
+  }
+
   pauseQueuedJobs(): void {
     this.getDb().run(`UPDATE job_queue SET status = 'paused' WHERE status = 'queued'`);
   }
@@ -299,6 +306,14 @@ export class QueueStore {
     this.getDb().run(
       `UPDATE job_queue SET status = 'queued', created_at = datetime('now')
        WHERE status = 'paused'`
+    );
+  }
+
+  resumePausedJob(jobId: string): { changes: number } {
+    return this.getDb().run(
+      `UPDATE job_queue SET status = 'queued', created_at = datetime('now')
+       WHERE id = ? AND status = 'paused'`,
+      jobId
     );
   }
 

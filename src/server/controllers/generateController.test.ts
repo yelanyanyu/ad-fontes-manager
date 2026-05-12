@@ -534,6 +534,54 @@ void describe('generateController with JobQueue', () => {
     });
   });
 
+  // ---- handlePauseJob / handleResumeActiveJob ----
+
+  void describe('handlePauseJob and handleResumeActiveJob', () => {
+    void it('pauses and resumes a queued job', async () => {
+      const blockingRunner = new BlockingFakeRunner();
+      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      _resetQueue();
+      initQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+      delete require.cache[require.resolve('./generateController')];
+
+      const { handleGenerateSingle, handlePauseJob, handleResumeActiveJob } =
+        require('./generateController') as {
+          handleGenerateSingle: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+          handlePauseJob: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+          handleResumeActiveJob: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+        };
+
+      await handleGenerateSingle(fakeReq({ body: { word: 'blocker', language: 'en' } }), fakeRes());
+      const queuedRes = fakeRes();
+      await handleGenerateSingle(
+        fakeReq({ body: { word: 'queued-pause', language: 'en' } }),
+        queuedRes
+      );
+      const jobId = (queuedRes._body as any).jobId;
+
+      const pauseRes = fakeRes();
+      await handlePauseJob(fakeReq({ params: { jobId } }), pauseRes);
+      assert.equal(pauseRes._status, 200);
+      assert.equal((pauseRes._body as any).ok, true);
+      assert.equal(
+        getDb().get('SELECT status FROM job_queue WHERE id = ?', jobId)?.status,
+        'paused'
+      );
+
+      const resumeRes = fakeRes();
+      await handleResumeActiveJob(fakeReq({ params: { jobId } }), resumeRes);
+      assert.equal(resumeRes._status, 200);
+      assert.equal((resumeRes._body as any).ok, true);
+      assert.equal(
+        getDb().get('SELECT status FROM job_queue WHERE id = ?', jobId)?.status,
+        'queued'
+      );
+
+      blockingRunner.releaseAll();
+      await new Promise(r => setTimeout(r, 0));
+    });
+  });
+
   // ---- handleResumeJob ----
 
   void describe('handleResumeJob', () => {

@@ -571,15 +571,19 @@ const loadAnkiConfig = (): void => {
   ankiMappingModels.value = listStoredFieldMappingModelNames();
 };
 
-const testAnkiConnection = async (): Promise<void> => {
+const testAnkiConnection = async (notify = true): Promise<void> => {
   ankiStatus.value = 'testing';
   try {
     await pingAnkiConnect();
     ankiStatus.value = 'connected';
-    appStore.addToast('Anki connected', 'success');
+    if (notify) {
+      appStore.addToast('Anki connected', 'success');
+    }
   } catch (error) {
     ankiStatus.value = 'disconnected';
-    appStore.addToast('Anki disconnected', 'error');
+    if (notify) {
+      appStore.addToast('Anki disconnected', 'error');
+    }
     console.error('Failed to connect Anki', error);
   }
 };
@@ -614,7 +618,7 @@ const replayOnboarding = (): void => {
 onMounted(() => {
   loadAnkiConfig();
   void loadAIConfig();
-  void testAnkiConnection();
+  void testAnkiConnection(false);
   void loadDataDir();
 });
 </script>
@@ -1333,7 +1337,7 @@ onMounted(() => {
             <p class="data-note">
               AnkiConnect {{ ankiStatusText }}
               <span :class="'status-badge ' + ankiStatus" />
-              <button class="btn btn-compact" @click="testAnkiConnection">重试</button>
+              <button class="btn btn-compact" @click="testAnkiConnection()">重试</button>
             </p>
           </div>
 

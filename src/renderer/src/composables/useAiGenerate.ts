@@ -518,6 +518,35 @@ export function useAiGenerate() {
     await fetchQueueOverview();
   }
 
+  async function pauseGeneration(jobId: string): Promise<void> {
+    await request.post(`/v2/generate/${jobId}/pause`);
+    const job = jobs.value.get(jobId);
+    if (job) {
+      job.status = 'paused';
+      const runningStep = job.steps.find(step => step.status === 'running');
+      if (runningStep) {
+        runningStep.status = 'pending';
+        runningStep.summary = 'Paused';
+      }
+      touchJobs();
+    }
+    await fetchQueueOverview();
+  }
+
+  async function resumeActiveGeneration(jobId: string): Promise<void> {
+    await request.post(`/v2/generate/${jobId}/resume-active`);
+    await fetchQueueOverview();
+    const overviewItem = queueOverview.value.find(item => item.jobId === jobId);
+    if (overviewItem) {
+      const job = ensureJobFromOverview(overviewItem);
+      job.status = overviewItem.status === 'queued' ? 'queued' : 'running';
+      touchJobs();
+      if (overviewItem.status === 'queued' || overviewItem.status === 'running') {
+        subscribeToJob(jobId);
+      }
+    }
+  }
+
   async function fixGeneration(jobId: string): Promise<string> {
     const job = jobs.value.get(jobId);
     const response = await request.post<GenerateResponse>(`/v2/generate/${jobId}/fix`);
@@ -705,6 +734,8 @@ export function useAiGenerate() {
     startGeneration,
     startBatchGeneration,
     cancelGeneration,
+    pauseGeneration,
+    resumeActiveGeneration,
     resumeGeneration,
     fixGeneration,
     subscribeToJob,

@@ -135,6 +135,47 @@ export class JobQueue {
     return false;
   }
 
+  pauseJob(jobId: string): boolean {
+    const status = this.store.getStatus(jobId);
+    if (!status) return false;
+
+    if (status === 'queued') {
+      const result = this.store.pauseQueuedJob(jobId);
+      if (result.changes > 0) {
+        this.lifecycle.finishEmitter(jobId);
+        this.lifecycle.cleanup(jobId);
+        return true;
+      }
+      return false;
+    }
+
+    if (status === 'running') {
+      const controller = this.gate.getAbortController(jobId);
+      const snapshot = this.buildResumeSnapshot(jobId);
+      this.gate.markPaused(jobId);
+      this.resumeState.set(jobId, snapshot);
+      this.store.pauseRunningJob(jobId);
+      this.emitProgress(jobId, { type: 'job:paused', step: snapshot.resumeFromStage });
+      if (controller && !controller.signal.aborted) {
+        controller.abort();
+      }
+      return true;
+    }
+
+    return false;
+  }
+
+  resumeJob(jobId: string): boolean {
+    const status = this.store.getStatus(jobId);
+    if (status !== 'paused') return false;
+
+    this.resumeState.set(jobId, this.buildResumeSnapshot(jobId));
+    const result = this.store.resumePausedJob(jobId);
+    if (result.changes <= 0) return false;
+    this.tryDequeue();
+    return true;
+  }
+
   subscribe(jobId: string, res: { write: (chunk: string) => void }): void {
     // Emit initial lifecycle event based on DB status.
     const status = this.store.getStatus(jobId);

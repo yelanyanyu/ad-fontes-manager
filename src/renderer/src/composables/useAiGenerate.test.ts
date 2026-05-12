@@ -170,6 +170,51 @@ describe('useAiGenerate', () => {
     expect(ai.currentJob.value?.jobId).toBe('job-a');
   });
 
+  it('pauses and resumes active jobs through queue endpoints', async () => {
+    requestPostMock.mockResolvedValue({});
+    requestGetMock.mockResolvedValueOnce({
+      jobs: [
+        {
+          jobId: 'job-1',
+          jobType: 'generate',
+          status: 'paused',
+          word: 'crate',
+          language: 'en',
+          priority: 'normal',
+          createdAt: 'now',
+        },
+      ],
+    });
+    requestGetMock.mockResolvedValueOnce({
+      jobs: [
+        {
+          jobId: 'job-1',
+          jobType: 'generate',
+          status: 'queued',
+          word: 'crate',
+          language: 'en',
+          priority: 'normal',
+          createdAt: 'now',
+        },
+      ],
+    });
+    const ai = useAiGenerate();
+    ai.jobs.value.set('job-1', {
+      jobId: 'job-1',
+      word: 'crate',
+      language: 'en',
+      status: 'running',
+      steps: [{ step: 'searching', status: 'running' }],
+    });
+
+    await ai.pauseGeneration('job-1');
+    expect(requestPostMock).toHaveBeenCalledWith('/v2/generate/job-1/pause');
+    expect(ai.jobs.value.get('job-1')?.status).toBe('paused');
+
+    await ai.resumeActiveGeneration('job-1');
+    expect(requestPostMock).toHaveBeenCalledWith('/v2/generate/job-1/resume-active');
+  });
+
   it('keeps completed target steps visible when starting an auto fix job', async () => {
     requestPostMock.mockResolvedValue({ jobId: 'fix-job-1', queued: false });
     const ai = useAiGenerate();

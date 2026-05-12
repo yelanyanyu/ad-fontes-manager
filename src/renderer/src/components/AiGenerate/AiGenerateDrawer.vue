@@ -203,8 +203,7 @@ function handleStageClick(step: StepState): void {
   stagePanelOpen.value = true;
 }
 
-async function handleStageRegenerate(event: MouseEvent, step: StepState): Promise<void> {
-  event.stopPropagation();
+async function handleStageRegenerate(step: StepState): Promise<void> {
   await handleResume(step.step as ResumeStage);
 }
 </script>
@@ -236,13 +235,28 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
         >
           Single
         </button>
-        <button
-          type="button"
-          :class="{ active: entryMode === 'batch' }"
-          @click="entryMode = 'batch'"
-        >
-          Batch
-        </button>
+        <div class="batch-mode" :class="{ active: entryMode === 'batch' }">
+          <button type="button" class="batch-mode-main" @click="entryMode = 'batch'">
+            Batch
+          </button>
+          <select
+            v-model="batchSource"
+            class="batch-source-select"
+            aria-label="Batch source"
+            @click.stop="entryMode = 'batch'"
+            @change="entryMode = 'batch'"
+          >
+            <option value="text">Text</option>
+            <option value="json">JSON file</option>
+          </select>
+          <button type="button" class="batch-info-button" aria-label="Batch input help">
+            i
+            <span class="batch-help">
+              Text: one word per line, or blank-line blocks with word/context/notes. JSON:
+              items array with word, context, and notes fields. Only word is required.
+            </span>
+          </button>
+        </div>
       </section>
 
       <template v-if="entryMode === 'single'">
@@ -275,25 +289,10 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
       </template>
 
       <section v-else class="batch-panel">
-        <div class="source-row">
-          <div class="source-tabs" aria-label="Batch source">
-            <button
-              type="button"
-              :class="{ active: batchSource === 'text' }"
-              @click="batchSource = 'text'"
-            >
-              Text
-            </button>
-            <button
-              type="button"
-              :class="{ active: batchSource === 'json' }"
-              @click="batchSource = 'json'"
-            >
-              JSON file
-            </button>
-          </div>
+        <div v-if="batchSource === 'json'" class="batch-toolbar">
+          <span>Import the browser-extension JSON contract.</span>
           <label class="file-button">
-            Import
+            Import JSON
             <input type="file" accept="application/json,.json" @change="handleBatchFileChange" />
           </label>
         </div>
@@ -352,28 +351,35 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
         </div>
 
         <div class="stage-list">
-          <button
+          <div
             v-for="step in displaySteps"
             :key="step.step"
-            type="button"
             class="stage-row"
             :class="`stage-${step.status}`"
-            @click="handleStageClick(step)"
           >
             <span class="stage-name">{{ step.step }}</span>
             <span class="stage-meta">
+              {{ step.duration ? `${Math.round(step.duration / 100) / 10}s` : step.status }}
+            </span>
+            <div class="stage-actions">
               <button
                 v-if="step.status === 'complete' || step.status === 'error'"
                 type="button"
-                class="stage-regenerate-button"
+                class="stage-action-btn regenerate"
                 :disabled="isRunning"
-                @click="handleStageRegenerate($event, step)"
+                @click="handleStageRegenerate(step)"
               >
                 Regenerate
               </button>
-              <span>{{ step.duration ? `${Math.round(step.duration / 100) / 10}s` : step.status }}</span>
-            </span>
-          </button>
+              <button
+                type="button"
+                class="stage-action-btn"
+                @click="handleStageClick(step)"
+              >
+                Details
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -469,8 +475,7 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
   gap: 14px;
 }
 
-.mode-tabs,
-.source-tabs {
+.mode-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
@@ -480,8 +485,8 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
   overflow: hidden;
 }
 
-.mode-tabs button,
-.source-tabs button {
+.mode-tabs > button,
+.batch-mode-main {
   height: 32px;
   border: 0;
   background: transparent;
@@ -491,10 +496,84 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
   cursor: pointer;
 }
 
-.mode-tabs button.active,
-.source-tabs button.active {
+.mode-tabs > button.active,
+.batch-mode.active {
   background: var(--green-soft);
   color: var(--green);
+}
+
+.batch-mode {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(56px, 1fr) auto auto;
+  align-items: center;
+  color: var(--muted);
+}
+
+.batch-mode-main {
+  min-width: 0;
+  color: inherit;
+}
+
+.batch-source-select {
+  height: 24px;
+  max-width: 86px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-soft);
+  padding: 0 22px 0 8px;
+  font-size: 11px;
+  font-weight: 650;
+  outline: 0;
+}
+
+.batch-mode.active .batch-source-select {
+  border-color: var(--green-border);
+  color: var(--green);
+}
+
+.batch-info-button {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  margin-right: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface-panel);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
+}
+
+.batch-help {
+  position: absolute;
+  right: 0;
+  top: 28px;
+  width: 260px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-soft);
+  box-shadow: var(--shadow-md);
+  padding: 10px;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+  z-index: 30;
+}
+
+.batch-info-button:hover .batch-help,
+.batch-info-button:focus-visible .batch-help {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .input-grid {
@@ -528,11 +607,13 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
   gap: 10px;
 }
 
-.source-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
+.batch-toolbar {
+  display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .file-button {
@@ -767,10 +848,7 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
   padding: 8px 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  cursor: pointer;
-  text-align: left;
 }
 
 .stage-name {
@@ -782,30 +860,42 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
 .stage-meta {
   color: var(--muted);
   font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
   flex-shrink: 0;
 }
 
-.stage-regenerate-button {
+.stage-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.stage-action-btn {
   height: 26px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-panel);
-  color: var(--green);
+  color: var(--text-soft);
   padding: 0 9px;
   font-size: 11px;
   font-weight: 650;
   cursor: pointer;
 }
 
-.stage-regenerate-button:hover {
+.stage-action-btn:hover {
+  border-color: var(--green-border);
+  color: var(--green);
+}
+
+.stage-action-btn.regenerate {
+  color: var(--green);
+}
+
+.stage-action-btn.regenerate:hover {
   border-color: var(--green-border);
   background: var(--green-soft);
 }
 
-.stage-regenerate-button:disabled {
+.stage-action-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }

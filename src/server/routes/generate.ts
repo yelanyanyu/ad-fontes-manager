@@ -13,6 +13,8 @@ const {
   handleGenerateBatch,
   handleStream,
   handleCancelJob,
+  handlePauseJob,
+  handleResumeActiveJob,
   handleResumeJob,
   handleFixJob,
   handleQueueOverview,
@@ -28,6 +30,8 @@ const {
   handleGenerateBatch: (req: Request, res: Response) => Promise<void>;
   handleStream: (req: Request, res: Response) => Promise<void>;
   handleCancelJob: (req: Request, res: Response) => Promise<void>;
+  handlePauseJob: (req: Request, res: Response) => Promise<void>;
+  handleResumeActiveJob: (req: Request, res: Response) => Promise<void>;
   handleResumeJob: (req: Request, res: Response) => Promise<void>;
   handleFixJob: (req: Request, res: Response) => Promise<void>;
   handleQueueOverview: (req: Request, res: Response) => Promise<void>;
@@ -44,6 +48,12 @@ router.post('/generate/single', requireWriteAccess, asyncHandler(handleGenerateS
 router.post('/generate/batch', requireWriteAccess, asyncHandler(handleGenerateBatch));
 router.get('/generate/:jobId/stream', asyncHandler(handleStream));
 router.post('/generate/:jobId/cancel', requireWriteAccess, asyncHandler(handleCancelJob));
+router.post('/generate/:jobId/pause', requireWriteAccess, asyncHandler(handlePauseJob));
+router.post(
+  '/generate/:jobId/resume-active',
+  requireWriteAccess,
+  asyncHandler(handleResumeActiveJob)
+);
 router.post('/generate/:jobId/resume', requireWriteAccess, asyncHandler(handleResumeJob));
 router.post('/generate/:jobId/fix', requireWriteAccess, asyncHandler(handleFixJob));
 

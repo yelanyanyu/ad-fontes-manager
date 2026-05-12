@@ -83,15 +83,9 @@ watch(
 <style scoped>
 .stage-panel {
   position: absolute;
-  top: 0;
-  right: 100%;
-  width: min(420px, 42vw);
-  height: 100%;
-  border-left: 1px solid var(--line);
-  border-right: 1px solid var(--line);
+  inset: 0;
   background: var(--surface-panel);
-  box-shadow: var(--shadow-md);
-  z-index: 22;
+  z-index: 25;
   display: flex;
   flex-direction: column;
 }
@@ -230,11 +224,4 @@ p {
   font-size: 12px;
 }
 
-@media (max-width: 920px) {
-  .stage-panel {
-    right: 0;
-    width: 100%;
-    z-index: 24;
-  }
-}
 </style>

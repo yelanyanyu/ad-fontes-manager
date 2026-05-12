@@ -217,6 +217,42 @@ async function handleCancelJob(req: Request, res: Response): Promise<void> {
   res.json({ ok: cancelled, jobId });
 }
 
+async function handlePauseJob(req: Request, res: Response): Promise<void> {
+  const jobId = firstParam(req.params.jobId);
+  const queue = getQueue();
+  const job = queue.getJob(jobId);
+
+  if (!job) {
+    res.status(404).json({ code: 404, message: 'Job not found' });
+    return;
+  }
+  if (job.status !== 'queued' && job.status !== 'running') {
+    res.status(400).json({ code: 400, message: 'Only queued or running jobs can be paused' });
+    return;
+  }
+
+  const paused = queue.pauseJob(jobId);
+  res.json({ ok: paused, jobId });
+}
+
+async function handleResumeActiveJob(req: Request, res: Response): Promise<void> {
+  const jobId = firstParam(req.params.jobId);
+  const queue = getQueue();
+  const job = queue.getJob(jobId);
+
+  if (!job) {
+    res.status(404).json({ code: 404, message: 'Job not found' });
+    return;
+  }
+  if (job.status !== 'paused') {
+    res.status(400).json({ code: 400, message: 'Only paused jobs can be resumed' });
+    return;
+  }
+
+  const resumed = queue.resumeJob(jobId);
+  res.json({ ok: resumed, jobId });
+}
+
 async function handleResumeJob(req: Request, res: Response): Promise<void> {
   const jobId = firstParam(req.params.jobId);
   const queue = getQueue();
@@ -417,6 +453,8 @@ module.exports = {
   handleGenerateBatch,
   handleStream,
   handleCancelJob,
+  handlePauseJob,
+  handleResumeActiveJob,
   handleResumeJob,
   handleFixJob,
   handleQueueOverview,
