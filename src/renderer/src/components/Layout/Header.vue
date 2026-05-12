@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useAppStore, SUPPORTED_LANGUAGES } from '@/stores/appStore';
 import { useThemeStore } from '@/stores/themeStore';
 import BellIcon from '@/components/Announcement/BellIcon.vue';
 
 const appStore = useAppStore();
 const themeStore = useThemeStore();
+const router = useRouter();
 const open = ref(false);
 const langMenuRef = ref<HTMLElement | null>(null);
 
@@ -24,6 +26,14 @@ const currentFlag = computed(() => {
 function select(code: 'en' | 'de') {
   appStore.setLanguage(code);
   open.value = false;
+}
+
+function openAiGenerate(): void {
+  void router.push('/').finally(() => {
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('ad-fontes:ai-generate-open'));
+    }, 0);
+  });
 }
 
 function onDocumentClick(e: MouseEvent) {
@@ -46,6 +56,14 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
     </div>
 
     <div class="top-actions">
+      <button class="ai-generate-btn" type="button" title="AI Generate" @click="openAiGenerate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+          <path d="M12 3l1.7 5.1L19 10l-5.3 1.9L12 17l-1.7-5.1L5 10l5.3-1.9L12 3z" />
+          <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />
+        </svg>
+        <span>AI Generate</span>
+      </button>
+
       <BellIcon />
 
       <!-- Theme toggle -->
@@ -171,6 +189,43 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.ai-generate-btn {
+  height: 32px;
+  border: 1px solid rgba(29, 120, 84, 0.22);
+  border-radius: 8px;
+  background: var(--green);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: 0 8px 18px rgba(29, 120, 84, 0.16);
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.ai-generate-btn:hover {
+  background: #196f4d;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(29, 120, 84, 0.2);
+}
+
+.ai-generate-btn svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.8;
+}
+
+[data-theme="dark"] .ai-generate-btn {
+  background: #207d59;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
 }
 
 .icon-btn {

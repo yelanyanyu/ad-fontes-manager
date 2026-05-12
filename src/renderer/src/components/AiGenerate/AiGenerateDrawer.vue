@@ -3,6 +3,7 @@ import { computed, inject, ref } from 'vue';
 import { useAppStore, type LanguageCode } from '@/stores/appStore';
 import { AI_STATE_KEY, type ResumeStage, type StepState } from '@/composables/useAiGenerate';
 import AiGenerateStagePanel from './AiGenerateStagePanel.vue';
+import { parseBatchJson, parseBatchText } from '@/services/batchGenerateParser';
 
 defineProps<{
   open: boolean;
@@ -19,15 +20,24 @@ const {
   isRunning,
   isComplete,
   startGeneration,
+  startBatchGeneration,
   cancelGeneration,
   resumeGeneration,
   fixGeneration,
 } = inject(AI_STATE_KEY)!;
 
+type EntryMode = 'single' | 'batch';
+type BatchSource = 'text' | 'json';
+
+const entryMode = ref<EntryMode>('single');
+const batchSource = ref<BatchSource>('text');
 const word = ref('');
 const fixing = ref(false);
 const context = ref('');
 const notes = ref('');
+const batchText = ref('');
+const batchFileName = ref('');
+const batchSubmitting = ref(false);
 const errorMessage = ref('');
 const selectedStage = ref<StepState | null>(null);
 const stagePanelOpen = ref(false);
@@ -56,6 +66,22 @@ const reviewScore = computed(() => {
   return typeof score === 'number' ? score : null;
 });
 const canStart = computed(() => word.value.trim().length > 0);
+const batchParseResult = computed(() =>
+  batchSource.value === 'json' ? parseBatchJson(batchText.value) : parseBatchText(batchText.value)
+);
+const batchItems = computed(() => batchParseResult.value.items);
+const canStartBatch = computed(
+  () => batchItems.value.length > 0 && batchParseResult.value.invalid.length === 0
+);
+const batchPlaceholder = computed(() =>
+  batchSource.value === 'json'
+    ? '{ "items": [{ "word": "proliferate", "context": "..." }] }'
+    : 'proliferate\ncontext: The idea began to proliferate.\nnotes: Latin root\n\nameliorate'
+);
+const missingContextCount = computed(
+  () => batchItems.value.filter(item => !item.context?.trim()).length
+);
+const missingNotesCount = computed(() => batchItems.value.filter(item => !item.notes?.trim()).length);
 
 const hasRevisionNotes = computed(() => {
   const notes = currentJob.value?.scores?.revision_notes as string | undefined;
@@ -92,6 +118,34 @@ async function handleStart(): Promise<void> {
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '生成请求失败';
   }
+}
+
+async function handleBatchStart(): Promise<void> {
+  errorMessage.value = '';
+  if (!canStartBatch.value) {
+    errorMessage.value = batchParseResult.value.invalid[0] || '请输入至少一个单词';
+    return;
+  }
+  batchSubmitting.value = true;
+  try {
+    const response = await startBatchGeneration(language.value, batchItems.value);
+    const skipped = response.skipped.length ? `, skipped ${response.skipped.length}` : '';
+    errorMessage.value = `Created ${response.jobs.length} jobs${skipped}.`;
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : '批量提交失败';
+  } finally {
+    batchSubmitting.value = false;
+  }
+}
+
+async function handleBatchFileChange(event: Event): Promise<void> {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (!file) return;
+  batchFileName.value = file.name;
+  batchSource.value = 'json';
+  batchText.value = await file.text();
+  target.value = '';
 }
 
 async function handleCancel(): Promise<void> {
@@ -174,32 +228,111 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
     </header>
 
     <div class="drawer-body">
-      <section class="input-grid">
-        <label>
-          <span>Word</span>
-          <input v-model="word" type="text" @keyup.enter="handleStart" />
-        </label>
-        <label>
-          <span>Context</span>
-          <input v-model="context" type="text" />
-        </label>
-        <label>
-          <span>Notes</span>
-          <input v-model="notes" type="text" />
-        </label>
+      <section class="mode-tabs" aria-label="AI Generate mode">
+        <button
+          type="button"
+          :class="{ active: entryMode === 'single' }"
+          @click="entryMode = 'single'"
+        >
+          Single
+        </button>
+        <button
+          type="button"
+          :class="{ active: entryMode === 'batch' }"
+          @click="entryMode = 'batch'"
+        >
+          Batch
+        </button>
       </section>
 
-      <div class="action-row">
-        <button type="button" class="primary-button" :disabled="!canStart" @click="handleStart">
-          Generate
-        </button>
-        <button v-if="isRunning" type="button" class="danger-button" @click="handleCancel">
-          Cancel selected
-        </button>
-        <span v-if="currentJob?.status === 'queued'" class="queue-pill">
-          Queued {{ currentJob.queuePosition || 1 }}
-        </span>
-      </div>
+      <template v-if="entryMode === 'single'">
+        <section class="input-grid">
+          <label>
+            <span>Word</span>
+            <input v-model="word" type="text" @keyup.enter="handleStart" />
+          </label>
+          <label>
+            <span>Context</span>
+            <input v-model="context" type="text" />
+          </label>
+          <label>
+            <span>Notes</span>
+            <input v-model="notes" type="text" />
+          </label>
+        </section>
+
+        <div class="action-row">
+          <button type="button" class="primary-button" :disabled="!canStart" @click="handleStart">
+            Generate
+          </button>
+          <button v-if="isRunning" type="button" class="danger-button" @click="handleCancel">
+            Cancel selected
+          </button>
+          <span v-if="currentJob?.status === 'queued'" class="queue-pill">
+            Queued {{ currentJob.queuePosition || 1 }}
+          </span>
+        </div>
+      </template>
+
+      <section v-else class="batch-panel">
+        <div class="source-row">
+          <div class="source-tabs" aria-label="Batch source">
+            <button
+              type="button"
+              :class="{ active: batchSource === 'text' }"
+              @click="batchSource = 'text'"
+            >
+              Text
+            </button>
+            <button
+              type="button"
+              :class="{ active: batchSource === 'json' }"
+              @click="batchSource = 'json'"
+            >
+              JSON file
+            </button>
+          </div>
+          <label class="file-button">
+            Import
+            <input type="file" accept="application/json,.json" @change="handleBatchFileChange" />
+          </label>
+        </div>
+
+        <textarea
+          v-model="batchText"
+          class="batch-textarea"
+          :placeholder="batchPlaceholder"
+        />
+
+        <div class="batch-summary">
+          <span>{{ batchItems.length }} words</span>
+          <span>{{ missingContextCount }} without context</span>
+          <span>{{ missingNotesCount }} without notes</span>
+          <span v-if="batchFileName">{{ batchFileName }}</span>
+        </div>
+        <p v-if="batchParseResult.invalid.length" class="error-text">
+          {{ batchParseResult.invalid[0] }}
+        </p>
+        <div v-if="batchItems.length" class="batch-preview">
+          <div v-for="item in batchItems.slice(0, 5)" :key="item.word" class="batch-preview-row">
+            <strong>{{ item.word }}</strong>
+            <span>{{ item.context || 'No context' }}</span>
+          </div>
+        </div>
+        <div class="action-row">
+          <button
+            type="button"
+            class="primary-button"
+            :disabled="!canStartBatch || batchSubmitting"
+            @click="handleBatchStart"
+          >
+            {{ batchSubmitting ? 'Creating...' : 'Create Batch' }}
+          </button>
+          <button v-if="isRunning" type="button" class="danger-button" @click="handleCancel">
+            Cancel selected
+          </button>
+        </div>
+      </section>
 
       <p v-if="errorMessage || currentJob?.error" class="error-text">
         {{ errorMessage || currentJob?.error }}
@@ -336,6 +469,34 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
   gap: 14px;
 }
 
+.mode-tabs,
+.source-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.mode-tabs button,
+.source-tabs button {
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.mode-tabs button.active,
+.source-tabs button.active {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
 .input-grid {
   display: grid;
   gap: 10px;
@@ -360,6 +521,108 @@ async function handleStageRegenerate(event: MouseEvent, step: StepState): Promis
 .input-grid input:focus {
   border-color: var(--green-border);
   box-shadow: 0 0 0 2px var(--green-soft);
+}
+
+.batch-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.source-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.file-button {
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.file-button input {
+  display: none;
+}
+
+.batch-textarea {
+  min-height: 168px;
+  max-height: 260px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--editor-field);
+  color: var(--text);
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  outline: 0;
+}
+
+.batch-textarea:focus {
+  border-color: var(--green-border);
+  box-shadow: 0 0 0 2px var(--green-soft);
+}
+
+.batch-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.batch-summary span {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--muted);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.batch-preview {
+  display: grid;
+  gap: 6px;
+}
+
+.batch-preview-row {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: minmax(92px, 0.38fr) 1fr;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+}
+
+.batch-preview-row strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-preview-row span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .action-row,

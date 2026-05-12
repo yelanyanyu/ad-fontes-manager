@@ -48,6 +48,10 @@ const applyGeneratedYaml = (yamlContent: string) => {
   previewJob.value = null;
 };
 
+const openAiGenerate = () => {
+  aiDrawerOpen.value = true;
+};
+
 const openAiJob = () => {
   aiDrawerOpen.value = true;
 };
@@ -64,6 +68,8 @@ let handleResizeMove: ((e: MouseEvent) => void) | null = null;
 let handleResizeUp: (() => void) | null = null;
 
 onMounted(() => {
+  window.addEventListener('ad-fontes:ai-generate-open', openAiGenerate);
+
   const handle = dragHandle.value;
   const left = leftPanel.value;
   const parent = container.value;
@@ -107,6 +113,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  window.removeEventListener('ad-fontes:ai-generate-open', openAiGenerate);
   if (handleResizeMove) document.removeEventListener('mousemove', handleResizeMove);
   if (handleResizeUp) document.removeEventListener('mouseup', handleResizeUp);
 });
@@ -122,7 +129,7 @@ onUnmounted(() => {
       style="width: 45%"
     >
       <div class="editor-shell">
-        <WordEditor ref="wordEditorRef" @ai-generate-open="aiDrawerOpen = true" />
+        <WordEditor ref="wordEditorRef" />
       </div>
       <AiQueueBar
         class="queue-shell"

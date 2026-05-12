@@ -10,6 +10,7 @@ const { asyncHandler } = require('../utils/errors') as {
 };
 const {
   handleGenerateSingle,
+  handleGenerateBatch,
   handleStream,
   handleCancelJob,
   handleResumeJob,
@@ -24,6 +25,7 @@ const {
   handleQueueResumeAll,
 } = require('../controllers/generateController') as {
   handleGenerateSingle: (req: Request, res: Response) => Promise<void>;
+  handleGenerateBatch: (req: Request, res: Response) => Promise<void>;
   handleStream: (req: Request, res: Response) => Promise<void>;
   handleCancelJob: (req: Request, res: Response) => Promise<void>;
   handleResumeJob: (req: Request, res: Response) => Promise<void>;
@@ -39,6 +41,7 @@ const {
 };
 
 router.post('/generate/single', requireWriteAccess, asyncHandler(handleGenerateSingle));
+router.post('/generate/batch', requireWriteAccess, asyncHandler(handleGenerateBatch));
 router.get('/generate/:jobId/stream', asyncHandler(handleStream));
 router.post('/generate/:jobId/cancel', requireWriteAccess, asyncHandler(handleCancelJob));
 router.post('/generate/:jobId/resume', requireWriteAccess, asyncHandler(handleResumeJob));

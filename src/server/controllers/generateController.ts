@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { JobQueue } from '../services/ai/JobQueue';
 
 const { z } = require('zod') as typeof import('zod');
+const crypto = require('node:crypto') as typeof import('node:crypto');
 const { getQueue } = require('../services/ai/queue') as {
   getQueue: () => JobQueue;
 };
@@ -24,6 +25,19 @@ const GenerateRequestSchema = z.object({
   context: z.string().optional(),
   language: z.enum(['en', 'de']).default('en'),
   notes: z.string().optional(),
+});
+const BatchGenerateRequestSchema = z.object({
+  language: z.enum(['en', 'de']).default('en'),
+  items: z
+    .array(
+      z.object({
+        word: z.string().trim().min(1),
+        context: z.string().optional(),
+        notes: z.string().optional(),
+      })
+    )
+    .min(1)
+    .max(200),
 });
 const ResumeRequestSchema = z.object({
   fromStage: z.enum(['searching', 'pondering', 'auditing']).optional(),
@@ -83,6 +97,69 @@ async function handleGenerateSingle(req: Request, res: Response): Promise<void> 
   );
 
   res.status(202).json({ jobId, queued: isQueued, position });
+}
+
+async function handleGenerateBatch(req: Request, res: Response): Promise<void> {
+  const parsed = BatchGenerateRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ code: 400, message: 'Invalid request', errors: parsed.error.issues });
+    return;
+  }
+
+  const { language, items } = parsed.data;
+  const queue = getQueue();
+  const batchId = `batch-${crypto.randomUUID()}`;
+  const seen = new Set<string>();
+  const jobs: Array<{ jobId: string; word: string; queued: boolean; position?: number }> = [];
+  const skipped: Array<{ word: string; reason: string }> = [];
+
+  for (const item of items) {
+    const word = item.word.trim();
+    const key = `${language}:${word.toLocaleLowerCase()}`;
+    if (seen.has(key)) {
+      skipped.push({ word, reason: 'duplicate-in-request' });
+      continue;
+    }
+    seen.add(key);
+
+    if (queue.isDuplicate(word, language)) {
+      skipped.push({ word, reason: 'already-queued-or-running' });
+      continue;
+    }
+
+    const jobId = queue.enqueue({
+      type: 'generate',
+      priority: 'normal',
+      word,
+      language,
+      context: item.context?.trim() || undefined,
+      notes: item.notes?.trim() || undefined,
+      batchId,
+    });
+    const job = queue.getJob(jobId);
+    const queued = job?.status === 'queued';
+    jobs.push({
+      jobId,
+      word,
+      queued,
+      position: queued ? queue.getQueuePosition(jobId) : undefined,
+    });
+  }
+
+  if (jobs.length === 0) {
+    res.status(409).json({
+      code: 409,
+      message: 'No jobs were created for this batch.',
+      batchId,
+      skipped,
+    });
+    return;
+  }
+
+  const runLogger = loggers.ai.child({ batchId, language, total: jobs.length });
+  runLogger.info({ event: 'batch:accepted', skipped }, 'AI generation batch accepted');
+
+  res.status(202).json({ batchId, jobs, skipped });
 }
 
 async function handleStream(req: Request, res: Response): Promise<void> {
@@ -337,6 +414,7 @@ async function handleQueueResumeAll(_req: Request, res: Response): Promise<void>
 
 module.exports = {
   handleGenerateSingle,
+  handleGenerateBatch,
   handleStream,
   handleCancelJob,
   handleResumeJob,

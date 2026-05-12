@@ -140,6 +140,36 @@ describe('useAiGenerate', () => {
     });
   });
 
+  it('registers and subscribes to jobs returned by batch generation', async () => {
+    requestPostMock.mockResolvedValue({
+      batchId: 'batch-1',
+      jobs: [
+        { jobId: 'job-a', word: 'proliferate', queued: true, position: 1 },
+        { jobId: 'job-b', word: 'ameliorate', queued: true, position: 2 },
+      ],
+      skipped: [],
+    });
+    const ai = useAiGenerate();
+
+    const response = await ai.startBatchGeneration('en', [
+      { word: 'proliferate', context: 'context text' },
+      { word: 'ameliorate' },
+    ]);
+
+    expect(response.batchId).toBe('batch-1');
+    expect(ai.jobs.value.get('job-a')).toMatchObject({
+      word: 'proliferate',
+      context: 'context text',
+      status: 'queued',
+      queuePosition: 1,
+    });
+    expect(MockEventSource.instances.map(source => source.url)).toEqual([
+      '/api/v2/generate/job-a/stream',
+      '/api/v2/generate/job-b/stream',
+    ]);
+    expect(ai.currentJob.value?.jobId).toBe('job-a');
+  });
+
   it('keeps completed target steps visible when starting an auto fix job', async () => {
     requestPostMock.mockResolvedValue({ jobId: 'fix-job-1', queued: false });
     const ai = useAiGenerate();

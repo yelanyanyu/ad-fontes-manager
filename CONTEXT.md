@@ -100,6 +100,10 @@ The set of slots that determines how many Jobs the Queue runs simultaneously. Si
 A group of Jobs submitted together, tracked as a unit with aggregate progress derived from `job_queue` (`done`/`failed`/`total` via COUNT GROUP BY status). Has its own lifecycle (`pending` → `running` → `paused` / `complete` / `cancelled`). All Jobs in a Batch share the global Concurrency Pool.
 _Avoid_: Bulk, group, collection
 
+**Batch Submission** (批量提交):
+The user action of creating one Batch from multiple Word analysis requests. A Batch Submission expands into one Generate Job per Word; it does not create a special multi-Word Job. In user-entered batch text and imported batch files, only Word/Lemma is required; Context and Notes are optional per item. Manual batch text input remains a first-class entry path. JSON file import is the stable contract for browser-extension export and future direct desktop integration: `{ "items": [{ "word": "...", "context": "...", "notes": "..." }] }`.
+_Avoid_: Multi-word job, combined job
+
 **Queue** (队列):
 A SQLite-backed durable scheduler that gates Job execution across a global Concurrency Pool. Dequeues by Priority then by `created_at`. Supports restart recovery (`running` → `queued`), pause/resume/cancel per Job and per Batch, and automatic retry with circuit breaker.
 _Avoid_: Job pool, task queue

@@ -295,6 +295,60 @@ void describe('generateController with JobQueue', () => {
     });
   });
 
+  // ---- handleGenerateBatch ----
+
+  void describe('handleGenerateBatch', () => {
+    void it('creates multiple generate jobs with the same batch id', async () => {
+      const { handleGenerateBatch } = require('./generateController') as {
+        handleGenerateBatch: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const req = fakeReq({
+        body: {
+          language: 'en',
+          items: [
+            { word: 'proliferate', context: 'The idea began to proliferate.' },
+            { word: 'ameliorate' },
+          ],
+        },
+      });
+      const res = fakeRes();
+
+      await handleGenerateBatch(req, res);
+
+      assert.equal(res._status, 202);
+      const body = res._body as any;
+      assert.equal(body.jobs.length, 2);
+      assert.ok(body.batchId.startsWith('batch-'));
+
+      const rows = getDb().all('SELECT batch_id FROM job_queue ORDER BY word ASC');
+      assert.equal(rows.length, 2);
+      assert.equal(rows[0].batch_id, body.batchId);
+      assert.equal(rows[1].batch_id, body.batchId);
+    });
+
+    void it('skips duplicate words inside the same batch request', async () => {
+      const { handleGenerateBatch } = require('./generateController') as {
+        handleGenerateBatch: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const res = fakeRes();
+      await handleGenerateBatch(
+        fakeReq({
+          body: {
+            language: 'en',
+            items: [{ word: 'conduct' }, { word: 'conduct' }],
+          },
+        }),
+        res
+      );
+
+      assert.equal(res._status, 202);
+      assert.equal((res._body as any).jobs.length, 1);
+      assert.equal((res._body as any).skipped[0].reason, 'duplicate-in-request');
+    });
+  });
+
   // ---- handleStream ----
 
   void describe('handleStream', () => {

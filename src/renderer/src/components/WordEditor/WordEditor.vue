@@ -11,10 +11,6 @@ import type { ConflictData, EditorStatus } from '@/types/word-editor';
 import request from '@/utils/request';
 import { useYamlHierarchy } from '@/composables/useYamlHierarchy';
 
-const emit = defineEmits<{
-  'ai-generate-open': [];
-}>();
-
 interface WordStoreLike {
   editorYaml: string;
   saveWord: (yamlContent: string, force?: boolean) => Promise<boolean | ConflictData>;
@@ -273,9 +269,6 @@ defineExpose({ applyGeneratedYaml });
         </span>
       </div>
       <div class="head-actions">
-        <button class="head-link" type="button" @click="emit('ai-generate-open')">
-          AI Generate
-        </button>
         <button class="head-link" type="button" @click="clear">Clear</button>
       </div>
     </div>

@@ -49,10 +49,27 @@ export interface GenerateParams {
   notes?: string;
 }
 
+export interface BatchGenerateItem {
+  word: string;
+  context?: string;
+  notes?: string;
+}
+
 interface GenerateResponse {
   jobId: string;
   queued?: boolean;
   position?: number;
+}
+
+export interface BatchGenerateResponse {
+  batchId: string;
+  jobs: Array<{
+    jobId: string;
+    word: string;
+    queued?: boolean;
+    position?: number;
+  }>;
+  skipped: Array<{ word: string; reason: string }>;
 }
 
 export type ResumeStage = 'searching' | 'pondering' | 'auditing';
@@ -134,6 +151,33 @@ export function useAiGenerate() {
     subscribeToJob(response.jobId);
     await fetchQueueOverview();
     return response.jobId;
+  }
+
+  async function startBatchGeneration(
+    language: 'en' | 'de',
+    items: BatchGenerateItem[]
+  ): Promise<BatchGenerateResponse> {
+    const response = await request.post<BatchGenerateResponse>('/v2/generate/batch', {
+      language,
+      items,
+    });
+    for (const job of response.jobs) {
+      const item = items.find(candidate => candidate.word === job.word);
+      registerJob(
+        job.jobId,
+        {
+          word: job.word,
+          language,
+          context: item?.context,
+          notes: item?.notes,
+        },
+        job
+      );
+      subscribeToJob(job.jobId);
+    }
+    if (response.jobs[0]) selectedJobId.value = response.jobs[0].jobId;
+    await fetchQueueOverview();
+    return response;
   }
 
   function ensureJobFromOverview(item: QueueJobOverview): JobState {
@@ -659,6 +703,7 @@ export function useAiGenerate() {
     isRunning,
     isComplete,
     startGeneration,
+    startBatchGeneration,
     cancelGeneration,
     resumeGeneration,
     fixGeneration,
