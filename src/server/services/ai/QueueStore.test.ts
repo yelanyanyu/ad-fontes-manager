@@ -1,5 +1,6 @@
 import { beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { performance } from 'node:perf_hooks';
 import Database from 'better-sqlite3';
 
 import { QueueStore, type SqliteLike } from './QueueStore';
@@ -30,6 +31,9 @@ const JOB_QUEUE_DDL = `
   );
   CREATE INDEX IF NOT EXISTS idx_job_queue_status ON job_queue(status);
   CREATE INDEX IF NOT EXISTS idx_job_queue_priority_created ON job_queue(priority, created_at);
+  CREATE INDEX IF NOT EXISTS idx_job_queue_workset_today
+    ON job_queue(status, language, word, completed_at, created_at)
+    WHERE result_yaml IS NOT NULL AND result_yaml <> '';
 `;
 
 function createTestDb(): SqliteLike {
@@ -139,5 +143,27 @@ void describe('QueueStore', () => {
 
     assert.equal(workset.total, 2);
     assert.deepEqual(workset.jobs.map(job => job.jobId).sort(), ['de-crate', 'new-crate']);
+  });
+
+  void it('returns today workset without correlated scans over repeated words', () => {
+    const insert = `
+      INSERT INTO job_queue (
+        id, job_type, priority, status, word, language, result_yaml, completed_at, created_at
+      )
+      VALUES (?, 'generate', 'normal', 'complete', ?, 'en', 'yaml', datetime('now', ?), datetime('now', ?))
+    `;
+
+    for (let i = 0; i < 500; i += 1) {
+      const word = `word-${i % 25}`;
+      const offset = `-${500 - i} seconds`;
+      db.run(insert, `job-${i}`, word, offset, offset);
+    }
+
+    const start = performance.now();
+    const workset = store.getTodayWorkset();
+    const elapsedMs = performance.now() - start;
+
+    assert.equal(workset.total, 25);
+    assert.ok(elapsedMs < 100, `expected workset refresh query to stay quick, got ${elapsedMs}ms`);
   });
 });

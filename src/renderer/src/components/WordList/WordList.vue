@@ -72,7 +72,7 @@ interface WordStoreLike {
   dbRecords: WordRecord[];
   dbListMeta: DbListMeta;
   loading: boolean;
-  fetchDbRecords: (params?: Partial<DbListMeta>) => Promise<void>;
+  fetchDbRecords: (params?: Partial<DbListMeta> & { background?: boolean }) => Promise<void>;
   deleteWord: (id: string) => Promise<void>;
   setEditorYaml: (yaml: string) => void;
   setEditingContext: (context: { id: string | null }) => void;

@@ -480,33 +480,32 @@ export class QueueStore {
 
   getTodayWorkset(): { jobs: WorksetJob[]; total: number } {
     const rows = this.getDb().all(
-      `SELECT id, job_type, status, word, language, priority, batch_id, created_at, completed_at,
-              CASE WHEN result_yaml IS NULL OR result_yaml = '' THEN 0 ELSE 1 END as has_result
-       FROM job_queue current_job
-       WHERE status IN ('complete', 'partial')
-         AND result_yaml IS NOT NULL
-         AND result_yaml <> ''
-         AND date(COALESCE(completed_at, created_at), 'localtime') = date('now', 'localtime')
-         AND NOT EXISTS (
-           SELECT 1 FROM job_queue newer_job
-           WHERE newer_job.status IN ('complete', 'partial')
-             AND newer_job.result_yaml IS NOT NULL
-             AND newer_job.result_yaml <> ''
-             AND lower(newer_job.word) = lower(current_job.word)
-             AND newer_job.language = current_job.language
-             AND date(COALESCE(newer_job.completed_at, newer_job.created_at), 'localtime') =
-                 date('now', 'localtime')
-             AND (
-               COALESCE(newer_job.completed_at, newer_job.created_at) >
-                 COALESCE(current_job.completed_at, current_job.created_at)
-               OR (
-                 COALESCE(newer_job.completed_at, newer_job.created_at) =
-                   COALESCE(current_job.completed_at, current_job.created_at)
-                 AND newer_job.rowid > current_job.rowid
-               )
-             )
-         )
-       ORDER BY COALESCE(completed_at, created_at) DESC, rowid DESC`
+      `WITH ranked_jobs AS (
+         SELECT
+           id,
+           job_type,
+           status,
+           word,
+           language,
+           priority,
+           batch_id,
+           created_at,
+           completed_at,
+           CASE WHEN result_yaml IS NULL OR result_yaml = '' THEN 0 ELSE 1 END AS has_result,
+           ROW_NUMBER() OVER (
+             PARTITION BY lower(word), language
+             ORDER BY COALESCE(completed_at, created_at) DESC, rowid DESC
+           ) AS workset_rank
+         FROM job_queue
+         WHERE status IN ('complete', 'partial')
+           AND result_yaml IS NOT NULL
+           AND result_yaml <> ''
+           AND date(COALESCE(completed_at, created_at), 'localtime') = date('now', 'localtime')
+       )
+       SELECT id, job_type, status, word, language, priority, batch_id, created_at, completed_at, has_result
+       FROM ranked_jobs
+       WHERE workset_rank = 1
+       ORDER BY COALESCE(completed_at, created_at) DESC`
     );
 
     const jobs = rows.map(row => ({

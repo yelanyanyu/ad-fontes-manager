@@ -90,6 +90,14 @@ _Avoid_: Step, phase, node
 A unit of work in the Queue. Three types: **Generate Job** (runs a full Pipeline for one Word), **Fix Job** (runs a single fix Stage against a completed Generate Job's output), **Audit-Fix Job** (audits and fixes a Word already saved to the database). Every Job has a lifecycle (`queued` → `running` → `complete` / `partial` / `error`) and a **Priority** (`normal` or `high`).
 _Avoid_: Task, execution, run
 
+**Format Fix** (格式修复):
+A synchronous (non-Queue) structural repair of a `complete` Job's YAML. Triggered manually by the user when YAML fails to parse. Runs in-place on the original Job, reusing its SSE step panel. Two tiers: **Basic** (code-driven: strip fences, remove unknown fields) and **Enhanced** (LLM-driven via `format-fixer.md` prompt). Basic runs first; Enhanced is only invoked if Basic fails. `partial` and `error` Jobs are rejected — they must regenerate.
+_Avoid_: YAML repair, schema fix
+
+**Content Fix** (内容修复):
+A Queue-based creative-field rewrite against a `complete` Job whose `overall_score < 6`. Uses the existing `fixing` Pipeline Stage (with `content-fixer.md` prompt and existing revision notes), then re-runs `auditing` to produce a new score. Can be triggered per-word or as a Workset batch operation (one Fix Job per word, grouped by `batchId`). Requires `complete` status and valid revision notes from a prior auditing stage.
+_Avoid_: Creative fix, quality fix, rewrite
+
 **Priority**:
 Either `normal` (for Generate Jobs) or `high` (for Fix and Audit-Fix Jobs). The Queue always dequeues high-priority Jobs before normal-priority ones, ensuring user-facing fixes are not blocked by batch generation.
 
@@ -162,6 +170,8 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - The Queue panel presents **Active Queue** and **Job History** as two modes in the same UI surface; execution controls belong only to Active Queue, while review and filtering controls belong to Job History
 - Saving or overwriting a **Word** remains an Editor responsibility; **Job History** may fill the Editor from a complete Job, but does not write directly to `words_v2`
 - A **Workset** is derived from **Job History** rows but is not itself History: it answers "what latest YAML results should I save now?" and can batch-save through the Word save path, reporting per-Word save outcomes such as saved, conflict, invalid, missing, or error
+- A **Format Fix** applies only to `complete` Jobs whose YAML fails `yaml.load`; `partial` and `error` Jobs are rejected. It runs synchronously in-place on the original Job, reusing the same SSE step panel. Basic (code-driven) runs first; Enhanced (LLM-driven) runs only if Basic fails.
+- A **Content Fix** applies to `complete` Jobs whose `overall_score < 6`. It creates a new Queue-based Fix Job (priority `high`) that runs `fixing` then re-runs `auditing`. Can be triggered per-word or as a Workset batch.
 - Each **Stage** may use one **Provider** + model and zero or more **Tools**
 - A **Field Mapping** connects a **Data Source** (from a Word's YAML) to an Anki **Field**
 - **AnkiConnect** and **APKG** are two export paths; both use the same **Field Mapping** and **Card Template**

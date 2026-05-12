@@ -177,7 +177,7 @@ async function handleSaveWorkset(): Promise<void> {
     recordWorksetSave(result);
     if (result.saved > 0) {
       appStore.addToast(`Saved ${result.saved} workset words`, 'success');
-      await wordStore.fetchDbRecords();
+      await wordStore.fetchDbRecords({ background: true });
     }
     if (result.conflicts || result.failed || result.missing.length) {
       appStore.addToast(
@@ -200,7 +200,7 @@ async function handleOverwriteConflicts(): Promise<void> {
     recordWorksetSave(result);
     if (result.saved > 0) {
       appStore.addToast(`Overwrote ${result.saved} workset conflicts`, 'success');
-      await wordStore.fetchDbRecords();
+      await wordStore.fetchDbRecords({ background: true });
     }
     if (result.failed || result.missing.length) {
       appStore.addToast(

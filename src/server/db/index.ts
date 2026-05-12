@@ -66,6 +66,9 @@ const ensureDatabaseSchema = (target: SqliteDatabase): void => {
     CREATE INDEX IF NOT EXISTS idx_job_queue_batch_id ON job_queue(batch_id);
     CREATE INDEX IF NOT EXISTS idx_job_queue_status ON job_queue(status);
     CREATE INDEX IF NOT EXISTS idx_job_queue_priority_created ON job_queue(priority, created_at);
+    CREATE INDEX IF NOT EXISTS idx_job_queue_workset_today
+      ON job_queue(status, language, word, completed_at, created_at)
+      WHERE result_yaml IS NOT NULL AND result_yaml <> '';
   `);
 
   // Migrate existing job_queue tables that may be missing columns added in later

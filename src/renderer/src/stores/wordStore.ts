@@ -29,6 +29,10 @@ interface HttpErrorLike {
   message?: string;
 }
 
+type FetchDbRecordsParams = Partial<DbListMeta> & {
+  background?: boolean;
+};
+
 const defaultDbListMeta = (): DbListMeta => ({
   page: 1,
   limit: 20,
@@ -49,13 +53,20 @@ export const useWordStore = defineStore('word', {
   }),
 
   actions: {
-    async fetchDbRecords(params: Partial<DbListMeta> = {}): Promise<void> {
-      this.loading = true;
+    async fetchDbRecords(params: FetchDbRecordsParams = {}): Promise<void> {
+      const { background = false, ...queryParams } = params;
+      if (!background) {
+        this.loading = true;
+      }
       const appStore = useAppStore();
       const currentLang = appStore.currentLanguage;
-      wordLogger.debug('Fetching records...', { ...params, language: currentLang });
+      wordLogger.debug('Fetching records...', {
+        ...queryParams,
+        language: currentLang,
+        background,
+      });
       try {
-        const p = { ...this.dbListMeta, ...params };
+        const p = { ...this.dbListMeta, ...queryParams };
         const res = await request.get('/v2/words', {
           params: {
             page: p.page,
@@ -91,7 +102,9 @@ export const useWordStore = defineStore('word', {
         this.dbListMeta = defaultDbListMeta();
         wordLogger.error('Failed to fetch records', e);
       } finally {
-        this.loading = false;
+        if (!background) {
+          this.loading = false;
+        }
       }
     },
 
