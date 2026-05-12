@@ -1003,5 +1003,36 @@ void describe('generateController with JobQueue', () => {
       assert.equal(res._status, 200);
       assert.equal((res._body as any).deleted, 1);
     });
+
+    void it('returns today workset with deduplicated latest results', async () => {
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (
+          id, job_type, priority, status, word, language, result_yaml, completed_at, created_at
+        )
+         VALUES
+         ('workset-old', 'generate', 'normal', 'complete', 'agent', 'en', ?, datetime('now', '-2 hours'), datetime('now', '-2 hours')),
+         ('workset-new', 'fix', 'high', 'complete', 'agent', 'en', ?, datetime('now', '-1 hours'), datetime('now', '-1 hours')),
+         ('workset-other', 'generate', 'normal', 'partial', 'crate', 'en', ?, datetime('now'), datetime('now'))`,
+        FAKE_YAML,
+        FAKE_YAML,
+        FAKE_YAML
+      );
+
+      const { handleTodayWorkset } = require('./generateController') as {
+        handleTodayWorkset: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const res = fakeRes();
+      await handleTodayWorkset(fakeReq(), res);
+
+      assert.equal(res._status, 200);
+      const body = res._body as any;
+      assert.equal(body.total, 2);
+      assert.deepEqual(body.jobs.map((job: Record<string, unknown>) => job.jobId).sort(), [
+        'workset-new',
+        'workset-other',
+      ]);
+    });
   });
 });

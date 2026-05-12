@@ -73,6 +73,19 @@ export interface QueueHistoryParams {
   query?: string;
 }
 
+export interface WorksetJob {
+  jobId: string;
+  jobType: string;
+  status: string;
+  word: string;
+  language: string;
+  priority: string;
+  batchId?: string;
+  createdAt: string;
+  completedAt?: string;
+  hasResult: boolean;
+}
+
 export class QueueStore {
   constructor(private readonly getDb: () => SqliteLike) {}
 
@@ -463,6 +476,74 @@ export class QueueStore {
       page,
       pageSize,
     };
+  }
+
+  getTodayWorkset(): { jobs: WorksetJob[]; total: number } {
+    const rows = this.getDb().all(
+      `SELECT id, job_type, status, word, language, priority, batch_id, created_at, completed_at,
+              CASE WHEN result_yaml IS NULL OR result_yaml = '' THEN 0 ELSE 1 END as has_result
+       FROM job_queue current_job
+       WHERE status IN ('complete', 'partial')
+         AND result_yaml IS NOT NULL
+         AND result_yaml <> ''
+         AND date(COALESCE(completed_at, created_at), 'localtime') = date('now', 'localtime')
+         AND NOT EXISTS (
+           SELECT 1 FROM job_queue newer_job
+           WHERE newer_job.status IN ('complete', 'partial')
+             AND newer_job.result_yaml IS NOT NULL
+             AND newer_job.result_yaml <> ''
+             AND lower(newer_job.word) = lower(current_job.word)
+             AND newer_job.language = current_job.language
+             AND date(COALESCE(newer_job.completed_at, newer_job.created_at), 'localtime') =
+                 date('now', 'localtime')
+             AND (
+               COALESCE(newer_job.completed_at, newer_job.created_at) >
+                 COALESCE(current_job.completed_at, current_job.created_at)
+               OR (
+                 COALESCE(newer_job.completed_at, newer_job.created_at) =
+                   COALESCE(current_job.completed_at, current_job.created_at)
+                 AND newer_job.rowid > current_job.rowid
+               )
+             )
+         )
+       ORDER BY COALESCE(completed_at, created_at) DESC, rowid DESC`
+    );
+
+    const jobs = rows.map(row => ({
+      jobId: row.id as string,
+      jobType: row.job_type as string,
+      status: row.status as string,
+      word: row.word as string,
+      language: row.language as string,
+      priority: row.priority as string,
+      batchId: row.batch_id as string | undefined,
+      createdAt: row.created_at as string,
+      completedAt: row.completed_at as string | undefined,
+      hasResult: Boolean(row.has_result),
+    }));
+
+    return { jobs, total: jobs.length };
+  }
+
+  getWorksetYaml(jobIds: string[]): Array<{ jobId: string; yaml: string }> {
+    const uniqueIds = [...new Set(jobIds.map(id => id.trim()).filter(Boolean))];
+    if (uniqueIds.length === 0) return [];
+
+    const placeholders = uniqueIds.map(() => '?').join(', ');
+    const rows = this.getDb().all(
+      `SELECT id, result_yaml
+       FROM job_queue
+       WHERE id IN (${placeholders})
+         AND status IN ('complete', 'partial')
+         AND result_yaml IS NOT NULL
+         AND result_yaml <> ''`,
+      ...uniqueIds
+    );
+
+    return rows.map(row => ({
+      jobId: row.id as string,
+      yaml: row.result_yaml as string,
+    }));
   }
 
   deleteHistoryJob(jobId: string): 'deleted' | 'not-found' | 'active' {

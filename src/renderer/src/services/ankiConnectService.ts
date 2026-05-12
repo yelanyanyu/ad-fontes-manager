@@ -373,6 +373,26 @@ export const applyDuplicateResolution = async (
         return [];
       }
 
+      // [DEBUG-d4f1] dump field state for diagnosis
+      const ankiFieldKeys = Object.keys(noteInfoAfterUpdate.fields ?? {});
+      const updateFieldKeys = Object.keys(fieldsToUpdate);
+      const existingFieldKeys = Object.keys(conflict.existingFields ?? {});
+      console.warn('[DEBUG-d4f1] Verification mismatch', {
+        fieldName,
+        expectedValue,
+        actualValue,
+        previousValue,
+        expectedLen: expectedValue.length,
+        actualLen: actualValue.length,
+        previousLen: previousValue.length,
+        fieldExistsInAnki: fieldName in (noteInfoAfterUpdate.fields ?? {}),
+        ankiFieldKeys,
+        updateFieldKeys,
+        existingFieldKeys,
+        rawAnkiValue: noteInfoAfterUpdate.fields?.[fieldName]?.value,
+        rawExistingValue: conflict.existingFields?.[fieldName],
+      });
+
       return [
         `${fieldName} mismatch (expected len=${expectedValue.length}, actual len=${actualValue.length}, previous len=${previousValue.length})`,
       ];

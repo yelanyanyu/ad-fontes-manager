@@ -92,11 +92,29 @@ export interface QueueHistoryJob extends QueueJobOverview {
   hasResult: boolean;
 }
 
+export interface WorksetJob extends QueueHistoryJob {
+  batchId?: string;
+}
+
 interface QueueHistoryResponse {
   jobs: QueueHistoryJob[];
   total: number;
   page: number;
   pageSize: number;
+}
+
+interface WorksetResponse {
+  jobs: WorksetJob[];
+  total: number;
+}
+
+export interface WorksetSaveResponse {
+  ok: boolean;
+  saved: number;
+  conflicts: number;
+  failed: number;
+  missing: string[];
+  results: Array<{ jobId: string; result: Record<string, unknown> }>;
 }
 
 export type AiGenerateState = ReturnType<typeof useAiGenerate>;
@@ -114,6 +132,8 @@ export function useAiGenerate() {
   const queueHistoryPageSize = ref(20);
   const queueHistoryStatus = ref<QueueHistoryStatus | undefined>();
   const queueHistoryQuery = ref('');
+  const todayWorkset = ref<WorksetJob[]>([]);
+  const todayWorksetTotal = ref(0);
 
   const currentJob = computed(() => {
     if (!selectedJobId.value) return null;
@@ -679,6 +699,25 @@ export function useAiGenerate() {
     return res.deleted;
   }
 
+  async function fetchTodayWorkset(): Promise<void> {
+    const res = await request.get<WorksetResponse>('/v2/generate/workset/today');
+    todayWorkset.value = res.jobs;
+    todayWorksetTotal.value = res.total;
+  }
+
+  async function saveTodayWorkset(
+    jobIds?: string[],
+    options: { forceUpdate?: boolean } = {}
+  ): Promise<WorksetSaveResponse> {
+    const ids = jobIds?.length ? jobIds : todayWorkset.value.map(job => job.jobId);
+    const res = await request.post<WorksetSaveResponse>('/v2/generate/workset/save', {
+      jobIds: ids,
+      forceUpdate: options.forceUpdate === true,
+    });
+    await fetchTodayWorkset();
+    return res;
+  }
+
   async function queueCancelAll(): Promise<void> {
     await request.post('/v2/generate/queue/cancel-all');
     await fetchQueueOverview();
@@ -753,6 +792,10 @@ export function useAiGenerate() {
     loadHistoryJob,
     deleteHistoryJob,
     clearQueueHistory,
+    todayWorkset,
+    todayWorksetTotal,
+    fetchTodayWorkset,
+    saveTodayWorkset,
     queueCancelAll,
     queuePauseAll,
     queueResumeAll,

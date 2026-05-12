@@ -100,24 +100,28 @@ const format = val => {
   if (typeof val === 'string') return val;
   return props.formatter.format(val);
 };
+
+const badgeToneClass = cls => {
+  if (cls.includes('green')) return 'tone-new';
+  if (cls.includes('red')) return 'tone-deleted';
+  if (cls.includes('yellow')) return 'tone-edited';
+  if (cls.includes('indigo')) return 'tone-array';
+  return 'tone-neutral';
+};
 </script>
 
 <template>
   <div
     v-if="open"
-    class="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4"
+    class="conflict-backdrop fixed inset-0 z-40 flex items-center justify-center p-4"
     role="dialog"
     aria-modal="true"
   >
-    <div
-      class="w-full max-w-5xl rounded-xl bg-white shadow-lg border border-emerald-100 overflow-hidden"
-    >
-      <div
-        class="px-4 py-3 border-b border-emerald-50 font-bold text-slate-800 flex items-center justify-between"
-      >
+    <div class="conflict-modal w-full max-w-5xl rounded-xl shadow-lg overflow-hidden">
+      <div class="conflict-header px-4 py-3 font-bold flex items-center justify-between">
         <span>{{ title }}</span>
         <button
-          class="text-stone-400 hover:text-emerald-600 transition-colors"
+          class="conflict-close transition-colors"
           aria-label="Close"
           @click="$emit('close')"
         >
@@ -125,70 +129,66 @@ const format = val => {
         </button>
       </div>
 
-      <div v-if="subtitle" class="px-4 py-2 text-sm text-slate-600 border-b border-emerald-50">
+      <div v-if="subtitle" class="conflict-subtitle px-4 py-2 text-sm">
         {{ subtitle }}
       </div>
 
       <div
         v-if="modules.length || badges.length"
-        class="px-4 py-3 text-sm text-slate-600 border-b border-emerald-50"
+        class="conflict-meta px-4 py-3 text-sm"
       >
         <div class="flex flex-wrap items-center gap-2">
-          <span class="font-bold text-slate-700">Modules:</span>
+          <span class="conflict-meta-label font-bold">Modules:</span>
           <span
             v-for="m in modules"
             :key="m"
-            class="px-2 py-0.5 rounded border bg-slate-50 text-slate-700 border-emerald-100 text-xs font-bold"
+            class="conflict-module px-2 py-0.5 rounded border text-xs font-bold"
             >{{ m }}</span
           >
-          <span v-if="!modules.length" class="text-stone-400 text-xs">No module detail</span>
+          <span v-if="!modules.length" class="conflict-empty text-xs">No module detail</span>
         </div>
         <div class="mt-2 flex flex-wrap gap-1">
           <span
             v-for="b in badges"
             :key="b.path"
-            class="px-2 py-0.5 rounded border text-[10px] font-bold"
-            :class="b.cls"
+            class="conflict-badge px-2 py-0.5 rounded border text-[10px] font-bold"
+            :class="badgeToneClass(b.cls)"
             >{{ b.path }}</span
           >
         </div>
       </div>
 
       <div class="grid grid-cols-2 gap-0">
-        <div class="border-r border-emerald-50">
-          <div
-            class="px-4 py-2 text-xs font-bold text-slate-500 bg-slate-50 border-b border-emerald-50"
-          >
+        <div class="conflict-pane border-r">
+          <div class="conflict-pane-head px-4 py-2 text-xs font-bold">
             {{ leftLabel }}
           </div>
-          <pre class="p-4 text-xs overflow-auto max-h-[50vh]">{{ format(leftData) }}</pre>
+          <pre class="conflict-code p-4 text-xs overflow-auto max-h-[50vh]">{{ format(leftData) }}</pre>
         </div>
         <div>
-          <div
-            class="px-4 py-2 text-xs font-bold text-slate-500 bg-slate-50 border-b border-emerald-50"
-          >
+          <div class="conflict-pane-head px-4 py-2 text-xs font-bold">
             {{ rightLabel }}
           </div>
-          <pre class="p-4 text-xs overflow-auto max-h-[50vh]">{{ format(rightData) }}</pre>
+          <pre class="conflict-code p-4 text-xs overflow-auto max-h-[50vh]">{{ format(rightData) }}</pre>
         </div>
       </div>
 
-      <div class="px-4 py-3 border-t border-emerald-50 flex justify-end gap-2 bg-slate-50">
+      <div class="conflict-actions px-4 py-3 flex justify-end gap-2">
         <button
           v-if="tertiaryLabel"
-          class="px-3 py-1.5 rounded-lg border border-emerald-100 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
+          class="conflict-secondary px-3 py-1.5 rounded-lg border text-sm transition-colors"
           @click="$emit('tertiary')"
         >
           {{ tertiaryLabel }}
         </button>
         <button
-          class="px-3 py-1.5 rounded-lg border border-emerald-100 bg-white text-slate-700 text-sm hover:bg-slate-50 transition-colors"
+          class="conflict-secondary px-3 py-1.5 rounded-lg border text-sm transition-colors"
           @click="$emit('secondary')"
         >
           {{ secondaryLabel }}
         </button>
         <button
-          class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm hover:bg-red-500 transition-colors"
+          class="conflict-primary px-3 py-1.5 rounded-lg text-sm transition-colors"
           @click="$emit('primary')"
         >
           {{ primaryLabel }}
@@ -197,3 +197,131 @@ const format = val => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.conflict-backdrop {
+  background: rgba(0, 0, 0, 0.44);
+}
+
+.conflict-modal {
+  background: var(--surface-panel);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  box-shadow: var(--shadow-md);
+}
+
+.conflict-header,
+.conflict-subtitle,
+.conflict-meta,
+.conflict-pane-head,
+.conflict-actions {
+  border-color: var(--line);
+}
+
+.conflict-header {
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+
+.conflict-close {
+  color: var(--faint);
+}
+
+.conflict-close:hover {
+  color: var(--green);
+}
+
+.conflict-subtitle,
+.conflict-meta {
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.conflict-meta-label {
+  color: var(--text-soft);
+}
+
+.conflict-module {
+  background: var(--surface-soft);
+  border-color: var(--green-border);
+  color: var(--text-soft);
+}
+
+.conflict-empty {
+  color: var(--faint);
+}
+
+.conflict-badge {
+  color: var(--text-soft);
+}
+
+.conflict-badge.tone-new {
+  background: var(--green-soft);
+  border-color: var(--green-border);
+  color: var(--green);
+}
+
+.conflict-badge.tone-deleted {
+  background: var(--red-soft);
+  border-color: var(--red-border);
+  color: var(--red);
+}
+
+.conflict-badge.tone-edited {
+  background: var(--amber-soft);
+  border-color: var(--amber-border);
+  color: var(--amber);
+}
+
+.conflict-badge.tone-array {
+  background: var(--blue-soft);
+  border-color: var(--blue-border);
+  color: var(--blue);
+}
+
+.conflict-badge.tone-neutral {
+  background: var(--surface-soft);
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.conflict-pane {
+  border-color: var(--line);
+}
+
+.conflict-pane-head {
+  background: var(--surface-head);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.conflict-code {
+  background: var(--editor-field);
+  color: var(--text-soft);
+}
+
+.conflict-actions {
+  background: var(--surface-head);
+  border-top: 1px solid var(--line);
+}
+
+.conflict-secondary {
+  background: var(--surface);
+  border-color: var(--green-border);
+  color: var(--text-soft);
+}
+
+.conflict-secondary:hover {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.conflict-primary {
+  background: #be334b;
+  color: #fff;
+}
+
+.conflict-primary:hover {
+  background: #d13f58;
+}
+</style>

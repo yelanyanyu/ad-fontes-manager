@@ -280,6 +280,28 @@ export class JobQueue {
     return this.store.getQueueHistory(params);
   }
 
+  getTodayWorkset(): {
+    jobs: Array<{
+      jobId: string;
+      jobType: string;
+      status: string;
+      word: string;
+      language: string;
+      priority: string;
+      batchId?: string;
+      createdAt: string;
+      completedAt?: string;
+      hasResult: boolean;
+    }>;
+    total: number;
+  } {
+    return this.store.getTodayWorkset();
+  }
+
+  getWorksetYaml(jobIds: string[]): Array<{ jobId: string; yaml: string }> {
+    return this.store.getWorksetYaml(jobIds);
+  }
+
   deleteHistoryJob(jobId: string): 'deleted' | 'not-found' | 'active' {
     const result = this.store.deleteHistoryJob(jobId);
     if (result === 'deleted') {

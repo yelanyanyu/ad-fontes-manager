@@ -20,6 +20,8 @@ const {
   handleQueueOverview,
   handleQueueHistory,
   handleQueueHistoryJob,
+  handleTodayWorkset,
+  handleSaveWorkset,
   handleDeleteHistoryJob,
   handleClearQueueHistory,
   handleQueueCancelAll,
@@ -37,6 +39,8 @@ const {
   handleQueueOverview: (req: Request, res: Response) => Promise<void>;
   handleQueueHistory: (req: Request, res: Response) => Promise<void>;
   handleQueueHistoryJob: (req: Request, res: Response) => Promise<void>;
+  handleTodayWorkset: (req: Request, res: Response) => Promise<void>;
+  handleSaveWorkset: (req: Request, res: Response) => Promise<void>;
   handleDeleteHistoryJob: (req: Request, res: Response) => Promise<void>;
   handleClearQueueHistory: (req: Request, res: Response) => Promise<void>;
   handleQueueCancelAll: (req: Request, res: Response) => Promise<void>;
@@ -60,6 +64,8 @@ router.post('/generate/:jobId/fix', requireWriteAccess, asyncHandler(handleFixJo
 // Queue management
 router.get('/generate/queue/overview', asyncHandler(handleQueueOverview));
 router.get('/generate/queue/history', asyncHandler(handleQueueHistory));
+router.get('/generate/workset/today', asyncHandler(handleTodayWorkset));
+router.post('/generate/workset/save', requireWriteAccess, asyncHandler(handleSaveWorkset));
 router.post(
   '/generate/queue/history/clear',
   requireWriteAccess,

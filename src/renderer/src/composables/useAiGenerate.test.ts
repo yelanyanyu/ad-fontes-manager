@@ -265,4 +265,63 @@ describe('useAiGenerate', () => {
       '/v2/generate/queue/history?page=1&pageSize=20'
     );
   });
+
+  it('loads and saves today workset job results', async () => {
+    requestGetMock.mockResolvedValueOnce({
+      jobs: [
+        {
+          jobId: 'job-latest',
+          jobType: 'fix',
+          status: 'complete',
+          word: 'crate',
+          language: 'en',
+          priority: 'high',
+          createdAt: '2026-05-12 10:00:00',
+          completedAt: '2026-05-12 10:03:00',
+          hasResult: true,
+        },
+      ],
+      total: 1,
+    });
+    requestPostMock.mockResolvedValue({
+      ok: true,
+      saved: 1,
+      conflicts: 0,
+      failed: 0,
+      missing: [],
+      results: [],
+    });
+    requestGetMock.mockResolvedValueOnce({ jobs: [], total: 0 });
+    const ai = useAiGenerate();
+
+    await ai.fetchTodayWorkset();
+    expect(ai.todayWorkset.value[0]?.jobId).toBe('job-latest');
+    const result = await ai.saveTodayWorkset();
+
+    expect(requestPostMock).toHaveBeenCalledWith('/v2/generate/workset/save', {
+      jobIds: ['job-latest'],
+      forceUpdate: false,
+    });
+    expect(result.saved).toBe(1);
+  });
+
+  it('can explicitly force update selected workset jobs', async () => {
+    requestPostMock.mockResolvedValue({
+      ok: true,
+      saved: 1,
+      conflicts: 0,
+      failed: 0,
+      missing: [],
+      results: [],
+    });
+    requestGetMock.mockResolvedValue({ jobs: [], total: 0 });
+    const ai = useAiGenerate();
+
+    await ai.saveTodayWorkset(['job-conflict'], { forceUpdate: true });
+
+    expect(requestPostMock).toHaveBeenCalledWith('/v2/generate/workset/save', {
+      jobIds: ['job-conflict'],
+      forceUpdate: true,
+    });
+  });
 });

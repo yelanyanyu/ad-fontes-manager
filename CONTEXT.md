@@ -120,6 +120,10 @@ _Avoid_: Archive, completed tasks
 A read-only detail view for a `complete` Job's generated YAML before or after it is saved as a Word. It is distinct from a saved Word preview because a completed Job may not yet have been persisted to `words_v2`.
 _Avoid_: Word detail, saved preview
 
+**Workset** (工作集):
+A review-and-save surface for the latest generated YAML results the user is actively working through. The current Workset is derived from today's persisted `complete` and `partial` Jobs, deduplicated by Lemma + Language so only the newest Job result for each Word remains. It batch-saves through the same Word save path used by the Editor, first detecting conflicts without overwriting and only overwriting conflict items after an explicit user action.
+_Avoid_: Current batch, History subset, temporary database
+
 **Circuit Breaker** (熔断):
 A safety mechanism that pauses all Jobs assigned to a specific Provider after 3 consecutive failures from that Provider. The user is notified; manual intervention is required to resume.
 _Avoid_: Rate limiter, throttle
@@ -157,6 +161,7 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - Clicking a **Job History** item opens a status-specific detail: `complete` Jobs open a **Job Result Preview**, while `partial` and `error` Jobs reuse the AI drawer so the user can inspect stages and retry or recover
 - The Queue panel presents **Active Queue** and **Job History** as two modes in the same UI surface; execution controls belong only to Active Queue, while review and filtering controls belong to Job History
 - Saving or overwriting a **Word** remains an Editor responsibility; **Job History** may fill the Editor from a complete Job, but does not write directly to `words_v2`
+- A **Workset** is derived from **Job History** rows but is not itself History: it answers "what latest YAML results should I save now?" and can batch-save through the Word save path, reporting per-Word save outcomes such as saved, conflict, invalid, missing, or error
 - Each **Stage** may use one **Provider** + model and zero or more **Tools**
 - A **Field Mapping** connects a **Data Source** (from a Word's YAML) to an Anki **Field**
 - **AnkiConnect** and **APKG** are two export paths; both use the same **Field Mapping** and **Card Template**

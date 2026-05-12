@@ -4,7 +4,14 @@ import {
   AI_STATE_KEY,
   type QueueHistoryJob,
   type QueueHistoryStatus,
+  type WorksetSaveResponse,
 } from '@/composables/useAiGenerate';
+import { useAppStore } from '@/stores/appStore';
+import { useWordStore } from '@/stores/wordStore';
+import {
+  describeWorksetSaveResult,
+  type WorksetSaveDetail,
+} from '@/services/worksetSaveResult';
 
 const emit = defineEmits<{
   'expanded-change': [expanded: boolean];
@@ -20,8 +27,12 @@ const {
   queueHistoryPageSize,
   queueHistoryStatus,
   queueHistoryQuery,
+  todayWorkset,
+  todayWorksetTotal,
   fetchQueueOverview,
   fetchQueueHistory,
+  fetchTodayWorkset,
+  saveTodayWorkset,
   queueCancelAll,
   queuePauseAll,
   queueResumeAll,
@@ -34,9 +45,13 @@ const {
   selectedJobId,
 } = inject(AI_STATE_KEY)!;
 
+const appStore = useAppStore();
+const wordStore = useWordStore();
 const expanded = ref(false);
-const mode = ref<'active' | 'history'>('active');
+const mode = ref<'active' | 'history' | 'workset'>('active');
 const historySearch = ref('');
+const savingWorkset = ref(false);
+const worksetSaveResults = ref(new Map<string, WorksetSaveDetail>());
 
 onMounted(() => {
   fetchQueueOverview();
@@ -58,23 +73,54 @@ const total = computed(() => queueOverview.value.length);
 const historyPages = computed(() =>
   Math.max(1, Math.ceil(queueHistoryTotal.value / queueHistoryPageSize.value))
 );
+const worksetSaveSummary = computed(() => {
+  const summary = { saved: 0, conflict: 0, invalid: 0, missing: 0, error: 0 };
+  for (const detail of worksetSaveResults.value.values()) {
+    summary[detail.status]++;
+  }
+  return summary;
+});
+const conflictJobIds = computed(() =>
+  [...worksetSaveResults.value.entries()]
+    .filter(([, detail]) => detail.status === 'conflict')
+    .map(([jobId]) => jobId)
+);
+
+function recordWorksetSave(response: WorksetSaveResponse): void {
+  const next = new Map(worksetSaveResults.value);
+  for (const item of response.results) {
+    next.set(item.jobId, describeWorksetSaveResult(item.result));
+  }
+  for (const jobId of response.missing) {
+    next.set(jobId, {
+      status: 'missing',
+      label: 'missing',
+      message: 'No saveable YAML result was found for this Job.',
+    });
+  }
+  worksetSaveResults.value = next;
+}
 
 function toggleExpand(): void {
   expanded.value = !expanded.value;
   emit('expanded-change', expanded.value);
   if (expanded.value) {
     if (mode.value === 'active') fetchQueueOverview();
-    else fetchQueueHistory();
+    else if (mode.value === 'history') fetchQueueHistory();
+    else fetchTodayWorkset();
   }
 }
 
-async function setMode(nextMode: 'active' | 'history'): Promise<void> {
+async function setMode(nextMode: 'active' | 'history' | 'workset'): Promise<void> {
   mode.value = nextMode;
   if (nextMode === 'active') {
     await fetchQueueOverview();
-  } else {
+  } else if (nextMode === 'history') {
     await fetchQueueHistory({ page: 1 });
     historySearch.value = queueHistoryQuery.value;
+  } else {
+    worksetSaveResults.value = new Map();
+    await fetchTodayWorkset();
   }
 }
 
@@ -121,6 +167,52 @@ function handleHistorySelect(job: QueueHistoryJob): void {
   emit('history-job-selected', job);
 }
 
+async function handleSaveWorkset(): Promise<void> {
+  if (todayWorkset.value.length === 0 || savingWorkset.value) return;
+  if (!confirm(`Save ${todayWorkset.value.length} latest YAML results to DB?`)) return;
+
+  savingWorkset.value = true;
+  try {
+    const result = await saveTodayWorkset();
+    recordWorksetSave(result);
+    if (result.saved > 0) {
+      appStore.addToast(`Saved ${result.saved} workset words`, 'success');
+      await wordStore.fetchDbRecords();
+    }
+    if (result.conflicts || result.failed || result.missing.length) {
+      appStore.addToast(
+        `Not saved: ${result.conflicts} conflict, ${result.failed} failed, ${result.missing.length} missing`,
+        'warning'
+      );
+    }
+  } finally {
+    savingWorkset.value = false;
+  }
+}
+
+async function handleOverwriteConflicts(): Promise<void> {
+  if (conflictJobIds.value.length === 0 || savingWorkset.value) return;
+  if (!confirm(`Overwrite ${conflictJobIds.value.length} conflicting words?`)) return;
+
+  savingWorkset.value = true;
+  try {
+    const result = await saveTodayWorkset(conflictJobIds.value, { forceUpdate: true });
+    recordWorksetSave(result);
+    if (result.saved > 0) {
+      appStore.addToast(`Overwrote ${result.saved} workset conflicts`, 'success');
+      await wordStore.fetchDbRecords();
+    }
+    if (result.failed || result.missing.length) {
+      appStore.addToast(
+        `Still not saved: ${result.failed} failed, ${result.missing.length} missing`,
+        'warning'
+      );
+    }
+  } finally {
+    savingWorkset.value = false;
+  }
+}
+
 async function handleDeleteHistoryJob(jobId: string): Promise<void> {
   await deleteHistoryJob(jobId);
 }
@@ -163,6 +255,13 @@ async function handleClearHistory(): Promise<void> {
             @click="setMode('history')"
           >
             History
+          </button>
+          <button
+            type="button"
+            :class="{ active: mode === 'workset' }"
+            @click="setMode('workset')"
+          >
+            Today
           </button>
         </div>
       </div>
@@ -222,7 +321,7 @@ async function handleClearHistory(): Promise<void> {
         <div v-if="queueOverview.length === 0" class="bar-empty-list">No active jobs</div>
       </div>
 
-      <div v-else class="history-panel">
+      <div v-else-if="mode === 'history'" class="history-panel">
         <div class="history-tools">
           <form class="history-search" @submit.prevent="applyHistorySearch">
             <input v-model="historySearch" type="search" placeholder="Search lemma" />
@@ -311,6 +410,83 @@ async function handleClearHistory(): Promise<void> {
           </div>
         </div>
       </div>
+
+      <div v-else class="workset-panel">
+        <div class="workset-tools">
+          <div class="workset-summary">
+            <strong>{{ todayWorksetTotal }}</strong>
+            <span>latest today</span>
+          </div>
+          <button
+            type="button"
+            class="qbtn"
+            :disabled="todayWorkset.length === 0 || savingWorkset"
+            @click="fetchTodayWorkset"
+          >
+            Refresh
+          </button>
+          <button
+            type="button"
+            class="qbtn primary"
+            :disabled="todayWorkset.length === 0 || savingWorkset"
+            @click="handleSaveWorkset"
+          >
+            Save All
+          </button>
+          <button
+            v-if="conflictJobIds.length > 0"
+            type="button"
+            class="qbtn danger"
+            :disabled="savingWorkset"
+            @click="handleOverwriteConflicts"
+          >
+            Overwrite Conflicts
+          </button>
+        </div>
+
+        <div v-if="worksetSaveResults.size > 0" class="workset-result-summary">
+          <span v-if="worksetSaveSummary.saved">Saved {{ worksetSaveSummary.saved }}</span>
+          <span v-if="worksetSaveSummary.conflict" class="is-warning">
+            Conflict {{ worksetSaveSummary.conflict }}
+          </span>
+          <span v-if="worksetSaveSummary.invalid" class="is-danger">
+            Invalid {{ worksetSaveSummary.invalid }}
+          </span>
+          <span v-if="worksetSaveSummary.error" class="is-danger">
+            Error {{ worksetSaveSummary.error }}
+          </span>
+          <span v-if="worksetSaveSummary.missing" class="is-muted">
+            Missing {{ worksetSaveSummary.missing }}
+          </span>
+        </div>
+
+        <div class="bar-list workset-list">
+          <div
+            v-for="job in todayWorkset"
+            :key="job.jobId"
+            class="bar-row workset-row"
+            :class="`q-${job.status}`"
+            @click="handleHistorySelect(job)"
+          >
+            <span class="q-dot" :class="job.status" />
+            <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
+            <span class="q-word">{{ job.word }}</span>
+            <span class="q-lang">{{ job.language === 'de' ? 'DE' : 'EN' }}</span>
+            <span class="q-status">{{ job.status }}</span>
+            <span
+              v-if="worksetSaveResults.get(job.jobId)"
+              class="save-chip"
+              :class="`save-${worksetSaveResults.get(job.jobId)?.status}`"
+              :title="worksetSaveResults.get(job.jobId)?.message"
+            >
+              {{ worksetSaveResults.get(job.jobId)?.label }}
+            </span>
+          </div>
+          <div v-if="todayWorkset.length === 0" class="bar-empty-list">
+            No latest results today
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -378,9 +554,7 @@ async function handleClearHistory(): Promise<void> {
   display: flex;
   flex-direction: column;
   flex: 1;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.7), transparent 56px),
-    var(--surface-panel);
+  background: var(--surface-panel);
 }
 
 .bar-actions {
@@ -396,22 +570,26 @@ async function handleClearHistory(): Promise<void> {
 
 .mode-control {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   border: 1px solid var(--line);
   border-radius: 4px;
   overflow: hidden;
-  background: var(--surface);
+  background: var(--surface-soft);
 }
 
 .mode-control button,
 .status-tabs button {
   border: 0;
-  background: transparent;
+  background: var(--surface);
   color: var(--muted);
   cursor: pointer;
   font-size: 11px;
   font-weight: 650;
   height: 26px;
+}
+
+.mode-control button + button {
+  border-left: 1px solid var(--line);
 }
 
 .mode-control button.active,
@@ -438,6 +616,12 @@ async function handleClearHistory(): Promise<void> {
 .qbtn.danger {
   border-color: var(--red-border);
   color: var(--red);
+}
+
+.qbtn.primary {
+  border-color: var(--green-border);
+  background: var(--green);
+  color: #fff;
 }
 
 .bar-list {
@@ -544,6 +728,113 @@ async function handleClearHistory(): Promise<void> {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.workset-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workset-tools {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 6px;
+  padding: 6px 14px;
+  align-items: center;
+}
+
+.workset-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.workset-summary strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.workset-result-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px 6px;
+  color: var(--green);
+  font-size: 11px;
+  min-height: 20px;
+  flex-wrap: wrap;
+}
+
+.workset-result-summary span {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 6px;
+  background: var(--surface);
+}
+
+.workset-result-summary .is-warning {
+  color: var(--amber);
+  border-color: var(--amber-border, var(--line));
+}
+
+.workset-result-summary .is-danger {
+  color: var(--red);
+  border-color: var(--red-border);
+}
+
+.workset-result-summary .is-muted {
+  color: var(--muted);
+}
+
+.workset-list {
+  padding-bottom: 8px;
+}
+
+.workset-row {
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
+}
+
+.save-chip {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 16px;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface);
+  max-width: 76px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.save-saved {
+  border-color: var(--green-border);
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.save-conflict {
+  color: var(--amber);
+  border-color: var(--amber-border, var(--line));
+  background: var(--amber-soft, var(--surface));
+}
+
+.save-invalid,
+.save-error {
+  color: var(--red);
+  border-color: var(--red-border);
+  background: var(--red-soft);
+}
+
+.save-missing {
+  color: var(--muted);
 }
 
 .history-tools {

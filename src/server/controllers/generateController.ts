@@ -6,6 +6,13 @@ const crypto = require('node:crypto') as typeof import('node:crypto');
 const { getQueue } = require('../services/ai/queue') as {
   getQueue: () => JobQueue;
 };
+const wordServiceV2 = require('../services/word/WordServiceV2') as {
+  saveWord: (
+    req: Request,
+    yamlStr: string,
+    forceUpdate?: boolean
+  ) => Promise<Record<string, unknown>>;
+};
 
 const { loggers } = require('../utils/logger') as {
   loggers: {
@@ -49,6 +56,10 @@ const HistoryQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   status: z.enum(['complete', 'partial', 'error']).optional(),
   query: z.string().trim().optional(),
+});
+const WorksetSaveSchema = z.object({
+  jobIds: z.array(z.string().trim().min(1)).min(1).max(200),
+  forceUpdate: z.boolean().default(false),
 });
 
 // ---- Helpers ----
@@ -401,6 +412,43 @@ async function handleQueueHistoryJob(req: Request, res: Response): Promise<void>
   res.json({ job });
 }
 
+async function handleTodayWorkset(_req: Request, res: Response): Promise<void> {
+  const queue = getQueue();
+  res.json(queue.getTodayWorkset());
+}
+
+async function handleSaveWorkset(req: Request, res: Response): Promise<void> {
+  const parsed = WorksetSaveSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    res.status(400).json({ code: 400, message: 'Invalid request', errors: parsed.error.issues });
+    return;
+  }
+
+  const queue = getQueue();
+  const yamlRows = queue.getWorksetYaml(parsed.data.jobIds);
+  const foundIds = new Set(yamlRows.map(row => row.jobId));
+  const missing = parsed.data.jobIds.filter(jobId => !foundIds.has(jobId));
+  const results: Array<{ jobId: string; result: Record<string, unknown> }> = [];
+
+  for (const row of yamlRows) {
+    const result = await wordServiceV2.saveWord(req, row.yaml, parsed.data.forceUpdate);
+    results.push({ jobId: row.jobId, result });
+  }
+
+  const saved = results.filter(item => item.result.success === true).length;
+  const conflicts = results.filter(item => item.result.status === 'conflict').length;
+  const failed = results.length - saved - conflicts;
+
+  res.json({
+    ok: failed === 0 && conflicts === 0 && missing.length === 0,
+    saved,
+    conflicts,
+    failed,
+    missing,
+    results,
+  });
+}
+
 async function handleDeleteHistoryJob(req: Request, res: Response): Promise<void> {
   const jobId = firstParam(req.params.jobId);
   const queue = getQueue();
@@ -460,6 +508,8 @@ module.exports = {
   handleQueueOverview,
   handleQueueHistory,
   handleQueueHistoryJob,
+  handleTodayWorkset,
+  handleSaveWorkset,
   handleDeleteHistoryJob,
   handleClearQueueHistory,
   handleQueueCancelAll,

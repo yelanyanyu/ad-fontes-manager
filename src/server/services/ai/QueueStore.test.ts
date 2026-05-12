@@ -120,4 +120,24 @@ void describe('QueueStore', () => {
     assert.equal(store.deleteHistoryJob('done-job'), 'deleted');
     assert.equal(store.getRow('done-job'), undefined);
   });
+
+  void it('returns today workset with only the latest result per word and language', () => {
+    db.run(
+      `INSERT INTO job_queue (
+         id, job_type, priority, status, word, language, result_yaml, completed_at, created_at
+       )
+       VALUES
+       ('old-crate', 'generate', 'normal', 'complete', 'crate', 'en', 'old yaml', datetime('now', '-2 hours'), datetime('now', '-2 hours')),
+       ('new-crate', 'fix', 'high', 'complete', 'crate', 'en', 'new yaml', datetime('now', '-1 hours'), datetime('now', '-1 hours')),
+       ('de-crate', 'generate', 'normal', 'complete', 'crate', 'de', 'de yaml', datetime('now', '-30 minutes'), datetime('now', '-30 minutes')),
+       ('yesterday-word', 'generate', 'normal', 'complete', 'old', 'en', 'yaml', datetime('now', '-1 day'), datetime('now', '-1 day')),
+       ('no-yaml', 'generate', 'normal', 'complete', 'blank', 'en', '', datetime('now'), datetime('now')),
+       ('failed', 'generate', 'normal', 'error', 'failed', 'en', 'yaml', datetime('now'), datetime('now'))`
+    );
+
+    const workset = store.getTodayWorkset();
+
+    assert.equal(workset.total, 2);
+    assert.deepEqual(workset.jobs.map(job => job.jobId).sort(), ['de-crate', 'new-crate']);
+  });
 });
