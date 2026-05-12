@@ -5,10 +5,17 @@ export class QueueGate {
   private providerFailures = new Map<string, number>();
   private pauseFlags = new Set<string>();
 
-  constructor(private readonly maxConcurrency: number) {
+  constructor(private maxConcurrency: number) {
     if (maxConcurrency < 1) {
       throw new Error(`maxConcurrency must be >= 1, got ${maxConcurrency}`);
     }
+  }
+
+  setMaxConcurrency(maxConcurrency: number): void {
+    if (maxConcurrency < 1) {
+      throw new Error(`maxConcurrency must be >= 1, got ${maxConcurrency}`);
+    }
+    this.maxConcurrency = maxConcurrency;
   }
 
   hasCapacity(): boolean {

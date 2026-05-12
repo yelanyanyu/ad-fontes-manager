@@ -14,6 +14,7 @@ const baseConfig = (): AIConfigMasked => ({
       models: [{ id: 'deepseek-chat', name: 'deepseek-chat' }],
     },
   ],
+  queue_concurrency: 1,
   search: {
     provider: 'brave',
     apiKey: '',

@@ -29,6 +29,7 @@ export interface AIStageConfig {
 
 export interface AIConfigMasked {
   providers: AIProviderMasked[];
+  queue_concurrency: number;
   search?: AISearchConfigMasked;
   stages: {
     fast?: AIStageConfig;

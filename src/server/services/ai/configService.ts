@@ -51,6 +51,7 @@ interface AIStageConfig {
 
 interface AIConfig {
   providers: AIProvider[];
+  queue_concurrency: number;
   search?: AISearchConfig;
   stages: {
     fast?: AIStageConfig;
@@ -72,6 +73,7 @@ const knownAnthropicBaseUrls: Record<string, string> = {
 
 const defaultAIConfig = (): AIConfig => ({
   providers: [],
+  queue_concurrency: 1,
   stages: {},
   review: {
     threshold: 6,
@@ -176,6 +178,7 @@ function updateAIConfig(input: unknown): AIConfigMasked {
 
   const merged: AIConfig = {
     providers: mergeProvidersWithMaskedKeys(validated.providers, existing.providers),
+    queue_concurrency: validated.queue_concurrency ?? existing.queue_concurrency,
     search: validated.search
       ? containsMask(validated.search.apiKey) && !existing.search
         ? { ...validated.search, apiKey: '' }
@@ -187,11 +190,16 @@ function updateAIConfig(input: unknown): AIConfigMasked {
 
   const fullValidated = withAIEndpointDefaults(AIConfigSchema.parse(merged));
   config.saveConfigFile({ ...config.loadConfigFile(), ai: fullValidated });
+  const { updateQueueConcurrency } = require('./queue') as {
+    updateQueueConcurrency: (maxConcurrency: number) => void;
+  };
+  updateQueueConcurrency(fullValidated.queue_concurrency);
 
   loggers.ai.info(
     {
       providerCount: fullValidated.providers.length,
       hasSearch: Boolean(fullValidated.search),
+      queueConcurrency: fullValidated.queue_concurrency,
     },
     'AI config saved'
   );

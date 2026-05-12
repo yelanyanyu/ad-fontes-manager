@@ -57,11 +57,6 @@ const reviewScore = computed(() => {
 });
 const canStart = computed(() => word.value.trim().length > 0);
 
-const stageOptions = computed(() =>
-  currentJob.value?.steps.filter(step => step.status === 'complete' || step.status === 'error') ||
-  []
-);
-
 const hasRevisionNotes = computed(() => {
   const notes = currentJob.value?.scores?.revision_notes as string | undefined;
   return typeof notes === 'string' && notes.length > 0 && notes !== '无需修改。';
@@ -153,6 +148,11 @@ function handleStageClick(step: StepState): void {
   selectedStage.value = step;
   stagePanelOpen.value = true;
 }
+
+async function handleStageRegenerate(event: MouseEvent, step: StepState): Promise<void> {
+  event.stopPropagation();
+  await handleResume(step.step as ResumeStage);
+}
 </script>
 
 <template>
@@ -229,7 +229,16 @@ function handleStageClick(step: StepState): void {
           >
             <span class="stage-name">{{ step.step }}</span>
             <span class="stage-meta">
-              {{ step.duration ? `${Math.round(step.duration / 100) / 10}s` : step.status }}
+              <button
+                v-if="step.status === 'complete' || step.status === 'error'"
+                type="button"
+                class="stage-regenerate-button"
+                :disabled="isRunning"
+                @click="handleStageRegenerate($event, step)"
+              >
+                Regenerate
+              </button>
+              <span>{{ step.duration ? `${Math.round(step.duration / 100) / 10}s` : step.status }}</span>
             </span>
           </button>
         </div>
@@ -263,33 +272,15 @@ function handleStageClick(step: StepState): void {
           <button type="button" class="primary-button" @click="fillEditor">Fill Editor</button>
         </div>
       </section>
-
-      <section v-if="stageOptions.length" class="resume-section">
-        <span>Regenerate from</span>
-        <div class="resume-buttons">
-          <button
-            v-for="step in stageOptions"
-            :key="step.step"
-            type="button"
-            class="secondary-button"
-            :disabled="isRunning"
-            @click="handleResume(step.step as ResumeStage)"
-          >
-            {{ step.step }}
-          </button>
-        </div>
-      </section>
-</div>
+    </div>
   </aside>
 </template>
 
 <style scoped>
 .ai-drawer {
-  position: fixed;
-  top: 88px;
-  right: 0;
-  bottom: 0;
-  width: min(520px, 100vw);
+  position: absolute;
+  inset: 0;
+  width: 100%;
   z-index: 20;
   background: var(--surface-panel);
   border-left: 1px solid var(--line);
@@ -528,6 +519,32 @@ function handleStageClick(step: StepState): void {
 .stage-meta {
   color: var(--muted);
   font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.stage-regenerate-button {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--green);
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.stage-regenerate-button:hover {
+  border-color: var(--green-border);
+  background: var(--green-soft);
+}
+
+.stage-regenerate-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .stage-complete {

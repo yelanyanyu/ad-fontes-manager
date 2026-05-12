@@ -62,6 +62,7 @@ const AIReviewConfigSchema = z
 
 const AIConfigSchema = z.object({
   providers: z.array(AIProviderSchema).default([]),
+  queue_concurrency: z.number().int().min(1).default(1),
   search: AISearchConfigSchema.optional(),
   stages: AIStageMapSchema,
   review: AIReviewConfigSchema,
@@ -69,6 +70,7 @@ const AIConfigSchema = z.object({
 
 const AIConfigUpdateSchema = z.object({
   providers: z.array(AIProviderSchema).optional(),
+  queue_concurrency: z.number().int().min(1).optional(),
   search: AISearchConfigSchema.optional(),
   stages: z
     .object({

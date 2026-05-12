@@ -9,6 +9,7 @@ const loadService = () => require('./configService');
 void describe('configService', () => {
   void afterEach(() => {
     delete process.env.ADFONTES_CONFIG_PATH;
+    delete process.env.AI_QUEUE_CONCURRENCY;
     try {
       const config = require('../../utils/config') as { clearCache: () => void };
       config.clearCache();
@@ -301,6 +302,50 @@ void describe('configService', () => {
     assert.equal(saved.server?.port, 4567);
     assert.equal(saved.database?.url, './data/custom.db');
     assert.equal(saved.ai?.providers[0].id, 'deepseek');
+  });
+
+  void it('updateAIConfig persists queue concurrency alongside AI settings', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const { getAIConfig, updateAIConfig } = loadService();
+
+    const result = updateAIConfig({
+      providers: [],
+      queue_concurrency: 3,
+    });
+
+    const saved = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+      ai?: { queue_concurrency?: number };
+    };
+
+    assert.equal(result.queue_concurrency, 3);
+    assert.equal(getAIConfig().queue_concurrency, 3);
+    assert.equal(saved.ai?.queue_concurrency, 3);
+  });
+
+  void it('reads AI queue concurrency from the environment', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    process.env.AI_QUEUE_CONCURRENCY = '4';
+
+    const config = require('../../utils/config') as {
+      clearCache: () => void;
+      get: <T = unknown>(path: string, defaultValue?: T) => T;
+    };
+    config.clearCache();
+
+    assert.equal(config.get<number>('ai.queue_concurrency'), 4);
+
+    delete process.env.AI_QUEUE_CONCURRENCY;
   });
 
   void it('updateAIConfig never persists a masked provider key without an existing real key', () => {

@@ -1,106 +1,9 @@
 import type { Request, Response } from 'express';
+import type { JobQueue } from '../services/ai/JobQueue';
 
 const { z } = require('zod') as typeof import('zod');
 const { getQueue } = require('../services/ai/queue') as {
-  getQueue: () => {
-    enqueue: (params: {
-      type: 'generate' | 'fix' | 'audit-fix';
-      priority: 'normal' | 'high';
-      word: string;
-      language: string;
-      context?: string;
-      notes?: string;
-      targetJobId?: string;
-      resumeFromStage?: string;
-      previousContext?: Record<string, unknown>;
-      previousSteps?: Array<{
-        step: string;
-        summary?: string;
-        duration?: number;
-        result?: unknown;
-        rawText?: string;
-        reasoningText?: string;
-      }>;
-    }) => string;
-    cancel: (jobId: string) => boolean;
-    subscribe: (jobId: string, res: { write: (chunk: string) => void }) => void;
-    unsubscribe: (jobId: string, res: unknown) => void;
-    getJob: (jobId: string) =>
-      | {
-          jobId: string;
-          status: string;
-          jobType?: string;
-          word: string;
-          language: string;
-          context?: string;
-          notes?: string;
-          error?: string;
-          result?: { yaml: string; scores: Record<string, unknown> };
-        }
-      | undefined;
-    getCompletedSteps: (jobId: string) => Array<{
-      type: string;
-      step?: string;
-      summary?: string;
-      result?: unknown;
-      [key: string]: unknown;
-    }>;
-    getQueuePosition: (jobId: string) => number;
-    isDuplicate: (word: string, language: string) => boolean;
-    getQueueOverview: () => Array<{
-      jobId: string;
-      jobType: string;
-      status: string;
-      word: string;
-      language: string;
-      priority: string;
-      createdAt: string;
-      error?: string;
-    }>;
-    getQueueHistory: (params: {
-      page: number;
-      pageSize: number;
-      status?: 'complete' | 'partial' | 'error';
-      query?: string;
-    }) => {
-      jobs: Array<{
-        jobId: string;
-        jobType: string;
-        status: string;
-        word: string;
-        language: string;
-        priority: string;
-        createdAt: string;
-        completedAt?: string;
-        error?: string;
-        hasResult: boolean;
-      }>;
-      total: number;
-      page: number;
-      pageSize: number;
-    };
-    deleteHistoryJob: (jobId: string) => 'deleted' | 'not-found' | 'active';
-    clearHistory: (params: { status?: 'complete' | 'partial' | 'error'; query?: string }) => number;
-    cancelAll: () => void;
-    pauseAll: () => void;
-    resumeAll: () => void;
-    emitProgress: (
-      jobId: string,
-      event: {
-        type: string;
-        step?: string;
-        message?: string;
-        chunk?: string;
-        duration?: number;
-        summary?: string;
-        result?: unknown;
-        rawText?: string;
-        reasoningText?: string;
-        error?: string;
-        [key: string]: unknown;
-      }
-    ) => void;
-  };
+  getQueue: () => JobQueue;
 };
 
 const { loggers } = require('../utils/logger') as {
@@ -257,42 +160,15 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Reconstruct resume state from the old job's completed steps.
-  const completedSteps = queue.getCompletedSteps(jobId);
-  const completedStepResults = completedSteps
-    .filter(e => e.type === 'step:complete')
-    .map(e => ({
-      step: e.step as string,
-      summary: e.summary as string | undefined,
-      duration: e.duration as number | undefined,
-      result: e.result,
-      rawText: e.rawText as string | undefined,
-      reasoningText: e.reasoningText as string | undefined,
-    }));
-
-  // Merge context from completed step results.
-  const previousContext: Record<string, unknown> = {};
-  for (const step of completedStepResults) {
-    if (step.result && typeof step.result === 'object' && !Array.isArray(step.result)) {
-      Object.assign(previousContext, step.result as Record<string, unknown>);
-    }
-  }
-  // Also include the old job's YAML as researchYaml.
+  const snapshot = queue.buildResumeSnapshot(jobId, parsed.data.fromStage);
+  const previousContext = { ...(snapshot.previousContext || {}) };
   if (oldJob.result?.yaml) {
     previousContext.researchYaml = oldJob.result.yaml;
   }
   if (parsed.data.userScore !== undefined) {
     previousContext.userScore = parsed.data.userScore;
   }
-
-  // Determine resume stage from request or last completed/errored step.
-  const errorEvent = completedSteps.find(e => e.type === 'step:error');
-  const resumeFromStage = parsed.data.fromStage || (errorEvent?.step as string) || 'searching';
-
-  // Filter steps up to (but not including) the resume stage.
-  const stageOrder = ['searching', 'pondering', 'auditing'];
-  const resumeIndex = stageOrder.indexOf(resumeFromStage);
-  const previousSteps = completedStepResults.filter(s => stageOrder.indexOf(s.step) < resumeIndex);
+  const resumeFromStage = snapshot.resumeFromStage || 'searching';
 
   const newJobId = queue.enqueue({
     type: 'generate',
@@ -303,7 +179,7 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
     notes: parsed.data.notes ?? oldJob.notes,
     resumeFromStage,
     previousContext,
-    previousSteps,
+    previousSteps: snapshot.previousSteps,
   });
 
   const newJob = queue.getJob(newJobId);

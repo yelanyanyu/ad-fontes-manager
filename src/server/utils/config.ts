@@ -19,6 +19,7 @@ interface ConfigObject {
 }
 
 interface AIConfigShape extends ConfigObject {
+  queue_concurrency?: number;
   providers?: Array<{
     id: string;
     name?: string;
@@ -121,6 +122,7 @@ const defaultConfig: ConfigObject = {
   },
   ai: {
     providers: [],
+    queue_concurrency: 1,
     stages: {},
     review: {
       threshold: 6,
@@ -197,6 +199,7 @@ const envMapping: Record<string, string> = {
   SECURITY_HSTS: 'security.hsts',
   AI_SEARCH_API_KEY: 'ai.search.apiKey',
   AI_SEARCH_PROVIDER: 'ai.search.provider',
+  AI_QUEUE_CONCURRENCY: 'ai.queue_concurrency',
   AI_REVIEW_THRESHOLD: 'ai.review.threshold',
   AI_FAST_PROVIDER: 'ai.stages.fast.provider',
   AI_FAST_MODEL: 'ai.stages.fast.model',

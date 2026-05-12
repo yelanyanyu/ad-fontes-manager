@@ -10,10 +10,6 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
-const { createApp } = require('../server/app') as {
-  createApp: typeof createServerApp;
-};
-
 let mainWindow: BrowserWindow | null = null;
 let serverInstance: http.Server | null = null;
 
@@ -22,6 +18,12 @@ let serverInstance: http.Server | null = null;
 const DESKTOP_SERVER_PORT = Number(process.env.DESKTOP_SERVER_PORT || 19876);
 const CONFIG_FILE = path.join(electronApp.getPath('userData'), 'config.json');
 const DIAGNOSTIC_LOG_FILE = path.join(electronApp.getPath('userData'), 'desktop-runtime.log');
+
+process.env.ADFONTES_CONFIG_PATH = process.env.ADFONTES_CONFIG_PATH || CONFIG_FILE;
+
+const { createApp } = require('../server/app') as {
+  createApp: typeof createServerApp;
+};
 
 interface ListenError extends Error {
   code?: string;
@@ -105,7 +107,18 @@ function readDataDir(): string {
 
 function writeDesktopConfig(dataDir: string): void {
   ensureDirectory(path.dirname(CONFIG_FILE));
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ dataDir }, null, 2));
+  let existingConfig: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        existingConfig = parsed as Record<string, unknown>;
+      }
+    }
+  } catch {
+    existingConfig = {};
+  }
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ ...existingConfig, dataDir }, null, 2));
 }
 
 function ensureConfig(): void {

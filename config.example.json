@@ -39,6 +39,7 @@
     "hsts": true
   },
   "ai": {
+    "queue_concurrency": 1,
     "providers": [
       {
         "id": "deepseek",

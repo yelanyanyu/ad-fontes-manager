@@ -44,6 +44,7 @@ const closeJobPreview = () => {
 const applyGeneratedYaml = (yamlContent: string) => {
   wordEditorRef.value?.applyGeneratedYaml(yamlContent);
   aiDrawerOpen.value = false;
+  queueExpanded.value = false;
   previewJob.value = null;
 };
 
@@ -133,8 +134,14 @@ onUnmounted(() => {
 
     <div ref="dragHandle" class="resizer" />
 
-    <div data-tour="word-list" class="right-panel">
+    <div data-tour="word-list" class="right-panel" :class="{ 'ai-drawer-open': aiDrawerOpen }">
       <WordList @preview="showPreview" />
+      <AiGenerateDrawer
+        v-show="aiDrawerOpen"
+        :open="aiDrawerOpen"
+        @close="aiDrawerOpen = false"
+        @yaml-ready="applyGeneratedYaml"
+      />
     </div>
 
     <WordPreview v-if="previewId" :word-id="previewId" @close="closePreview" />
@@ -142,12 +149,6 @@ onUnmounted(() => {
       v-if="previewJob"
       :job="previewJob"
       @close="closeJobPreview"
-      @yaml-ready="applyGeneratedYaml"
-    />
-    <AiGenerateDrawer
-      v-show="aiDrawerOpen"
-      :open="aiDrawerOpen"
-      @close="aiDrawerOpen = false"
       @yaml-ready="applyGeneratedYaml"
     />
   </div>
@@ -204,6 +205,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  position: relative;
+  overflow: hidden;
 }
 
 .resizer {

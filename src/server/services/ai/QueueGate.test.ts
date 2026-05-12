@@ -18,6 +18,20 @@ void describe('QueueGate', () => {
     assert.equal(gate.getActiveCount(), 2);
   });
 
+  void it('allows the concurrency limit to grow at runtime', () => {
+    const gate = new QueueGate(1);
+
+    assert.equal(gate.reserveSlot(), true);
+    assert.equal(gate.reserveSlot(), false);
+
+    gate.setMaxConcurrency(3);
+
+    assert.equal(gate.reserveSlot(), true);
+    assert.equal(gate.reserveSlot(), true);
+    assert.equal(gate.reserveSlot(), false);
+    assert.equal(gate.getActiveCount(), 3);
+  });
+
   void it('tracks abort controllers and pause flags for running jobs', () => {
     const gate = new QueueGate(1);
     const controller = new AbortController();

@@ -1,72 +1,7 @@
 import type { PipelineRunner } from './types';
+import type { JobQueue } from './JobQueue';
 
-const { JobQueue } = require('./JobQueue') as {
-  JobQueue: new (config: {
-    getDb: () => {
-      get: (sql: string, ...params: unknown[]) => Record<string, unknown> | undefined;
-      run: (sql: string, ...params: unknown[]) => { changes: number };
-      all: (sql: string, ...params: unknown[]) => Record<string, unknown>[];
-    };
-    maxConcurrency: number;
-    runner: PipelineRunner;
-  }) => {
-    enqueue: (params: {
-      type: 'generate' | 'fix' | 'audit-fix';
-      priority: 'normal' | 'high';
-      word: string;
-      language: string;
-      context?: string;
-      notes?: string;
-      batchId?: string;
-      targetJobId?: string;
-      targetWordId?: string;
-      providerId?: string;
-      resumeFromStage?: string;
-      previousContext?: Record<string, unknown>;
-      previousSteps?: Array<{
-        step: string;
-        summary?: string;
-        duration?: number;
-        result?: unknown;
-        rawText?: string;
-        reasoningText?: string;
-      }>;
-    }) => string;
-    cancel: (jobId: string) => boolean;
-    subscribe: (jobId: string, res: { write: (chunk: string) => void }) => void;
-    unsubscribe: (jobId: string, res: unknown) => void;
-    getJob: (jobId: string) =>
-      | {
-          jobId: string;
-          status: string;
-          word: string;
-          language: string;
-          context?: string;
-          notes?: string;
-          error?: string;
-          result?: { yaml: string; scores: Record<string, unknown> };
-        }
-      | undefined;
-    getCompletedSteps: (jobId: string) => Array<{ type: string; [key: string]: unknown }>;
-    getBatchStatus: (batchId: string) => {
-      total: number;
-      queued: number;
-      running: number;
-      complete: number;
-      error: number;
-      partial: number;
-      cancelled: number;
-      paused: number;
-      done: number;
-      failed: number;
-    };
-    pauseBatch: (batchId: string) => void;
-    resumeBatch: (batchId: string) => void;
-    cancelBatch: (batchId: string) => void;
-    retryBatch: (batchId: string) => void;
-    resetCircuitBreaker: (providerId: string) => void;
-  };
-};
+const { JobQueue: JobQueueCtor } = require('./JobQueue') as typeof import('./JobQueue');
 
 const { sequentialRunner } = require('./pipe') as {
   sequentialRunner: PipelineRunner;
@@ -103,7 +38,7 @@ function createSqliteAdapter(): SqliteLike {
   };
 }
 
-let _queue: any = null;
+let _queue: JobQueue | null = null;
 
 function initQueue(overrides?: {
   getDb?: () => SqliteLike;
@@ -112,16 +47,22 @@ function initQueue(overrides?: {
 }): void {
   const maxConcurrency =
     overrides?.maxConcurrency ?? Math.max(1, Number(config.get<number>('ai.queue_concurrency', 1)));
-  _queue = new JobQueue({
+  _queue = new JobQueueCtor({
     getDb: overrides?.getDb ?? createSqliteAdapter,
     maxConcurrency,
     runner: overrides?.runner ?? sequentialRunner,
   });
 }
 
-function getQueue(): any {
+function getQueue(): JobQueue {
   if (!_queue) initQueue();
-  return _queue;
+  return _queue!;
+}
+
+function updateQueueConcurrency(maxConcurrency: number): void {
+  if (_queue) {
+    _queue.setMaxConcurrency(maxConcurrency);
+  }
 }
 
 // For testing only — reset the singleton so tests can inject their own config.
@@ -129,4 +70,4 @@ function _resetQueue(): void {
   _queue = null;
 }
 
-module.exports = { initQueue, getQueue, _resetQueue };
+module.exports = { initQueue, getQueue, updateQueueConcurrency, _resetQueue };

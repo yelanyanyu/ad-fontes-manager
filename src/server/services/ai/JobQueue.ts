@@ -159,6 +159,11 @@ export class JobQueue {
     this.tryDequeue();
   }
 
+  setMaxConcurrency(maxConcurrency: number): void {
+    this.gate.setMaxConcurrency(maxConcurrency);
+    this.tryDequeue();
+  }
+
   getBatchStatus(batchId: string): BatchStatus {
     return this.store.getBatchStatus(batchId);
   }
@@ -360,7 +365,10 @@ export class JobQueue {
     this.lifecycle.emitProgress(jobId, event);
   }
 
-  private buildResumeSnapshot(jobId: string): {
+  buildResumeSnapshot(
+    jobId: string,
+    resumeFromStageOverride?: string
+  ): {
     resumeFromStage?: string;
     previousContext?: Record<string, unknown>;
     previousSteps?: Array<{
@@ -398,7 +406,10 @@ export class JobQueue {
       currentStage && !completedStages.has(currentStage)
         ? currentStage
         : this.defaultStageOrder.find(stage => !completedStages.has(stage));
-    const resumeIndex = resumeFromStage ? this.defaultStageOrder.indexOf(resumeFromStage) : -1;
+    const effectiveResumeFromStage = resumeFromStageOverride || resumeFromStage;
+    const resumeIndex = effectiveResumeFromStage
+      ? this.defaultStageOrder.indexOf(effectiveResumeFromStage)
+      : -1;
     const previousSteps =
       resumeIndex >= 0
         ? completedStepResults.filter(step => {
@@ -408,7 +419,7 @@ export class JobQueue {
         : completedStepResults;
 
     return {
-      resumeFromStage,
+      resumeFromStage: effectiveResumeFromStage,
       previousContext,
       previousSteps,
     };

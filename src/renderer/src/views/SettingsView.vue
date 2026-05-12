@@ -28,7 +28,7 @@ type StageKey = 'fast' | 'balanced' | 'expert';
 type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'auto';
 type DomainGroup = 'common' | 'en' | 'de';
 type SettingsPage = 'about' | 'api';
-type ApiSection = 'providers' | 'stages' | 'search' | 'review';
+type ApiSection = 'providers' | 'stages' | 'search' | 'review' | 'runtime';
 
 const router = useRouter();
 const appStore = useAppStore();
@@ -108,6 +108,7 @@ const apiSectionTitles: Record<ApiSection, string> = {
   stages: '阶段模型分配',
   search: '搜索 API',
   review: '审核阈值',
+  runtime: '运行参数',
 };
 
 const apiSectionDescription: Record<ApiSection, string> = {
@@ -115,6 +116,7 @@ const apiSectionDescription: Record<ApiSection, string> = {
   stages: '为快速 / 均衡 / 专家三种模型配置指定供应商与模型，系统自动分配到对应流水线阶段',
   search: '配置网页搜索提供商与域名偏好',
   review: '设置审核评分阈值（1-10）与按语言覆盖',
+  runtime: '配置 AI 作业队列的全局并发池大小',
 };
 
 const close = (): void => {
@@ -189,6 +191,7 @@ const getPresetWebsite = (providerId: string): string | undefined =>
 const normalizeAIConfig = (config: AIConfigMasked): AIConfigMasked => ({
   ...config,
   providers: mergePresetProviders(config.providers || []),
+  queue_concurrency: Math.max(1, Number(config.queue_concurrency || 1)),
   search: config.search || createEmptySearch(),
   stages: config.stages || {},
   review: {
@@ -258,6 +261,13 @@ const updateStageReasoningEffort = (stageKey: StageKey, effort: string): void =>
   const allowed = reasoningEffortOptions.map(option => option.value);
   if (!allowed.includes(effort as ReasoningEffort)) return;
   getStage(stageKey).reasoningEffort = effort as ReasoningEffort;
+  triggerAutoSave();
+};
+
+const updateQueueConcurrency = (value: number): void => {
+  if (!aiConfig.value) return;
+  const nextValue = Math.max(1, Math.floor(Number(value) || 1));
+  aiConfig.value.queue_concurrency = nextValue;
   triggerAutoSave();
 };
 
@@ -650,7 +660,13 @@ onMounted(() => {
               :class="{ active: activeApiSection === 'providers' }"
               @click="activeApiSection = 'providers'"
             >
-              <span>◎</span>
+              <span class="api-nav-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="4" y="4" width="16" height="16" rx="4" />
+                  <path d="M9 12h6" />
+                  <path d="M12 9v6" />
+                </svg>
+              </span>
               AI 提供商
             </button>
             <button
@@ -659,7 +675,16 @@ onMounted(() => {
               :class="{ active: activeApiSection === 'stages' }"
               @click="activeApiSection = 'stages'"
             >
-              <span>▱</span>
+              <span class="api-nav-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 7h14" />
+                  <path d="M5 12h14" />
+                  <path d="M5 17h14" />
+                  <circle cx="8" cy="7" r="1.5" />
+                  <circle cx="14" cy="12" r="1.5" />
+                  <circle cx="11" cy="17" r="1.5" />
+                </svg>
+              </span>
               阶段模型分配
             </button>
             <button
@@ -668,7 +693,12 @@ onMounted(() => {
               :class="{ active: activeApiSection === 'search' }"
               @click="activeApiSection = 'search'"
             >
-              <span>⌕</span>
+              <span class="api-nav-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="11" cy="11" r="6" />
+                  <path d="M16 16l4 4" />
+                </svg>
+              </span>
               搜索 API
             </button>
             <button
@@ -677,8 +707,29 @@ onMounted(() => {
               :class="{ active: activeApiSection === 'review' }"
               @click="activeApiSection = 'review'"
             >
-              <span>◇</span>
+              <span class="api-nav-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 4l7 4v5c0 4.5-3 7-7 8-4-1-7-3.5-7-8V8l7-4z" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+              </span>
               审核阈值
+            </button>
+            <button
+              type="button"
+              class="api-section-nav-item"
+              :class="{ active: activeApiSection === 'runtime' }"
+              @click="activeApiSection = 'runtime'"
+            >
+              <span class="api-nav-icon">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 7h9" />
+                  <path d="M4 17h9" />
+                  <circle cx="17" cy="7" r="3" />
+                  <circle cx="17" cy="17" r="3" />
+                </svg>
+              </span>
+              运行参数
             </button>
           </div>
         </nav>
@@ -1146,7 +1197,7 @@ onMounted(() => {
             </div>
 
             <!-- Review section -->
-            <div v-else class="api-config-stack">
+            <div v-else-if="activeApiSection === 'review'" class="api-config-stack">
               <section class="ai-panel ai-panel-review">
                 <header class="ai-panel-header">
                   <h2>审核阈值</h2>
@@ -1203,6 +1254,33 @@ onMounted(() => {
                       <span class="range-hint">1-10</span>
                     </div>
                   </div>
+                </div>
+              </section>
+            </div>
+
+            <!-- Runtime section -->
+            <div v-else class="api-config-stack">
+              <section class="ai-panel ai-panel-runtime">
+                <header class="ai-panel-header">
+                  <p>控制 AI 作业队列的全局并发池。Web 调试和 Electron 桌面端共用此配置。</p>
+                </header>
+
+                <div class="runtime-setting-row">
+                  <span class="search-field-label">
+                    并发池大小
+                    <span class="stage-info-icon">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
+                      <span class="stage-tooltip">同一时间允许运行的 Generate / Fix / Audit-Fix Job 总数。设置为 3 时，最多 3 个 Job 同时执行；所有批次共享这个全局池。</span>
+                    </span>
+                  </span>
+                  <input
+                    class="number-control"
+                    type="number"
+                    min="1"
+                    :value="aiConfig.queue_concurrency"
+                    @change="updateQueueConcurrency(($event.target as HTMLInputElement).valueAsNumber)"
+                  />
+                  <span class="range-hint">≥ 1</span>
                 </div>
               </section>
             </div>
@@ -1463,6 +1541,31 @@ onMounted(() => {
 .api-section-nav-item.active {
   color: var(--green);
   font-weight: 600;
+}
+
+.api-nav-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+  flex-shrink: 0;
+}
+
+.api-nav-icon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.api-section-nav-item.active .api-nav-icon {
+  background: var(--green-soft);
 }
 
 /* ===== Provider Column ===== */
@@ -2132,7 +2235,8 @@ onMounted(() => {
 }
 
 .threshold-default-row,
-.threshold-lang-row {
+.threshold-lang-row,
+.runtime-setting-row {
   display: flex;
   align-items: center;
   gap: 10px;
