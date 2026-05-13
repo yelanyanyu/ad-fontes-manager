@@ -7,6 +7,7 @@ const {
   buildExportPayloadMock,
   exportApkgByIdsMock,
   exportBatchApkgViaAnkiConnectMock,
+  ensureDeckExistsMock,
   getDeckNamesMock,
   getDefaultAnkiOptionsMock,
   getInitialAnkiExportOptionsMock,
@@ -23,6 +24,7 @@ const {
   buildExportPayloadMock: vi.fn(),
   exportApkgByIdsMock: vi.fn(),
   exportBatchApkgViaAnkiConnectMock: vi.fn(),
+  ensureDeckExistsMock: vi.fn(),
   getDeckNamesMock: vi.fn(),
   getDefaultAnkiOptionsMock: vi.fn(),
   getInitialAnkiExportOptionsMock: vi.fn(),
@@ -48,6 +50,7 @@ vi.mock('@/services/apkgExportService', () => ({
 
 vi.mock('@/services/ankiConnectService', () => ({
   checkDuplicateConflict: vi.fn(),
+  ensureDeckExists: ensureDeckExistsMock,
   getDeckNames: getDeckNamesMock,
   getModelFieldNames: getModelFieldNamesMock,
   getModelNames: getModelNamesMock,

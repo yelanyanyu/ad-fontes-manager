@@ -789,6 +789,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
 <template>
   <div
     class="panel table-panel"
+    :class="{ 'has-batch-summary': showBatchSummaryBar }"
   >
     <AnkiExportModal
       :open="ankiExportOpen"
@@ -929,7 +930,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
     />
     <div
       v-if="showBatchSummaryBar"
-      class="px-4 py-2 border-b border-[var(--line)] bg-[var(--surface-soft)]"
+      class="batch-summary-bar px-4 py-2 border-b border-[var(--line)] bg-[var(--surface-soft)]"
     >
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-3 min-w-0">
@@ -1128,6 +1129,14 @@ const paginationRange = computed<Array<number | '...'>>(() => {
 .table-panel {
   display: grid;
   grid-template-rows: auto 1fr 48px;
+  min-height: 0;
+}
+
+.table-panel.has-batch-summary {
+  grid-template-rows: auto auto minmax(0, 1fr) 48px;
+}
+
+.batch-summary-bar {
   min-height: 0;
 }
 

@@ -118,7 +118,7 @@ const invoke = async <T>(payload: AnkiConnectInvokePayload): Promise<T> => {
   return data.result;
 };
 
-const ensureDeckExists = async (deckName: string): Promise<void> => {
+export const ensureDeckExists = async (deckName: string): Promise<void> => {
   const decks = await invoke<string[]>({
     action: 'deckNames',
     version: ANKI_CONNECT_VERSION,
@@ -239,9 +239,10 @@ export const getModelTemplates = async (modelName: string): Promise<AnkiModelTem
 };
 
 export const importPayloadToAnki = async (
-  payload: AnkiExportPayload
+  payload: AnkiExportPayload,
+  options?: { skipPrepare?: boolean }
 ): Promise<{ noteId: number }> => {
-  await prepareAnkiTarget(payload);
+  if (!options?.skipPrepare) await prepareAnkiTarget(payload);
 
   try {
     const noteId = await invoke<number>({
@@ -285,9 +286,10 @@ export const importPayloadToAnki = async (
 export const importPayloadWithStrategy = async (
   payload: AnkiExportPayload,
   strategy: AnkiImportStrategy,
-  expectedDuplicateState?: AnkiDuplicateState
+  expectedDuplicateState?: AnkiDuplicateState,
+  options?: { skipPrepare?: boolean }
 ): Promise<{ noteId: number; mode: 'added' | 'overwritten' }> => {
-  await prepareAnkiTarget(payload);
+  if (!options?.skipPrepare) await prepareAnkiTarget(payload);
 
   const conflict = await getExistingNoteByWord(payload);
   const actualDuplicateState: AnkiDuplicateState = conflict ? 'duplicate' : 'ready';
@@ -303,7 +305,7 @@ export const importPayloadWithStrategy = async (
   }
 
   if (!conflict) {
-    const added = await importPayloadToAnki(payload);
+    const added = await importPayloadToAnki(payload, { skipPrepare: true });
     return { noteId: added.noteId, mode: 'added' };
   }
 
@@ -320,9 +322,10 @@ export const importPayloadWithStrategy = async (
 };
 
 export const checkDuplicateConflict = async (
-  payload: AnkiExportPayload
+  payload: AnkiExportPayload,
+  options?: { skipPrepare?: boolean }
 ): Promise<AnkiDuplicateConflict | null> => {
-  await prepareAnkiTarget(payload);
+  if (!options?.skipPrepare) await prepareAnkiTarget(payload);
   return getExistingNoteByWord(payload);
 };
 

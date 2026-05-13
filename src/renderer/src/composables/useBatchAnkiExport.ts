@@ -2,6 +2,7 @@ import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import {
   checkDuplicateConflict,
+  ensureDeckExists,
   getDeckNames,
   getModelFieldNames,
   getModelNames,
@@ -32,6 +33,7 @@ import { useBatchAnkiStore } from '@/stores/batchAnkiStore';
 import { makeWordSelectionKey } from '@/utils/wordSelection';
 import type {
   AnkiConflictAction,
+  AnkiDuplicateConflict,
   AnkiModelTemplate,
   BatchAnkiExportItem,
   BatchAnkiProgressPhase,
@@ -311,55 +313,62 @@ export const useBatchAnkiExport = () => {
 
     try {
       if (!ankiConnected.value) await connectAnki(true);
+      // Prepare once for all items instead of per-item.
+      await pingAnkiConnect();
+      await ensureDeckExists(deckName.value);
 
-      for (const item of checkTargets) {
+      // Process in chunks for parallelism while preserving cancel responsiveness.
+      const CHUNK_SIZE = 5;
+      for (let i = 0; i < checkTargets.length; i += CHUNK_SIZE) {
         if (cancelRequested.value) {
           stopBatchOperation('check', ['pending', 'cancelled']);
           break;
         }
 
-        setItem(item.key, {
-          status: 'checking',
-          error: '',
-        });
-
-        try {
-          const payload = await buildExportPayload(
-            item.record,
-            {
-              deckName: deckName.value,
-              modelName: modelName.value,
-              tags: tags.value,
-            },
-            fieldMapping.value
-          );
-          const conflict = await checkDuplicateConflict(payload);
-          if (conflict) {
-            setItem(item.key, {
-              payload,
-              preflightDuplicateState: 'duplicate',
-              conflict,
-              resolution: 'undecided',
-              status: 'duplicate',
-            });
-          } else {
-            setItem(item.key, {
-              payload,
-              preflightDuplicateState: 'ready',
-              conflict: null,
-              resolution: 'undecided',
-              status: 'ready',
-            });
-          }
-        } catch (err) {
-          const e = err as { message?: string };
-          setItem(item.key, {
-            status: 'failed',
-            error: e.message || 'Failed to build payload or check duplicate',
-          });
+        const chunk = checkTargets.slice(i, i + CHUNK_SIZE);
+        for (const item of chunk) {
+          setItem(item.key, { status: 'checking', error: '' });
         }
 
-        progress.value = stepBatchProgress(progress.value);
+        const results = await Promise.allSettled(
+          chunk.map(async item => {
+            try {
+              const payload = await buildExportPayload(
+                item.record,
+                { deckName: deckName.value, modelName: modelName.value, tags: tags.value },
+                fieldMapping.value
+              );
+              const conflict = await checkDuplicateConflict(payload, { skipPrepare: true });
+              return { key: item.key, ok: true as const, payload, conflict };
+            } catch (err) {
+              const e = err as { message?: string };
+              return {
+                key: item.key,
+                ok: false as const,
+                error: e.message || 'Failed to build payload or check duplicate',
+              };
+            }
+          })
+        );
+
+        for (const result of results) {
+          const r = result.status === 'fulfilled' ? result.value : null;
+          if (r?.ok) {
+            setItem(r.key, {
+              payload: r.payload,
+              preflightDuplicateState: r.conflict ? 'duplicate' : 'ready',
+              conflict: r.conflict || null,
+              resolution: 'undecided',
+              status: r.conflict ? 'duplicate' : 'ready',
+            });
+          } else {
+            setItem((r as { key: string })?.key || '', {
+              status: 'failed',
+              error: (r as { error?: string })?.error || 'Unknown error',
+            });
+          }
+          progress.value = stepBatchProgress(progress.value);
+        }
 
         if (cancelRequested.value) {
           stopBatchOperation('check', ['pending', 'cancelled']);
@@ -375,10 +384,7 @@ export const useBatchAnkiExport = () => {
       error.value = e.message || 'Batch duplicate check failed';
     } finally {
       busy.value = false;
-      progress.value = {
-        ...progress.value,
-        phase: 'idle',
-      };
+      progress.value = { ...progress.value, phase: 'idle' };
     }
   };
 
@@ -466,6 +472,65 @@ export const useBatchAnkiExport = () => {
     }
   };
 
+  const importOneItem = async (
+    item: BatchAnkiExportItem
+  ): Promise<{
+    key: string;
+    status: BatchAnkiExportItem['status'];
+    noteId?: number | null;
+    error?: string;
+    conflict?: AnkiDuplicateConflict;
+  }> => {
+    if (!item.payload) {
+      return { key: item.key, status: 'failed', error: 'Payload not prepared' };
+    }
+    if (item.preflightDuplicateState === 'duplicate' && item.resolution === 'skip') {
+      return { key: item.key, status: 'skipped' };
+    }
+    try {
+      if (item.preflightDuplicateState === 'duplicate' && item.resolution === 'overwrite') {
+        const result = await importPayloadWithStrategy(
+          item.payload,
+          'overwrite_if_duplicate',
+          'duplicate',
+          { skipPrepare: true }
+        );
+        return {
+          key: item.key,
+          status: result.mode === 'overwritten' ? 'overwritten' : 'imported',
+          noteId: result.noteId,
+        };
+      }
+      if (item.preflightDuplicateState === 'ready') {
+        const result = await importPayloadWithStrategy(
+          item.payload,
+          'add_if_not_duplicate',
+          'ready',
+          { skipPrepare: true }
+        );
+        return {
+          key: item.key,
+          status: result.mode === 'overwritten' ? 'overwritten' : 'imported',
+          noteId: result.noteId,
+        };
+      }
+      if (item.preflightDuplicateState === 'duplicate' && item.resolution === 'undecided') {
+        return { key: item.key, status: 'failed', error: 'Unresolved duplicate' };
+      }
+      return { key: item.key, status: 'failed', error: 'Missing preflight state' };
+    } catch (err) {
+      if (isAnkiDuplicateConflictError(err)) {
+        return {
+          key: item.key,
+          status: 'duplicate',
+          conflict: err.conflict,
+        };
+      }
+      const e = err as { message?: string };
+      return { key: item.key, status: 'failed', error: e.message || 'Import failed' };
+    }
+  };
+
   const importReadyItems = async (): Promise<void> => {
     const importable = getImportableBatchItems(items.value);
     if (!importable.length) return;
@@ -479,80 +544,38 @@ export const useBatchAnkiExport = () => {
 
     try {
       if (!ankiConnected.value) await connectAnki(true);
+      // Prepare once for all items instead of per-item.
+      await pingAnkiConnect();
+      await ensureDeckExists(deckName.value);
 
-      for (const item of importable) {
+      const CHUNK_SIZE = 5;
+      for (let i = 0; i < importable.length; i += CHUNK_SIZE) {
         if (cancelRequested.value) {
           stopBatchOperation('import', ['ready', 'duplicate', 'cancelled']);
           break;
         }
 
-        setItem(item.key, {
-          status: 'importing',
-          error: '',
-        });
-        try {
-          if (!item.payload) {
-            throw new Error('Payload not prepared; please run duplicate check first.');
-          }
-          if (item.preflightDuplicateState === 'duplicate' && item.resolution === 'skip') {
-            setItem(item.key, {
-              status: 'skipped',
-            });
-            continue;
-          }
-
-          if (item.preflightDuplicateState === 'duplicate' && item.resolution === 'overwrite') {
-            const result = await importPayloadWithStrategy(
-              item.payload,
-              'overwrite_if_duplicate',
-              'duplicate'
-            );
-            setItem(item.key, {
-              status: result.mode === 'overwritten' ? 'overwritten' : 'imported',
-              noteId: result.noteId,
-            });
-            continue;
-          }
-
-          if (item.preflightDuplicateState === 'ready') {
-            const result = await importPayloadWithStrategy(
-              item.payload,
-              'add_if_not_duplicate',
-              'ready'
-            );
-            setItem(item.key, {
-              status: result.mode === 'overwritten' ? 'overwritten' : 'imported',
-              noteId: result.noteId,
-            });
-            continue;
-          }
-
-          if (item.preflightDuplicateState === 'duplicate' && item.resolution === 'undecided') {
-            throw new Error('Duplicate item is unresolved; choose skip or overwrite first.');
-          } else {
-            throw new Error(
-              'Item duplicate preflight status is missing; run duplicate check first.'
-            );
-          }
-        } catch (err) {
-          if (isAnkiDuplicateConflictError(err)) {
-            setItem(item.key, {
-              status: 'duplicate',
-              preflightDuplicateState: 'duplicate',
-              conflict: err.conflict,
-              resolution: 'undecided',
-              error: '',
-            });
-          } else {
-            const e = err as { message?: string };
-            setItem(item.key, {
-              status: 'failed',
-              error: e.message || 'Import failed',
-            });
-          }
+        const chunk = importable.slice(i, i + CHUNK_SIZE);
+        for (const item of chunk) {
+          setItem(item.key, { status: 'importing', error: '' });
         }
 
-        progress.value = stepBatchProgress(progress.value);
+        const results = await Promise.all(chunk.map(item => importOneItem(item)));
+
+        for (const r of results) {
+          const patch: Partial<BatchAnkiExportItem> = {
+            status: r.status,
+            noteId: r.noteId ?? null,
+          };
+          if (r.conflict) {
+            patch.preflightDuplicateState = 'duplicate';
+            patch.conflict = r.conflict;
+            patch.resolution = 'undecided';
+          }
+          if (r.error) patch.error = r.error;
+          setItem(r.key, patch);
+          progress.value = stepBatchProgress(progress.value);
+        }
 
         if (cancelRequested.value) {
           stopBatchOperation('import', ['ready', 'duplicate', 'cancelled']);
@@ -568,10 +591,7 @@ export const useBatchAnkiExport = () => {
       error.value = e.message || 'Batch import failed';
     } finally {
       busy.value = false;
-      progress.value = {
-        ...progress.value,
-        phase: 'idle',
-      };
+      progress.value = { ...progress.value, phase: 'idle' };
     }
   };
 

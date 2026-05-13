@@ -17,8 +17,10 @@ import {
   AnkiImportStateMismatchError,
   applyDuplicateResolution,
   checkDuplicateConflict,
+  ensureDeckExists,
   getModelStyling,
   importPayloadToAnki,
+  importPayloadWithStrategy,
   isAnkiDuplicateConflictError,
   isAnkiImportStateMismatchError,
   isDuplicateAddNoteError,
@@ -156,6 +158,50 @@ describe('ankiConnectService duplicate safeguards', () => {
           query: 'deck:"English::English-word" note:"单词模板-Quizify" Word:"craft"',
         },
       }),
+      expect.objectContaining({ skipErrorToast: true })
+    );
+  });
+
+  it('exports deck preparation for batch callers', async () => {
+    requestPostMock
+      .mockResolvedValueOnce(asAnkiResponse(['Other deck']))
+      .mockResolvedValueOnce(asAnkiResponse(null));
+
+    await ensureDeckExists(payload.options.deckName);
+
+    expect(requestPostMock).toHaveBeenNthCalledWith(
+      2,
+      '/anki/connect',
+      expect.objectContaining({
+        action: 'createDeck',
+        params: { deck: payload.options.deckName },
+      }),
+      expect.objectContaining({ skipErrorToast: true })
+    );
+  });
+
+  it('skips repeated preparation when importing with a pre-prepared target', async () => {
+    requestPostMock
+      .mockResolvedValueOnce(asAnkiResponse([]))
+      .mockResolvedValueOnce(asAnkiResponse(123));
+
+    await expect(
+      importPayloadWithStrategy(payload, 'add_if_not_duplicate', 'ready', {
+        skipPrepare: true,
+      })
+    ).resolves.toEqual({ noteId: 123, mode: 'added' });
+
+    expect(requestPostMock).toHaveBeenCalledTimes(2);
+    expect(requestPostMock).toHaveBeenNthCalledWith(
+      1,
+      '/anki/connect',
+      expect.objectContaining({ action: 'findNotes' }),
+      expect.objectContaining({ skipErrorToast: true })
+    );
+    expect(requestPostMock).toHaveBeenNthCalledWith(
+      2,
+      '/anki/connect',
+      expect.objectContaining({ action: 'addNote' }),
       expect.objectContaining({ skipErrorToast: true })
     );
   });
