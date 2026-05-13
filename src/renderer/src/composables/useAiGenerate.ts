@@ -1,4 +1,4 @@
-import { computed, onUnmounted, ref, type InjectionKey } from 'vue';
+import { computed, onUnmounted, reactive, ref, type InjectionKey } from 'vue';
 import request, { type RequestConfig } from '@/utils/request';
 
 const LOCAL_QUEUE_REQUEST: RequestConfig = { skipRateLimit: true };
@@ -144,7 +144,7 @@ const mergeWorksetSaveResponses = (responses: WorksetSaveResponse[]): WorksetSav
 };
 
 export function useAiGenerate() {
-  const jobs = ref<Map<string, JobState>>(new Map());
+  const jobs = reactive<Record<string, JobState>>({});
   const selectedJobId = ref<string | null>(null);
   const eventSources = new Map<string, EventSource>();
   const queueOverview = ref<QueueJobOverview[]>([]);
@@ -159,7 +159,7 @@ export function useAiGenerate() {
 
   const currentJob = computed(() => {
     if (!selectedJobId.value) return null;
-    return jobs.value.get(selectedJobId.value) || null;
+    return jobs[selectedJobId.value] || null;
   });
   const isRunning = computed(
     () => currentJob.value?.status === 'running' || currentJob.value?.status === 'queued'
@@ -168,12 +168,8 @@ export function useAiGenerate() {
     () => currentJob.value?.status === 'complete' || currentJob.value?.status === 'partial'
   );
 
-  function touchJobs(): void {
-    jobs.value = new Map(jobs.value);
-  }
-
   function registerJob(jobId: string, params: GenerateParams, response: GenerateResponse): void {
-    jobs.value.set(jobId, {
+    jobs[jobId] = {
       jobId,
       word: params.word,
       language: params.language,
@@ -182,9 +178,8 @@ export function useAiGenerate() {
       status: response.queued ? 'queued' : 'running',
       queuePosition: response.position,
       steps: [],
-    });
+    };
     selectedJobId.value = jobId;
-    touchJobs();
   }
 
   async function startGeneration(params: GenerateParams): Promise<string> {
@@ -231,7 +226,7 @@ export function useAiGenerate() {
   }
 
   function ensureJobFromOverview(item: QueueJobOverview): JobState {
-    const existing = jobs.value.get(item.jobId);
+    const existing = jobs[item.jobId];
     if (existing) return existing;
 
     const language = item.language === 'de' ? 'de' : 'en';
@@ -250,8 +245,7 @@ export function useAiGenerate() {
       steps: item.jobType === 'fix' ? [{ step: 'fixing', status: 'pending' }] : [],
       error: item.error,
     };
-    jobs.value.set(item.jobId, job);
-    touchJobs();
+    jobs[item.jobId] = job;
     return job;
   }
 
@@ -262,7 +256,7 @@ export function useAiGenerate() {
     }
   ): JobState {
     const language = job.language === 'de' ? 'de' : 'en';
-    const existing = jobs.value.get(job.jobId);
+    const existing = jobs[job.jobId];
     const next: JobState = {
       ...(existing || {
         steps: job.jobType === 'fix' ? [{ step: 'fixing', status: 'pending' as const }] : [],
@@ -280,8 +274,8 @@ export function useAiGenerate() {
       yaml: job.yaml || job.result?.yaml,
       scores: job.scores || job.result?.scores,
     };
-    jobs.value.set(job.jobId, next);
-    touchJobs();
+    jobs[job.jobId] = next;
+
     return next;
   }
 
@@ -292,26 +286,26 @@ export function useAiGenerate() {
 
     es.addEventListener('job:queued', event => {
       const data = JSON.parse(event.data) as { position: number };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       job.status = 'queued';
       job.queuePosition = data.position;
-      touchJobs();
+
       void fetchQueueOverview();
     });
 
     es.addEventListener('job:started', () => {
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       job.status = 'running';
       job.queuePosition = undefined;
-      touchJobs();
+
       void fetchQueueOverview();
     });
 
     es.addEventListener('job:paused', event => {
       const data = JSON.parse(event.data) as { step?: string };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       job.status = 'paused';
       job.queuePosition = undefined;
@@ -321,13 +315,13 @@ export function useAiGenerate() {
         runningStep.status = 'pending';
         runningStep.summary = 'Paused';
       }
-      touchJobs();
+
       void fetchQueueOverview();
     });
 
     es.addEventListener('step:start', event => {
       const data = JSON.parse(event.data) as { step: string; message: string };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       const existingIdx = job.steps.findIndex(
         step => step.step === data.step && step.status === 'running'
@@ -346,29 +340,26 @@ export function useAiGenerate() {
       if (data.step !== 'fixing') {
         job.status = 'running';
       }
-      touchJobs();
     });
 
     es.addEventListener('step:tokens', event => {
       const data = JSON.parse(event.data) as { step: string; chunk: string };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       const step = job.steps.find(item => item.step === data.step && item.status === 'running');
       if (step) {
         step.tokens = (step.tokens || '') + data.chunk;
       }
-      touchJobs();
     });
 
     es.addEventListener('step:reasoning', event => {
       const data = JSON.parse(event.data) as { step: string; chunk: string };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       const step = job.steps.find(item => item.step === data.step && item.status === 'running');
       if (step) {
         step.reasoningText = (step.reasoningText || '') + data.chunk;
       }
-      touchJobs();
     });
 
     es.addEventListener('step:complete', event => {
@@ -380,7 +371,7 @@ export function useAiGenerate() {
         rawText?: string;
         reasoningText?: string;
       };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       let step = job.steps.find(item => item.step === data.step && item.status === 'running');
       if (!step) {
@@ -398,7 +389,6 @@ export function useAiGenerate() {
         step.rawText = data.rawText;
         if (data.reasoningText) step.reasoningText = data.reasoningText;
       }
-      touchJobs();
     });
 
     es.addEventListener('step:tool-call', event => {
@@ -409,7 +399,7 @@ export function useAiGenerate() {
         input?: unknown;
         startTime: number;
       };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       const step = job.steps.find(item => item.step === data.step && item.status === 'running');
       if (!step) return;
@@ -423,7 +413,6 @@ export function useAiGenerate() {
           startTime: data.startTime,
         });
       }
-      touchJobs();
     });
 
     es.addEventListener('step:tool-result', event => {
@@ -436,7 +425,7 @@ export function useAiGenerate() {
         warning?: string;
         duration: number;
       };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       const step = job.steps.find(item => item.step === data.step && item.status === 'running');
       const toolCall = step?.toolCalls?.find(item => item.toolCallId === data.toolCallId);
@@ -446,12 +435,11 @@ export function useAiGenerate() {
       toolCall.error = data.error;
       toolCall.warning = data.warning;
       toolCall.duration = data.duration;
-      touchJobs();
     });
 
     es.addEventListener('step:error', event => {
       const data = JSON.parse(event.data) as { step: string; error: string; willRetry?: boolean };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       const step = job.steps.find(item => item.step === data.step && item.status === 'running');
       if (step) {
@@ -464,13 +452,13 @@ export function useAiGenerate() {
       }
       es.close();
       eventSources.delete(jobId);
-      touchJobs();
+
       void fetchQueueOverview();
     });
 
     es.addEventListener('pipeline:complete', event => {
       const data = JSON.parse(event.data) as { yaml: string; scores: Record<string, unknown> };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       if (job.status === 'paused') return;
       job.status = 'complete';
@@ -482,7 +470,7 @@ export function useAiGenerate() {
         es.close();
         eventSources.delete(jobId);
       }
-      touchJobs();
+
       void fetchQueueOverview();
     });
 
@@ -492,7 +480,7 @@ export function useAiGenerate() {
         stoppedAtStage: string;
         reason: string;
       };
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job) return;
       if (job.status === 'paused') return;
       job.status = 'partial';
@@ -501,12 +489,12 @@ export function useAiGenerate() {
       job.scores = {};
       es.close();
       eventSources.delete(jobId);
-      touchJobs();
+
       void fetchQueueOverview();
     });
 
     es.onerror = () => {
-      const job = jobs.value.get(jobId);
+      const job = jobs[jobId];
       if (!job || job.status === 'complete' || job.status === 'partial' || job.status === 'error') {
         es.close();
         eventSources.delete(jobId);
@@ -524,7 +512,7 @@ export function useAiGenerate() {
     userScore?: number
   ): Promise<void> {
     eventSources.get(jobId)?.close();
-    const oldJob = jobs.value.get(jobId);
+    const oldJob = jobs[jobId];
     const body: Record<string, unknown> = {};
     if (fromStage) body.fromStage = fromStage;
     if (notes !== undefined) body.notes = notes;
@@ -550,11 +538,10 @@ export function useAiGenerate() {
         },
         response
       );
-      const newJob = jobs.value.get(response.jobId);
+      const newJob = jobs[response.jobId];
       if (newJob) {
         newJob.error = undefined;
         newJob.steps = previousSteps.map(step => ({ ...step }));
-        touchJobs();
       }
     }
     subscribeToJob(response.jobId);
@@ -563,18 +550,17 @@ export function useAiGenerate() {
 
   async function cancelGeneration(jobId: string): Promise<void> {
     await request.post(`/v2/generate/${jobId}/cancel`, undefined, LOCAL_QUEUE_REQUEST);
-    const job = jobs.value.get(jobId);
+    const job = jobs[jobId];
     if (job) {
       job.status = 'error';
       job.error = 'User cancelled';
-      touchJobs();
     }
     await fetchQueueOverview();
   }
 
   async function pauseGeneration(jobId: string): Promise<void> {
     await request.post(`/v2/generate/${jobId}/pause`, undefined, LOCAL_QUEUE_REQUEST);
-    const job = jobs.value.get(jobId);
+    const job = jobs[jobId];
     if (job) {
       job.status = 'paused';
       const runningStep = job.steps.find(step => step.status === 'running');
@@ -582,7 +568,6 @@ export function useAiGenerate() {
         runningStep.status = 'pending';
         runningStep.summary = 'Paused';
       }
-      touchJobs();
     }
     await fetchQueueOverview();
   }
@@ -594,7 +579,7 @@ export function useAiGenerate() {
     if (overviewItem) {
       const job = ensureJobFromOverview(overviewItem);
       job.status = overviewItem.status === 'queued' ? 'queued' : 'running';
-      touchJobs();
+
       if (overviewItem.status === 'queued' || overviewItem.status === 'running') {
         subscribeToJob(jobId);
       }
@@ -602,7 +587,7 @@ export function useAiGenerate() {
   }
 
   async function fixGeneration(jobId: string, notes?: string): Promise<string> {
-    const job = jobs.value.get(jobId);
+    const job = jobs[jobId];
     const userNotes = notes?.trim() || undefined;
     const response = await request.post<GenerateResponse>(
       `/v2/generate/${jobId}/fix`,
@@ -628,11 +613,11 @@ export function useAiGenerate() {
         },
         response
       );
-      const newJob = jobs.value.get(response.jobId);
+      const newJob = jobs[response.jobId];
       if (newJob) {
         newJob.steps = [...previousSteps, { step: 'fixing', status: 'pending' }];
       }
-      touchJobs();
+
       subscribeToJob(response.jobId);
       await fetchQueueOverview();
     }
@@ -645,7 +630,7 @@ export function useAiGenerate() {
   }
 
   function selectJob(jobId: string | null): void {
-    if (jobId && !jobs.value.has(jobId)) {
+    if (jobId && !(jobId in jobs)) {
       const overviewItem = queueOverview.value.find(item => item.jobId === jobId);
       if (overviewItem) {
         ensureJobFromOverview(overviewItem);
@@ -723,9 +708,9 @@ export function useAiGenerate() {
 
   async function deleteHistoryJob(jobId: string): Promise<void> {
     await request.delete(`/v2/generate/queue/history/${jobId}`, LOCAL_QUEUE_REQUEST);
-    jobs.value.delete(jobId);
+    delete jobs[jobId];
     if (selectedJobId.value === jobId) selectedJobId.value = null;
-    touchJobs();
+
     await fetchQueueHistory();
   }
 
@@ -739,12 +724,12 @@ export function useAiGenerate() {
       LOCAL_QUEUE_REQUEST
     );
     for (const job of queueHistory.value) {
-      jobs.value.delete(job.jobId);
+      delete jobs[job.jobId];
     }
-    if (selectedJobId.value && !jobs.value.has(selectedJobId.value)) {
+    if (selectedJobId.value && !(selectedJobId.value in jobs)) {
       selectedJobId.value = null;
     }
-    touchJobs();
+
     await fetchQueueHistory({ page: 1 });
     return res.deleted;
   }
@@ -787,7 +772,7 @@ export function useAiGenerate() {
 
   async function queuePauseAll(): Promise<void> {
     await request.post('/v2/generate/queue/pause-all', undefined, LOCAL_QUEUE_REQUEST);
-    for (const job of jobs.value.values()) {
+    for (const job of Object.values(jobs)) {
       if (job.status === 'queued' || job.status === 'running') {
         job.status = 'paused';
         const runningStep = job.steps.find(step => step.status === 'running');
@@ -797,7 +782,7 @@ export function useAiGenerate() {
         }
       }
     }
-    touchJobs();
+
     await fetchQueueOverview();
   }
 
@@ -812,7 +797,7 @@ export function useAiGenerate() {
       if (!overviewItem) continue;
       const job = ensureJobFromOverview(overviewItem);
       job.status = overviewItem.status === 'queued' ? 'queued' : 'running';
-      touchJobs();
+
       if (overviewItem.status === 'queued' || overviewItem.status === 'running') {
         subscribeToJob(jobId);
       }

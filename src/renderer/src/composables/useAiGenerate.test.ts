@@ -161,7 +161,7 @@ describe('useAiGenerate', () => {
     ]);
 
     expect(response.batchId).toBe('batch-1');
-    expect(ai.jobs.value.get('job-a')).toMatchObject({
+    expect(ai.jobs['job-a']).toMatchObject({
       word: 'proliferate',
       context: 'context text',
       status: 'queued',
@@ -203,13 +203,13 @@ describe('useAiGenerate', () => {
       ],
     });
     const ai = useAiGenerate();
-    ai.jobs.value.set('job-1', {
+    ai.jobs['job-1'] = {
       jobId: 'job-1',
       word: 'crate',
       language: 'en',
       status: 'running',
       steps: [{ step: 'searching', status: 'running' }],
-    });
+    };
 
     await ai.pauseGeneration('job-1');
     expect(requestPostMock).toHaveBeenCalledWith(
@@ -217,7 +217,7 @@ describe('useAiGenerate', () => {
       undefined,
       expect.objectContaining({ skipRateLimit: true })
     );
-    expect(ai.jobs.value.get('job-1')?.status).toBe('paused');
+    expect(ai.jobs['job-1']?.status).toBe('paused');
 
     await ai.resumeActiveGeneration('job-1');
     expect(requestPostMock).toHaveBeenCalledWith(
@@ -231,7 +231,7 @@ describe('useAiGenerate', () => {
     requestPostMock.mockResolvedValue({ jobId: 'fix-job-1', queued: false });
     const ai = useAiGenerate();
 
-    ai.jobs.value.set('source-job', {
+    ai.jobs['source-job'] = {
       jobId: 'source-job',
       word: 'crate',
       language: 'en',
@@ -254,7 +254,7 @@ describe('useAiGenerate', () => {
       ],
       yaml: 'yield:\n  lemma: crate\n',
       scores: { revision_notes: 'Fix the weak fields.' },
-    });
+    };
 
     await ai.fixGeneration('source-job', 'Use more concrete examples.');
 
@@ -263,9 +263,9 @@ describe('useAiGenerate', () => {
       { notes: 'Use more concrete examples.' },
       expect.objectContaining({ skipRateLimit: true })
     );
-    expect(ai.jobs.value.get('fix-job-1')?.notes).toContain('Fix the weak fields.');
-    expect(ai.jobs.value.get('fix-job-1')?.notes).toContain('Use more concrete examples.');
-    expect(ai.jobs.value.get('fix-job-1')?.steps).toMatchObject([
+    expect(ai.jobs['fix-job-1']?.notes).toContain('Fix the weak fields.');
+    expect(ai.jobs['fix-job-1']?.notes).toContain('Use more concrete examples.');
+    expect(ai.jobs['fix-job-1']?.steps).toMatchObject([
       { step: 'searching', status: 'complete', rawText: 'yield:\n  lemma: crate\n' },
       { step: 'auditing', status: 'complete', reasoningText: 'audit thinking' },
       { step: 'fixing', status: 'pending' },
