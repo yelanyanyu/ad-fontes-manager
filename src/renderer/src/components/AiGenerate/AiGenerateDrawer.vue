@@ -510,7 +510,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
 
 .mode-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(76px, 0.9fr) minmax(0, 1.1fr);
   gap: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -538,7 +538,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
 .batch-mode {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(56px, 1fr) auto auto;
+  grid-template-columns: minmax(44px, 1fr) minmax(62px, 86px) 22px;
   align-items: center;
   color: var(--muted);
 }
@@ -550,7 +550,8 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
 
 .batch-source-select {
   height: 24px;
-  max-width: 86px;
+  width: 100%;
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-panel);
@@ -570,7 +571,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   position: relative;
   width: 22px;
   height: 22px;
-  margin-right: 6px;
+  margin-right: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
   background: var(--surface-panel);

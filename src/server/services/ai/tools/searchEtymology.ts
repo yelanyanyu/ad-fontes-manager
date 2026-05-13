@@ -7,13 +7,17 @@ interface SearchResult {
 }
 
 const BRAVE_RATE = { perSecond: 1, perMonth: 15000 };
-const braveCount = { second: 0, month: 0, lastReset: Date.now() };
+const braveCount = { second: 0, month: 0, lastSecondReset: Date.now(), lastMonthReset: Date.now() };
 
 function checkBraveRateLimit(): void {
   const now = Date.now();
-  if (now - braveCount.lastReset > 1000) {
+  if (now - braveCount.lastSecondReset > 1000) {
     braveCount.second = 0;
-    braveCount.lastReset = now;
+    braveCount.lastSecondReset = now;
+  }
+  if (now - braveCount.lastMonthReset > 30 * 24 * 60 * 60 * 1000) {
+    braveCount.month = 0;
+    braveCount.lastMonthReset = now;
   }
   if (braveCount.second >= BRAVE_RATE.perSecond || braveCount.month >= BRAVE_RATE.perMonth) {
     throw new Error('Brave Search API rate limit exceeded');

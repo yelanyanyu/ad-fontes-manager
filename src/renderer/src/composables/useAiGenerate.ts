@@ -291,7 +291,7 @@ export function useAiGenerate() {
       job.status = 'queued';
       job.queuePosition = data.position;
 
-      void fetchQueueOverview();
+      scheduleQueueOverviewRefresh();
     });
 
     es.addEventListener('job:started', () => {
@@ -300,7 +300,7 @@ export function useAiGenerate() {
       job.status = 'running';
       job.queuePosition = undefined;
 
-      void fetchQueueOverview();
+      scheduleQueueOverviewRefresh();
     });
 
     es.addEventListener('job:paused', event => {
@@ -316,7 +316,7 @@ export function useAiGenerate() {
         runningStep.summary = 'Paused';
       }
 
-      void fetchQueueOverview();
+      scheduleQueueOverviewRefresh();
     });
 
     es.addEventListener('step:start', event => {
@@ -453,7 +453,7 @@ export function useAiGenerate() {
       es.close();
       eventSources.delete(jobId);
 
-      void fetchQueueOverview();
+      scheduleQueueOverviewRefresh();
     });
 
     es.addEventListener('pipeline:complete', event => {
@@ -471,7 +471,7 @@ export function useAiGenerate() {
         eventSources.delete(jobId);
       }
 
-      void fetchQueueOverview();
+      scheduleQueueOverviewRefresh();
     });
 
     es.addEventListener('pipeline:stopped', event => {
@@ -490,7 +490,7 @@ export function useAiGenerate() {
       es.close();
       eventSources.delete(jobId);
 
-      void fetchQueueOverview();
+      scheduleQueueOverviewRefresh();
     });
 
     es.onerror = () => {
@@ -647,6 +647,15 @@ export function useAiGenerate() {
   }
 
   // ---- Queue overview ----
+
+  let overviewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function scheduleQueueOverviewRefresh(): void {
+    if (overviewDebounceTimer) clearTimeout(overviewDebounceTimer);
+    overviewDebounceTimer = setTimeout(() => {
+      void fetchQueueOverview();
+    }, 200);
+  }
 
   async function fetchQueueOverview(): Promise<void> {
     try {
@@ -805,6 +814,7 @@ export function useAiGenerate() {
   }
 
   onUnmounted(() => {
+    if (overviewDebounceTimer) clearTimeout(overviewDebounceTimer);
     for (const source of eventSources.values()) {
       source.close();
     }

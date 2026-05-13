@@ -126,10 +126,12 @@ async function handleGenerateBatch(req: Request, res: Response): Promise<void> {
   const { language, items } = parsed.data;
   const queue = getQueue();
   const batchId = `batch-${crypto.randomUUID()}`;
-  const seen = new Set<string>();
   const jobs: Array<{ jobId: string; word: string; queued: boolean; position?: number }> = [];
   const skipped: Array<{ word: string; reason: string }> = [];
 
+  // Pass 1: dedup within the request and collect unique items for bulk duplicate check.
+  const seen = new Set<string>();
+  const uniqueItems: Array<{ word: string; context?: string; notes?: string }> = [];
   for (const item of items) {
     const word = item.word.trim();
     const key = `${language}:${word.toLocaleLowerCase()}`;
@@ -138,29 +140,40 @@ async function handleGenerateBatch(req: Request, res: Response): Promise<void> {
       continue;
     }
     seen.add(key);
+    uniqueItems.push({ word, context: item.context, notes: item.notes });
+  }
 
-    if (queue.isDuplicate(word, language)) {
-      skipped.push({ word, reason: 'already-queued-or-running' });
+  // Pass 2: bulk duplicate check (1 query instead of N).
+  const dupKeys = queue.findDuplicates(uniqueItems.map(item => ({ word: item.word, language })));
+
+  // Pass 3: enqueue non-duplicates.
+  const newJobIds: string[] = [];
+  for (const item of uniqueItems) {
+    const key = `${language}:${item.word.toLocaleLowerCase()}`;
+    if (dupKeys.has(key)) {
+      skipped.push({ word: item.word, reason: 'already-queued-or-running' });
       continue;
     }
-
     const jobId = queue.enqueue({
       type: 'generate',
       priority: 'normal',
-      word,
+      word: item.word,
       language,
       context: item.context?.trim() || undefined,
       notes: item.notes?.trim() || undefined,
       batchId,
     });
-    const job = queue.getJob(jobId);
-    const queued = job?.status === 'queued';
-    jobs.push({
-      jobId,
-      word,
-      queued,
-      position: queued ? queue.getQueuePosition(jobId) : undefined,
-    });
+    newJobIds.push(jobId);
+    jobs.push({ jobId, word: item.word, queued: true, position: undefined });
+  }
+
+  // Pass 4: bulk position query (1 query instead of N).
+  if (newJobIds.length > 0) {
+    const positions = queue.getQueuePositions(newJobIds);
+    for (const job of jobs) {
+      const pos = positions.get(job.jobId);
+      if (pos !== undefined) job.position = pos;
+    }
   }
 
   if (jobs.length === 0) {

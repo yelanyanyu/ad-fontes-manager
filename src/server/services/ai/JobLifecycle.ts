@@ -81,6 +81,15 @@ export class JobLifecycle {
     }
   }
 
+  private shouldPersist(event: PipelineProgressEvent): boolean {
+    return (
+      event.type === 'step:complete' ||
+      event.type === 'step:error' ||
+      event.type === 'pipeline:complete' ||
+      event.type === 'pipeline:stopped'
+    );
+  }
+
   emitProgress(jobId: string, event: PipelineProgressEvent): void {
     let emitter = this.emitters.get(jobId);
     if (!emitter) {
@@ -93,7 +102,9 @@ export class JobLifecycle {
       const steps = this.completedSteps.get(jobId);
       if (steps) {
         steps.push(event);
-        this.store.persistProgressEvents(jobId, steps);
+        if (this.shouldPersist(event)) {
+          this.store.persistProgressEvents(jobId, steps);
+        }
       }
     }
   }
@@ -107,7 +118,9 @@ export class JobLifecycle {
     emitter?.emit('progress', event);
     if (event.type !== 'step:tokens' && event.type !== 'step:reasoning') {
       steps.push(event);
-      this.store.persistProgressEvents(jobId, steps);
+      if (this.shouldPersist(event)) {
+        this.store.persistProgressEvents(jobId, steps);
+      }
     }
   }
 

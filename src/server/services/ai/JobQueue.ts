@@ -495,8 +495,16 @@ export class JobQueue {
     return this.store.isDuplicate(word, language);
   }
 
+  findDuplicates(items: Array<{ word: string; language: string }>): Set<string> {
+    return this.store.findDuplicates(items);
+  }
+
   getQueuePosition(jobId: string): number {
     return this.store.getQueuePosition(jobId);
+  }
+
+  getQueuePositions(jobIds: string[]): Map<string, number> {
+    return this.store.getQueuePositions(jobIds);
   }
 
   /** Emit a progress event to all SSE subscribers of this job. */

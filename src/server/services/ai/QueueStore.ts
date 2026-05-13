@@ -362,6 +362,56 @@ export class QueueStore {
     return !!row;
   }
 
+  findDuplicates(items: Array<{ word: string; language: string }>): Set<string> {
+    if (items.length === 0) return new Set();
+    const placeholders = items.map(() => '(?, ?)').join(', ');
+    const params: unknown[] = [];
+    for (const item of items) {
+      params.push(item.word, item.language);
+    }
+    const rows = this.getDb().all(
+      `SELECT DISTINCT word, language FROM job_queue
+       WHERE (word, language) IN (${placeholders})
+       AND status IN ('queued', 'running')`,
+      ...params
+    );
+    const keys = new Set<string>();
+    for (const row of rows) {
+      keys.add(`${row.language}:${String(row.word).toLocaleLowerCase()}`);
+    }
+    return keys;
+  }
+
+  getQueuePositions(jobIds: string[]): Map<string, number> {
+    if (jobIds.length === 0) return new Map();
+    const idPlaceholders = jobIds.map(() => '?').join(', ');
+    const rows = this.getDb().all(
+      `WITH targets AS (
+         SELECT id, CASE priority WHEN 'high' THEN 1 ELSE 0 END AS priority_rank,
+                created_at, rowid
+         FROM job_queue WHERE id IN (${idPlaceholders})
+       )
+       SELECT t.id, COUNT(*) as cnt
+       FROM job_queue j, targets t
+       WHERE j.status = 'queued'
+         AND (
+           CASE j.priority WHEN 'high' THEN 1 ELSE 0 END > t.priority_rank
+           OR (
+             CASE j.priority WHEN 'high' THEN 1 ELSE 0 END = t.priority_rank
+             AND (j.created_at < t.created_at
+               OR (j.created_at = t.created_at AND j.rowid <= t.rowid))
+           )
+         )
+       GROUP BY t.id`,
+      ...jobIds
+    );
+    const map = new Map<string, number>();
+    for (const row of rows) {
+      map.set(row.id as string, (row.cnt as number) || 1);
+    }
+    return map;
+  }
+
   getTargetJobYaml(jobId: string): string | undefined {
     return this.getDb().get('SELECT result_yaml FROM job_queue WHERE id = ?', jobId)
       ?.result_yaml as string | undefined;
