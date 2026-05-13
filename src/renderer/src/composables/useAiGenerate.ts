@@ -154,6 +154,8 @@ export function useAiGenerate() {
   const queueHistoryPageSize = ref(20);
   const queueHistoryStatus = ref<QueueHistoryStatus | undefined>();
   const queueHistoryQuery = ref('');
+  const queueHistoryLoading = ref(false);
+  let queueHistoryRequestId = 0;
   const todayWorkset = ref<WorksetJob[]>([]);
   const todayWorksetTotal = ref(0);
 
@@ -698,6 +700,14 @@ export function useAiGenerate() {
           : options.status
         : queueHistoryStatus.value;
     const query = options.query !== undefined ? options.query : queueHistoryQuery.value;
+    const requestId = ++queueHistoryRequestId;
+
+    queueHistoryPage.value = page;
+    queueHistoryPageSize.value = pageSize;
+    queueHistoryStatus.value = status;
+    queueHistoryQuery.value = query;
+    queueHistoryLoading.value = true;
+
     const params = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
@@ -705,16 +715,21 @@ export function useAiGenerate() {
     if (status) params.set('status', status);
     if (query.trim()) params.set('query', query.trim());
 
-    const res = await request.get<QueueHistoryResponse>(
-      `/v2/generate/queue/history?${params.toString()}`,
-      LOCAL_QUEUE_REQUEST
-    );
-    queueHistory.value = res.jobs;
-    queueHistoryTotal.value = res.total;
-    queueHistoryPage.value = res.page;
-    queueHistoryPageSize.value = res.pageSize;
-    queueHistoryStatus.value = status;
-    queueHistoryQuery.value = query;
+    try {
+      const res = await request.get<QueueHistoryResponse>(
+        `/v2/generate/queue/history?${params.toString()}`,
+        LOCAL_QUEUE_REQUEST
+      );
+      if (requestId !== queueHistoryRequestId) return;
+      queueHistory.value = res.jobs;
+      queueHistoryTotal.value = res.total;
+      queueHistoryPage.value = res.page;
+      queueHistoryPageSize.value = res.pageSize;
+    } finally {
+      if (requestId === queueHistoryRequestId) {
+        queueHistoryLoading.value = false;
+      }
+    }
   }
 
   async function loadHistoryJob(jobId: string): Promise<JobState | null> {
@@ -857,6 +872,7 @@ export function useAiGenerate() {
     queueHistoryPageSize,
     queueHistoryStatus,
     queueHistoryQuery,
+    queueHistoryLoading,
     fetchQueueHistory,
     loadHistoryJob,
     deleteHistoryJob,

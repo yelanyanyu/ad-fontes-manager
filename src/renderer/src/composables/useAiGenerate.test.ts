@@ -286,6 +286,78 @@ describe('useAiGenerate', () => {
     );
   });
 
+  it('updates queue history filters immediately and ignores stale responses', async () => {
+    const completeResponse = {
+      jobs: [
+        {
+          jobId: 'complete-job',
+          jobType: 'generate',
+          status: 'complete',
+          word: 'crate',
+          language: 'en',
+          priority: 'normal',
+          createdAt: '2026-05-12 10:00:00',
+          hasResult: true,
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    };
+    const errorResponse = {
+      jobs: [
+        {
+          jobId: 'error-job',
+          jobType: 'generate',
+          status: 'error',
+          word: 'suffer',
+          language: 'en',
+          priority: 'normal',
+          createdAt: '2026-05-12 10:01:00',
+          hasResult: false,
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    };
+    let resolveComplete!: (value: typeof completeResponse) => void;
+    let resolveError!: (value: typeof errorResponse) => void;
+    requestGetMock
+      .mockReturnValueOnce(
+        new Promise<typeof completeResponse>(resolve => {
+          resolveComplete = resolve;
+        })
+      )
+      .mockReturnValueOnce(
+        new Promise<typeof errorResponse>(resolve => {
+          resolveError = resolve;
+        })
+      );
+    const ai = useAiGenerate();
+
+    const firstRequest = ai.fetchQueueHistory({ page: 1, status: 'complete' });
+    expect(ai.queueHistoryStatus.value).toBe('complete');
+    expect(ai.queueHistoryLoading.value).toBe(true);
+
+    const secondRequest = ai.fetchQueueHistory({ page: 1, status: 'error' });
+    expect(ai.queueHistoryStatus.value).toBe('error');
+
+    resolveComplete(completeResponse);
+    await firstRequest;
+
+    expect(ai.queueHistoryStatus.value).toBe('error');
+    expect(ai.queueHistory.value).toEqual([]);
+    expect(ai.queueHistoryLoading.value).toBe(true);
+
+    resolveError(errorResponse);
+    await secondRequest;
+
+    expect(ai.queueHistoryStatus.value).toBe('error');
+    expect(ai.queueHistory.value[0]?.jobId).toBe('error-job');
+    expect(ai.queueHistoryLoading.value).toBe(false);
+  });
+
   it('loads and saves today workset job results', async () => {
     requestGetMock.mockResolvedValueOnce({
       jobs: [

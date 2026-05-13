@@ -27,6 +27,7 @@ const {
   queueHistoryPageSize,
   queueHistoryStatus,
   queueHistoryQuery,
+  queueHistoryLoading,
   todayWorkset,
   todayWorksetTotal,
   fetchQueueOverview,
@@ -375,7 +376,11 @@ async function handleClearHistory(): Promise<void> {
           </button>
         </div>
 
-        <div class="bar-list history-list">
+        <div
+          class="bar-list history-list"
+          :class="{ loading: queueHistoryLoading }"
+          :aria-busy="queueHistoryLoading"
+        >
           <div
             v-for="job in queueHistory"
             :key="job.jobId"
@@ -931,6 +936,11 @@ async function handleClearHistory(): Promise<void> {
 
 .history-list {
   padding-bottom: 4px;
+}
+
+.history-list.loading {
+  opacity: 0.72;
+  transition: opacity 0.12s ease;
 }
 
 .history-row {

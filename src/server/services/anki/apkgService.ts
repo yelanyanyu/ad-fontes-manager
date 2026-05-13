@@ -39,6 +39,7 @@ type AnkiExportInstance = {
   db: {
     prepare: (query: string) => { getAsObject: (params?: Record<string, unknown>) => unknown };
     exec: (query: string) => Array<{ values: unknown[][] }>;
+    run: (sql: string, ...params: unknown[]) => { changes: number };
   };
   _getInitialRowValue: (table: string, column: string) => Record<string, Record<string, unknown>>;
   _update: (query: string, params: Record<string, unknown>) => void;
