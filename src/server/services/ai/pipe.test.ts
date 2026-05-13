@@ -301,8 +301,9 @@ void describe('SequentialRunner', () => {
 
       assert.match(result.yaml, /root: pos \(from Latin ponere\)/);
       assert.match(result.yaml, /visual_imagery_zh:/);
-      assert.match(String(calls[2].system), /visual_imagery_zh:/);
-      assert.match(String(calls[2].system), /historical_origins:/);
+      assert.doesNotMatch(String(calls[2].system), /杯子终于落回杯碟中心/);
+      assert.match(String(calls[2].prompt), /visual_imagery_zh:/);
+      assert.match(String(calls[2].prompt), /historical_origins:/);
     } finally {
       require.cache[aiPath]!.exports = originalAI;
     }

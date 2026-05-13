@@ -639,8 +639,8 @@ export class JobQueue {
       targetYaml = this.store.getWordContent(row.target_word_id);
     }
 
-    // Pass target YAML via previousContext so the runner's buildPrompt
-    // maps it to {{yaml}} (via ctx.fullYaml || ctx.researchYaml).
+    // Pass target YAML via previousContext so the prompt assembler maps it
+    // to {{yaml}} (via ctx.fullYaml || ctx.researchYaml).
     const effectivePreviousContext = targetYaml
       ? { ...(resume?.previousContext || {}), researchYaml: targetYaml }
       : resume?.previousContext;

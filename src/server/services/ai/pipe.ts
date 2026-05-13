@@ -1,5 +1,6 @@
 import type { PipelineContext, PipelineRunner, PipelineStage } from './types';
 import type { Tool } from 'ai';
+import type { AssembledPrompt } from './prompts/assembler';
 
 const yaml = require('js-yaml') as typeof import('js-yaml');
 const { streamText, stepCountIs } = require('ai') as typeof import('ai');
@@ -15,8 +16,8 @@ const { loggers } = require('../../utils/logger') as {
     };
   };
 };
-const { loadSystemPrompt } = require('./prompts/loader') as {
-  loadSystemPrompt: (filename: string, variables: Record<string, string>) => string;
+const { assemblePrompt } = require('./prompts/assembler') as {
+  assemblePrompt: (stage: PipelineStage, ctx: PipelineContext) => AssembledPrompt;
 };
 const { resolveModel } = require('./modelResolver') as {
   resolveModel: (stageName?: 'fast' | 'balanced' | 'expert') => {
@@ -171,23 +172,6 @@ function buildMockReview(): string {
   });
 }
 
-function buildPrompt(stage: PipelineStage, ctx: PipelineContext): string {
-  const vars: Record<string, string> = {
-    word: ctx.word,
-    context: ctx.context || '',
-    language: ctx.language,
-    notes: ctx.notes || '',
-    yaml: ctx.fullYaml || ctx.researchYaml || '',
-    revisionNotes: ctx.revisionNotes || ctx.notes || '',
-    stage: stage.id,
-    researchYaml: ctx.researchYaml || '',
-    searchSummary: ctx.searchSummary || '',
-    userScore: ctx.userScore !== undefined ? String(ctx.userScore) : '',
-  };
-
-  return loadSystemPrompt(stage.systemPromptFile || 'content-reviewer.md', vars);
-}
-
 function createProvider(model: ReturnType<typeof resolveModel>) {
   if (model.format === 'openai') {
     return createOpenAI({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.modelId);
@@ -227,7 +211,7 @@ function sleep(ms: number): Promise<void> {
 
 interface RunStageTextOptions {
   stage: PipelineStage;
-  prompt: string;
+  prompt: AssembledPrompt;
   ctx: PipelineContext;
   onChunk: (chunk: string) => void;
   onToolCall?: (event: {
@@ -288,8 +272,8 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
     try {
       const result = streamText({
         model: createProvider(model),
-        system: prompt,
-        prompt: `Generate the ${stage.id} output for "${ctx.word}".`,
+        system: prompt.system,
+        prompt: prompt.user,
         maxOutputTokens: 4096,
         abortSignal: combinedSignal,
         ...(Object.keys(tools).length > 0 ? { tools, stopWhen: stepCountIs(3) } : {}),
@@ -514,7 +498,7 @@ export class SequentialRunner implements PipelineRunner {
         let reasoningText = '';
         let text = await runStageText({
           stage,
-          prompt: buildPrompt(stage, ctx),
+          prompt: assemblePrompt(stage, ctx),
           ctx,
           onChunk: chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
           onToolCall: event => onProgress({ type: 'step:tool-call', step: stage.id, ...event }),
@@ -545,7 +529,7 @@ export class SequentialRunner implements PipelineRunner {
               reasoningText = '';
               fallbackText = await runStageText({
                 stage: fallbackStage,
-                prompt: buildPrompt(fallbackStage, ctx),
+                prompt: assemblePrompt(fallbackStage, ctx),
                 ctx,
                 onChunk: chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
                 onReasoning: chunk => {

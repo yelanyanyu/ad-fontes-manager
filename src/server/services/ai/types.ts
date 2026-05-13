@@ -4,6 +4,7 @@ export interface PipelineStage {
   type: 'llm' | 'validate';
   modelKey?: 'fast' | 'balanced' | 'expert';
   systemPromptFile?: string;
+  schemaFile?: string;
   toolNames?: string[];
   outputParser?: (text: string) => Partial<PipelineContext>;
   schemaName?: string;
