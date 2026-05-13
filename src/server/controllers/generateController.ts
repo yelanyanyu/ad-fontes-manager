@@ -13,6 +13,9 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
     forceUpdate?: boolean
   ) => Promise<Record<string, unknown>>;
 };
+const { getSqlite } = require('../db') as {
+  getSqlite: () => import('better-sqlite3').Database;
+};
 
 const { loggers } = require('../utils/logger') as {
   loggers: {
@@ -440,9 +443,17 @@ async function handleSaveWorkset(req: Request, res: Response): Promise<void> {
   const missing = parsed.data.jobIds.filter(jobId => !foundIds.has(jobId));
   const results: Array<{ jobId: string; result: Record<string, unknown> }> = [];
 
-  for (const row of yamlRows) {
-    const result = await wordServiceV2.saveWord(req, row.yaml, parsed.data.forceUpdate);
-    results.push({ jobId: row.jobId, result });
+  const sqlite = getSqlite();
+  sqlite.exec('BEGIN IMMEDIATE');
+  try {
+    for (const row of yamlRows) {
+      const result = await wordServiceV2.saveWord(req, row.yaml, parsed.data.forceUpdate);
+      results.push({ jobId: row.jobId, result });
+    }
+    sqlite.exec('COMMIT');
+  } catch (_err) {
+    sqlite.exec('ROLLBACK');
+    throw _err;
   }
 
   const saved = results.filter(item => item.result.success === true).length;

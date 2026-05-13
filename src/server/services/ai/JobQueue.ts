@@ -295,6 +295,7 @@ export class JobQueue {
       createdAt: string;
       completedAt?: string;
       hasResult: boolean;
+      finalScore: number | null;
     }>;
     total: number;
   } {

@@ -84,6 +84,25 @@ export interface WorksetJob {
   createdAt: string;
   completedAt?: string;
   hasResult: boolean;
+  finalScore: number | null;
+}
+
+function parseFinalScore(rawScores: unknown): number | null {
+  if (typeof rawScores !== 'string' || !rawScores.trim()) return null;
+
+  try {
+    const scores = JSON.parse(rawScores) as Record<string, unknown>;
+    const overallScore = scores.overall_score;
+    if (typeof overallScore === 'number' && Number.isFinite(overallScore)) return overallScore;
+    if (typeof overallScore === 'string') {
+      const numericScore = Number(overallScore);
+      return Number.isFinite(numericScore) ? numericScore : null;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 export class QueueStore {
@@ -493,6 +512,7 @@ export class QueueStore {
            batch_id,
            created_at,
            completed_at,
+           result_scores,
            CASE WHEN result_yaml IS NULL OR result_yaml = '' THEN 0 ELSE 1 END AS has_result,
            ROW_NUMBER() OVER (
              PARTITION BY lower(word), language
@@ -504,7 +524,7 @@ export class QueueStore {
            AND result_yaml <> ''
            AND date(COALESCE(completed_at, created_at), 'localtime') = date('now', 'localtime')
        )
-       SELECT id, job_type, status, word, language, priority, batch_id, created_at, completed_at, has_result
+       SELECT id, job_type, status, word, language, priority, batch_id, created_at, completed_at, result_scores, has_result
        FROM ranked_jobs
        WHERE workset_rank = 1
        ORDER BY COALESCE(completed_at, created_at) DESC`
@@ -521,6 +541,7 @@ export class QueueStore {
       createdAt: row.created_at as string,
       completedAt: row.completed_at as string | undefined,
       hasResult: Boolean(row.has_result),
+      finalScore: parseFinalScore(row.result_scores),
     }));
 
     return { jobs, total: jobs.length };

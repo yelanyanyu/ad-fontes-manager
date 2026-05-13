@@ -299,6 +299,7 @@ describe('useAiGenerate', () => {
           createdAt: '2026-05-12 10:00:00',
           completedAt: '2026-05-12 10:03:00',
           hasResult: true,
+          finalScore: 8,
         },
       ],
       total: 1,
@@ -316,6 +317,7 @@ describe('useAiGenerate', () => {
 
     await ai.fetchTodayWorkset();
     expect(ai.todayWorkset.value[0]?.jobId).toBe('job-latest');
+    expect(ai.todayWorkset.value[0]?.finalScore).toBe(8);
     const result = await ai.saveTodayWorkset();
 
     expect(requestPostMock).toHaveBeenCalledWith(

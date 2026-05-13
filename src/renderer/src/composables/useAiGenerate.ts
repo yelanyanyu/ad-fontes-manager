@@ -98,6 +98,7 @@ export interface QueueHistoryJob extends QueueJobOverview {
 
 export interface WorksetJob extends QueueHistoryJob {
   batchId?: string;
+  finalScore: number | null;
 }
 
 interface QueueHistoryResponse {

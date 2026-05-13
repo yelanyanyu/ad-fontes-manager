@@ -134,21 +134,23 @@ void describe('QueueStore', () => {
   void it('returns today workset with only the latest result per word and language', () => {
     db.run(
       `INSERT INTO job_queue (
-         id, job_type, priority, status, word, language, result_yaml, completed_at, created_at
+         id, job_type, priority, status, word, language, result_yaml, result_scores, completed_at, created_at
        )
        VALUES
-       ('old-crate', 'generate', 'normal', 'complete', 'crate', 'en', 'old yaml', datetime('now', '-2 hours'), datetime('now', '-2 hours')),
-       ('new-crate', 'fix', 'high', 'complete', 'crate', 'en', 'new yaml', datetime('now', '-1 hours'), datetime('now', '-1 hours')),
-       ('de-crate', 'generate', 'normal', 'complete', 'crate', 'de', 'de yaml', datetime('now', '-30 minutes'), datetime('now', '-30 minutes')),
-       ('yesterday-word', 'generate', 'normal', 'complete', 'old', 'en', 'yaml', datetime('now', '-1 day'), datetime('now', '-1 day')),
-       ('no-yaml', 'generate', 'normal', 'complete', 'blank', 'en', '', datetime('now'), datetime('now')),
-       ('failed', 'generate', 'normal', 'error', 'failed', 'en', 'yaml', datetime('now'), datetime('now'))`
+       ('old-crate', 'generate', 'normal', 'complete', 'crate', 'en', 'old yaml', '{"overall_score":4}', datetime('now', '-2 hours'), datetime('now', '-2 hours')),
+       ('new-crate', 'fix', 'high', 'complete', 'crate', 'en', 'new yaml', '{"overall_score":8}', datetime('now', '-1 hours'), datetime('now', '-1 hours')),
+       ('de-crate', 'generate', 'normal', 'complete', 'crate', 'de', 'de yaml', '{"overall_score":"7"}', datetime('now', '-30 minutes'), datetime('now', '-30 minutes')),
+       ('yesterday-word', 'generate', 'normal', 'complete', 'old', 'en', 'yaml', '{"overall_score":9}', datetime('now', '-1 day'), datetime('now', '-1 day')),
+       ('no-yaml', 'generate', 'normal', 'complete', 'blank', 'en', '', '{"overall_score":9}', datetime('now'), datetime('now')),
+       ('failed', 'generate', 'normal', 'error', 'failed', 'en', 'yaml', '{"overall_score":1}', datetime('now'), datetime('now'))`
     );
 
     const workset = store.getTodayWorkset();
 
     assert.equal(workset.total, 2);
     assert.deepEqual(workset.jobs.map(job => job.jobId).sort(), ['de-crate', 'new-crate']);
+    assert.equal(workset.jobs.find(job => job.jobId === 'new-crate')?.finalScore, 8);
+    assert.equal(workset.jobs.find(job => job.jobId === 'de-crate')?.finalScore, 7);
   });
 
   void it('returns today workset without correlated scans over repeated words', () => {

@@ -106,6 +106,10 @@ _Avoid_: Notes, comments
 Correction feedback applied to an existing Job when the user regenerates or runs a Content Fix. Revision Notes may include the auditing Stage's `revision_notes` plus additional user feedback.
 _Avoid_: Notes, comments
 
+**Review Score** (审核分数):
+The final quality score produced by a Job's auditing Stage. It is used to decide whether Content Fix is available and to help users prioritize Workset review before saving.
+_Avoid_: Rating, database score
+
 **Priority**:
 Either `normal` (for Generate Jobs) or `high` (for Fix and Audit-Fix Jobs). The Queue always dequeues high-priority Jobs before normal-priority ones, ensuring user-facing fixes are not blocked by batch generation.
 
@@ -137,7 +141,7 @@ A read-only detail view for a `complete` Job's generated YAML before or after it
 _Avoid_: Word detail, saved preview
 
 **Workset** (工作集):
-A review-and-save surface for the latest generated YAML results the user is actively working through. The current Workset is derived from today's persisted `complete` and `partial` Jobs, deduplicated by Lemma + Language so only the newest Job result for each Word remains. It batch-saves through the same Word save path used by the Editor, first detecting conflicts without overwriting and only overwriting conflict items after an explicit user action.
+A review-and-save surface for the latest generated YAML results the user is actively working through. The current Workset is derived from today's persisted `complete` and `partial` Jobs, deduplicated by Lemma + Language so only the newest Job result for each Word remains. It displays each Job's Review Score when available, helping the user spot low-quality results before saving. It batch-saves through the same Word save path used by the Editor, first detecting conflicts without overwriting and only overwriting conflict items after an explicit user action.
 _Avoid_: Current batch, History subset, temporary database
 
 **Circuit Breaker** (熔断):

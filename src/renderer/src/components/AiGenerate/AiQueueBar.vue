@@ -86,6 +86,18 @@ const conflictJobIds = computed(() =>
     .map(([jobId]) => jobId)
 );
 
+function formatFinalScore(score: number | null | undefined): string {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return '--';
+  return `${score}/10`;
+}
+
+function finalScoreClass(score: number | null | undefined): string {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return 'score-missing';
+  if (score >= 8) return 'score-strong';
+  if (score >= 6) return 'score-ok';
+  return 'score-low';
+}
+
 function recordWorksetSave(response: WorksetSaveResponse): void {
   const next = new Map(worksetSaveResults.value);
   for (const item of response.results) {
@@ -474,6 +486,13 @@ async function handleClearHistory(): Promise<void> {
             <span class="q-lang">{{ job.language === 'de' ? 'DE' : 'EN' }}</span>
             <span class="q-status">{{ job.status }}</span>
             <span
+              class="score-chip"
+              :class="finalScoreClass(job.finalScore)"
+              title="Final review score"
+            >
+              {{ formatFinalScore(job.finalScore) }}
+            </span>
+            <span
               v-if="worksetSaveResults.get(job.jobId)"
               class="save-chip"
               :class="`save-${worksetSaveResults.get(job.jobId)?.status}`"
@@ -796,7 +815,37 @@ async function handleClearHistory(): Promise<void> {
 }
 
 .workset-row {
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto;
+}
+
+.score-chip {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 10px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.score-strong {
+  color: var(--green);
+  border-color: var(--green-border);
+  background: var(--green-soft);
+}
+
+.score-ok {
+  color: var(--amber);
+  border-color: var(--amber-border, var(--line));
+  background: var(--amber-soft, var(--surface));
+}
+
+.score-low {
+  color: var(--red);
+  border-color: var(--red-border);
+  background: var(--red-soft);
 }
 
 .save-chip {

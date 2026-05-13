@@ -1018,12 +1018,12 @@ void describe('generateController with JobQueue', () => {
       const db = getDb();
       db.run(
         `INSERT INTO job_queue (
-          id, job_type, priority, status, word, language, result_yaml, completed_at, created_at
+          id, job_type, priority, status, word, language, result_yaml, result_scores, completed_at, created_at
         )
          VALUES
-         ('workset-old', 'generate', 'normal', 'complete', 'agent', 'en', ?, datetime('now', '-2 hours'), datetime('now', '-2 hours')),
-         ('workset-new', 'fix', 'high', 'complete', 'agent', 'en', ?, datetime('now', '-1 hours'), datetime('now', '-1 hours')),
-         ('workset-other', 'generate', 'normal', 'partial', 'crate', 'en', ?, datetime('now'), datetime('now'))`,
+         ('workset-old', 'generate', 'normal', 'complete', 'agent', 'en', ?, '{"overall_score":4}', datetime('now', '-2 hours'), datetime('now', '-2 hours')),
+         ('workset-new', 'fix', 'high', 'complete', 'agent', 'en', ?, '{"overall_score":8}', datetime('now', '-1 hours'), datetime('now', '-1 hours')),
+         ('workset-other', 'generate', 'normal', 'partial', 'crate', 'en', ?, '{"overall_score":6}', datetime('now'), datetime('now'))`,
         FAKE_YAML,
         FAKE_YAML,
         FAKE_YAML
@@ -1043,6 +1043,10 @@ void describe('generateController with JobQueue', () => {
         'workset-new',
         'workset-other',
       ]);
+      assert.equal(
+        body.jobs.find((job: Record<string, unknown>) => job.jobId === 'workset-new')?.finalScore,
+        8
+      );
     });
   });
 });
