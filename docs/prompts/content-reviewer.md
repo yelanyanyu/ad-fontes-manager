@@ -9,18 +9,6 @@ regenerating. Write them as actionable instructions to the next LLM, not as poli
 
 ---
 
-# Input YAML
-
-yaml 如下所示：
-{{yaml}}
-
-
-User notes: {{notes}}
-
-User-assigned score (0-10, empty if not modified): {{userScore}}
-
----
-
 # Fields to Review
 
 Review exactly these three fields:
@@ -136,3 +124,16 @@ Return only valid JSON, no markdown fences:
 }
 
 Use `"verdict": "pass"` when score >= 6, otherwise `"fail"`. Be harsh. A 6 is barely acceptable.
+
+---
+
+# User Message
+
+待审核 YAML：
+
+```yaml
+{{yaml}}
+```
+
+用户备注：{{notes}}
+用户评分：{{userScore}}

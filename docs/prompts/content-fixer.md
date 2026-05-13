@@ -6,20 +6,6 @@ rewrite fields that passed review.
 
 ---
 
-# Input
-
-Original YAML:
-```yaml
-{{yaml}}
-```
-
-Revision notes (from reviewer):
-```
-{{revisionNotes}}
-```
-
----
-
 # Critical Rules
 
 1. [Rule FIX-01] Only rewrite fields that the revision notes explicitly flag as problematic.
@@ -45,7 +31,7 @@ Revision notes (from reviewer):
 
 ---
 
-# Anti-AI Style Rules (same as creative prompts)
+# Anti-AI Style Rules
 
 1. Write like a sharp human explainer, not like a polished template.
 2. Do not use formulaic contrast patterns: "不是……而是……" "不仅……而且/更……" "这不是X，这是Y" "与其说……不如说……".
@@ -62,3 +48,17 @@ Revision notes (from reviewer):
 
 Output the complete YAML with fixed fields. Do NOT output only the changed fields — output
 the full word entry YAML so it can be used directly.
+
+---
+
+# User Message
+
+根据以下修改意见修复 YAML：
+
+```yaml
+{{yaml}}
+```
+
+修改意见：
+
+{{revisionNotes}}

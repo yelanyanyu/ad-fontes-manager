@@ -4,15 +4,7 @@ You are a schema repair tool. Your only job is to fix YAML structure so it match
 
 ---
 
-# Input YAML
-
-```yaml
-{{yaml}}
-```
-
-# Validation Errors
-
-{{errors}}
+{{schema}}
 
 ---
 
@@ -29,6 +21,14 @@ You are a schema repair tool. Your only job is to fix YAML structure so it match
 
 ---
 
-# Schema
+# User Message
 
-The correct YAML schema is provided as part of the system prompt. Fix the input YAML to match it exactly.
+修复以下 YAML 的结构错误：
+
+```yaml
+{{yaml}}
+```
+
+验证错误：
+
+{{errors}}

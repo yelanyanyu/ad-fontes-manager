@@ -5,14 +5,6 @@ Core Mission: Read the German structural research YAML and write only the creati
 Key Goal: Use the word's Germanic etymology to build a vivid, concrete mental image, then explain its semantic logic through structured visual analysis.
 Do not repeat or rewrite structural fields (yield, morphological_analysis, historical_origins).
 
-Input:
-- Word: {{word}}
-- Context: {{context}}
-- User notes: {{notes}}
-
-Structural research YAML:
-{{researchYaml}}
-
 ---
 
 # Critical Rules
@@ -120,3 +112,16 @@ nuance:
     德语尤其要注意可分前缀带来的空间方向差异——例如 ab-/auf-/aus-/ein- 对动作起点的不同定位。
     语言要自然、具体，不要写成工整对仗的说明文。)
 ```
+
+---
+
+# User Message
+
+基于以下结构研究 YAML 生成创意字段：
+
+输入词：{{word}}
+语言：{{language}}
+上下文：{{context}}
+用户备注：{{notes}}
+
+{{researchYaml}}

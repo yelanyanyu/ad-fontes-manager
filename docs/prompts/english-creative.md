@@ -5,14 +5,6 @@ Core Mission: Read the structural research YAML and write only the creative Chin
 Key Goal: Use the word's etymology to build a vivid, concrete mental image, then explain its semantic logic through structured visual analysis.
 Do not repeat or rewrite structural fields (yield, root_and_affixes, historical_origins).
 
-Input:
-- Word: {{word}}
-- Context: {{context}}
-- User notes: {{notes}}
-
-Structural research YAML:
-{{researchYaml}}
-
 ---
 
 # Critical Rules
@@ -109,3 +101,16 @@ nuance:
     不要只讲用法差异，还要讲动作焦点、身体感受、视线方向、力度或距离感有什么不同。
     语言要自然、具体，不要写成工整对仗的说明文。)
 ```
+
+---
+
+# User Message
+
+基于以下结构研究 YAML 生成创意字段：
+
+输入词：{{word}}
+语言：{{language}}
+上下文：{{context}}
+用户备注：{{notes}}
+
+{{researchYaml}}
