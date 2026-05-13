@@ -39,6 +39,7 @@ const schemaErrors = ref<string[]>([]);
 const validating = ref(false);
 const saving = ref(false);
 let validateTimer: ReturnType<typeof setTimeout> | null = null;
+let clientParseTimer: ReturnType<typeof setTimeout> | null = null;
 
 const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
 
@@ -122,6 +123,7 @@ const handleInput = () => {
   if (!input.value || input.value.trim().length === 0) {
     status.value = '';
     schemaErrors.value = [];
+    if (clientParseTimer) clearTimeout(clientParseTimer);
     return;
   }
 
@@ -170,8 +172,14 @@ const handleInput = () => {
   }, 300);
 };
 
+const onEditorInput = () => {
+  if (clientParseTimer) clearTimeout(clientParseTimer);
+  clientParseTimer = setTimeout(() => handleInput(), 150);
+};
+
 onUnmounted(() => {
   if (validateTimer) clearTimeout(validateTimer);
+  if (clientParseTimer) clearTimeout(clientParseTimer);
 });
 
 watch(
@@ -349,7 +357,7 @@ defineExpose({ applyGeneratedYaml });
           v-model="input"
           spellcheck="false"
           placeholder="每行输入 YAML 内容，例如：lemma: apple..."
-          @input="handleInput"
+          @input="onEditorInput"
           @scroll="syncScroll"
           @click="updateCursorPos"
           @keyup="updateCursorPos"

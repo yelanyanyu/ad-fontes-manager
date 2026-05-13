@@ -25,7 +25,7 @@
  * - @/utils/request: HTTP 请求工具
  */
 
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { marked } from 'marked';
 import { toPng, toBlob } from 'html-to-image';
 import { useWordStore } from '@/stores/wordStore';
@@ -93,6 +93,8 @@ const loading = ref<boolean>(false);
  * @description 从 YAML 解析后的原始词条数据对象
  */
 const rawData = ref<PreviewYamlData | null>(null);
+
+const markdownContent = computed(() => generateMarkdown(rawData.value || {}));
 
 /**
  * 规范化 YAML 数据
@@ -426,7 +428,7 @@ const copyRichText = (): void => {
             </button>
           </div>
           <div class="source-body">
-            <pre>{{ generateMarkdown(rawData || {}) }}</pre>
+            <pre>{{ markdownContent }}</pre>
           </div>
         </div>
       </div>

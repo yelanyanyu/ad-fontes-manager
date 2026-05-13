@@ -327,10 +327,14 @@ const buildApkgBuffer = async (input: BuildApkgInput): Promise<Buffer> => {
     css
   );
 
+  exporter.db.run('BEGIN TRANSACTION');
+
   for (const payload of payloads) {
     const guidKey = buildGuidKey(payload, deckName, modelFields[0] || '');
     upsertNoteAndCard(exporter, payload, modelFields, deckId, modelId, guidKey);
   }
+
+  exporter.db.run('COMMIT');
 
   return exporter.save();
 };
