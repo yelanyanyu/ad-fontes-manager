@@ -175,17 +175,6 @@ class WordRepositoryV2 {
     };
   }
 
-  listAll(language: string = 'en'): WordRecord[] {
-    const db = getDb();
-    const rows = db
-      .select()
-      .from(wordsV2)
-      .where(eq(wordsV2.language, language))
-      .orderBy(desc(wordsV2.createdAt))
-      .all();
-    return rows.map((row: WordRow) => toWordRecord(row) as WordRecord);
-  }
-
   // NOTE: logUserRequest is not implemented for v2 because user_requests
   // has an FK constraint referencing old words.id. When old tables are retired,
   // create user_requests_v2 or drop the FK constraint.

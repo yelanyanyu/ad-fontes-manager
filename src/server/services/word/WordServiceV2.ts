@@ -52,7 +52,6 @@ interface WordRepositoryV2Like {
   ) => { id: string; lemma: string; language: string };
   update: (id: string, wordData: Record<string, unknown>, client?: DbOrTxLike | null) => void;
   delete: (id: string, client?: DbOrTxLike | null) => void;
-  listAll: (language: string) => Record<string, unknown>[];
   listPaged: (options: {
     page: number;
     limit: number;
@@ -175,13 +174,7 @@ class WordServiceV2 {
   }
 
   async listWords(req: RequestLike): Promise<Record<string, unknown> | Record<string, unknown>[]> {
-    const query = this._getQuery(req);
-    const language = String(query.language || 'en').toLowerCase();
-
-    if (query.page || query.limit || query.search || query.sort) {
-      return this.listWordsPaged(req);
-    }
-    return repositoryV2.listAll(language);
+    return this.listWordsPaged(req);
   }
 
   async listWordsPaged(req: RequestLike): Promise<Record<string, unknown>> {
@@ -211,7 +204,7 @@ class WordServiceV2 {
     const result = repositoryV2.findByLemma(wordText, language);
     if (!result) throw new Error('Not found');
 
-    // Return content JSONB directly â€?it's the full YAML document
+    // Return content JSONB directly ï¿½?it's the full YAML document
     const { content, ...meta } = result;
     return {
       ...meta,
