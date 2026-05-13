@@ -7,6 +7,9 @@ import { QueueStore, type SqliteLike, type BatchStatus, type JobState } from './
 import { JobLifecycle } from './JobLifecycle';
 import { QueueGate } from './QueueGate';
 
+const { loadYamlObjectWithRepairs, mergeYamlTexts } =
+  require('./utils') as typeof import('./utils');
+
 interface QueueConfig {
   getDb: () => SqliteLike;
   maxConcurrency: number;
@@ -384,6 +387,12 @@ export class JobQueue {
   getJob(jobId: string): JobState | undefined {
     const row = this.store.getRow(jobId);
     if (!row) return undefined;
+    const events = this.store.getPersistedEvents(row);
+    const steps = this.lifecycle.buildStepResults(events);
+    const resultYaml =
+      typeof row.result_yaml === 'string'
+        ? this.reconstructMergedYamlIfNeeded(row.result_yaml, events)
+        : undefined;
 
     return {
       jobId: row.id as string,
@@ -394,10 +403,10 @@ export class JobQueue {
       context: row.context as string | undefined,
       notes: row.notes as string | undefined,
       error: row.error as string | undefined,
-      steps: this.lifecycle.buildStepResults(this.store.getPersistedEvents(row)),
-      result: row.result_yaml
+      steps,
+      result: resultYaml
         ? {
-            yaml: row.result_yaml as string,
+            yaml: resultYaml,
             scores: (() => {
               try {
                 return JSON.parse(row.result_scores as string);
@@ -408,6 +417,72 @@ export class JobQueue {
           }
         : undefined,
     };
+  }
+
+  private reconstructMergedYamlIfNeeded(
+    storedYaml: string,
+    events: PipelineProgressEvent[]
+  ): string {
+    const fixYaml = this.getLatestFixYaml(events);
+    if (fixYaml) return fixYaml;
+
+    if (!this.isMissingCreativeYaml(storedYaml)) return storedYaml;
+
+    const completed = events.filter(
+      (event): event is Extract<PipelineProgressEvent, { type: 'step:complete' }> =>
+        event.type === 'step:complete'
+    );
+    const previousContext: Record<string, unknown> = {};
+    for (const step of completed) {
+      if (step.result && typeof step.result === 'object' && !Array.isArray(step.result)) {
+        Object.assign(previousContext, step.result as Record<string, unknown>);
+      }
+    }
+
+    const researchYaml =
+      typeof previousContext.researchYaml === 'string' ? previousContext.researchYaml : storedYaml;
+    const creativeYaml =
+      typeof previousContext.creativeYaml === 'string' ? previousContext.creativeYaml : '';
+    if (!researchYaml || !creativeYaml) return storedYaml;
+
+    try {
+      return mergeYamlTexts(researchYaml, creativeYaml);
+    } catch {
+      return storedYaml;
+    }
+  }
+
+  private getLatestFixYaml(events: PipelineProgressEvent[]): string | undefined {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index];
+      if (event.type !== 'step:complete' || event.step !== 'fixing') continue;
+      const result = event.result;
+      if (!result || typeof result !== 'object' || Array.isArray(result)) continue;
+      const fullYaml = (result as Record<string, unknown>).fullYaml;
+      if (typeof fullYaml === 'string' && fullYaml.trim()) return fullYaml;
+    }
+    return undefined;
+  }
+
+  private isMissingCreativeYaml(yamlText: string): boolean {
+    try {
+      const parsed = loadYamlObjectWithRepairs(yamlText);
+      const etymology =
+        parsed.etymology && typeof parsed.etymology === 'object'
+          ? (parsed.etymology as Record<string, unknown>)
+          : {};
+      const nuance =
+        parsed.nuance && typeof parsed.nuance === 'object'
+          ? (parsed.nuance as Record<string, unknown>)
+          : {};
+      return (
+        !etymology.visual_imagery_zh ||
+        !etymology.meaning_evolution_zh ||
+        !nuance.image_differentiation_zh
+      );
+    } catch {
+      return true;
+    }
   }
 
   getCompletedSteps(jobId: string): PipelineProgressEvent[] {
@@ -501,12 +576,10 @@ export class JobQueue {
         if (!this.startJob(jobId)) {
           // Setup failed — release the reserved slot and try the next Job.
           this.gate.releaseSlot();
-          continue;
         }
       } catch {
         // Synchronous exception in startJob — release the reserved slot.
         this.gate.releaseSlot();
-        continue;
       }
     }
   }

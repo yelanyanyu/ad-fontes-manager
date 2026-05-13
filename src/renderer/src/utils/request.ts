@@ -18,11 +18,13 @@ interface PublicConfigResponse {
 
 interface InternalRequestConfig<D = unknown> extends AxiosRequestConfig<D> {
   skipErrorToast?: boolean;
+  skipRateLimit?: boolean;
   __rateLimitRetried?: boolean;
 }
 
 export interface RequestConfig<D = unknown> extends AxiosRequestConfig<D> {
   skipErrorToast?: boolean;
+  skipRateLimit?: boolean;
 }
 
 interface ErrorPayload {
@@ -43,6 +45,11 @@ const service = axios.create({
 
 const withRateLimit = <T>(task: () => Promise<T>): Promise<T> => {
   return scheduleRateLimitedRequest(task);
+};
+
+const runRequest = <T>(config: RequestConfig | undefined, task: () => Promise<T>): Promise<T> => {
+  if (config?.skipRateLimit) return task();
+  return withRateLimit(task);
 };
 
 const updateRateLimitFromConfig = (config: PublicConfigResponse | null | undefined): void => {
@@ -86,7 +93,7 @@ service.interceptors.response.use(
       pauseRateLimitedQueue(retryAfterMs);
       originalConfig.__rateLimitRetried = true;
 
-      return withRateLimit(() => service.request(originalConfig));
+      return runRequest(originalConfig, () => service.request(originalConfig));
     }
 
     const appStore = useAppStore();
@@ -103,23 +110,27 @@ service.interceptors.response.use(
 
 const request: RequestClient = {
   get<T = any>(url: string, config?: RequestConfig): Promise<T> {
-    return withRateLimit(() => service.get(url, config as InternalRequestConfig)) as Promise<T>;
+    return runRequest(config, () =>
+      service.get(url, config as InternalRequestConfig)
+    ) as Promise<T>;
   },
 
   post<T = any>(url: string, data?: unknown, config?: RequestConfig): Promise<T> {
-    return withRateLimit(() =>
+    return runRequest(config, () =>
       service.post(url, data, config as InternalRequestConfig)
     ) as Promise<T>;
   },
 
   put<T = any>(url: string, data?: unknown, config?: RequestConfig): Promise<T> {
-    return withRateLimit(() =>
+    return runRequest(config, () =>
       service.put(url, data, config as InternalRequestConfig)
     ) as Promise<T>;
   },
 
   delete<T = any>(url: string, config?: RequestConfig): Promise<T> {
-    return withRateLimit(() => service.delete(url, config as InternalRequestConfig)) as Promise<T>;
+    return runRequest(config, () =>
+      service.delete(url, config as InternalRequestConfig)
+    ) as Promise<T>;
   },
 };
 

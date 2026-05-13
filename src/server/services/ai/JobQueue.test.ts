@@ -982,6 +982,50 @@ void describe('JobQueue lifecycle events and extended state', () => {
     assert.equal(job.notes, 'Focus on musical usage');
   });
 
+  void it('prefers the fixing fullYaml over reconstructed search and pondering YAML', () => {
+    const db = getDb();
+    const fixedYaml = 'yield:\n  lemma: repair\n  language: en\nfixed: true\n';
+    db.run(
+      `INSERT INTO job_queue (
+        id, job_type, priority, status, word, language, result_yaml, result_scores, progress_events
+      )
+       VALUES (?, 'fix', 'high', 'complete', 'repair', 'en', ?, '{}', ?)`,
+      'fix-result-job',
+      'yield:\n  lemma: repair\n  language: en\n',
+      JSON.stringify([
+        {
+          type: 'step:complete',
+          step: 'searching',
+          duration: 10,
+          summary: 'Searched',
+          result: { researchYaml: 'yield:\n  lemma: repair\n  language: en\n' },
+        },
+        {
+          type: 'step:complete',
+          step: 'pondering',
+          duration: 20,
+          summary: 'Pondered',
+          result: {
+            creativeYaml:
+              'etymology:\n  visual_imagery_zh: old\n  meaning_evolution_zh: old\nnuance:\n  image_differentiation_zh: old\n',
+          },
+        },
+        {
+          type: 'step:complete',
+          step: 'fixing',
+          duration: 30,
+          summary: 'Fixed',
+          result: { fullYaml: fixedYaml },
+        },
+      ])
+    );
+
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: fakeRunner });
+
+    assert.equal(queue.getJob('fix-result-job').result.yaml, fixedYaml);
+  });
+
   void it('subscribe writes job:queued event with position for a queued Job', async () => {
     const blockingRunner = new BlockingFakeRunner();
     const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };

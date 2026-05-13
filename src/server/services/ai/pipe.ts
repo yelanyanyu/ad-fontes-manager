@@ -29,7 +29,7 @@ const { resolveModel } = require('./modelResolver') as {
     isMock: boolean;
   };
 };
-const { deepMerge } = require('./utils') as typeof import('./utils');
+const { mergeYamlTexts } = require('./utils') as typeof import('./utils');
 const { resolveTools } = require('./tools/adapter') as {
   resolveTools: (toolNames?: string[]) => Record<string, Tool>;
 };
@@ -425,26 +425,7 @@ function mergeCreativeYaml(
   }
 
   try {
-    const structural = yaml.load(ctx.researchYaml) as Record<string, unknown>;
-    const creative = yaml.load(ctx.creativeYaml) as Record<string, unknown>;
-
-    if (!structural || typeof structural !== 'object') {
-      runLogger?.error(
-        { reason: 'structural YAML parsed to non-object' },
-        'mergeCreativeYaml failed'
-      );
-      return;
-    }
-    if (!creative || typeof creative !== 'object') {
-      runLogger?.error(
-        { reason: 'creative YAML parsed to non-object' },
-        'mergeCreativeYaml failed'
-      );
-      return;
-    }
-
-    const merged = deepMerge(structural, creative);
-    ctx.fullYaml = yaml.dump(merged, { lineWidth: -1, noRefs: true });
+    ctx.fullYaml = mergeYamlTexts(ctx.researchYaml, ctx.creativeYaml);
     runLogger?.info(
       { fullYamlChars: ctx.fullYaml.length },
       'mergeCreativeYaml: merged YAML successfully'

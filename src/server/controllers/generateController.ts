@@ -51,6 +51,9 @@ const ResumeRequestSchema = z.object({
   notes: z.string().optional(),
   userScore: z.number().min(0).max(10).optional(),
 });
+const FixRequestSchema = z.object({
+  notes: z.string().trim().optional(),
+});
 const HistoryQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -321,6 +324,11 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
 
 async function handleFixJob(req: Request, res: Response): Promise<void> {
   const jobId = firstParam(req.params.jobId);
+  const parsed = FixRequestSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ code: 400, message: 'Invalid request', errors: parsed.error.issues });
+    return;
+  }
   const queue = getQueue();
   const job = queue.getJob(jobId);
 
@@ -341,6 +349,8 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
     res.status(400).json({ code: 400, message: 'No revision notes to apply' });
     return;
   }
+  const userNotes = parsed.data.notes?.trim();
+  const fixNotes = userNotes ? `${revisionNotes}\n\nUser feedback:\n${userNotes}` : revisionNotes;
 
   const completedSteps = queue.getCompletedSteps(jobId);
   const previousSteps = completedSteps
@@ -360,7 +370,7 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
     word: job.word,
     language: job.language,
     context: job.context,
-    notes: revisionNotes,
+    notes: fixNotes,
     targetJobId: jobId,
     resumeFromStage: 'fixing',
     previousSteps,

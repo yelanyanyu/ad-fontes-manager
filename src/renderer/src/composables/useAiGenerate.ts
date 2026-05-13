@@ -1,5 +1,9 @@
 import { computed, onUnmounted, ref, type InjectionKey } from 'vue';
-import request from '@/utils/request';
+import request, { type RequestConfig } from '@/utils/request';
+
+const LOCAL_QUEUE_REQUEST: RequestConfig = { skipRateLimit: true };
+const WORKSET_SAVE_REQUEST: RequestConfig = { skipRateLimit: true, timeout: 30000 };
+const WORKSET_SAVE_CHUNK_SIZE = 25;
 
 export interface StepState {
   step: string;
@@ -121,6 +125,23 @@ export type AiGenerateState = ReturnType<typeof useAiGenerate>;
 
 export const AI_STATE_KEY: InjectionKey<AiGenerateState> = Symbol('ai-state');
 
+const mergeWorksetSaveResponses = (responses: WorksetSaveResponse[]): WorksetSaveResponse => {
+  const saved = responses.reduce((total, item) => total + item.saved, 0);
+  const conflicts = responses.reduce((total, item) => total + item.conflicts, 0);
+  const failed = responses.reduce((total, item) => total + item.failed, 0);
+  const missing = responses.flatMap(item => item.missing);
+  const results = responses.flatMap(item => item.results);
+
+  return {
+    ok: responses.every(item => item.ok) && missing.length === 0,
+    saved,
+    conflicts,
+    failed,
+    missing,
+    results,
+  };
+};
+
 export function useAiGenerate() {
   const jobs = ref<Map<string, JobState>>(new Map());
   const selectedJobId = ref<string | null>(null);
@@ -166,7 +187,11 @@ export function useAiGenerate() {
   }
 
   async function startGeneration(params: GenerateParams): Promise<string> {
-    const response = await request.post<GenerateResponse>('/v2/generate/single', params);
+    const response = await request.post<GenerateResponse>(
+      '/v2/generate/single',
+      params,
+      LOCAL_QUEUE_REQUEST
+    );
     registerJob(response.jobId, params, response);
     subscribeToJob(response.jobId);
     await fetchQueueOverview();
@@ -177,10 +202,14 @@ export function useAiGenerate() {
     language: 'en' | 'de',
     items: BatchGenerateItem[]
   ): Promise<BatchGenerateResponse> {
-    const response = await request.post<BatchGenerateResponse>('/v2/generate/batch', {
-      language,
-      items,
-    });
+    const response = await request.post<BatchGenerateResponse>(
+      '/v2/generate/batch',
+      {
+        language,
+        items,
+      },
+      LOCAL_QUEUE_REQUEST
+    );
     for (const job of response.jobs) {
       const item = items.find(candidate => candidate.word === job.word);
       registerJob(
@@ -499,7 +528,11 @@ export function useAiGenerate() {
     if (fromStage) body.fromStage = fromStage;
     if (notes !== undefined) body.notes = notes;
     if (userScore !== undefined) body.userScore = userScore;
-    const response = await request.post<GenerateResponse>(`/v2/generate/${jobId}/resume`, body);
+    const response = await request.post<GenerateResponse>(
+      `/v2/generate/${jobId}/resume`,
+      body,
+      LOCAL_QUEUE_REQUEST
+    );
     if (oldJob) {
       const previousSteps = oldJob.steps.filter(step => {
         if (!fromStage) return false;
@@ -528,7 +561,7 @@ export function useAiGenerate() {
   }
 
   async function cancelGeneration(jobId: string): Promise<void> {
-    await request.post(`/v2/generate/${jobId}/cancel`);
+    await request.post(`/v2/generate/${jobId}/cancel`, undefined, LOCAL_QUEUE_REQUEST);
     const job = jobs.value.get(jobId);
     if (job) {
       job.status = 'error';
@@ -539,7 +572,7 @@ export function useAiGenerate() {
   }
 
   async function pauseGeneration(jobId: string): Promise<void> {
-    await request.post(`/v2/generate/${jobId}/pause`);
+    await request.post(`/v2/generate/${jobId}/pause`, undefined, LOCAL_QUEUE_REQUEST);
     const job = jobs.value.get(jobId);
     if (job) {
       job.status = 'paused';
@@ -554,7 +587,7 @@ export function useAiGenerate() {
   }
 
   async function resumeActiveGeneration(jobId: string): Promise<void> {
-    await request.post(`/v2/generate/${jobId}/resume-active`);
+    await request.post(`/v2/generate/${jobId}/resume-active`, undefined, LOCAL_QUEUE_REQUEST);
     await fetchQueueOverview();
     const overviewItem = queueOverview.value.find(item => item.jobId === jobId);
     if (overviewItem) {
@@ -567,10 +600,20 @@ export function useAiGenerate() {
     }
   }
 
-  async function fixGeneration(jobId: string): Promise<string> {
+  async function fixGeneration(jobId: string, notes?: string): Promise<string> {
     const job = jobs.value.get(jobId);
-    const response = await request.post<GenerateResponse>(`/v2/generate/${jobId}/fix`);
+    const userNotes = notes?.trim() || undefined;
+    const response = await request.post<GenerateResponse>(
+      `/v2/generate/${jobId}/fix`,
+      userNotes ? { notes: userNotes } : undefined,
+      LOCAL_QUEUE_REQUEST
+    );
     if (job) {
+      const revisionNotes = job.scores?.revision_notes as string | undefined;
+      const fixNotes =
+        userNotes && revisionNotes
+          ? `${revisionNotes}\n\nUser feedback:\n${userNotes}`
+          : userNotes || revisionNotes || job.notes;
       const previousSteps = job.steps
         .filter(step => step.status === 'complete')
         .map(step => ({ ...step }));
@@ -580,7 +623,7 @@ export function useAiGenerate() {
           word: job.word,
           context: job.context,
           language: job.language,
-          notes: (job.scores?.revision_notes as string | undefined) || job.notes,
+          notes: fixNotes,
         },
         response
       );
@@ -622,7 +665,8 @@ export function useAiGenerate() {
   async function fetchQueueOverview(): Promise<void> {
     try {
       const res = await request.get<{ jobs: typeof queueOverview.value }>(
-        '/v2/generate/queue/overview'
+        '/v2/generate/queue/overview',
+        LOCAL_QUEUE_REQUEST
       );
       queueOverview.value = res.jobs;
     } catch {
@@ -655,7 +699,8 @@ export function useAiGenerate() {
     if (query.trim()) params.set('query', query.trim());
 
     const res = await request.get<QueueHistoryResponse>(
-      `/v2/generate/queue/history?${params.toString()}`
+      `/v2/generate/queue/history?${params.toString()}`,
+      LOCAL_QUEUE_REQUEST
     );
     queueHistory.value = res.jobs;
     queueHistoryTotal.value = res.total;
@@ -671,12 +716,12 @@ export function useAiGenerate() {
         jobType?: string;
         result?: { yaml: string; scores: Record<string, unknown> };
       };
-    }>(`/v2/generate/queue/history/${jobId}`);
+    }>(`/v2/generate/queue/history/${jobId}`, LOCAL_QUEUE_REQUEST);
     return upsertJobFromServer(res.job);
   }
 
   async function deleteHistoryJob(jobId: string): Promise<void> {
-    await request.delete(`/v2/generate/queue/history/${jobId}`);
+    await request.delete(`/v2/generate/queue/history/${jobId}`, LOCAL_QUEUE_REQUEST);
     jobs.value.delete(jobId);
     if (selectedJobId.value === jobId) selectedJobId.value = null;
     touchJobs();
@@ -684,10 +729,14 @@ export function useAiGenerate() {
   }
 
   async function clearQueueHistory(): Promise<number> {
-    const res = await request.post<{ deleted: number }>('/v2/generate/queue/history/clear', {
-      status: queueHistoryStatus.value,
-      query: queueHistoryQuery.value.trim() || undefined,
-    });
+    const res = await request.post<{ deleted: number }>(
+      '/v2/generate/queue/history/clear',
+      {
+        status: queueHistoryStatus.value,
+        query: queueHistoryQuery.value.trim() || undefined,
+      },
+      LOCAL_QUEUE_REQUEST
+    );
     for (const job of queueHistory.value) {
       jobs.value.delete(job.jobId);
     }
@@ -700,7 +749,10 @@ export function useAiGenerate() {
   }
 
   async function fetchTodayWorkset(): Promise<void> {
-    const res = await request.get<WorksetResponse>('/v2/generate/workset/today');
+    const res = await request.get<WorksetResponse>(
+      '/v2/generate/workset/today',
+      LOCAL_QUEUE_REQUEST
+    );
     todayWorkset.value = res.jobs;
     todayWorksetTotal.value = res.total;
   }
@@ -710,21 +762,30 @@ export function useAiGenerate() {
     options: { forceUpdate?: boolean } = {}
   ): Promise<WorksetSaveResponse> {
     const ids = jobIds?.length ? jobIds : todayWorkset.value.map(job => job.jobId);
-    const res = await request.post<WorksetSaveResponse>('/v2/generate/workset/save', {
-      jobIds: ids,
-      forceUpdate: options.forceUpdate === true,
-    });
+    const responses: WorksetSaveResponse[] = [];
+    for (let index = 0; index < ids.length; index += WORKSET_SAVE_CHUNK_SIZE) {
+      const chunk = ids.slice(index, index + WORKSET_SAVE_CHUNK_SIZE);
+      const response = await request.post<WorksetSaveResponse>(
+        '/v2/generate/workset/save',
+        {
+          jobIds: chunk,
+          forceUpdate: options.forceUpdate === true,
+        },
+        WORKSET_SAVE_REQUEST
+      );
+      responses.push(response);
+    }
     await fetchTodayWorkset();
-    return res;
+    return mergeWorksetSaveResponses(responses);
   }
 
   async function queueCancelAll(): Promise<void> {
-    await request.post('/v2/generate/queue/cancel-all');
+    await request.post('/v2/generate/queue/cancel-all', undefined, LOCAL_QUEUE_REQUEST);
     await fetchQueueOverview();
   }
 
   async function queuePauseAll(): Promise<void> {
-    await request.post('/v2/generate/queue/pause-all');
+    await request.post('/v2/generate/queue/pause-all', undefined, LOCAL_QUEUE_REQUEST);
     for (const job of jobs.value.values()) {
       if (job.status === 'queued' || job.status === 'running') {
         job.status = 'paused';
@@ -743,7 +804,7 @@ export function useAiGenerate() {
     const pausedIds = queueOverview.value
       .filter(item => item.status === 'paused')
       .map(item => item.jobId);
-    await request.post('/v2/generate/queue/resume-all');
+    await request.post('/v2/generate/queue/resume-all', undefined, LOCAL_QUEUE_REQUEST);
     await fetchQueueOverview();
     for (const jobId of pausedIds) {
       const overviewItem = queueOverview.value.find(item => item.jobId === jobId);

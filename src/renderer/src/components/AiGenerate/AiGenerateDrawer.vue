@@ -88,12 +88,26 @@ const hasRevisionNotes = computed(() => {
   return typeof notes === 'string' && notes.length > 0 && notes !== '无需修改。';
 });
 
+const isRevisionNotesMode = computed(() => isComplete.value || hasRevisionNotes.value);
+const notesLabel = computed(() => (isRevisionNotesMode.value ? 'Revision notes' : 'Generation notes'));
+const notesBadge = computed(() => (isRevisionNotesMode.value ? 'Regenerate / Auto Fix' : 'Generate'));
+const notesPlaceholder = computed(() =>
+  isRevisionNotesMode.value
+    ? 'Add extra feedback for the next revision...'
+    : 'Optional hints, constraints, or examples...'
+);
+const notesHelp = computed(() =>
+  isRevisionNotesMode.value
+    ? 'Applied to Regenerate and Auto Fix for the selected job.'
+    : 'Applied when starting a new single generation.'
+);
+
 async function handleFix(): Promise<void> {
   const jobId = currentJob.value?.jobId;
   if (!jobId) return;
   fixing.value = true;
   try {
-    await fixGeneration(jobId);
+    await fixGeneration(jobId, notes.value.trim() || undefined);
   } catch (err) {
     errorMessage.value = err instanceof Error ? err.message : 'Fix failed';
   } finally {
@@ -269,9 +283,18 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
             <span>Context</span>
             <input v-model="context" type="text" />
           </label>
-          <label>
-            <span>Notes</span>
-            <input v-model="notes" type="text" />
+          <label class="notes-field" :class="{ 'is-revision': isRevisionNotesMode }">
+            <span class="field-label-row">
+              <span>{{ notesLabel }}</span>
+              <span class="field-badge">{{ notesBadge }}</span>
+            </span>
+            <textarea
+              v-model="notes"
+              class="notes-input"
+              rows="2"
+              :placeholder="notesPlaceholder"
+            />
+            <small class="field-help">{{ notesHelp }}</small>
           </label>
         </section>
 
@@ -586,7 +609,33 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   gap: 5px;
 }
 
-.input-grid input {
+.field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.field-badge {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--muted);
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.notes-field.is-revision .field-badge {
+  border-color: var(--green-border);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.input-grid input,
+.input-grid textarea {
   height: 34px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -597,9 +646,25 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   outline: 0;
 }
 
-.input-grid input:focus {
+.input-grid textarea {
+  min-height: 58px;
+  height: auto;
+  resize: vertical;
+  line-height: 1.45;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.input-grid input:focus,
+.input-grid textarea:focus {
   border-color: var(--green-border);
   box-shadow: 0 0 0 2px var(--green-soft);
+}
+
+.field-help {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .batch-panel {

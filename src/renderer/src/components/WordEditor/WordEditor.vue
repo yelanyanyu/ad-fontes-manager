@@ -37,6 +37,7 @@ const status = ref<EditorStatus>('');
 const conflictData = ref<ConflictData | null>(null);
 const schemaErrors = ref<string[]>([]);
 const validating = ref(false);
+const saving = ref(false);
 let validateTimer: ReturnType<typeof setTimeout> | null = null;
 
 const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
@@ -186,28 +187,37 @@ watch(
 );
 
 const clear = () => {
+  if (saving.value) return;
   input.value = '';
   status.value = '';
   schemaErrors.value = [];
 };
 
 const save = async () => {
-  if (!input.value) return;
+  if (!input.value || saving.value) return;
   if (status.value === 'Invalid YAML') {
     appStore.addToast('Cannot save: Invalid YAML format', 'error');
     return;
   }
-  const res = await wordStore.saveWord(input.value);
-  if (res && typeof res === 'object' && 'status' in res && res.status === 'conflict') {
-    conflictData.value = res as ConflictData;
+  saving.value = true;
+  try {
+    const res = await wordStore.saveWord(input.value);
+    if (res && typeof res === 'object' && 'status' in res && res.status === 'conflict') {
+      conflictData.value = res as ConflictData;
+    }
+  } finally {
+    saving.value = false;
   }
 };
 
 const closeConflict = () => {
+  if (saving.value) return;
   conflictData.value = null;
+  void nextTick(() => textareaRef.value?.focus());
 };
 
 const useExisting = () => {
+  if (saving.value) return;
   if (!conflictData.value || !conflictData.value.oldData) return;
   try {
     input.value = yamlFormatter.format(conflictData.value.oldData || {});
@@ -222,8 +232,17 @@ const useExisting = () => {
 };
 
 const overwrite = async () => {
-  const ok = await wordStore.saveWord(input.value, true);
-  if (ok) closeConflict();
+  if (saving.value) return;
+  saving.value = true;
+  try {
+    const ok = await wordStore.saveWord(input.value, true);
+    if (ok) {
+      conflictData.value = null;
+      void nextTick(() => textareaRef.value?.focus());
+    }
+  } finally {
+    saving.value = false;
+  }
 };
 
 const applyGeneratedYaml = (yamlContent: string) => {
@@ -244,8 +263,10 @@ defineExpose({ applyGeneratedYaml });
       :right-data="conflictData?.newData || {}"
       left-label="Existing"
       right-label="New"
-      primary-label="Overwrite"
+      :subtitle="saving ? 'Saving overwrite to the database. The editor is temporarily locked.' : ''"
+      :primary-label="saving ? 'Saving...' : 'Overwrite'"
       secondary-label="Use Existing"
+      :busy="saving"
       :formatter="yamlFormatter"
       :diff-adapter="deepDiffAdapter"
       @close="closeConflict"
@@ -269,7 +290,19 @@ defineExpose({ applyGeneratedYaml });
         </span>
       </div>
       <div class="head-actions">
-        <button class="head-link" type="button" @click="clear">Clear</button>
+        <button class="head-link" type="button" :disabled="saving" @click="clear">Clear</button>
+        <button
+          :class="['btn', 'head-save', isEmpty ? 'btn-disabled' : 'btn-primary']"
+          :disabled="isEmpty || saving"
+          @click="save"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M19 21H5a2 2 0 0 1-2-2V7l4-4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z" />
+            <path d="M17 21v-8H7v8" />
+            <path d="M7 3v4h8" />
+          </svg>
+          {{ saving ? 'Saving...' : saveLabel }}
+        </button>
       </div>
     </div>
 
@@ -330,22 +363,6 @@ defineExpose({ applyGeneratedYaml });
         <li v-for="(err, i) in schemaErrors" :key="i">{{ err }}</li>
       </ul>
     </div>
-
-    <div class="editor-foot">
-      <button
-        :class="['btn', isEmpty ? 'btn-disabled' : 'btn-primary']"
-        :disabled="isEmpty"
-        @click="save"
-        style="min-width: 96px"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <path d="M19 21H5a2 2 0 0 1-2-2V7l4-4h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2z" />
-          <path d="M17 21v-8H7v8" />
-          <path d="M7 3v4h8" />
-        </svg>
-        {{ saveLabel }}
-      </button>
-    </div>
   </div>
 </template>
 
@@ -364,7 +381,7 @@ defineExpose({ applyGeneratedYaml });
 
 .editor-panel {
   display: grid;
-  grid-template-rows: 48px auto 1fr auto 56px;
+  grid-template-rows: 48px auto minmax(0, 1fr) auto;
 }
 
 .panel-head {
@@ -455,7 +472,13 @@ defineExpose({ applyGeneratedYaml });
 .head-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.head-save {
+  min-width: 92px;
+  height: 30px;
+  padding: 0 11px;
 }
 
 [data-theme="dark"] .head-link {
@@ -593,7 +616,7 @@ defineExpose({ applyGeneratedYaml });
 .editor-input textarea {
   width: 100%;
   height: 100%;
-  min-height: 520px;
+  min-height: 0;
   border: 0;
   outline: 0;
   resize: none;
@@ -627,19 +650,6 @@ defineExpose({ applyGeneratedYaml });
   font-size: 12px;
   color: var(--red);
   line-height: 1.6;
-}
-
-.editor-foot {
-  background: var(--surface);
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding: 0 12px;
-  flex: none;
-}
-
-[data-theme="dark"] .editor-foot {
-  background: #26231e;
 }
 
 /* Button system (shared) */

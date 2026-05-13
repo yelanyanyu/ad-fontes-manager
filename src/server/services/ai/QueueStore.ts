@@ -188,27 +188,29 @@ export class QueueStore {
 
   getQueuePosition(jobId: string): number {
     const posRow = this.getDb().get(
-      `SELECT COUNT(*) as cnt FROM job_queue
+      `WITH target AS (
+         SELECT CASE priority WHEN 'high' THEN 1 ELSE 0 END AS priority_rank,
+                created_at,
+                rowid
+         FROM job_queue
+         WHERE id = ?
+       )
+       SELECT COUNT(*) as cnt
+       FROM job_queue, target
        WHERE status = 'queued'
          AND (
-           CASE priority WHEN 'high' THEN 1 ELSE 0 END >
-             (SELECT CASE priority WHEN 'high' THEN 1 ELSE 0 END FROM job_queue WHERE id = ?)
+           CASE priority WHEN 'high' THEN 1 ELSE 0 END > target.priority_rank
            OR (
-             CASE priority WHEN 'high' THEN 1 ELSE 0 END =
-               (SELECT CASE priority WHEN 'high' THEN 1 ELSE 0 END FROM job_queue WHERE id = ?)
+             CASE priority WHEN 'high' THEN 1 ELSE 0 END = target.priority_rank
              AND (
-               created_at < (SELECT created_at FROM job_queue WHERE id = ?)
+               job_queue.created_at < target.created_at
                OR (
-                 created_at = (SELECT created_at FROM job_queue WHERE id = ?)
-                 AND rowid <= (SELECT rowid FROM job_queue WHERE id = ?)
+                 job_queue.created_at = target.created_at
+                 AND job_queue.rowid <= target.rowid
                )
              )
            )
          )`,
-      jobId,
-      jobId,
-      jobId,
-      jobId,
       jobId
     );
     return (posRow?.cnt as number) || 1;

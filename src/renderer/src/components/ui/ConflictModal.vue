@@ -67,6 +67,9 @@ const props = defineProps({
 
   /** 第三操作按钮标签（编辑本地数据），为空时不显示该按钮 */
   tertiaryLabel: { type: String, default: '' },
+
+  /** 是否正在处理冲突操作 */
+  busy: { type: Boolean, default: false },
 });
 
 /**
@@ -177,18 +180,21 @@ const badgeToneClass = cls => {
         <button
           v-if="tertiaryLabel"
           class="conflict-secondary px-3 py-1.5 rounded-lg border text-sm transition-colors"
+          :disabled="busy"
           @click="$emit('tertiary')"
         >
           {{ tertiaryLabel }}
         </button>
         <button
           class="conflict-secondary px-3 py-1.5 rounded-lg border text-sm transition-colors"
+          :disabled="busy"
           @click="$emit('secondary')"
         >
           {{ secondaryLabel }}
         </button>
         <button
           class="conflict-primary px-3 py-1.5 rounded-lg text-sm transition-colors"
+          :disabled="busy"
           @click="$emit('primary')"
         >
           {{ primaryLabel }}
@@ -323,5 +329,11 @@ const badgeToneClass = cls => {
 
 .conflict-primary:hover {
   background: #d13f58;
+}
+
+.conflict-secondary:disabled,
+.conflict-primary:disabled {
+  cursor: wait;
+  opacity: 0.64;
 }
 </style>

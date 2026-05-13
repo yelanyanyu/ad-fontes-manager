@@ -1,7 +1,7 @@
 import Bottleneck from 'bottleneck';
 
 const SAFETY_RATIO = 0.75;
-const DEFAULT_LIMIT_PER_MINUTE = 100;
+const DEFAULT_LIMIT_PER_MINUTE = 0;
 
 let configuredLimitPerMinute = DEFAULT_LIMIT_PER_MINUTE;
 let effectiveLimitPerMinute = 0;

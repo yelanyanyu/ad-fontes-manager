@@ -98,6 +98,14 @@ _Avoid_: YAML repair, schema fix
 A Queue-based creative-field rewrite against a `complete` Job whose `overall_score < 6`. Uses the existing `fixing` Pipeline Stage (with `content-fixer.md` prompt and existing revision notes), then re-runs `auditing` to produce a new score. Can be triggered per-word or as a Workset batch operation (one Fix Job per word, grouped by `batchId`). Requires `complete` status and valid revision notes from a prior auditing stage.
 _Avoid_: Creative fix, quality fix, rewrite
 
+**Generation Notes** (生成备注):
+Optional user guidance supplied before starting a new Generate Job. Generation Notes shape the initial Pipeline run but are not the same as later correction feedback.
+_Avoid_: Notes, comments
+
+**Revision Notes** (修复意见):
+Correction feedback applied to an existing Job when the user regenerates or runs a Content Fix. Revision Notes may include the auditing Stage's `revision_notes` plus additional user feedback.
+_Avoid_: Notes, comments
+
 **Priority**:
 Either `normal` (for Generate Jobs) or `high` (for Fix and Audit-Fix Jobs). The Queue always dequeues high-priority Jobs before normal-priority ones, ensuring user-facing fixes are not blocked by batch generation.
 

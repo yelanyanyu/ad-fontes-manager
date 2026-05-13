@@ -31,6 +31,12 @@ const JOB_QUEUE_DDL = `
   );
   CREATE INDEX IF NOT EXISTS idx_job_queue_status ON job_queue(status);
   CREATE INDEX IF NOT EXISTS idx_job_queue_priority_created ON job_queue(priority, created_at);
+  CREATE INDEX IF NOT EXISTS idx_job_queue_status_priority_created
+    ON job_queue(status, priority, created_at);
+  CREATE INDEX IF NOT EXISTS idx_job_queue_history_status_completed
+    ON job_queue(status, completed_at, created_at);
+  CREATE INDEX IF NOT EXISTS idx_job_queue_word_language
+    ON job_queue(word, language);
   CREATE INDEX IF NOT EXISTS idx_job_queue_workset_today
     ON job_queue(status, language, word, completed_at, created_at)
     WHERE result_yaml IS NOT NULL AND result_yaml <> '';

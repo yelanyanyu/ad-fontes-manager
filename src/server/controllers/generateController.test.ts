@@ -849,7 +849,7 @@ void describe('generateController with JobQueue', () => {
       await new Promise(r => setTimeout(r, 0));
     });
 
-    void it('carries target job completed stages into the fix job detail', async () => {
+    void it('carries target job completed stages and user notes into the fix job detail', async () => {
       const calls: Array<Parameters<PipelineRunner['run']>[0]> = [];
       const captureRunner: PipelineRunner = {
         async run(params) {
@@ -898,12 +898,22 @@ void describe('generateController with JobQueue', () => {
       };
 
       const res = fakeRes();
-      await handleFixJob(fakeReq({ params: { jobId: 'job-fix-source' } }), res);
+      await handleFixJob(
+        fakeReq({
+          params: { jobId: 'job-fix-source' },
+          body: { notes: 'Make the examples less generic.' },
+        }),
+        res
+      );
       await new Promise(r => setTimeout(r, 0));
 
       assert.equal(res._status, 202);
       assert.equal(calls.length, 1);
       assert.equal(calls[0].resumeFromStage, 'fixing');
+      assert.equal(
+        calls[0].input.notes,
+        'Fix the etymology section.\n\nUser feedback:\nMake the examples less generic.'
+      );
       assert.deepEqual(
         calls[0].previousSteps?.map(step => step.step),
         ['searching', 'auditing']

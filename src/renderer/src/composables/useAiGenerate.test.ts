@@ -135,9 +135,13 @@ describe('useAiGenerate', () => {
     await ai.startGeneration({ word: 'conduct', language: 'en' });
     await ai.resumeGeneration('job-1', 'pondering');
 
-    expect(requestPostMock).toHaveBeenLastCalledWith('/v2/generate/job-1/resume', {
-      fromStage: 'pondering',
-    });
+    expect(requestPostMock).toHaveBeenLastCalledWith(
+      '/v2/generate/job-1/resume',
+      {
+        fromStage: 'pondering',
+      },
+      expect.objectContaining({ skipRateLimit: true })
+    );
   });
 
   it('registers and subscribes to jobs returned by batch generation', async () => {
@@ -208,11 +212,19 @@ describe('useAiGenerate', () => {
     });
 
     await ai.pauseGeneration('job-1');
-    expect(requestPostMock).toHaveBeenCalledWith('/v2/generate/job-1/pause');
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/v2/generate/job-1/pause',
+      undefined,
+      expect.objectContaining({ skipRateLimit: true })
+    );
     expect(ai.jobs.value.get('job-1')?.status).toBe('paused');
 
     await ai.resumeActiveGeneration('job-1');
-    expect(requestPostMock).toHaveBeenCalledWith('/v2/generate/job-1/resume-active');
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/v2/generate/job-1/resume-active',
+      undefined,
+      expect.objectContaining({ skipRateLimit: true })
+    );
   });
 
   it('keeps completed target steps visible when starting an auto fix job', async () => {
@@ -244,8 +256,15 @@ describe('useAiGenerate', () => {
       scores: { revision_notes: 'Fix the weak fields.' },
     });
 
-    await ai.fixGeneration('source-job');
+    await ai.fixGeneration('source-job', 'Use more concrete examples.');
 
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/v2/generate/source-job/fix',
+      { notes: 'Use more concrete examples.' },
+      expect.objectContaining({ skipRateLimit: true })
+    );
+    expect(ai.jobs.value.get('fix-job-1')?.notes).toContain('Fix the weak fields.');
+    expect(ai.jobs.value.get('fix-job-1')?.notes).toContain('Use more concrete examples.');
     expect(ai.jobs.value.get('fix-job-1')?.steps).toMatchObject([
       { step: 'searching', status: 'complete', rawText: 'yield:\n  lemma: crate\n' },
       { step: 'auditing', status: 'complete', reasoningText: 'audit thinking' },
@@ -262,7 +281,8 @@ describe('useAiGenerate', () => {
 
     expect(ai.queueHistoryStatus.value).toBeUndefined();
     expect(requestGetMock).toHaveBeenLastCalledWith(
-      '/v2/generate/queue/history?page=1&pageSize=20'
+      '/v2/generate/queue/history?page=1&pageSize=20',
+      expect.objectContaining({ skipRateLimit: true })
     );
   });
 
@@ -298,10 +318,14 @@ describe('useAiGenerate', () => {
     expect(ai.todayWorkset.value[0]?.jobId).toBe('job-latest');
     const result = await ai.saveTodayWorkset();
 
-    expect(requestPostMock).toHaveBeenCalledWith('/v2/generate/workset/save', {
-      jobIds: ['job-latest'],
-      forceUpdate: false,
-    });
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/v2/generate/workset/save',
+      {
+        jobIds: ['job-latest'],
+        forceUpdate: false,
+      },
+      expect.objectContaining({ skipRateLimit: true, timeout: 30000 })
+    );
     expect(result.saved).toBe(1);
   });
 
@@ -319,9 +343,68 @@ describe('useAiGenerate', () => {
 
     await ai.saveTodayWorkset(['job-conflict'], { forceUpdate: true });
 
-    expect(requestPostMock).toHaveBeenCalledWith('/v2/generate/workset/save', {
-      jobIds: ['job-conflict'],
-      forceUpdate: true,
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/v2/generate/workset/save',
+      {
+        jobIds: ['job-conflict'],
+        forceUpdate: true,
+      },
+      expect.objectContaining({ skipRateLimit: true, timeout: 30000 })
+    );
+  });
+
+  it('saves today workset jobs in chunks so large batches do not sit in one request', async () => {
+    const ids = Array.from({ length: 60 }, (_, index) => `job-${index + 1}`);
+    requestPostMock.mockResolvedValue({
+      ok: true,
+      saved: 25,
+      conflicts: 0,
+      failed: 0,
+      missing: [],
+      results: [],
     });
+    requestPostMock.mockResolvedValueOnce({
+      ok: true,
+      saved: 25,
+      conflicts: 0,
+      failed: 0,
+      missing: [],
+      results: [],
+    });
+    requestPostMock.mockResolvedValueOnce({
+      ok: true,
+      saved: 25,
+      conflicts: 0,
+      failed: 0,
+      missing: [],
+      results: [],
+    });
+    requestPostMock.mockResolvedValueOnce({
+      ok: true,
+      saved: 10,
+      conflicts: 0,
+      failed: 0,
+      missing: [],
+      results: [],
+    });
+    requestGetMock.mockResolvedValue({ jobs: [], total: 0 });
+    const ai = useAiGenerate();
+
+    const result = await ai.saveTodayWorkset(ids);
+
+    expect(requestPostMock).toHaveBeenCalledTimes(3);
+    expect(requestPostMock).toHaveBeenNthCalledWith(
+      1,
+      '/v2/generate/workset/save',
+      { jobIds: ids.slice(0, 25), forceUpdate: false },
+      expect.objectContaining({ skipRateLimit: true, timeout: 30000 })
+    );
+    expect(requestPostMock).toHaveBeenNthCalledWith(
+      3,
+      '/v2/generate/workset/save',
+      { jobIds: ids.slice(50, 60), forceUpdate: false },
+      expect.objectContaining({ skipRateLimit: true, timeout: 30000 })
+    );
+    expect(result.saved).toBe(60);
   });
 });

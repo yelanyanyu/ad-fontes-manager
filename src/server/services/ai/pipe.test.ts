@@ -211,6 +211,103 @@ void describe('SequentialRunner', () => {
     assert.equal(complete.rawText, 'yield:\n  lemma: crate\n  language: en\n');
   });
 
+  void it('repairs common quoted-scalar YAML slips before merging creative output', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [
+                { id: 'model-fast', name: 'model-fast' },
+                { id: 'model-expert', name: 'model-expert' },
+              ],
+            },
+          ],
+          stages: {
+            fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
+            expert: { provider: 'realish', model: 'model-expert', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const calls: Array<Record<string, unknown>> = [];
+    const stageOutputs = [
+      [
+        'yield:',
+        '  lemma: "composure"',
+        '  language: "en"',
+        'etymology:',
+        '  root_and_affixes:',
+        '    root: "pos" (from Latin ponere)',
+        '  historical_origins:',
+        '    source_word: "Latin componere"',
+      ].join('\n'),
+      [
+        'etymology:',
+        '  visual_imagery_zh: |',
+        '    杯子终于落回杯碟中心。',
+        '  meaning_evolution_zh: |',
+        '    从放回原位走到心神归位。',
+        'nuance:',
+        '  image_differentiation_zh: |',
+        '    composure 像把散掉的东西重新放稳。',
+      ].join('\n'),
+      JSON.stringify({ overall_score: 8, revision_notes: 'Keep it concrete.' }),
+    ];
+
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: (options: Record<string, unknown>) => {
+        const text = stageOutputs[calls.length];
+        calls.push(options);
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const { englishPipeline } =
+      require('./definitions/english') as typeof import('./definitions/english');
+
+    try {
+      const result = await new SequentialRunner().run({
+        definition: englishPipeline,
+        input: { word: 'composure', language: 'en' },
+        onProgress: () => undefined,
+      });
+
+      assert.match(result.yaml, /root: pos \(from Latin ponere\)/);
+      assert.match(result.yaml, /visual_imagery_zh:/);
+      assert.match(String(calls[2].system), /visual_imagery_zh:/);
+      assert.match(String(calls[2].system), /historical_origins:/);
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+  });
+
   void it('replays previous steps with raw text and reasoning intact', async () => {
     writeMockAIConfig();
     const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
@@ -329,5 +426,102 @@ void describe('SequentialRunner', () => {
           event.type === 'pipeline:stopped' && event.stoppedAtStage === 'fixing'
       )
     );
+  });
+
+  void it('uses fixing fullYaml as the final YAML instead of the pre-fix merged YAML', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-expert', name: 'model-expert' }],
+            },
+          ],
+          stages: {
+            expert: { provider: 'realish', model: 'model-expert', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const fixedYaml = 'yield:\n  lemma: dignity\n  language: en\nfixed: true\n';
+    const oldMergedYaml = 'yield:\n  lemma: dignity\n  language: en\nold_merge: true\n';
+    const stageOutputs = [
+      fixedYaml,
+      JSON.stringify({ overall_score: 9, revision_notes: '无需修改。' }),
+    ];
+    const events: PipelineProgressEvent[] = [];
+
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: () => {
+        const text = stageOutputs.shift() || '';
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      const result = await new SequentialRunner().run({
+        definition: {
+          id: 'fix',
+          language: '*',
+          stages: [
+            {
+              id: 'fixing',
+              description: 'Applying revision notes',
+              type: 'llm',
+              modelKey: 'expert',
+              systemPromptFile: 'content-fixer.md',
+              outputParser: (text: string) => ({ fullYaml: text }),
+            },
+            {
+              id: 'auditing',
+              description: 'Auditing fixed YAML',
+              type: 'llm',
+              modelKey: 'expert',
+              systemPromptFile: 'content-reviewer.md',
+              outputParser: (text: string) => ({ scores: JSON.parse(text) }),
+            },
+          ],
+        },
+        input: { word: 'dignity', language: 'en', notes: 'Apply the fix.' },
+        previousContext: { fullYaml: oldMergedYaml },
+        resumeFromStage: 'fixing',
+        onProgress: event => events.push(event),
+      });
+
+      assert.equal(result.yaml, fixedYaml);
+      const complete = events.find(
+        (event): event is Extract<PipelineProgressEvent, { type: 'pipeline:complete' }> =>
+          event.type === 'pipeline:complete'
+      );
+      assert.equal(complete?.yaml, fixedYaml);
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
   });
 });
