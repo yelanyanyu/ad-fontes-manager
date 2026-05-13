@@ -41,14 +41,22 @@ function classifyError(err: unknown): { errorCode: string; willRetry: boolean } 
 
 async function executeWithTimeout<T>(
   fn: (signal: AbortSignal) => Promise<T>,
-  timeoutMs: number
+  timeoutMs: number,
+  externalSignal?: AbortSignal
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const abortFromExternal = () => controller.abort();
+  if (externalSignal?.aborted) {
+    controller.abort();
+  } else {
+    externalSignal?.addEventListener('abort', abortFromExternal, { once: true });
+  }
   try {
     return await fn(controller.signal);
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', abortFromExternal);
   }
 }
 
@@ -61,13 +69,17 @@ const BACKOFF_SCHEDULE = [2000, 8000];
 export function buildTool<TInput, TOutput>(options: BuildToolOptions<TInput, TOutput>) {
   const { id, description, inputSchema, execute, timeoutMs = 30000, maxRetries = 2 } = options;
 
-  async function run(input: TInput): Promise<ToolResult<TOutput>> {
+  async function run(input: TInput, signal?: AbortSignal): Promise<ToolResult<TOutput>> {
     const startTime = Date.now();
     let lastError: unknown;
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
-        const data = await executeWithTimeout(signal => execute(input, signal), timeoutMs);
+        const data = await executeWithTimeout(
+          toolSignal => execute(input, toolSignal),
+          timeoutMs,
+          signal
+        );
         loggers.ai.info(
           { tool: id, event: 'complete', durationMs: Date.now() - startTime, attempt: attempt + 1 },
           'AI tool completed'

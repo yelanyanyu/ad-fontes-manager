@@ -539,13 +539,6 @@ export class JobQueue {
         reasoningText: event.reasoningText,
       }));
 
-    const previousContext: Record<string, unknown> = {};
-    for (const step of completedStepResults) {
-      if (step.result && typeof step.result === 'object' && !Array.isArray(step.result)) {
-        Object.assign(previousContext, step.result as Record<string, unknown>);
-      }
-    }
-
     const lastStarted = [...steps].reverse().find(event => event.type === 'step:start');
     const currentStage = lastStarted?.type === 'step:start' ? lastStarted.step : undefined;
     const completedStages = new Set(completedStepResults.map(step => step.step));
@@ -564,6 +557,12 @@ export class JobQueue {
             return stepIndex >= 0 && stepIndex < resumeIndex;
           })
         : completedStepResults;
+    const previousContext: Record<string, unknown> = {};
+    for (const step of previousSteps) {
+      if (step.result && typeof step.result === 'object' && !Array.isArray(step.result)) {
+        Object.assign(previousContext, step.result as Record<string, unknown>);
+      }
+    }
 
     return {
       resumeFromStage: effectiveResumeFromStage,

@@ -1370,6 +1370,56 @@ void describe('JobQueue queue-wide operations', () => {
     assert.equal(calls[0].previousSteps?.[0].reasoningText, 'search thinking');
   });
 
+  void it('keeps only upstream stage context when regenerating from pondering', () => {
+    const db = getDb();
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language, progress_events)
+       VALUES (?, 'generate', 'normal', 'complete', 'crate', 'en', ?)`,
+      'completed-for-pondering-regenerate',
+      JSON.stringify([
+        { type: 'job:started' },
+        { type: 'step:start', step: 'searching', message: 'Searching' },
+        {
+          type: 'step:complete',
+          step: 'searching',
+          duration: 100,
+          summary: 'Searched',
+          result: { researchYaml: 'research-only-yaml' },
+        },
+        { type: 'step:start', step: 'pondering', message: 'Pondering' },
+        {
+          type: 'step:complete',
+          step: 'pondering',
+          duration: 100,
+          summary: 'Pondered',
+          result: { creativeYaml: 'old-creative-yaml' },
+        },
+        { type: 'step:start', step: 'auditing', message: 'Auditing' },
+        {
+          type: 'step:complete',
+          step: 'auditing',
+          duration: 100,
+          summary: 'Audited',
+          result: { scores: { revision_notes: 'old fix notes' } },
+        },
+      ])
+    );
+
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+
+    const snapshot = queue.buildResumeSnapshot('completed-for-pondering-regenerate', 'pondering');
+
+    assert.equal(snapshot.resumeFromStage, 'pondering');
+    assert.deepEqual(
+      snapshot.previousSteps?.map((step: { step: string }) => step.step),
+      ['searching']
+    );
+    assert.deepEqual(snapshot.previousContext, {
+      researchYaml: 'research-only-yaml',
+    });
+  });
+
   void it('ignores late terminal progress after pausing a running job', async () => {
     let capturedProgress: ((event: any) => void) | undefined;
     let release: ((value: { yaml: string; scores: Record<string, unknown> }) => void) | undefined;

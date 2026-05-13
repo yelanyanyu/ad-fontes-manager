@@ -35,6 +35,13 @@ const { resolveTools } = require('./tools/adapter') as {
   resolveTools: (toolNames?: string[]) => Record<string, Tool>;
 };
 const { buildReasoningParams } = require('./tools/reasoning') as typeof import('./tools/reasoning');
+const { getAIConfig } = require('./configService') as {
+  getAIConfig: () => {
+    search?: {
+      apiKey?: string;
+    };
+  };
+};
 
 function buildStructuralMock(word: string, language: string, context: string): string {
   if (language === 'de') {
@@ -258,7 +265,7 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
   const maxRetries = 1;
   let lastError: unknown;
   const toolStartTimes = new Map<string, number>();
-  const tools = resolveTools(stage.toolNames);
+  const tools = resolveStageTools(stage, runLogger);
   const reasoningParams = buildReasoningParams(model.format, model.reasoningEffort);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -346,6 +353,21 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
                   : undefined,
             duration: Date.now() - startedAt,
           });
+          if (
+            stage.id === 'searching' &&
+            toolName === 'search_etymology' &&
+            resultObject.success === false
+          ) {
+            runLogger?.info(
+              {
+                step: stage.id,
+                toolName,
+                errorCode: resultObject.errorCode,
+              },
+              'Search tool failed; switching searching stage to no-tool fallback'
+            );
+            return '';
+          }
         }
       }
 
@@ -438,6 +460,27 @@ function checkStopLoss(
   }
 
   return { stopped: false };
+}
+
+function resolveStageTools(
+  stage: PipelineStage,
+  runLogger?: {
+    info: (payload: Record<string, unknown>, msg?: string) => void;
+  }
+): Record<string, Tool> {
+  const toolNames = stage.toolNames || [];
+  if (stage.id === 'searching' && toolNames.includes('search_etymology')) {
+    const aiConfig = getAIConfig();
+    if (!aiConfig.search?.apiKey) {
+      runLogger?.info(
+        { step: stage.id, event: 'search-tools-disabled' },
+        'Search tools disabled because search API key is not configured'
+      );
+      return {};
+    }
+  }
+
+  return resolveTools(toolNames);
 }
 
 export class SequentialRunner implements PipelineRunner {

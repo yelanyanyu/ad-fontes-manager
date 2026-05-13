@@ -41,6 +41,7 @@ import WordListPagination from '@/components/WordList/WordListPagination.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import request from '@/utils/request';
 import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search';
+import { isSortMode } from '@/utils/sortMode';
 import {
   addVisibleSelections,
   getSelectedLemmas,
@@ -722,7 +723,7 @@ const setSearchMode = (mode: SearchMode): void => {
 };
 
 const updateSort = (value: string): void => {
-  if (value === 'az' || value === 'za' || value === 'newest' || value === 'oldest') {
+  if (isSortMode(value)) {
     sort.value = value;
   }
   clearSelection();

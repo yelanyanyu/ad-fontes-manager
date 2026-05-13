@@ -97,4 +97,25 @@ describe('wordStore.fetchDbRecords', () => {
 
     expect(store.loading).toBe(false);
   });
+
+  it('passes modified-time sort modes through to the v2 API', async () => {
+    requestGetMock.mockResolvedValueOnce({
+      items: [],
+      page: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 1,
+    });
+
+    const store = useWordStore();
+    await store.fetchDbRecords({ sort: 'updated-newest' });
+
+    expect(requestGetMock).toHaveBeenCalledWith(
+      '/v2/words',
+      expect.objectContaining({
+        params: expect.objectContaining({ sort: 'updated-newest' }),
+      })
+    );
+    expect(store.dbListMeta.sort).toBe('updated-newest');
+  });
 });

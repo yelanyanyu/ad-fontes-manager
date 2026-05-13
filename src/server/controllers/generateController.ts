@@ -305,13 +305,13 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
 
   const snapshot = queue.buildResumeSnapshot(jobId, parsed.data.fromStage);
   const previousContext = { ...(snapshot.previousContext || {}) };
-  if (oldJob.result?.yaml) {
-    previousContext.researchYaml = oldJob.result.yaml;
-  }
   if (parsed.data.userScore !== undefined) {
     previousContext.userScore = parsed.data.userScore;
   }
   const resumeFromStage = snapshot.resumeFromStage || 'searching';
+  if (resumeFromStage !== 'searching' && !previousContext.researchYaml && oldJob.result?.yaml) {
+    previousContext.researchYaml = oldJob.result.yaml;
+  }
 
   const newJobId = queue.enqueue({
     type: 'generate',

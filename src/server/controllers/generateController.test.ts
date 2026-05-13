@@ -717,7 +717,7 @@ void describe('generateController with JobQueue', () => {
         ['searching']
       );
       assert.deepEqual(calls[0].previousContext, {
-        researchYaml: 'yield:\n  lemma: resume-next\n',
+        researchYaml: 'from-search',
       });
     });
 

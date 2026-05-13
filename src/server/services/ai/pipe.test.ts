@@ -77,6 +77,12 @@ void describe('SequentialRunner', () => {
           stages: {
             fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
           },
+          search: {
+            provider: 'brave',
+            apiKey: 'search-test-key',
+            autoDomains: false,
+            domains: { common: [], en: [], de: [] },
+          },
           review: { threshold: 6, thresholdByLanguage: {} },
         },
       }),
@@ -129,6 +135,188 @@ void describe('SequentialRunner', () => {
 
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0].stopWhen, { ...stopMarker, count: 3 });
+  });
+
+  void it('does not expose search or fetch tools when search API key is missing', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-fast', name: 'model-fast' }],
+            },
+          ],
+          stages: {
+            fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
+          },
+          search: {
+            provider: 'brave',
+            apiKey: '',
+            autoDomains: false,
+            domains: { common: [], en: [], de: [] },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const calls: Array<Record<string, unknown>> = [];
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      streamText: (options: Record<string, unknown>) => {
+        calls.push(options);
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'yield:\n  lemma: crate\n  language: en\n' };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      await new SequentialRunner().run({
+        definition: {
+          id: 'tool-search',
+          language: 'en',
+          stages: [
+            {
+              id: 'searching',
+              description: 'Searching',
+              type: 'llm',
+              modelKey: 'fast',
+              systemPromptFile: 'english-structural.md',
+              toolNames: ['search_etymology', 'fetch_page'],
+              outputParser: (text: string) => ({ researchYaml: text }),
+            },
+          ],
+        },
+        input: { word: 'crate', language: 'en' },
+        onProgress: () => undefined,
+      });
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].tools, undefined);
+    assert.equal(calls[0].stopWhen, undefined);
+  });
+
+  void it('falls back without tools immediately after the search tool fails', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-fast', name: 'model-fast' }],
+            },
+          ],
+          stages: {
+            fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
+          },
+          search: {
+            provider: 'brave',
+            apiKey: 'bad-search-key',
+            autoDomains: false,
+            domains: { common: [], en: [], de: [] },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const calls: Array<Record<string, unknown>> = [];
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      streamText: (options: Record<string, unknown>) => {
+        calls.push(options);
+        return {
+          fullStream:
+            calls.length === 1
+              ? (async function* () {
+                  yield {
+                    type: 'tool-result',
+                    toolCallId: 'search-1',
+                    toolName: 'search_etymology',
+                    output: {
+                      success: false,
+                      errorCode: 'tool_error',
+                      errorMessage: 'Brave Search API returned 401: Unauthorized',
+                    },
+                  };
+                  yield { type: 'text-delta', text: 'yield:\n  lemma: wrong\n' };
+                })()
+              : (async function* () {
+                  yield { type: 'text-delta', text: 'yield:\n  lemma: crate\n  language: en\n' };
+                })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      const result = await new SequentialRunner().run({
+        definition: {
+          id: 'tool-search',
+          language: 'en',
+          stages: [
+            {
+              id: 'searching',
+              description: 'Searching',
+              type: 'llm',
+              modelKey: 'fast',
+              systemPromptFile: 'english-structural.md',
+              toolNames: ['search_etymology', 'fetch_page'],
+              outputParser: (text: string) => ({ researchYaml: text }),
+            },
+          ],
+        },
+        input: { word: 'crate', language: 'en' },
+        onProgress: () => undefined,
+      });
+
+      assert.equal(result.yaml, 'yield:\n  lemma: crate\n  language: en\n');
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].tools);
+    assert.equal(calls[1].tools, undefined);
+    assert.equal(calls[1].stopWhen, undefined);
   });
 
   void it('stores accumulated reasoning and raw text on completed stages', async () => {
