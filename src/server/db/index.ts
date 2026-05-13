@@ -34,6 +34,8 @@ const ensureDatabaseSchema = (target: SqliteDatabase): void => {
       ON words_v2 (language);
     CREATE INDEX IF NOT EXISTS idx_words_v2_lemma_lang
       ON words_v2 (lemma, language);
+    CREATE INDEX IF NOT EXISTS idx_words_v2_lower_lemma_lang
+      ON words_v2 (LOWER(lemma), language);
     CREATE INDEX IF NOT EXISTS idx_words_v2_created_at
       ON words_v2 (created_at);
     CREATE INDEX IF NOT EXISTS idx_words_v2_updated_at

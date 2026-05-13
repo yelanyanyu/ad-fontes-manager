@@ -57,6 +57,7 @@ export const wordsV2 = sqliteTable(
     uniqueIndex('unique_lemma_lang_v2').on(table.lemma, table.language),
     index('idx_words_v2_language').on(table.language),
     index('idx_words_v2_lemma_lang').on(table.lemma, table.language),
+    index('idx_words_v2_lower_lemma_lang').on(sql`LOWER(${table.lemma})`, table.language),
     index('idx_words_v2_created_at').on(table.createdAt),
     index('idx_words_v2_updated_at').on(table.updatedAt),
   ]
