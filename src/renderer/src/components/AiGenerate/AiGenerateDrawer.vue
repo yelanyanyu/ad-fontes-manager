@@ -259,28 +259,28 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
         >
           Single
         </button>
-        <div class="batch-mode" :class="{ active: entryMode === 'batch' }">
-          <button type="button" class="batch-mode-main" @click="entryMode = 'batch'">
-            Batch
-          </button>
-          <select
-            v-model="batchSource"
-            class="batch-source-select"
-            aria-label="Batch source"
-            @click.stop="entryMode = 'batch'"
-            @change="entryMode = 'batch'"
-          >
-            <option value="text">Text</option>
-            <option value="json">JSON file</option>
-          </select>
-          <button type="button" class="batch-info-button" aria-label="Batch input help">
-            i
-            <span class="batch-help">
-              Text: one word per line, or blank-line blocks with word/context/notes. JSON:
-              items array with word, context, and notes fields. Only word is required.
-            </span>
-          </button>
-        </div>
+        <button type="button" :class="{ active: entryMode === 'batch' }" @click="entryMode = 'batch'">
+          Batch
+        </button>
+      </section>
+
+      <section v-if="entryMode === 'batch'" class="batch-source-row" aria-label="Batch options">
+        <span>Input</span>
+        <select
+          v-model="batchSource"
+          class="batch-source-select"
+          aria-label="Batch source"
+        >
+          <option value="text">Text</option>
+          <option value="json">JSON file</option>
+        </select>
+        <button type="button" class="batch-info-button" aria-label="Batch input help">
+          i
+          <span class="batch-help">
+            Text: one word per line, or blank-line blocks with word/context/notes. JSON:
+            items array with word, context, and notes fields. Only word is required.
+          </span>
+        </button>
       </section>
 
       <template v-if="entryMode === 'single'">
@@ -509,17 +509,20 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
 }
 
 .mode-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 12;
   display: grid;
-  grid-template-columns: minmax(76px, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: 1fr 1fr;
   gap: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
   overflow: hidden;
+  box-shadow: 0 4px 8px color-mix(in srgb, var(--surface-panel) 72%, transparent);
 }
 
-.mode-tabs > button,
-.batch-mode-main {
+.mode-tabs > button {
   height: 32px;
   border: 0;
   background: transparent;
@@ -527,31 +530,42 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.mode-tabs > button.active,
-.batch-mode.active {
+.mode-tabs > button.active {
   background: var(--green-soft);
   color: var(--green);
 }
 
-.batch-mode {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(44px, 1fr) minmax(62px, 86px) 22px;
+.batch-source-row {
+  position: sticky;
+  top: 38px;
+  z-index: 11;
+  display: flex;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: -8px -2px 0;
+  padding: 2px 2px 8px;
+  background: var(--surface-panel);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.batch-source-row span {
+  flex: 0 0 auto;
   color: var(--muted);
 }
 
-.batch-mode-main {
-  min-width: 0;
-  color: inherit;
+.batch-source-row .batch-info-button {
+  flex: 0 0 auto;
 }
 
 .batch-source-select {
   height: 24px;
-  width: 100%;
-  min-width: 0;
+  width: auto;
+  min-width: 112px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-panel);
@@ -562,7 +576,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   outline: 0;
 }
 
-.batch-mode.active .batch-source-select {
+.batch-source-select:focus {
   border-color: var(--green-border);
   color: var(--green);
 }

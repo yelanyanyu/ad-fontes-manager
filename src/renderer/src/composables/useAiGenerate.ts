@@ -630,6 +630,18 @@ export function useAiGenerate() {
   }
 
   function selectJob(jobId: string | null): void {
+    // Close stale EventSources for jobs that reached a terminal state.
+    for (const [id, es] of eventSources) {
+      const job = jobs[id];
+      if (
+        job &&
+        (job.status === 'complete' || job.status === 'partial' || job.status === 'error')
+      ) {
+        es.close();
+        eventSources.delete(id);
+      }
+    }
+
     if (jobId && !(jobId in jobs)) {
       const overviewItem = queueOverview.value.find(item => item.jobId === jobId);
       if (overviewItem) {

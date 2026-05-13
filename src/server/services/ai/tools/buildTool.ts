@@ -19,7 +19,7 @@ interface BuildToolOptions<TInput, TOutput> {
   id: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  execute: (input: TInput) => Promise<TOutput>;
+  execute: (input: TInput, signal: AbortSignal) => Promise<TOutput>;
   timeoutMs?: number;
   maxRetries?: number;
 }
@@ -39,16 +39,17 @@ function classifyError(err: unknown): { errorCode: string; willRetry: boolean } 
   return { errorCode: 'tool_error', willRetry: false };
 }
 
-async function executeWithTimeout<T>(fn: () => Promise<T>, timeoutMs: number): Promise<T> {
-  return Promise.race([
-    fn(),
-    new Promise<T>((_, reject) =>
-      setTimeout(
-        () => reject(new Error(`Tool execution timed out after ${timeoutMs}ms`)),
-        timeoutMs
-      )
-    ),
-  ]);
+async function executeWithTimeout<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number
+): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fn(controller.signal);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -66,7 +67,7 @@ export function buildTool<TInput, TOutput>(options: BuildToolOptions<TInput, TOu
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
-        const data = await executeWithTimeout(() => execute(input), timeoutMs);
+        const data = await executeWithTimeout(signal => execute(input, signal), timeoutMs);
         loggers.ai.info(
           { tool: id, event: 'complete', durationMs: Date.now() - startTime, attempt: attempt + 1 },
           'AI tool completed'

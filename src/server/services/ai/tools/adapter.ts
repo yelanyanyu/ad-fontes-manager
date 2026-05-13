@@ -9,14 +9,15 @@ type BuiltTool = {
   id: string;
   description: string;
   inputSchema: Record<string, unknown>;
-  run: (input: never) => Promise<ToolResult<unknown>>;
+  run: (input: never, signal?: AbortSignal) => Promise<ToolResult<unknown>>;
 };
 
 export function toAISdkTool(toolDef: BuiltTool): Tool {
   return tool({
     description: toolDef.description,
     inputSchema: jsonSchema(toolDef.inputSchema),
-    execute: async input => toolDef.run(input as never),
+    execute: async (input, options) =>
+      toolDef.run(input as never, (options as { signal?: AbortSignal } | undefined)?.signal),
   }) as Tool;
 }
 

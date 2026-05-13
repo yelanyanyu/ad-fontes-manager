@@ -29,7 +29,8 @@ function checkBraveRateLimit(): void {
 async function braveSearch(
   query: string,
   apiKey: string,
-  domains: string[]
+  domains: string[],
+  signal?: AbortSignal
 ): Promise<SearchResult[]> {
   checkBraveRateLimit();
   const siteFilter = domains.length > 0 ? domains.map(d => `site:${d}`).join(' OR ') : '';
@@ -42,6 +43,7 @@ async function braveSearch(
         'Accept-Encoding': 'gzip',
         'X-Subscription-Token': apiKey,
       },
+      signal,
     }
   );
 
@@ -63,7 +65,8 @@ async function braveSearch(
 async function tavilySearch(
   query: string,
   apiKey: string,
-  domains: string[]
+  domains: string[],
+  signal?: AbortSignal
 ): Promise<SearchResult[]> {
   const body: Record<string, unknown> = {
     query,
@@ -79,6 +82,7 @@ async function tavilySearch(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!response.ok) {
@@ -107,7 +111,7 @@ export const searchEtymologyTool = buildTool({
     },
     required: ['query', 'language'],
   },
-  execute: async (input: { query: string; language: string }) => {
+  execute: async (input: { query: string; language: string }, signal: AbortSignal) => {
     const { getAIConfig } = require('../configService') as {
       getAIConfig: () => {
         search?: {
@@ -129,9 +133,11 @@ export const searchEtymologyTool = buildTool({
 
     const provider = aiConfig.search.provider || 'brave';
     if (provider === 'tavily') {
-      return { results: await tavilySearch(input.query, aiConfig.search.apiKey, allDomains) };
+      return {
+        results: await tavilySearch(input.query, aiConfig.search.apiKey, allDomains, signal),
+      };
     }
-    return { results: await braveSearch(input.query, aiConfig.search.apiKey, allDomains) };
+    return { results: await braveSearch(input.query, aiConfig.search.apiKey, allDomains, signal) };
   },
 });
 

@@ -22,13 +22,13 @@ export const fetchPageTool = buildTool({
     },
     required: ['url'],
   },
-  execute: async (input: { url: string }) => {
+  execute: async (input: { url: string }, signal: AbortSignal) => {
     const response = await fetch(input.url, {
       headers: {
         'User-Agent': 'AdFontesManager/1.0 (etymology research tool)',
         Accept: 'text/html,application/xhtml+xml',
       },
-      signal: globalThis.AbortSignal.timeout(15000),
+      signal,
     });
     if (!response.ok) {
       throw new Error(`Failed to fetch ${input.url}: ${response.status} ${response.statusText}`);
