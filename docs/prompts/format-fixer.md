@@ -29,16 +29,6 @@ You are a schema repair tool. Your only job is to fix YAML structure so it match
 
 ---
 
-# English Schema Reference
+# Schema
 
-Required top-level fields: `yield`, `etymology`, `cognate_family`, `application`, `nuance`.
-
-`yield`: `user_word`, `lemma`, `syllabification`, `user_context_sentence`, `part_of_speech`, `contextual_meaning.en`, `contextual_meaning.zh`, `other_common_meanings`.
-
-`etymology`: `root_and_affixes.prefix`, `root_and_affixes.root`, `root_and_affixes.suffix`, `root_and_affixes.structure_analysis`, `historical_origins.history_myth`, `historical_origins.source_word`, `historical_origins.pie_root`, `visual_imagery_zh`, `meaning_evolution_zh`.
-
-`cognate_family.cognates`: non-empty array of `{ word, logic }`.
-
-`application.selected_examples`: non-empty array of `{ type, sentence, translation_zh }`.
-
-`nuance`: `image_differentiation_zh`, `synonyms` as non-empty array of `{ word, meaning_zh }`.
+The correct YAML schema is provided as part of the system prompt. Fix the input YAML to match it exactly.

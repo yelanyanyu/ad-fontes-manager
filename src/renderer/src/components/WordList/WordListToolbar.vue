@@ -236,15 +236,17 @@ const onPageSizeChange = (event: Event) => {
         </button>
         <button
           v-if="hasSelection"
-          class="btn btn-quiet"
-          style="height: 28px; padding: 0 10px"
+          class="icon-tool-button"
+          type="button"
+          title="Clear selection"
+          aria-label="Clear selection"
           data-test="clear-selection-button"
           @click="emit('clear-selection')"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <circle cx="12" cy="12" r="8" />
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
           </svg>
-          Clear Selection
         </button>
         <div class="count">{{ totalCount }} words</div>
         <button class="refresh" title="Refresh" @click="emit('refresh')">
@@ -546,6 +548,44 @@ const onPageSizeChange = (event: Event) => {
 
 [data-theme="dark"] .refresh:hover {
   color: #fff;
+}
+
+.icon-tool-button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: #7b746b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+
+.icon-tool-button:hover,
+.icon-tool-button:focus-visible {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #d14d4d;
+}
+
+.icon-tool-button svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+}
+
+[data-theme="dark"] .icon-tool-button {
+  background: rgba(255, 255, 255, 0.05);
+  color: #b6aca1;
+}
+
+[data-theme="dark"] .icon-tool-button:hover,
+[data-theme="dark"] .icon-tool-button:focus-visible {
+  color: #ff8f8f;
 }
 
 /* Button variants */
