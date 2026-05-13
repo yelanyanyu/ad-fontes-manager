@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import type { SearchMode, SortMode } from '@/types/word-list';
 
 defineProps<{
@@ -22,6 +23,7 @@ defineProps<{
 const emit = defineEmits<{
   (e: 'update-search', value: string): void;
   (e: 'search'): void;
+  (e: 'clear-search'): void;
   (e: 'search-keydown', event: KeyboardEvent): void;
   (e: 'toggle-search-mode'): void;
   (e: 'close-search-mode'): void;
@@ -36,9 +38,16 @@ const emit = defineEmits<{
   (e: 'select-all-matching'): void;
 }>();
 
+const searchInput = ref<HTMLInputElement | null>(null);
+
 const onSearchInput = (event: Event) => {
   const target = event.target as HTMLInputElement | null;
   emit('update-search', target?.value ?? '');
+};
+
+const clearSearch = () => {
+  emit('clear-search');
+  searchInput.value?.focus();
 };
 
 const onSortChange = (event: Event) => {
@@ -63,12 +72,27 @@ const onPageSizeChange = (event: Event) => {
           <path d="m20 20-3.5-3.5" />
         </svg>
         <input
+          ref="searchInput"
           :value="search"
           type="text"
           placeholder="Search..."
           @input="onSearchInput"
           @keydown="emit('search-keydown', $event)"
         />
+        <button
+          v-if="search"
+          type="button"
+          class="search-clear"
+          title="Clear search"
+          aria-label="Clear search"
+          @mousedown.prevent
+          @click="clearSearch"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
       </div>
 
       <div class="search-actions">
@@ -304,6 +328,7 @@ const onPageSizeChange = (event: Event) => {
 
 .search-wrap input {
   width: 100%;
+  min-width: 0;
   border: 0;
   outline: 0;
   background: transparent;
@@ -313,6 +338,31 @@ const onPageSizeChange = (event: Event) => {
 
 .search-wrap input::placeholder {
   color: #9a9389;
+}
+
+.search-clear {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #8f877e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.search-clear:hover,
+.search-clear:focus-visible {
+  background: rgba(127, 117, 104, 0.14);
+  color: var(--text);
+}
+
+.search-clear svg {
+  stroke-width: 2.2;
+  stroke-linecap: round;
 }
 
 .search-actions {

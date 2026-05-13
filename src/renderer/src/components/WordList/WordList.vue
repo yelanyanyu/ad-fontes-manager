@@ -700,6 +700,13 @@ const updateSearch = (value: string): void => {
   search.value = value;
 };
 
+const clearSearch = async (): Promise<void> => {
+  if (!canSearch.value) return;
+  search.value = '';
+  clearSelection();
+  await wordStore.fetchDbRecords({ search: '', page: 1 });
+};
+
 const toggleSearchMode = () => {
   searchModeOpen.value = !searchModeOpen.value;
 };
@@ -914,6 +921,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :has-selection="hasSelection"
       :selecting-all-matching="selectingAllMatching"
       @update-search="updateSearch"
+      @clear-search="clearSearch"
       @search="handleSearch"
       @search-keydown="handleSearchKeydown"
       @toggle-search-mode="toggleSearchMode"
