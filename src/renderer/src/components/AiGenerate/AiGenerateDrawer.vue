@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { useAppStore, type LanguageCode } from '@/stores/appStore';
 import { AI_STATE_KEY, type ResumeStage, type StepState } from '@/composables/useAiGenerate';
 import AiGenerateStagePanel from './AiGenerateStagePanel.vue';
@@ -36,7 +36,15 @@ const fixing = ref(false);
 const context = ref('');
 const notes = ref('');
 const batchText = ref('');
+const debouncedBatchText = ref('');
 const batchFileName = ref('');
+let batchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+watch(batchText, (val) => {
+  if (batchDebounceTimer) clearTimeout(batchDebounceTimer);
+  batchDebounceTimer = setTimeout(() => {
+    debouncedBatchText.value = val;
+  }, 150);
+});
 const batchSubmitting = ref(false);
 const errorMessage = ref('');
 const selectedStage = ref<StepState | null>(null);
@@ -67,7 +75,9 @@ const reviewScore = computed(() => {
 });
 const canStart = computed(() => word.value.trim().length > 0);
 const batchParseResult = computed(() =>
-  batchSource.value === 'json' ? parseBatchJson(batchText.value) : parseBatchText(batchText.value)
+  batchSource.value === 'json'
+    ? parseBatchJson(debouncedBatchText.value)
+    : parseBatchText(debouncedBatchText.value)
 );
 const batchItems = computed(() => batchParseResult.value.items);
 const canStartBatch = computed(
