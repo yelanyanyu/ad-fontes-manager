@@ -161,6 +161,8 @@ const onPageSizeChange = (event: Event) => {
             <option value="za">Z-A</option>
             <option value="newest">Newest</option>
             <option value="oldest">Oldest</option>
+            <option value="updated-newest">Modified Newest</option>
+            <option value="updated-oldest">Modified Oldest</option>
           </select>
         </div>
 

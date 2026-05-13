@@ -298,7 +298,19 @@ defineExpose({ applyGeneratedYaml });
         </span>
       </div>
       <div class="head-actions">
-        <button class="head-link" type="button" :disabled="saving" @click="clear">Clear</button>
+        <button
+          class="head-icon-button"
+          type="button"
+          :disabled="saving || isEmpty"
+          title="Clear editor"
+          aria-label="Clear editor"
+          @click="clear"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="m16 3 5 5-10 10H6l-3-3L13 5z" />
+            <path d="M6 18h12" />
+          </svg>
+        </button>
         <button
           :class="['btn', 'head-save', isEmpty ? 'btn-disabled' : 'btn-primary']"
           :disabled="isEmpty || saving"
@@ -468,19 +480,43 @@ defineExpose({ applyGeneratedYaml });
   box-shadow: 0 0 0 3px rgba(127, 119, 111, 0.1);
 }
 
-.head-link {
-  border: 0;
-  background: transparent;
-  color: #9d968d;
-  font-size: 13px;
-  padding: 0;
-  cursor: pointer;
-}
-
 .head-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.head-icon-button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: #8f877e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.head-icon-button svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.head-icon-button:hover:not(:disabled),
+.head-icon-button:focus-visible {
+  border-color: rgba(36, 114, 83, 0.35);
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.head-icon-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
 }
 
 .head-save {
@@ -489,12 +525,9 @@ defineExpose({ applyGeneratedYaml });
   padding: 0 11px;
 }
 
-[data-theme="dark"] .head-link {
+[data-theme="dark"] .head-icon-button {
+  background: #211e19;
   color: #8d857b;
-}
-
-[data-theme="dark"] .head-link:hover {
-  color: #eee8de;
 }
 
 .editor-area {

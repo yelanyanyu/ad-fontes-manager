@@ -5,7 +5,7 @@ const { getDb } = require('../../db') as {
 };
 const { wordsV2 } = require('../../db/schema') as typeof import('../../db/schema');
 
-type SortMode = 'az' | 'za' | 'newest' | 'oldest' | string;
+type SortMode = 'az' | 'za' | 'newest' | 'oldest' | 'updated-newest' | 'updated-oldest' | string;
 type WordRow = typeof wordsV2.$inferSelect;
 type DrizzleLike = any;
 
@@ -151,6 +151,8 @@ class WordRepositoryV2 {
     if (sort === 'za') orderBy = desc(wordsV2.lemma);
     if (sort === 'newest') orderBy = desc(wordsV2.createdAt);
     if (sort === 'oldest') orderBy = asc(wordsV2.createdAt);
+    if (sort === 'updated-newest') orderBy = desc(wordsV2.updatedAt);
+    if (sort === 'updated-oldest') orderBy = asc(wordsV2.updatedAt);
 
     const whereClause = and(...conditions);
     const totalRow = db.select({ total: count() }).from(wordsV2).where(whereClause).get();

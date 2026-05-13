@@ -32,7 +32,7 @@ const toOptionalBoolean = (value: unknown): boolean | undefined | unknown => {
 const NonEmptyString = z.string().trim().min(1, 'must not be empty');
 const NonEmptyStringArray = z.array(NonEmptyString).min(1, 'array must not be empty');
 const UUIDSchema = z.string().uuid('invalid uuid');
-const SortSchema = z.enum(['az', 'za', 'newest', 'oldest']);
+const SortSchema = z.enum(['az', 'za', 'newest', 'oldest', 'updated-newest', 'updated-oldest']);
 
 const OptionalIntegerFromQuery = z.preprocess(
   toOptionalInteger,

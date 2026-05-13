@@ -1,4 +1,4 @@
-export type SortMode = 'az' | 'za' | 'newest' | 'oldest';
+export type SortMode = 'az' | 'za' | 'newest' | 'oldest' | 'updated-newest' | 'updated-oldest';
 export type SearchMode = 'partial' | 'exact';
 
 export interface WordYield {

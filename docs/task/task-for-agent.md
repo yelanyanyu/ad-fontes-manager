@@ -1,13 +1,14 @@
-# Task: AI 单词语法生成 — 最小可行性验证
+# Task: Prompt 缓存优化 — format-fixer 静态 Schema 拆分
 
 > **状态**: 设计完成，待实现
-> **关联**: `docs/task/task_plan_phase2.md`（完整计划）
 
 ---
 
 ## 目标
 
-在 Home 页面的 YAML Editor 模块中嵌入 AI 生成模块，跑通单单词 Research → Enrichment → Review 管道。SSE 实时推送进度。一切从简但架构正确——`PipelineDefinition` + `PipelineRunner` 接口为完整计划保留清晰扩展点。
+将 YAML Schema 从 format-fixer prompt 中拆出为独立文件，使其成为纯静态 system prompt，利用 DeepSeek API 的自动前缀缓存减少批量修复时的 token 消耗。同步提取 prompt 组装逻辑到独立模块，降低 `pipe.ts` 耦合度。
+
+**核心原理**：DeepSeek API 对连续请求的字节级前缀做自动缓存。若 system prompt 完全不变，批量处理时只有第 1 次请求 cold，后续全部命中（~90% 折扣）。动态数据（待修复 YAML + errors）放 user message 不破坏缓存。
 
 ---
 
@@ -15,387 +16,114 @@
 
 | 决策点 | 选择 | 理由 |
 |--------|------|------|
-| LLM 调用位置 | Server-side | API Key 不泄露到客户端 |
-| LLM SDK | Vercel AI SDK (`ai` + `@ai-sdk/openai`) | `generateText()` 统一接口：tool calling、streaming、structured output |
-| 工作流编排 | 手写 `SequentialRunner` (implements `PipelineRunner`) | 本次 3 步线性管道，Mastra 过度抽象；完整计划时可换 `MastraRunner` 实现 |
-| 进度推送 | SSE (Server-Sent Events) | 实时展示每步状态；完整计划技术选型复用 |
-| Pipeline 抽象 | `PipelineDefinition` + `PipelineRunner` 接口 | 德语/批量/条件分支只需新 Definition 或新 Runner |
-| 配置持久化 | Zod schema + config.json + env override | 对齐 Phase 2 计划的 config 结构 |
-| Model 解析 | `modelResolver.ts` 集中管理 | 3 个 agent 统一调用，避免 config 访问散落各处 |
-| UI 架构 | `<AiGenerateBar>` 组件 + `useAiGenerate()` composable | 渲染与逻辑分离；composable 可在未来批量模式中复用 |
-| Prompt 文件 | 先 mock，后替换 | 本次验证用 hello 文本测试连通性；用户后续提供完整 prompt |
+| Schema 文件格式 | YAML 模板嵌入 Markdown，占位说明，无写作规则，无范例 | LLM 对 YAML 模板理解准确 |
+| Schema 拆分 | English + German 两个文件 | 结构差异大（`root_and_affixes` vs `morphological_analysis`），分开缓存命中率更高 |
+| format-fixer 发送模式 | 静态（Schema + Rules）→ system，动态（待修复 YAML + errors）→ user | 静态部分完整缓存命中，只有动态部分每次付费 |
+| 变量注入控制 | `PipelineStage` 加 `injectTarget: 'system' \| 'user'` | 默认 `'system'`，向后兼容现有 stage |
+| Schema 文件引用 | `PipelineStage` 加 `schemaFile` 字段 | assembler 在构建时自动拼接 |
+| Prompt 组装 | 新文件 `prompts/assembler.ts` | `pipe.ts` 不再关心变量字典和模板注入 |
+| Stage 架构 | 不合并 | 错误隔离、Stop-loss、中间产物可检查 |
+| creative prompt | 本次不动 | 其 Output Format 含写作规则，定位不同 |
 
 ---
 
-## 二、架构总览
+## 二、架构变更
 
 ```
-                    ┌─ config.json + env ─┐
-                    │   (Zod validated)   │
-                    └─────────┬───────────┘
-                              │
-                    ┌─────────▼───────────┐
-                    │   modelResolver.ts  │  ← resolveModel(stageName) → {provider, apiKey, baseUrl, format}
-                    └─────────┬───────────┘
-                              │
-  POST /api/v2/generate/single│
-    ┌─────────────────────────▼───────────────────────────┐
-    │              generateController.ts                  │
-    │  1. validate input (Zod)                            │
-    │  2. create jobId                                    │
-    │  3. select PipelineDefinition by language           │
-    │  4. launch SequentialRunner.run(definition, input)  │
-    └─────────────────────────┬───────────────────────────┘
-                              │
-    ┌─────────────────────────▼───────────────────────────┐
-    │              pipe.ts (SequentialRunner)             │
-    │  implements PipelineRunner                          │
-    │                                                     │
-    │  for each stage in definition.stages:               │
-    │    resolveModel(stage.modelKey)                     │
-    │    create provider (openai/anthropic)               │
-    │    load systemPrompt + inject variables             │
-    │    generateText({model, prompt, tools?})            │
-    │    emit SSE: step:start → step:complete             │
-    │  emit SSE: pipeline:complete                        │
-    └─────────────────────────┬───────────────────────────┘
-                              │ SSE
-    ┌─────────────────────────▼───────────────────────────┐
-    │              useAiGenerate.ts (composable)          │
-    │  EventSource → update reactive job state            │
-    └─────────────────────────┬───────────────────────────┘
-                              │
-    ┌─────────────────────────▼───────────────────────────┐
-    │              AiGenerateBar.vue (rendering)          │
-    │  Idle → Running(collapsed) → Running(expanded)     │
-    │  → Complete(expanded)                              │
-    └─────────────────────────────────────────────────────┘
+当前:
+  pipe.ts buildPrompt() → loader.ts loadSystemPrompt() → 变量注入到 system prompt
+  runStageText() 硬编码 user message: "Generate the ... output for ..."
+
+改为:
+  pipe.ts → assembler.ts assemblePrompt() → { system, user }
+  runStageText() 接收 { system, user }
 ```
+
+### assembler.ts 职责
+
+1. 从 PipelineContext 构建变量字典
+2. 加载 prompt 文件 + 可选 schema 文件拼接
+3. 根据 `injectTarget` 决定变量注入到 system 还是 user
+4. 返回 `{ system: string; user: string }`
+
+### 缓存原理
+
+```
+system prompt: [Schema.md (不变)] + [Rules (不变)] → 每次完整缓存命中
+user message:  [待修复 YAML (变)] + [errors (变)] → 每次付费
+```
+
+批量修复场景：200 个词，第 1 次 cold，后 199 次 system prompt 完整缓存命中，节省 ~38% token。
 
 ---
 
-## 三、管道定义
+## 三、第一阶段：修改 Prompt 文件
 
-```
-POST /api/v2/generate/single
-{
-  word: string,
-  context?: string,
-  language: 'en' | 'de',
-  notes?: string
-}
-  │
-  ▼
-[Research] researchAgent
-  模型: config.stages.fast (快速模型)
-  默认: config.stages.fast 指定的供应商与模型
-  Tools: searchEtymology + fetchPage
-  输入: word, context, language, notes
-  输出: yield, root_and_affixes, historical_origins（不含 zh 创意字段）
-  SSE: step:start → step:tokens(可选) → step:complete(含搜索摘要)
-  │
-  ▼
-[Enrichment] enrichmentAgent
-  模型: config.stages.balanced (均衡模型)
-  默认: config.stages.balanced 指定的供应商与模型
-  Tools: 无
-  输入: Research 输出 + 搜索摘要
-  输出: visual_imagery_zh, meaning_evolution_zh, cognate_family,
-        application, nuance, image_differentiation_zh
-  SSE: step:start → step:tokens(可选) → step:complete
-  │
-  ▼
-[Review] reviewerAgent
-  模型: config.stages.expert (专家模型)
-  默认: config.stages.expert 指定的供应商与模型
-  评分 3 字段: visual_imagery_zh, meaning_evolution_zh, image_differentiation_zh
-  每个字段: 1-10 分 + 评价文字（正面/负面逐条列出）
-  Zod outputSchema 约束输出 JSON
-  SSE: step:start → step:complete(含评分+评价)
-  │
-  ▼
-pipeline:complete → { yaml, scores, totalDuration }
-  │
-  ▼
-用户审阅：
-  - 查看 Reviewer 模型对每个字段的评分和评价
-  - 修改评价 / 附加自己的补充说明
-  - 决定："填入编辑器" / "重新生成"(带修改后的评价) / "手动编辑"
-```
+### 3.1 新建 English Schema
+
+从 `word-en2cn-yaml-long.md` 的 Output Format 部分提取 YAML 模板。保留占位说明（如 `"(Lemma of the word)"`），**去掉**：
+- `visual_imagery_zh` 的 6 条写作规则 → 只保留 `|` 和一行简短占位
+- 范例（"母亲走后第七天..."）
+- `meaning_evolution_zh` 的写作规则 → 只保留 `|` 和简短占位
+- `cognate_family.instruction` → 去掉 instruction，只保留 cognates 数组结构
+- `image_differentiation_zh` 的写作规则 → 只保留 `|` 和简短占位
+
+最终：纯 YAML 骨架 + 每个字段一行占位说明，约 50 行。
+
+### 3.2 新建 German Schema
+
+同上逻辑，从 `word-de2cn-yaml.md` 提取。German 结构差异：
+- `etymology` 下用 `morphological_analysis` 而非 `root_and_affixes`
+- `morphological_analysis.components` 含 `element`、`type`、`de_meaning`、`trennbar`
+- `yield` 含 `genus`、`kasus`
+- `nuance.synonyms` 含 `connotation_difference`
+
+### 3.3 修改 format-fixer prompt
+
+删除 English Schema Reference 部分（当前第 32-44 行）。只保留 Role 声明 + `{{yaml}}`/`{{errors}}` 输入 + 8 条 Critical Rules。最终约 20 行。
+
+注意：`{{yaml}}` 和 `{{errors}}` 占位符保留在文件中，由 assembler 根据 `injectTarget: 'user'` 决定注入位置。
 
 ---
 
-## 四、SSE 事件协议
+## 四、第二阶段：修改代码
 
-| 事件 | 触发时机 | 携带数据 |
-|------|---------|---------|
-| `step:start` | Step 开始 | `{step: "research"|"enrichment"|"review", message: string}` |
-| `step:tokens` | LLM 输出 token 流 (可选) | `{step, chunk: string}` |
-| `step:complete` | Step 完成 | `{step, duration: number, summary: string, result?: object}` |
-| `step:error` | Step 失败 | `{step, error: string, willRetry: boolean}` |
-| `pipeline:complete` | 全部完成 | `{yaml: string, scores: object, totalDuration: number}` |
+### 4.1 `PipelineStage` 类型加字段
 
----
+两个可选字段：
+- `schemaFile?: string` — 可选 YAML schema 文件路径，assembler 在构建时拼接到 system prompt 前面
+- `injectTarget?: 'system' | 'user'` — 变量注入目标，默认 `'system'`
 
-## 五、服务端文件结构
+### 4.2 loader.ts 加 `loadSchema()`
 
-```
-src/server/
-├── schemas/
-│   ├── aiConfig.ts              # AI 配置 Zod schemas
-│   └── config.ts                # 扩展: 添加 ai 字段
-├── utils/
-│   ├── config.ts                # 扩展: ai config 读写 + getAIConfig() / getAPIKeyMasked()
-│   └── logger.ts                # 扩展: loggers.ai
-├── controllers/
-│   └── generateController.ts    # 参数校验 + 调用 SequentialRunner + SSE 管理
-├── services/ai/
-│   ├── types.ts                 # PipelineDefinition, PipelineRunner, PipelineContext, StepResult
-│   ├── modelResolver.ts         # resolveModel(stageName) → {provider, apiKey, baseUrl, format}
-│   ├── pipe.ts                  # SequentialRunner implements PipelineRunner
-│   ├── agents/
-│   │   ├── research.ts          # research 阶段配置 (stage definition)
-│   │   ├── enrichment.ts        # enrichment 阶段配置
-│   │   └── reviewer.ts          # reviewer 阶段配置 + Zod output schema
-│   ├── tools/
-│   │   ├── buildTool.ts         # buildAITool() wrapper: 超时/重试/结构化错误/日志
-│   │   ├── searchEtymology.ts   # Brave Search API tool
-│   │   └── fetchPage.ts         # node-fetch + cheerio 抓取清洗
-│   ├── prompts/
-│   │   └── loader.ts            # 从 docs/prompts/ 加载 md + 模板变量注入
-│   ├── definitions/
-│   │   └── english.ts           # 英语 PipelineDefinition
-│   └── routes/
-│       └── generate.ts          # POST /generate/single + GET /:jobId/stream
-└── app.ts                       # 扩展: 注册 generate routes
-```
+与 `getPrompt` 类似（走同一缓存），但：
+- 文件路径解析到 `docs/prompts/schemas/`
+- 返回原始内容，不调用 `injectVariables`（Schema 无变量）
 
-注意 controller 已移到 `src/server/controllers/` 下，与项目现有结构一致。
+### 4.3 新建 `prompts/assembler.ts`
+
+导出 `assemblePrompt(stage, ctx): { system: string; user: string }`。
+
+实现要点：
+- 从 ctx 构建全部变量字典（同现有 `buildPrompt` 逻辑）
+- 若 `stage.schemaFile` 存在 → 加载 Schema 文本，拼接到 system prompt 前面
+- 若 `injectTarget === 'user'`：system 用空变量渲染（Schema + Rules 保持静态），user 注入 `{{yaml}}`、`{{errors}}` 等动态变量
+- 否则（默认）：system 注入所有变量，user 用固定短句 `"Generate the ${stage.id} output for "${ctx.word}".`
+
+### 4.4 修改 pipe.ts
+
+- 删除 `buildPrompt` 函数
+- 引入 `assemblePrompt`
+- `RunStageTextOptions.prompt` 类型从 `string` 改为 `{ system: string; user: string }`
+- `runStageText` 内：`system: prompt.system`，`prompt: prompt.user`
+- 所有调用点：`prompt: buildPrompt(stage, ctx)` → `prompt: assemblePrompt(stage, ctx)`
+- 现有错误处理和解析逻辑不变
 
 ---
 
-## 六、配置系统
+## 五、不在本次 scope
 
-### Schema（已实现）
-
-当前实现于 `src/server/schemas/aiConfig.ts`。与原始计划的差异：
-
-- Provider 用 `type: 'openai' | 'anthropic'` 替代 `formats` 数组。计划中的 `formats` 数组和 per-model `type` 覆盖待实施。
-- 阶段键从 `research/enrichment/review` 改为 `fast/balanced/expert`（三档配置，自动映射到 5 个 Pipeline 阶段）。
-
-```typescript
-// src/server/schemas/aiConfig.ts（当前实现）
-const AIProviderSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  type: z.enum(['openai', 'anthropic']).default('openai'),
-  baseUrl: z.string().url(),
-  apiKey: z.string().default(''),
-  models: z.array(z.object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-  })).min(1),
-});
-
-const AISearchConfigSchema = z.object({
-  provider: z.enum(['brave', 'tavily']).default('brave'),
-  apiKey: z.string().default(''),
-  autoDomains: z.boolean().default(false),
-  domains: z.object({
-    common: z.array(z.string()),
-    en: z.array(z.string()).default([]),
-    de: z.array(z.string()).default([]),
-  }),
-});
-
-const AIStageConfigSchema = z.object({
-  provider: z.string().min(1),
-  model: z.string().min(1),
-});
-
-const AIConfigSchema = z.object({
-  providers: z.array(AIProviderSchema).default([]),
-  search: AISearchConfigSchema.optional(),
-  stages: z.object({
-    fast: AIStageConfigSchema.optional(),
-    balanced: AIStageConfigSchema.optional(),
-    expert: AIStageConfigSchema.optional(),
-  }).default({}),
-  review: z.object({
-    threshold: z.number().min(1).max(10).default(6),
-    thresholdByLanguage: z.record(z.number().min(1).max(10)).default({}),
-  }).default({}),
-});
-```
-
-### 阶段映射
-
-| 配置档位 | 模型要求 | 自动分配到 |
-|---------|---------|-----------|
-| `fast`（快速） | 轻量快速 | Pass 1（搜索生成）+ Fixer（格式修复） |
-| `balanced`（均衡） | 质量速度平衡 | Pass 2（深度生成）+ Regenerator（字段重生成） |
-| `expert`（专家） | 最强推理 | Reviewer（内容审核评分） |
-
-### 读写方式
-
-- `GET /api/v2/config/ai` → 返回完整配置
-- `PUT /api/v2/config/ai` → 保存 AI 配置到 `config.json`
-- `POST /api/v2/config/ai/test-provider` → 测试 LLM 供应商连接
-- `POST /api/v2/config/ai/test-search` → 测试搜索 API 连接
-- `.env` 可覆盖：`AI_FAST_PROVIDER`、`AI_FAST_MODEL`、`AI_BALANCED_PROVIDER` 等
-- `config.json` 仅存 `ai` 子树，基础设施配置由 `.env` 管理
-- `config.example.json` 提供预设模板，可安全推送到远程仓库
-
----
-
-## 七、modelResolver（集中模型解析）
-
-```typescript
-// src/server/services/ai/modelResolver.ts
-interface ResolvedModel {
-  provider: string;    // e.g. "openai"
-  modelId: string;     // e.g. "gpt-4o-mini"
-  apiKey: string;
-  baseUrl: string;
-  format: 'openai' | 'anthropic';  // determines which AI SDK provider to create
-}
-
-function resolveModel(stageName: 'fast' | 'balanced' | 'expert'): ResolvedModel
-```
-
-3 个 agent 配置和 pipe.ts 统一从此获取模型信息，不再直接读 config。
-
----
-
-## 八、前端组件设计
-
-### AiGenerateBar.vue
-
-嵌入 WordEditor.vue 顶部的可折叠 AI 面板组件。
-
-**四种状态**：空闲（输入栏）/ 运行中收起（进度条）/ 运行中展开（步骤时间线）/ 完成展开（评分+操作）
-
-**Props**: `onYamlReady: (yaml: string) => void`
-
-**不含业务逻辑**——所有状态管理委托给 `useAiGenerate()` composable。
-
-### useAiGenerate() Composable
-
-批量感知的接口：`jobs: Map<jobId, JobState>`。单单词是 batchSize=1 的特例。核心方法：`startGeneration(params)` → `subscribeToJob(jobId)` → SSE → 更新 reactive state。
-
----
-
-## 九、后端日志
-
-`loggers.ai` (pino child)。每次管道调用创建 child logger：`{jobId, word, language}`。记录每步 start/complete/error 事件、耗时、token 数、搜索请求数。
-
----
-
-## 十、依赖
-
-```json
-{
-  "ai": "^5.x",
-  "@ai-sdk/openai": "^2.x",
-  "cheerio": "^1.x"
-}
-```
-
-（`@ai-sdk/anthropic` 在后续支持 Anthropic 格式 provider 时再加；`@mastra/core` 在需要条件分支/重试管道时再加。）
-
----
-
-## 十一、API 端点
-
-| 方法 | 路径 | 功能 |
-|------|------|------|
-| POST | `/api/v2/generate/single` | Body: `{word, context?, language, notes?}` → `{jobId}` |
-| GET | `/api/v2/generate/:jobId/stream` | SSE: step:start / tokens / complete / error / pipeline:complete |
-| GET | `/api/v2/config/ai` | 获取 AI 配置 |
-| PUT | `/api/v2/config/ai` | 更新 AI 配置 |
-| POST | `/api/v2/config/ai/test-provider` | 测试 LLM 供应商连接 |
-| POST | `/api/v2/config/ai/test-search` | 测试搜索 API 连接 |
-
----
-
-## 十二、错误处理
-
-| 错误类型 | 策略 |
-|----------|------|
-| Rate Limit (429) | 1 次重试，指数退避 2s→8s |
-| Provider 5xx | 1 次重试，退避 2s |
-| Zod 校验失败 | 返回错误信息给前端，用户手动修 |
-| 搜索 API 失败 | 降级：无搜索结果，模型仅凭知识生成 |
-| SSE 连接断开 | EventSource 自动重连；后端 jobId 保留状态 |
-
----
-
-## 十三、Phase 2 迁移路径
-
-当前最小实现和 Phase 2 完整计划之间，`PipelineRunner` 接口不变，变化都在实现层。
-
-### 框架兼容性验证
-
-Phase 2 完整管道：Pass1 → Format Check 1 → Fixer ⇄ retry → Pass2 → Format Check 2 → Fixer ⇄ retry → Review → Regenerator (条件) → 用户审核
-
-| Phase 2 步骤 | 当前 Support | 迁移方式 |
-|-------------|-------------|---------|
-| Pass 1, Pass 2 | ✓ 已有 `type: 'llm'` | 不变 |
-| Review | ✓ 已有 | 不变 |
-| Format Check 1, 2 | ✗ | `PipelineStage.type: 'validate'` + `schemaName` —— 在 SequentialRunner 或 MastraRunner 内做 Zod 校验 |
-| Fixer | ✗ | `PipelineStage.retry: {maxAttempts, fixerStageId}` —— Runner 在 validate 失败时自动触发 Fixer |
-| Regenerator | ✗ | `PipelineStage.condition` 或 Mastra step 内部分支 |
-
-所有扩展都是 `PipelineStage` 上加 optional 字段，不破坏现有 stage definition。
-
-### 两条迁移路径
-
-**路径 A — 扩展 SequentialRunner（适合简单场景）**
-```
-Phase 1: 3 stages, 纯顺序 → SequentialRunner (约 80 行)
-Phase 2: 7 stages, 条件分支+retry → SequentialRunner 加 retry loop + condition (约 200 行)
-```
-- 优点：零新依赖，代码完全可控
-- 缺点：复杂工作流逻辑手写，不如声明式清晰
-
-**路径 B — 切换到 MastraRunner（适合复杂场景）**
-```
-Phase 1: 3 stages → SequentialRunner
-Phase 2: 7 stages → MastraRunner implements PipelineRunner
-```
-- 优点：createStep 自带 Zod 校验（= Format Check），step 内 retry 语义清晰，DAG 编排声明式
-- 缺点：引入 Mastra 依赖
-
-**建议**：Phase 1 验证完后评估。如果 Fixer+Regenerator 的分支逻辑复杂，走路径 B；如果实际流程比计划的简单，走路径 A 省钱。
-
-### 接口稳定性保证
-
-Controller 只依赖接口：
-```typescript
-import { sequentialRunner } from '../services/ai/pipe';
-// Phase 2 只需改 import：
-// import { mastraRunner } from '../services/ai/MastraRunner';
-```
-
-前端 SSE 事件协议不变，`useAiGenerate()` composable 不变。
-
----
-
-## 十四、不在本次 scope
-
-- Fixer / Regenerator（格式修复/字段重生成 agent）
-- 批量生成 / GenerateView 页面
-- `step:tokens` 流式开关 UI（前缀预留，默认关闭）
-- 德语管道（`PipelineDefinition` + `language` 字段已支持多语）
-- Anki 集成
-- Mastra workflow（`PipelineRunner` 接口已预留，后续换实现）
-
-## 十五、已完成（超出原始 scope）
-
-- Settings UI 中的 AI 配置区块（供应商管理、阶段模型分配、搜索 API、审核阈值）
-- 供应商连接测试（chat completion 检测）
-- 搜索 API 连接测试
-- Provider 预设（DeepSeek、OpenRouter、Bailian、Silicon、AiHubMix）+ logo
-- `config.example.json` 安全模板
-- `config.json` 仅存 `ai` 子树，`.env` 管基础设施
-- 模型级 `type` 覆盖（待实施：per-model `type` 字段，未设置时继承 provider.type）
+- creative prompt 的 Schema 拆分——其 Output Format 含写作规则，定位不同
+- content-reviewer / content-fixer 的修改
+- field-regeneration prompt 的重启（虽能复用 Schema，属后续任务）
+- Anthropic 显式 `cache_control` 断点——当前 DeepSeek 自动前缀缓存已满足需求
