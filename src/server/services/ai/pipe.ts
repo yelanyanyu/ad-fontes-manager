@@ -452,6 +452,12 @@ function mergeCreativeYaml(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     runLogger?.error({ error: msg }, 'mergeCreativeYaml: yaml.load or deepMerge threw');
+    // Fallback: concatenate research + creative so auditing still sees creative fields.
+    ctx.fullYaml = `${ctx.researchYaml}\n${ctx.creativeYaml}`;
+    runLogger?.info(
+      { fullYamlChars: ctx.fullYaml.length },
+      'mergeCreativeYaml: used concatenation fallback'
+    );
   }
 }
 

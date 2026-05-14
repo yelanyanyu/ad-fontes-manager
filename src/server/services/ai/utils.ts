@@ -37,40 +37,125 @@ export function stripMarkdownFences(text: string): string {
   return result.trim();
 }
 
-export function repairCommonYamlScalarSlips(text: string): string {
-  return text
-    .split('\n')
+function escapeYamlDoubleQuoted(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function isBlockScalarStart(line: string): boolean {
+  return /^(\s*[^:#\n][^:\n]*:\s*)[|>]/.test(line);
+}
+
+function getIndent(line: string): number {
+  const match = line.match(/^ */);
+  return match ? match[0].length : 0;
+}
+
+function repairYamlLinesSafely(text: string, repairLine: (line: string) => string): string {
+  const lines = text.split('\n');
+  let inBlockScalar = false;
+  let blockIndent = -1;
+
+  return lines
     .map(line => {
-      const doubleQuotedWithTrailingText = line.match(
-        /^(\s*[^:#\n][^:\n]*:\s*)"([^"\n]*)"\s+([^#\n]+?)(\s*(?:#.*)?)$/
-      );
-      if (doubleQuotedWithTrailingText) {
-        const [, prefix, quotedValue, trailingText, comment = ''] = doubleQuotedWithTrailingText;
-        const mergedValue = `${quotedValue} ${trailingText.trim()}`.replace(/"/g, '\\"');
-        return `${prefix}"${mergedValue}"${comment}`;
+      const indent = getIndent(line);
+      const trimmed = line.trim();
+
+      if (inBlockScalar) {
+        if (trimmed === '') return line;
+        if (indent > blockIndent) return line;
+        inBlockScalar = false;
+        blockIndent = -1;
       }
 
-      const singleQuotedWithTrailingText = line.match(
-        /^(\s*[^:#\n][^:\n]*:\s*)'([^'\n]*)'\s+([^#\n]+?)(\s*(?:#.*)?)$/
-      );
-      if (singleQuotedWithTrailingText) {
-        const [, prefix, quotedValue, trailingText, comment = ''] = singleQuotedWithTrailingText;
-        const mergedValue = `${quotedValue} ${trailingText.trim()}`.replace(/"/g, '\\"');
-        return `${prefix}"${mergedValue}"${comment}`;
+      if (isBlockScalarStart(line)) {
+        inBlockScalar = true;
+        blockIndent = indent;
+        return line;
       }
 
-      return line;
+      return repairLine(line);
     })
     .join('\n');
+}
+
+export function repairCommonYamlScalarSlips(text: string): string {
+  return repairYamlLinesSafely(text, line => {
+    const doubleQuotedWithTrailingText = line.match(
+      /^(\s*[^:#\n][^:\n]*:\s*)"([^"\n]*)"\s+([^#\n]+?)(\s*(?:#.*)?)$/
+    );
+    if (doubleQuotedWithTrailingText) {
+      const [, prefix, quotedValue, trailingText, comment = ''] = doubleQuotedWithTrailingText;
+      const mergedValue = escapeYamlDoubleQuoted(`${quotedValue} ${trailingText.trim()}`);
+      return `${prefix}"${mergedValue}"${comment}`;
+    }
+
+    const singleQuotedWithTrailingText = line.match(
+      /^(\s*[^:#\n][^:\n]*:\s*)'([^'\n]*)'\s+([^#\n]+?)(\s*(?:#.*)?)$/
+    );
+    if (singleQuotedWithTrailingText) {
+      const [, prefix, quotedValue, trailingText, comment = ''] = singleQuotedWithTrailingText;
+      const mergedValue = escapeYamlDoubleQuoted(`${quotedValue} ${trailingText.trim()}`);
+      return `${prefix}"${mergedValue}"${comment}`;
+    }
+
+    return line;
+  });
+}
+
+function repairLlmYamlQuirks(text: string): string {
+  return repairYamlLinesSafely(text, line => {
+    // Fix 1: Double-quoted YAML scalar with unescaped ASCII " inside.
+    //        LLMs often emit Chinese quotemarks as ASCII " which breaks the
+    //        YAML string, e.g. logic: "根词"sever(严格)"的身体感知"
+    const dqLine = line.match(/^(\s*[^:#\n][^:\n]*:\s*)"(.*)"(\s*(?:#.*)?)$/);
+    if (dqLine) {
+      const [, prefix, inner, comment = ''] = dqLine;
+      if (/[^\\]"/.test(inner)) {
+        const escaped = inner.replace(/(?<!\\)"/g, '\\"');
+        return `${prefix}"${escaped}"${comment}`;
+      }
+      return line;
+    }
+
+    const match = line.match(/^(\s*[^:#\n][^:\n]*:\s*)([^#\n]*?)(\s*(?:#.*)?)$/);
+    if (!match) return line;
+
+    const [, prefix, rawValue, comment = ''] = match;
+    const value = rawValue.trim();
+    if (!value) return line;
+    if (/^["'{[\]]/.test(value)) return line;
+
+    const startsWithAliasLikeStar = /^\*\S+/.test(value);
+    const containsColonSpace = /:\s/.test(value);
+    if (!startsWithAliasLikeStar && !containsColonSpace) return line;
+
+    return `${prefix}"${escapeYamlDoubleQuoted(value)}"${comment}`;
+  });
 }
 
 export function loadYamlObjectWithRepairs(text: string): Record<string, unknown> {
   try {
     return yaml.load(text) as Record<string, unknown>;
   } catch (firstError) {
-    const repaired = repairCommonYamlScalarSlips(text);
-    if (repaired === text) throw firstError;
-    return yaml.load(repaired) as Record<string, unknown>;
+    const pass1 = repairLlmYamlQuirks(text);
+    if (pass1 !== text) {
+      try {
+        return yaml.load(pass1) as Record<string, unknown>;
+      } catch {
+        // Continue to pass 2.
+      }
+    }
+
+    const pass2 = repairCommonYamlScalarSlips(pass1);
+    if (pass2 !== pass1) {
+      try {
+        return yaml.load(pass2) as Record<string, unknown>;
+      } catch {
+        // Prefer the original parser error; the repair attempt failed too.
+      }
+    }
+
+    throw firstError;
   }
 }
 
