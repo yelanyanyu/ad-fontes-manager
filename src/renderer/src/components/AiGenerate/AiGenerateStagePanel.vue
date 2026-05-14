@@ -11,16 +11,16 @@ const emit = defineEmits<{
   close: [];
 }>();
 
-const thinkingOpen = ref(true);
+const thinkingOpen = ref(false);
 const toolsOpen = ref(true);
-const rawOpen = ref(false);
+const rawOpen = ref(true);
 
 watch(
   () => props.step?.step,
   () => {
-    thinkingOpen.value = true;
+    thinkingOpen.value = false;
     toolsOpen.value = true;
-    rawOpen.value = false;
+    rawOpen.value = true;
   }
 );
 </script>

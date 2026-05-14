@@ -20,8 +20,8 @@ rewrite fields that passed review.
    missing step. Don't reinterpret — execute.
 
 4. [Rule FIX-04] The fix must not introduce new AI-flavor problems. After rewriting, the text
-   must still follow all Anti-AI Style Rules (no "不是……而是……", no inflated words like "体现"
-   "彰显", no template phrasing, natural sentence rhythm).
+   must still follow the Anti-AI Style Rules below — Tier 1 (strict) for `visual_imagery_zh`,
+   Tier 2 (relaxed, with 转折呼应规则) for `meaning_evolution_zh` and `image_differentiation_zh`.
 
 5. [Rule FIX-05] Preserve the word's etymology and context. The fixed text must still be
    grounded in the same root image, historical source, and semantic logic as the original.
@@ -33,14 +33,32 @@ rewrite fields that passed review.
 
 # Anti-AI Style Rules
 
-1. Write like a sharp human explainer, not like a polished template.
-2. Do not use formulaic contrast patterns: "不是……而是……" "不仅……而且/更……" "这不是X，这是Y" "与其说……不如说……".
-3. Do not force rhetorical symmetry, parallel triples, or slogan-like endings.
-4. Avoid filler transitions: "此外" "因此" "同时" "某种意义上" "这意味着" "值得注意的是".
-5. Prefer short direct statements. Trust the reader.
-6. Use natural rhythm variation. Mix short and longer sentences.
-7. Use plain physical verbs: "走、推、贴、压、拉、伸、落下".
-8. Avoid inflated words: "体现" "彰显" "象征" "标志着" "承载" "证明了".
+The three creative fields have **two different strictness levels**:
+
+## Tier 1 — `visual_imagery_zh` (Strict)
+
+Must feel like a lived human scene. No formulaic writing tolerated.
+
+Absolute bans:
+- Contrast patterns: "不是……而是……" "不仅……而且/更……" "这不是X，这是Y" "与其说……不如说……"
+- 转折 conjunctions: "但" "却" "然而" connecting two full clauses
+- Filler transitions: "此外" "因此" "同时" "某种意义上" "这意味着" "值得注意的是"
+- Inflated words: "体现" "彰显" "象征" "标志着" "承载" "证明了"
+- Template phrasing: rhetorical symmetry, parallel triples, slogan-like endings, uniform sentence rhythm
+
+Prefer plain physical verbs: "走、推、贴、压、拉、伸、落下". Trust the reader with short direct statements.
+
+## Tier 2 — `meaning_evolution_zh` + `image_differentiation_zh` (Relaxed)
+
+Conceptual discussion is allowed. The only hard constraint is the **转折呼应规则**:
+
+A contrast pattern（"不是 A，而是 B" / "不只是 A，更是 B" / "与其说 A，不如说 B"）
+is allowed **only if A has been established in the preceding text**.
+If A is introduced for the first time inside the contrast formula itself, it must be removed
+or restructured into a direct statement.
+
+Filler transitions and inflated words: remove only when they pad a sentence that stands
+without them. If the word is doing real structural work, it may stay.
 
 ---
 
@@ -53,7 +71,7 @@ the full word entry YAML so it can be used directly.
 
 # User Message
 
-根据以下修改意见修复 YAML：
+待修复 YAML：
 
 ```yaml
 {{yaml}}

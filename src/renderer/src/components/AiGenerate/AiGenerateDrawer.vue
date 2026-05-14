@@ -4,6 +4,7 @@ import { useAppStore, type LanguageCode } from '@/stores/appStore';
 import { AI_STATE_KEY, type ResumeStage, type StepState } from '@/composables/useAiGenerate';
 import AiGenerateStagePanel from './AiGenerateStagePanel.vue';
 import { parseBatchJson, parseBatchText } from '@/services/batchGenerateParser';
+import { buildDisplaySteps } from './stageDisplay';
 
 defineProps<{
   open: boolean;
@@ -51,21 +52,16 @@ const selectedStage = ref<StepState | null>(null);
 const stagePanelOpen = ref(false);
 const language = computed<LanguageCode>(() => appStore.currentLanguage);
 
-const stageOrder = ['searching', 'pondering', 'auditing'];
-
 const displaySteps = computed(() => {
-  const steps = [...(currentJob.value?.steps || [])];
-  if (hasRevisionNotes.value && !steps.some(s => s.step === 'fixing')) {
-    steps.push({ step: 'fixing', status: 'pending' as const });
-  }
-  return steps;
+  return buildDisplaySteps(currentJob.value?.steps || [], hasRevisionNotes.value);
 });
 
 const progressPercent = computed(() => {
   const job = currentJob.value;
   if (!job) return 0;
-  const complete = job.steps.filter(step => step.status === 'complete').length;
-  const total = stageOrder.length + (hasRevisionNotes.value ? 1 : 0);
+  const steps = displaySteps.value;
+  const complete = steps.filter(step => step.status === 'complete').length;
+  const total = steps.length || 3;
   return Math.min(100, Math.round((complete / total) * 100));
 });
 
@@ -100,7 +96,7 @@ const hasRevisionNotes = computed(() => {
 
 const isRevisionNotesMode = computed(() => isComplete.value || hasRevisionNotes.value);
 const notesLabel = computed(() => (isRevisionNotesMode.value ? 'Revision notes' : 'Generation notes'));
-const notesBadge = computed(() => (isRevisionNotesMode.value ? 'Regenerate / Auto Fix' : 'Generate'));
+const notesBadge = computed(() => (isRevisionNotesMode.value ? 'Regenerate / Improve Text' : 'Generate'));
 const notesPlaceholder = computed(() =>
   isRevisionNotesMode.value
     ? 'Add extra feedback for the next revision...'
@@ -108,7 +104,7 @@ const notesPlaceholder = computed(() =>
 );
 const notesHelp = computed(() =>
   isRevisionNotesMode.value
-    ? 'Applied to Regenerate and Auto Fix for the selected job.'
+    ? 'Applied to stage regeneration and text quality improvement for the selected job.'
     : 'Applied when starting a new single generation.'
 );
 
@@ -228,6 +224,10 @@ function handleStageClick(step: StepState): void {
 }
 
 async function handleStageRegenerate(step: StepState): Promise<void> {
+  if (step.step === 'fixing') {
+    await handleFix();
+    return;
+  }
   await handleResume(step.step as ResumeStage);
 }
 </script>
@@ -287,11 +287,20 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
         <section class="input-grid">
           <label>
             <span>Word</span>
-            <input v-model="word" type="text" @keyup.enter="handleStart" />
+            <input
+              v-model="word"
+              type="text"
+              placeholder="Enter the word to analyze"
+              @keyup.enter="handleStart"
+            />
           </label>
           <label>
             <span>Context</span>
-            <input v-model="context" type="text" />
+            <input
+              v-model="context"
+              type="text"
+              placeholder="Add the word's sentence or context"
+            />
           </label>
           <label class="notes-field" :class="{ 'is-revision': isRevisionNotesMode }">
             <span class="field-label-row">
@@ -402,7 +411,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
                 :disabled="isRunning"
                 @click="handleStageRegenerate(step)"
               >
-                Regenerate
+                Regenerate from
               </button>
               <button
                 type="button"
@@ -429,17 +438,13 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
           />
         </div>
         <div class="result-actions">
-          <button type="button" class="secondary-button" @click="handleResume('pondering')">
-            Regenerate
-          </button>
           <button
-            v-if="hasRevisionNotes"
             type="button"
             class="secondary-button fix-button"
             :disabled="fixing"
             @click="handleFix"
           >
-            {{ fixing ? 'Fixing...' : 'Auto Fix' }}
+            {{ fixing ? 'Improving...' : 'Improve Text' }}
           </button>
           <button type="button" class="primary-button" @click="fillEditor">Fill Editor</button>
         </div>
@@ -945,6 +950,8 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   font-size: 13px;
   font-weight: 650;
   text-transform: capitalize;
+  flex: 1;
+  min-width: 0;
 }
 
 .stage-meta {
@@ -969,6 +976,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   font-size: 11px;
   font-weight: 650;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .stage-action-btn:hover {

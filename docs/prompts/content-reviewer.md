@@ -46,9 +46,9 @@ Each field has a writing annotation it must follow. Judge against the annotation
 检查要点：第一段是否是环境描写？场景是否制造了只有核心动作才能回应的生存情境？动作是否由情境和物自然逼出（而非由叙述者决定）？遭际是否有从受阻到得心应手的进程？结尾是否停在动作完成后物与人的新关系上？
 
 **`meaning_evolution_zh`** 的写作要求：
-> 顺着上面的画面，说清楚这个词怎么从身体动作一步步走到抽象用法。不要写成概念宣讲。要顺着动作、场景、遭际，把引申路径一层层说清楚。少用"不是……而是……""不仅……更……"这类生硬结构。可以引用中国诗句或典故作为联想的跳板，点到为止，不展开赏析。
+> 顺着上面的画面，说清楚这个词怎么从身体动作一步步走到抽象用法。概念化论述允许，但要顺着动作、场景、遭际把引申路径一层层说清楚。转折句式（"不是……而是……""不只是……更……"）可以使用，但必须满足转折呼应规则：A 必须在前文已经确立，不能首次出现在转折公式内部。可以引用中国诗句或典故作为联想的跳板，点到为止，不展开赏析。
 
-检查要点：是否顺着画面（而非跳开另起概念宣讲）？引申路径是否从动作→场景→遭际层层推进？是否避免了生硬转折句式？
+检查要点：是否顺着画面（而非跳开另起概念宣讲）？引申路径是否从动作→场景→遭际层层推进？转折句式是否满足呼应规则（前文已确立 A）？
 
 **`image_differentiation_zh`** 的写作要求：
 > 比较 lemma 与近义词在"根词画面"或"场所"上的差别。不要只讲用法差异，还要讲上手状态、遭际方式、物的抵抗或顺从有什么不同。语言要自然、具体，不要写成工整对仗的说明文。
@@ -74,22 +74,44 @@ Each field has a writing annotation it must follow. Judge against the annotation
 
 Flag each instance. Two or more distinct instances = hard fail (Rule 1).
 
-Formulaic contrast patterns:
-- "不是……而是……"
-- "不仅……而且/更……"
-- "这不是X，这是Y"
-- "与其说……不如说……"
+The three fields are judged with **two different strictness levels**:
 
-Filler transitions (when padding, not when necessary):
+## Tier 1 — `visual_imagery_zh` (Strict)
+
+This field must feel like a lived human scene. No formulaic writing of any kind is tolerated.
+
+Formulaic contrast patterns (absolute ban):
+- "不是……而是……"  "不仅……而且/更……"  "这不是X，这是Y"  "与其说……不如说……"
+- "但" "却" "然而" 等转折词连接的两个完整分句
+
+Filler transitions (absolute ban):
 - "此外" "因此" "同时" "某种意义上" "这意味着" "值得注意的是"
 
-Inflated words (when replacing concrete description):
+Inflated words (absolute ban):
 - "体现" "彰显" "象征" "标志着" "承载" "证明了"
 
-Template phrasing:
+Template phrasing (absolute ban):
 - Rhetorical symmetry, parallel triples, slogan-like endings
 - Sentences that all sound equally complete (no rhythm variation)
 - Over-explaining the takeaway before showing the image
+
+## Tier 2 — `meaning_evolution_zh` + `image_differentiation_zh` (Relaxed)
+
+Conceptual discussion is allowed. The only hard constraint on style is the
+**转折呼应规则**:
+
+A contrast pattern（"不是 A，而是 B" / "不只是 A，更是 B" / "与其说 A，不如说 B"）
+is allowed **only if A has been established in the preceding text**.
+If A is introduced for the first time inside the contrast formula itself, it is a Flag.
+
+Rationale: When A is already present in the preceding narrative, the contrast
+serves to tighten a distinction the reader already feels. When A appears only
+inside the formula, the writer is using the contrast structure as a cheap
+rhetorical device — the hallmark of AI-generated text.
+
+Filler transitions and inflated words: Flag only when they clearly pad a
+sentence that would stand without them. If the word is doing real structural
+work (e.g., "因此" linking two genuinely separate reasoning steps), it may pass.
 
 ---
 
