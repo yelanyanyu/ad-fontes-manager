@@ -244,7 +244,7 @@ export function useAiGenerate() {
             : item.status === 'error'
               ? 'error'
               : 'running',
-      steps: item.jobType === 'fix' ? [{ step: 'fixing', status: 'pending' }] : [],
+      steps: [],
       error: item.error,
     };
     jobs[item.jobId] = job;
@@ -261,11 +261,9 @@ export function useAiGenerate() {
     const existing = jobs[job.jobId];
     const next: JobState = {
       ...(existing || {
-        steps: job.jobType === 'fix' ? [{ step: 'fixing', status: 'pending' as const }] : [],
+        steps: [],
       }),
-      steps: job.steps?.length
-        ? job.steps
-        : existing?.steps || (job.jobType === 'fix' ? [{ step: 'fixing', status: 'pending' }] : []),
+      steps: job.steps?.length ? job.steps : existing?.steps || [],
       jobId: job.jobId,
       word: job.word,
       language,
@@ -617,7 +615,7 @@ export function useAiGenerate() {
       );
       const newJob = jobs[response.jobId];
       if (newJob) {
-        newJob.steps = [...previousSteps, { step: 'fixing', status: 'pending' }];
+        newJob.steps = [...previousSteps];
       }
 
       subscribeToJob(response.jobId);

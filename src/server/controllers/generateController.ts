@@ -361,12 +361,21 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
 
   const scores = job.result?.scores as Record<string, unknown> | undefined;
   const revisionNotes = scores?.revision_notes as string | undefined;
-  if (!revisionNotes || revisionNotes === '无需修改。') {
-    res.status(400).json({ code: 400, message: 'No revision notes to apply' });
+  const hasRevisionNotes = revisionNotes && revisionNotes !== '无需修改。';
+  const userNotes = parsed.data.notes?.trim();
+  if (!hasRevisionNotes && !userNotes) {
+    res.status(400).json({
+      code: 400,
+      message:
+        '已达满分（score=10），无需自动修复。如需继续修改，请在 Revision notes 中提供具体修改意见。',
+    });
     return;
   }
-  const userNotes = parsed.data.notes?.trim();
-  const fixNotes = userNotes ? `${revisionNotes}\n\nUser feedback:\n${userNotes}` : revisionNotes;
+  const fixNotes = userNotes
+    ? hasRevisionNotes
+      ? `${revisionNotes}\n\nUser feedback:\n${userNotes}`
+      : userNotes
+    : revisionNotes;
 
   const completedSteps = queue.getCompletedSteps(jobId);
   const previousSteps = completedSteps
