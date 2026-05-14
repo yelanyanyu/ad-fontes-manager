@@ -31,6 +31,7 @@ import { useWordStore } from '@/stores/wordStore';
 import { storeToRefs } from 'pinia';
 import { useAppStore } from '@/stores/appStore';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import WordActionMenu from '@/components/WordList/WordActionMenu.vue';
 import DeleteConfirmModal from '@/components/WordList/DeleteConfirmModal.vue';
 import BatchSyncModal from '@/components/WordList/BatchSyncModal.vue';
@@ -52,6 +53,7 @@ import {
 import { useWordEditorLoader } from '@/composables/useWordEditorLoader';
 import { useAnkiExport } from '@/composables/useAnkiExport';
 import { useBatchAnkiExport } from '@/composables/useBatchAnkiExport';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import {
   buildSelectAllMatchingDecision,
   collectAllDbMatchingRecords,
@@ -164,6 +166,11 @@ const displayedRecords = computed<WordRecord[]>(() => {
 const selectedKeys = ref<Set<string>>(new Set());
 const selectedItemsByKey = ref<Map<string, WordRecord>>(new Map());
 const selectingAllMatching = ref(false);
+const {
+  dialog: selectAllMatchingConfirmDialog,
+  requestConfirm: requestSelectAllMatchingConfirm,
+  settleConfirm: settleSelectAllMatchingConfirm,
+} = useConfirmDialog();
 
 // ----- Column visibility -----
 type ColumnKey = 'language' | 'partOfSpeech' | 'revisionCount' | 'createdAt' | 'updatedAt';
@@ -577,9 +584,11 @@ const selectAllMatching = async (): Promise<void> => {
     }
 
     if (decision.requiresConfirm) {
-      const confirmed = window.confirm(
-        `You are about to select ${decision.total} words. This exceeds 150 and may take longer to process. Continue?`
-      );
+      const confirmed = await requestSelectAllMatchingConfirm({
+        title: 'Select all matching words?',
+        message: `This will select ${decision.total} words and may take longer to process.`,
+        confirmLabel: 'Select All',
+      });
       if (!confirmed) return;
     }
 
@@ -799,6 +808,11 @@ const paginationRange = computed<Array<number | '...'>>(() => {
     class="panel table-panel"
     :class="{ 'has-batch-summary': showBatchSummaryBar }"
   >
+    <ConfirmDialog
+      v-bind="selectAllMatchingConfirmDialog"
+      @cancel="settleSelectAllMatchingConfirm(false)"
+      @confirm="settleSelectAllMatchingConfirm(true)"
+    />
     <AnkiExportModal
       :open="ankiExportOpen"
       :busy="ankiExportBusy"

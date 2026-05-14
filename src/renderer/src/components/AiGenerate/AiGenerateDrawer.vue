@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch } from 'vue';
 import { useAppStore, type LanguageCode } from '@/stores/appStore';
+import { useWordStore } from '@/stores/wordStore';
 import { AI_STATE_KEY, type ResumeStage, type StepState } from '@/composables/useAiGenerate';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import AiGenerateStagePanel from './AiGenerateStagePanel.vue';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { parseBatchJson, parseBatchText } from '@/services/batchGenerateParser';
 import { buildDisplaySteps } from './stageDisplay';
+import { prepareGeneratedYamlForSave } from '@/utils/generatedYaml';
 
 defineProps<{
   open: boolean;
@@ -16,6 +20,12 @@ const emit = defineEmits<{
 }>();
 
 const appStore = useAppStore();
+const wordStore = useWordStore();
+const {
+  dialog: saveConfirmDialog,
+  requestConfirm: requestSaveConfirm,
+  settleConfirm: settleSaveConfirm,
+} = useConfirmDialog();
 const {
   currentJob,
   isRunning,
@@ -34,6 +44,7 @@ const entryMode = ref<EntryMode>('single');
 const batchSource = ref<BatchSource>('text');
 const word = ref('');
 const fixing = ref(false);
+const saving = ref(false);
 const context = ref('');
 const notes = ref('');
 const batchText = ref('');
@@ -203,6 +214,52 @@ function fillEditor(): void {
   }
 }
 
+async function saveGeneratedYaml(): Promise<void> {
+  const job = currentJob.value;
+  if (!job?.yaml) {
+    errorMessage.value = 'No YAML to save. Use Fill Editor to repair manually or regenerate.';
+    appStore.addToast(errorMessage.value, 'error');
+    return;
+  }
+
+  const prepared = prepareGeneratedYamlForSave(job.yaml);
+  if (!prepared.ok || !prepared.yaml) {
+    errorMessage.value = `YAML format check failed: ${prepared.error}. Use Fill Editor to repair manually or regenerate.`;
+    appStore.addToast(errorMessage.value, 'error', 5000);
+    return;
+  }
+
+  saving.value = true;
+  errorMessage.value = '';
+  try {
+    const result = await wordStore.saveWord(prepared.yaml, false);
+    if (result === true) return;
+
+    if (result && typeof result === 'object' && result.status === 'conflict') {
+      const lemma = typeof result.lemma === 'string' ? result.lemma : job.word;
+      const shouldOverwrite = await requestSaveConfirm({
+        title: 'Overwrite existing word?',
+        message: `A saved entry for "${lemma}" already exists. Overwrite it with this generated result?`,
+        confirmLabel: 'Overwrite',
+        variant: 'danger',
+      });
+      if (!shouldOverwrite) {
+        appStore.addToast('Save cancelled. Existing word was not changed.', 'info');
+        return;
+      }
+      const overwriteResult = await wordStore.saveWord(prepared.yaml, true);
+      if (overwriteResult !== true) {
+        errorMessage.value = 'Overwrite failed. Use Fill Editor to repair manually or regenerate.';
+      }
+      return;
+    }
+
+    errorMessage.value = 'Save failed. Use Fill Editor to repair manually or regenerate.';
+  } finally {
+    saving.value = false;
+  }
+}
+
 function handleScoreChange(e: Event): void {
   const target = e.target as HTMLInputElement;
   const value = parseInt(target.value, 10);
@@ -234,6 +291,11 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
 
 <template>
   <aside v-show="open" class="ai-drawer" aria-label="AI Generate Drawer">
+    <ConfirmDialog
+      v-bind="saveConfirmDialog"
+      @cancel="settleSaveConfirm(false)"
+      @confirm="settleSaveConfirm(true)"
+    />
     <AiGenerateStagePanel
       :open="stagePanelOpen"
       :step="selectedStage"
@@ -445,6 +507,14 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
             @click="handleFix"
           >
             {{ fixing ? 'Improving...' : 'Improve Text' }}
+          </button>
+          <button
+            type="button"
+            class="secondary-button save-button"
+            :disabled="saving"
+            @click="saveGeneratedYaml"
+          >
+            {{ saving ? 'Saving...' : 'Save' }}
           </button>
           <button type="button" class="primary-button" @click="fillEditor">Fill Editor</button>
         </div>
