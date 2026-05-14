@@ -394,6 +394,65 @@ Response:
 }
 ```
 
+### Batch Generate
+
+```http
+POST /api/v2/generate/batch
+X-Admin-Token: <token>
+Content-Type: application/json
+
+{
+  "words": [
+    { "word": "ephemeral", "language": "en", "context": "..." },
+    { "word": "See", "language": "de", "context": "..." }
+  ]
+}
+```
+
+批量提交多个生成作业。每个 word 条目格式同 `/generate/single`。返回每个 job 的 ID 列表：
+
+```json
+{
+  "jobIds": ["uuid-1", "uuid-2"],
+  "count": 2
+}
+```
+
+### Pause Job
+
+```http
+POST /api/v2/generate/:jobId/pause
+X-Admin-Token: <token>
+```
+
+暂停正在运行的单个作业。暂停后可通过 `/queue/resume-all` 恢复。
+
+### Queue History
+
+```http
+GET /api/v2/generate/queue/history
+```
+
+获取已完成/已取消的作业历史列表（分页）。
+
+```http
+GET /api/v2/generate/queue/history/:jobId
+DELETE /api/v2/generate/queue/history/:jobId
+POST /api/v2/generate/queue/history/clear
+```
+
+查看、删除单个历史作业或清空全部历史。
+
+### Workset
+
+```http
+GET /api/v2/generate/workset/today
+POST /api/v2/generate/workset/save
+X-Admin-Token: <token>
+```
+
+获取今日工作集或保存当前生成结果到工作集。
+
 ---
 
 ## System

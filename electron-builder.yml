@@ -9,8 +9,17 @@ directories:
 npmRebuild: false
 buildDependenciesFromSource: false
 
+afterPack: scripts/after-pack.mjs
+
 files:
   - out/**/*
+  - "!out/**/*.test.js"
+  - "!out/**/*.test.js.map"
+  - "!out/**/__tests__/**"
+  - "!out/**/tests/**"
+  - "!out/**/.env*"
+  - "!out/**/config.json"
+  - "!out/**/config.json.bak"
   - package.json
 
 asarUnpack:
@@ -22,11 +31,18 @@ win:
     - target: nsis
       arch:
         - x64
+  # The custom afterPack hook embeds assets/icon.ico via resedit. Keeping
+  # electron-builder's rcedit path disabled avoids the legacy winCodeSign
+  # bundle extraction failure on Windows environments without symlink privilege.
   signAndEditExecutable: false
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  shortcutName: Ad Fontes Manager
 
 mac:
   icon: assets/icon.png

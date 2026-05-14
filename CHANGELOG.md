@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-05-15
+
+### 新增
+
+- **AI 批量生成**：新增批量输入面板，支持多词条同时提交，自动排队处理。
+- **AI 作业队列系统**：完整的任务队列引擎（JobQueue），支持并发池配置、暂停/恢复/取消、断点续传。
+- **AI 作业历史**：队列历史面板，查看已完成/已取消的生成任务，可恢复继续处理。
+- **AI 工作集**：支持将今日生成的结果批量保存，统一管理当天产物。
+- **AI 暂停/恢复**：单任务级别暂停和恢复，队列面板中可视化操作。
+- **AI 审核评分展示**：生成完成后展示审核评分（overall_score）和各字段评分详情。
+- **AI 内容修复流程**：新增 `fixing` 和 `auditing` 两个修复阶段，审核不达标可自动修复（audit-fix 流水线）。
+- **推理努力配置**：每个流水线阶段可独立配置推理努力（reasoningEffort：none ~ xhigh）。
+- **第三方 OpenAI 兼容厂商适配**：引入 `@ai-sdk/openai-compatible`，支持硅基流动、DashScope、AIHubMix 等厂商，自动处理 `/chat/completions` 端点和 `enable_thinking` 等厂商特有参数。
+- **确认弹窗组件**：`useConfirmDialog` composable 替代原生 `confirm()`，统一 UI 交互。
+- **新手引导系统**：5 步交互式引导（OnboardingTour），覆盖生成、编辑、保存、预览、导出流程，支持重放。
+- **YAML 层级面包屑**：编辑器底部显示 YAML 层级路径导航，点击可快速跳转。
+- **智能缩进**：Tab / Shift+Tab 智能调整 YAML 缩进，缩进深度标记可视化。
+- **排序模式**：词条列表支持最新添加、最早添加、A-Z、Z-A 四种排序。
+- **搜索清除 / 清空选择**：搜索框和词条列表工具栏新增一键清除功能。
+- **版本号与版权**：Settings > About 页面显示应用版本号和 Copyright，版本号从 `package.json` 读取。
+- **应用自定义图标**：Windows `.exe` 内嵌自定义图标（`assets/icon.ico`），安装包和快捷方式统一使用。
+- **Prompt 模板重构**：静态/动态分离，新增 content-fixer 和 format-fixer 模板，content-reviewer 反 AI 风格分层审查（Tier 1 严格 / Tier 2 放宽 + 转折呼应规则）。
+
+### 变更
+
+- AI 流水线从 3 段（searching → pondering → auditing）扩展为可配置 4 段（+ fixing）。
+- AI 提供商系统重构：OpenAI 官方、OpenAI 兼容厂商、Anthropic 格式三条路径独立处理。
+- Prompt 构建逻辑重构：新增 schema 文件支持，assembler 按阶段动态组装。
+- AI 工具调用重构：支持 AbortController 可中止请求，优化限流与重复任务检测。
+- 作业队列上下文处理重构：新增排序模式校验，清理冗余逻辑。
+- 批量 Anki 导出优化：统一前置准备与并行处理，后台任务非阻塞。
+- 词条列表查询简化：移除废弃的 `listAll` 方法，新增小写 lemma + language 组合索引优化查询性能。
+- UI 组件整理：清空选择按钮样式优化，侧边面板和批量生成 UI 重设计。
+- 项目文档重构：提示词、任务计划、需求文档分类整理到 `docs/task/`。
+
+### 修复
+
+- 修复批量请求污染问题：添加加载状态和请求去重。
+- 修复 AI 作业队列限流和重复任务检测逻辑。
+- 修复词条列表排序模式切换后状态不一致的问题。
+- 修复 Electron 开发模式 API 代理配置。
+- 修复 `@ai-sdk/openai` v3 默认 Responses API 导致的硅基流动 404 错误。
+- 修复 WordEditor 多处 UI 细节（状态指示器、滚动条主题适配等）。
+
+### 文档
+
+- 新增 `docs/JOB_QUEUE.md`：AI 作业队列系统完整文档。
+- 更新 `docs/DEVELOPMENT.md`：补充 AI 流水线架构、YAML 编辑器、批量生成。
+- 更新 `docs/API.md`：新增批量生成、暂停/恢复、作业历史、工作集等端点。
+- 更新 `docs/CONFIGURATION.md`：补全 AI 提供商预设字段和端点类型说明。
+- 更新 `docs/AGENTS.md`：修正过时路径，补充新系统引用。
+- 更新 `README.md`：新增批量生成、作业队列、版本号等功能说明。
+- README 新增 Logo 展示和应用截图。
+
+### 移除
+
+- 移除 FontAwesome 依赖，全部使用内联 SVG 图标。
+- 移除废弃的 6 表 PostgreSQL schema（v1 API），统一使用 `words_v2` 单表 JSONB 架构。
+- 移除 `listAll` 方法和不再使用的配置模板。
+
 ## [1.8.1] - 2026-05-04
 
 ### 新增

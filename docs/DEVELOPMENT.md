@@ -120,32 +120,36 @@ YAML 解析 (js-yaml)
     ↓
 POST /api/v2/generate/single → 创建 PipelineJob
     ↓
-SequentialRunner 执行 3 阶段流水线：
-  1. searching (fast model)  — 在线词源搜索 + 结构化研究
-  2. pondering (expert model) — 创意富化 + 同源词 + 例句
-  3. auditing (expert model)  — 质量评分 + 修改建议
+SequentialRunner 执行 4 阶段流水线：
+  1. searching (fast model)   — 在线词源搜索 + 结构化研究
+  2. pondering (balanced model) — 创意富化 + 同源词 + 例句
+  3. auditing (expert model)   — 质量评分 + 修改建议
+  4. fixing (expert model)     — 根据审核意见自动修复（可选）
     ↓
-SSE 实时推送进度 (step:start / step:tokens / step:complete / pipeline:complete)
+SSE 实时推送进度 (step:start / step:tokens / step:reasoning / step:toolCall / step:complete / pipeline:complete)
     ↓
 前端接收 YAML → 填入编辑器 → 用户审查/修改 → 保存
 ```
 
 ### AI 流水线架构
 
-3 阶段流水线配置于 `src/server/services/ai/definitions/`（英语/德语各一份）。`SequentialRunner`（`pipe.ts`）按序执行各阶段，每阶段：
+4 阶段流水线配置于 `src/server/services/ai/definitions/`（英语/德语/fix/audit-fix 各一份）。`SequentialRunner`（`pipe.ts`）按序执行各阶段，每阶段：
 
 1. 通过 `modelResolver` 解析模型配置（`fast`/`balanced`/`expert` 对应实际模型）
-2. 通过 `prompts/loader.ts` 加载 Prompt 模板并注入变量
-3. 通过 AI SDK `streamText()` 调用 LLM，传递 tools 和 reasoning 配置
-4. 通过 SSE 向前端实时推送 tokens、reasoning、tool calls
-5. 解析 LLM 输出（`agents/` 中的 parser），合并到 `PipelineContext`
-6. 调用 `checkStopLoss()` 检查输出是否为空（止损机制）
+2. 通过 `endpointResolver` 确定端点类型（OpenAI / Anthropic）
+3. 通过 `prompts/loader.ts` 加载 Prompt 模板并注入变量
+4. 通过 AI SDK `streamText()` 调用 LLM，传递 tools 和 reasoning 配置
+5. 通过 SSE 向前端实时推送 tokens、reasoning、tool calls
+6. 解析 LLM 输出（`agents/` 中的 parser），合并到 `PipelineContext`
+7. 调用 `checkStopLoss()` 检查输出是否为空（止损机制）
+
+**多厂商 AI 支持**：OpenAI 官方供应商使用 `@ai-sdk/openai`，第三方 OpenAI 兼容厂商（硅基流动、DashScope 等）使用 `@ai-sdk/openai-compatible`，Anthropic 格式模型使用 `@ai-sdk/anthropic`。`endpointResolver` 和 `createProvider` 自动选择正确的 SDK 包和端点。
 
 **Tool 集成**：searching 阶段可调用 `searchEtymology` 和 `fetchPage` 两个 tool，tool call/results 通过 SSE 实时广播给前端。
 
 **断点续传**：失败的 job 可通过 `POST /:jobId/resume` 从任意阶段重新开始，保留之前阶段的输出。`PipelineContext` 携带全部中间状态。
 
-**Auto Fix**：审核阶段给出 `revision_notes` 后，`POST /:jobId/fix` 调用 `content-fixer` prompt 修复 YAML，修复过程同样通过 SSE 流式返回。
+**Auto Fix**：审核阶段给出 `revision_notes` 后，`POST /:jobId/fix` 调用 `content-fixer` prompt 修复 YAML，重新走 fixing → auditing 两个阶段，结果通过 SSE 流式返回。
 
 ## 开发规范
 

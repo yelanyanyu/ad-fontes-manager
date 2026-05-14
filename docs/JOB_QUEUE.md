@@ -16,9 +16,8 @@
 |------|------|
 | **Job（作业）** | 一个待执行的 AI 任务，包含类型、优先级、状态、输入参数 |
 | **Queue（队列）** | SQLite `job_queue` 表中按优先级和创建时间排序的待处理作业集合 |
-| **Pipeline（流水线）** | 多阶段 AI 处理流程，如 `searching → pondering → auditing` |
-| **Concurrency Pool（并发池）** | `maxConcurrency` 限制的并发执行槽位 |
-| **Circuit Breaker（断路器）** | 同一 Provider 连续失败 3 次后自动暂停调度，防止雪崩 |
+| **Pipeline（流水线）** | 多阶段 AI 处理流程，如 `searching → pondering → auditing → fixing` |
+| **Concurrency Pool（并发池）** | `maxConcurrency` 限制的并发执行槽位（默认 1，可在设置中配置） |
 | **SSE（Server-Sent Events）** | 作业进度实时推送协议 |
 
 ### 作业状态机
@@ -67,8 +66,8 @@
 
 | 类型 | 流水线阶段 | 说明 |
 |------|-----------|------|
-| `generate` | searching → pondering → auditing | 从零生成词条 YAML |
-| `fix` | fixing | 根据审核修改建议修复单个问题 |
+| `generate` | searching → pondering → auditing → fixing | 从零生成词条 YAML |
+| `fix` | fixing → auditing | 根据审核修改建议修复并重新评分 |
 | `audit-fix` | auditing → fixing | 审核已有词条并自动修复低分字段 |
 
 ---
@@ -83,6 +82,8 @@
 | GET | `/api/v2/generate/:jobId/stream` | SSE 进度流 |
 | POST | `/api/v2/generate/:jobId/cancel` | 取消单个作业 |
 | POST | `/api/v2/generate/:jobId/resume` | 从断点恢复（创建新作业） |
+| POST | `/api/v2/generate/batch` | 批量提交多个生成作业 |
+| POST | `/api/v2/generate/:jobId/pause` | 暂停单个作业 |
 | POST | `/api/v2/generate/:jobId/fix` | 同步修复（返回 YAML） |
 
 ### 队列管理
@@ -93,6 +94,12 @@
 | POST | `/api/v2/generate/queue/cancel-all` | 中断并取消所有活跃作业 |
 | POST | `/api/v2/generate/queue/pause-all` | 暂停整个队列（运行中的安全中断→暂停） |
 | POST | `/api/v2/generate/queue/resume-all` | 恢复所有暂停作业 |
+| GET | `/api/v2/generate/queue/history` | 作业历史列表 |
+| GET | `/api/v2/generate/queue/history/:jobId` | 单个历史作业详情 |
+| DELETE | `/api/v2/generate/queue/history/:jobId` | 删除单个历史作业 |
+| POST | `/api/v2/generate/queue/history/clear` | 清除所有历史作业 |
+| GET | `/api/v2/generate/workset/today` | 获取今日工作集 |
+| POST | `/api/v2/generate/workset/save` | 保存工作集 |
 
 ---
 
@@ -116,6 +123,7 @@
 | `provider_id` | TEXT | AI Provider 标识（用于断路器） |
 | `result_yaml` | TEXT | 生成的 YAML 输出 |
 | `result_scores` | TEXT | JSON 格式的评分结果 |
+| `progress_events` | TEXT | JSON 格式的进度事件（用于断点续传） |
 | `error` | TEXT | 错误信息 |
 | `retry_count` | INTEGER | 重试次数 |
 | `max_retries` | INTEGER | 最大重试次数（默认 2） |
