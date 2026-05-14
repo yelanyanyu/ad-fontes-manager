@@ -781,6 +781,92 @@ void describe('SequentialRunner', () => {
     );
   });
 
+  void it('passes SiliconFlow thinking options under the silicon provider key', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'silicon',
+              name: 'SiliconFlow',
+              type: 'openai',
+              baseUrl: 'https://api.siliconflow.cn/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'deepseek-ai/DeepSeek-V3.2', name: 'DeepSeek-V3.2' }],
+            },
+          ],
+          stages: {
+            expert: {
+              provider: 'silicon',
+              model: 'deepseek-ai/DeepSeek-V3.2',
+              reasoningEffort: 'high',
+            },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    let capturedProviderOptions: unknown;
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: (options: Record<string, unknown>) => {
+        capturedProviderOptions = options.providerOptions;
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: '{"overall_score":9}' };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      await new SequentialRunner().run({
+        definition: {
+          id: 'single-stage',
+          language: 'en',
+          stages: [
+            {
+              id: 'auditing',
+              description: 'Auditing',
+              type: 'llm',
+              modelKey: 'expert',
+              systemPromptFile: 'content-reviewer.md',
+              outputParser: (text: string) => ({ scores: JSON.parse(text) }),
+            },
+          ],
+        },
+        input: { word: 'amuse', language: 'en' },
+        previousContext: { researchYaml: 'yield:\n  lemma: amuse\n  language: en\n' },
+        onProgress: () => undefined,
+      });
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    assert.deepEqual(capturedProviderOptions, {
+      silicon: {
+        enable_thinking: true,
+        thinking_budget: 16000,
+      },
+    });
+  });
+
   void it('uses fixing fullYaml as the final YAML instead of the pre-fix merged YAML', async () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),

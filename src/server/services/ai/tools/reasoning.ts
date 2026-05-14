@@ -7,7 +7,8 @@ interface ReasoningResult {
 
 export function buildReasoningParams(
   format: 'openai' | 'anthropic',
-  effort: ReasoningEffort = 'auto'
+  effort: ReasoningEffort = 'auto',
+  provider?: string
 ): ReasoningResult {
   if (effort === 'auto' || effort === 'none') {
     return { providerOptions: {}, metadata: { effort, enabled: false } };
@@ -25,9 +26,25 @@ export function buildReasoningParams(
   }
 
   const openAIEffort = effort === 'xhigh' ? 'high' : effort;
+  const providerKey = provider || 'openai';
+
+  // SiliconFlow DeepSeek thinking mode is controlled by provider-specific
+  // Chat Completions fields, not OpenAI's reasoning_effort field.
+  if (provider === 'silicon') {
+    return {
+      providerOptions: {
+        [providerKey]: {
+          enable_thinking: true,
+          thinking_budget: 16000,
+        } as unknown as Record<string, string | number | boolean | null>,
+      },
+      metadata: { effort, enabled: true },
+    };
+  }
+
   return {
     providerOptions: {
-      openai: { reasoningEffort: openAIEffort } as unknown as Record<
+      [providerKey]: { reasoningEffort: openAIEffort } as unknown as Record<
         string,
         string | number | boolean | null
       >,

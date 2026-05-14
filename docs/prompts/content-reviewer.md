@@ -119,7 +119,7 @@ Return only valid JSON, no markdown fences:
       "strengths": ["Specific strength"]
     }
   },
-  "overall_assessment": "中文总结，1-3句。必须写明：①各字段得分 ②有无触及AI味硬失败/AI味几处 ③有无不遵循字段要求/扣分 ④有无场景生硬/扣分 ⑤最终总分。",
+  "overall_assessment": "中文总结，1-3句。必须写明：1.各字段得分 2.有无触及AI味硬失败/AI味几处 3.有无不遵循字段要求/扣分 4.有无场景生硬/扣分 5.最终总分。",
   "revision_notes": "可直接放入 notes 框的中文修改意见。针对最需要改的 1-2 个点写具体建议，格式：对 [字段名] 的修改意见：[具体问题 + 怎么改]。语言简洁，像人在批注，不写套话。如果无需修改则写 '无需修改。'"
 }
 

@@ -5,6 +5,8 @@ import type { AssembledPrompt } from './prompts/assembler';
 const yaml = require('js-yaml') as typeof import('js-yaml');
 const { streamText, stepCountIs } = require('ai') as typeof import('ai');
 const { createOpenAI } = require('@ai-sdk/openai') as typeof import('@ai-sdk/openai');
+const { createOpenAICompatible } =
+  require('@ai-sdk/openai-compatible') as typeof import('@ai-sdk/openai-compatible');
 const { createAnthropic } = require('@ai-sdk/anthropic') as typeof import('@ai-sdk/anthropic');
 const { loggers } = require('../../utils/logger') as {
   loggers: {
@@ -181,7 +183,18 @@ function buildMockReview(): string {
 
 function createProvider(model: ReturnType<typeof resolveModel>) {
   if (model.format === 'openai') {
-    return createOpenAI({ apiKey: model.apiKey, baseURL: model.baseUrl }).chat(model.modelId);
+    const isOfficialOpenAI = model.baseUrl.includes('api.openai.com');
+    if (isOfficialOpenAI) {
+      return createOpenAI({ apiKey: model.apiKey, baseURL: model.baseUrl }).chat(model.modelId);
+    }
+
+    // Third-party OpenAI-compatible providers need Chat Completions semantics
+    // and their own providerOptions key, which @ai-sdk/openai-compatible supplies.
+    return createOpenAICompatible({
+      name: model.provider,
+      apiKey: model.apiKey,
+      baseURL: model.baseUrl,
+    }).chatModel(model.modelId);
   }
   if (model.format === 'anthropic') {
     return createAnthropic({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.modelId);
@@ -266,7 +279,7 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
   let lastError: unknown;
   const toolStartTimes = new Map<string, number>();
   const tools = resolveStageTools(stage, runLogger);
-  const reasoningParams = buildReasoningParams(model.format, model.reasoningEffort);
+  const reasoningParams = buildReasoningParams(model.format, model.reasoningEffort, model.provider);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const timeoutMs = STAGE_TIMEOUT_MS[stage.id] || 60_000;

@@ -40,6 +40,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.75",
     "@ai-sdk/openai": "^3.0.62",
+    "@ai-sdk/openai-compatible": "^2.0.47",
     "@fortawesome/fontawesome-free": "^7.1.0",
     "ai": "^6.0.175",
     "anki-apkg-export": "^4.0.3",
