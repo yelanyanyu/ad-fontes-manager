@@ -49,6 +49,26 @@ describe('aiConfigDraft', () => {
     expect(merged.stages.fast).toEqual({ provider: 'deepseek', model: 'deepseek-chat' });
   });
 
+  it('keeps a changed draft provider over an older saved complete stage', () => {
+    const draft = baseConfig();
+    draft.providers.push({
+      id: 'openrouter',
+      name: 'OpenRouter',
+      type: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: '',
+      models: [{ id: 'openrouter-model', name: 'openrouter-model' }],
+    });
+    draft.stages.expert = { provider: 'openrouter', model: '' };
+
+    const saved = baseConfig();
+    saved.stages.expert = { provider: 'deepseek', model: 'deepseek-chat' };
+
+    const merged = mergeSavedAIConfigWithDraft(saved, draft);
+
+    expect(merged.stages.expert).toEqual({ provider: 'openrouter', model: '' });
+  });
+
   it('keeps a draft model endpoint override when autosave response omits it', () => {
     const draft = baseConfig();
     draft.providers[0].models[0].endpointType = 'openai';

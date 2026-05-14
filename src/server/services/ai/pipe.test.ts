@@ -617,6 +617,170 @@ void describe('SequentialRunner', () => {
     );
   });
 
+  void it('passes malformed audit output into audit-fix scoring and revision notes', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-expert', name: 'model-expert' }],
+            },
+          ],
+          stages: {
+            expert: { provider: 'realish', model: 'model-expert', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const priorYaml = 'yield:\n  lemma: amuse\n  language: en\n';
+    const fixedYaml = 'yield:\n  lemma: amuse\n  language: en\nfixed: true\n';
+    const malformedAudit = `{
+  "overall_score": 8,
+  "overall_assessment": "visual_imagery_zh 扣除2分。",
+  "revision_notes": "对 visual_imagery_zh 的修改意见：删掉「而是」转折句式。
+}`;
+    const stageOutputs = [malformedAudit, fixedYaml];
+    const calls: Array<Record<string, unknown>> = [];
+
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: (options: Record<string, unknown>) => {
+        const text = stageOutputs[calls.length] || '';
+        calls.push(options);
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    delete require.cache[require.resolve('./definitions/audit-fix')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const { auditFixPipeline } =
+      require('./definitions/audit-fix') as typeof import('./definitions/audit-fix');
+
+    try {
+      const result = await new SequentialRunner().run({
+        definition: auditFixPipeline,
+        input: { word: 'amuse', language: 'en' },
+        previousContext: { researchYaml: priorYaml },
+        onProgress: () => undefined,
+      });
+
+      assert.equal(result.yaml, fixedYaml);
+      assert.equal(result.scores.overall_score, 8);
+      assert.match(String(calls[1].prompt), /lemma: amuse/);
+      assert.match(String(calls[1].prompt), /删掉「而是」转折句式/);
+      assert.doesNotMatch(String(calls[1].prompt), /overall_score/);
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+  });
+
+  void it('creates OpenAI chat model (not responses) to stay compatible with third-party providers', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://third-party.invalid',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-fast', name: 'model-fast' }],
+            },
+          ],
+          stages: {
+            fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    let capturedModel: { provider?: string; modelId?: string } | null = null;
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: (options: Record<string, unknown>) => {
+        capturedModel = options.model as { provider?: string; modelId?: string };
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: 'yield:\n  lemma: crate\n  language: en\n' };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      await new SequentialRunner().run({
+        definition: {
+          id: 'single-stage',
+          language: 'en',
+          stages: [
+            {
+              id: 'searching',
+              description: 'Searching',
+              type: 'llm',
+              modelKey: 'fast',
+              systemPromptFile: 'english-structural.md',
+              outputParser: (text: string) => ({ researchYaml: text }),
+            },
+          ],
+        },
+        input: { word: 'crate', language: 'en' },
+        onProgress: () => undefined,
+      });
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    assert.ok(capturedModel, 'Expected streamText to be called with a model');
+    const model = capturedModel as { provider?: string; modelId?: string };
+    assert.equal(model.modelId, 'model-fast');
+    assert.ok(
+      model.provider?.endsWith('.chat'),
+      `Expected provider to end with '.chat' (Chat Completions API), got '${model.provider}'. ` +
+        '@ai-sdk/openai v3 defaults to Responses API which third-party providers (SiliconFlow, etc.) do not support.'
+    );
+  });
+
   void it('uses fixing fullYaml as the final YAML instead of the pre-fix merged YAML', async () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),

@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { cpSync } from 'node:fs';
 
 const target = process.argv[2];
 const supportedTargets = new Set(['win', 'mac']);
@@ -21,6 +22,7 @@ let restoreStatus = 0;
 try {
   run('electron-vite', ['build']);
   run('npm', ['run', 'build:desktop:server']);
+  cpSync('docs/prompts', 'out/server/prompts', { recursive: true });
   run('npm', ['run', 'native:electron']);
   run('electron-builder', [`--${target}`]);
 } catch (error) {

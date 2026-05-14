@@ -213,9 +213,9 @@ const stageLabel = (stageKey: StageKey): string =>
 
 const stageDescription = (stageKey: StageKey): string =>
   ({
-    fast: '轻量快速模型。用于 Pass 1（搜索生成）和 Fixer（格式修复）阶段，速度快、成本低。',
-    balanced: '均衡质量模型。用于 Pass 2（深度生成）和 Regenerator（字段重生成）阶段，平衡速度与质量。',
-    expert: '最强推理模型。用于 Reviewer（内容审核评分）阶段，需要最高质量的三字段评分（1-10 分制）。',
+    fast: '轻量快速模型。用于 Searching（结构词源检索）阶段，含工具调用，速度快、成本低。',
+    balanced: '均衡质量模型。用于 Fixing（内容修复 / 格式修复）阶段，基于修改意见编辑已有字段，平衡速度与质量。',
+    expert: '最强推理模型。用于 Pondering（创意字段生成）和 Auditing（内容审核评分）阶段，需要最高质量的写作和评分。',
   })[stageKey];
 
 const getProviderModels = (providerId: string): AIProviderMasked['models'] =>
@@ -248,7 +248,7 @@ const getStage = (stageKey: StageKey): AIStageConfig => {
 const updateStageProvider = (stageKey: StageKey, providerId: string): void => {
   const stage = getStage(stageKey);
   stage.provider = providerId;
-  stage.model = '';
+  stage.model = getProviderModels(providerId)[0]?.id || '';
   triggerAutoSave();
 };
 

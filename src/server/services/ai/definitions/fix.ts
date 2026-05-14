@@ -12,7 +12,7 @@ export const fixPipeline: PipelineDefinition = {
       id: 'fixing',
       description: 'Applying revision notes to fix low-scoring YAML fields',
       type: 'llm',
-      modelKey: 'expert',
+      modelKey: 'balanced',
       systemPromptFile: 'content-fixer.md',
       outputParser: (text: string) => ({ fullYaml: text }),
     },

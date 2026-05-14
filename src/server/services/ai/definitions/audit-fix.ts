@@ -1,5 +1,9 @@
 import type { PipelineDefinition } from '../types';
 
+const { parseReviewOutput } = require('../agents/reviewer') as {
+  parseReviewOutput: (text: string) => Record<string, unknown>;
+};
+
 export const auditFixPipeline: PipelineDefinition = {
   id: 'audit-fix',
   language: '*',
@@ -10,12 +14,13 @@ export const auditFixPipeline: PipelineDefinition = {
       type: 'llm',
       modelKey: 'expert',
       systemPromptFile: 'content-reviewer.md',
+      outputParser: parseReviewOutput,
     },
     {
       id: 'fixing',
       description: 'Applying revision notes to fix low-scoring YAML fields',
       type: 'llm',
-      modelKey: 'expert',
+      modelKey: 'balanced',
       systemPromptFile: 'content-fixer.md',
       outputParser: (text: string) => ({ fullYaml: text }),
     },

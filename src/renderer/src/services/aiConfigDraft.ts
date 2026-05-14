@@ -6,6 +6,13 @@ const isCompleteStage = (stage: AIStageConfig | undefined): boolean =>
 const isDraftOnlyStage = (stage: AIStageConfig | undefined): boolean =>
   Boolean(stage?.provider.trim()) && !stage?.model.trim();
 
+const shouldKeepDraftOnlyStage = (
+  savedStage: AIStageConfig | undefined,
+  draftStage: AIStageConfig | undefined
+): boolean =>
+  isDraftOnlyStage(draftStage) &&
+  (!isCompleteStage(savedStage) || savedStage?.provider !== draftStage?.provider);
+
 export const mergeSavedAIConfigWithDraft = (
   saved: AIConfigMasked,
   draft: AIConfigMasked
@@ -28,6 +35,10 @@ export const mergeSavedAIConfigWithDraft = (
 
   for (const [key, draftStage] of Object.entries(draft.stages || {})) {
     const stageKey = key as keyof AIConfigMasked['stages'];
+    if (shouldKeepDraftOnlyStage(stages[stageKey], draftStage)) {
+      stages[stageKey] = draftStage;
+      continue;
+    }
     if (isCompleteStage(stages[stageKey])) continue;
     if (isDraftOnlyStage(draftStage)) {
       stages[stageKey] = draftStage;

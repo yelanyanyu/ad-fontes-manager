@@ -181,7 +181,7 @@ function buildMockReview(): string {
 
 function createProvider(model: ReturnType<typeof resolveModel>) {
   if (model.format === 'openai') {
-    return createOpenAI({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.modelId);
+    return createOpenAI({ apiKey: model.apiKey, baseURL: model.baseUrl }).chat(model.modelId);
   }
   if (model.format === 'anthropic') {
     return createAnthropic({ apiKey: model.apiKey, baseURL: model.baseUrl })(model.modelId);

@@ -1,7 +1,11 @@
 const fs = require('fs') as typeof import('fs');
 const path = require('path') as typeof import('path');
 
-const promptsDir = path.resolve(process.cwd(), 'docs', 'prompts');
+// 开发环境 cwd 为项目根目录，docs/prompts 存在；生产 ASAR 内回退到 __dirname
+const cwdPromptsDir = path.resolve(process.cwd(), 'docs', 'prompts');
+const promptsDir = fs.existsSync(cwdPromptsDir)
+  ? cwdPromptsDir
+  : path.resolve(__dirname, '..', '..', '..', 'prompts');
 const schemasDir = path.join(promptsDir, 'schemas');
 const templateCache = new Map<string, string>();
 
