@@ -313,7 +313,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
     </header>
 
     <div class="drawer-body">
-      <section class="mode-tabs" aria-label="AI Generate mode">
+      <section class="mode-tabs" aria-label="AI Generate mode" data-tour="ai-generate-mode">
         <button
           type="button"
           :class="{ active: entryMode === 'single' }"
@@ -379,7 +379,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
           </label>
         </section>
 
-        <div class="action-row">
+        <div class="action-row" data-tour="ai-generate-submit">
           <button type="button" class="primary-button" :disabled="!canStart" @click="handleStart">
             Generate
           </button>
@@ -441,7 +441,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
         {{ errorMessage || currentJob?.error }}
       </p>
 
-      <section v-if="currentJob" class="progress-section">
+      <section v-if="currentJob" class="progress-section" data-tour="ai-generate-progress">
         <div class="progress-head">
           <div class="job-title">
             <strong>{{ currentJob.word }}</strong>
@@ -488,7 +488,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
       </section>
 
       <section v-if="isComplete" class="result-section">
-        <div class="score-line">
+        <div class="score-line" data-tour="ai-generate-score">
           <span>Review score</span>
           <input
             type="number"
@@ -503,6 +503,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
           <button
             type="button"
             class="secondary-button fix-button"
+            data-tour="ai-generate-improve"
             :disabled="fixing"
             @click="handleFix"
           >
@@ -511,12 +512,20 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
           <button
             type="button"
             class="secondary-button save-button"
+            data-tour="ai-generate-save"
             :disabled="saving"
             @click="saveGeneratedYaml"
           >
             {{ saving ? 'Saving...' : 'Save' }}
           </button>
-          <button type="button" class="primary-button" @click="fillEditor">Fill Editor</button>
+          <button
+            type="button"
+            class="primary-button"
+            data-tour="ai-generate-fill-editor"
+            @click="fillEditor"
+          >
+            Fill Editor
+          </button>
         </div>
       </section>
     </div>

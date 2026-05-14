@@ -238,7 +238,7 @@ async function handleClearHistory(): Promise<void> {
 </script>
 
 <template>
-  <div class="queue-bar" :class="{ expanded }">
+  <div class="queue-bar" :class="{ expanded }" data-tour="ai-generate-queue">
     <div class="bar-summary" @click="toggleExpand">
       <span class="bar-label">Queue</span>
       <span v-if="total === 0" class="bar-empty">empty</span>
@@ -385,7 +385,7 @@ async function handleClearHistory(): Promise<void> {
             v-for="job in queueHistory"
             :key="job.jobId"
             class="bar-row history-row"
-            :class="`q-${job.status}`"
+            :class="{ selected: job.jobId === selectedJobId, ['q-' + job.status]: true }"
             @click="handleHistorySelect(job)"
           >
             <span class="q-dot" :class="job.status" />
@@ -482,7 +482,7 @@ async function handleClearHistory(): Promise<void> {
             v-for="job in todayWorkset"
             :key="job.jobId"
             class="bar-row workset-row"
-            :class="`q-${job.status}`"
+            :class="{ selected: job.jobId === selectedJobId, ['q-' + job.status]: true }"
             @click="handleHistorySelect(job)"
           >
             <span class="q-dot" :class="job.status" />
@@ -671,6 +671,11 @@ async function handleClearHistory(): Promise<void> {
 }
 
 .bar-row.selected {
+  background: var(--green-soft, #e8f5e9);
+  box-shadow: inset 3px 0 0 var(--green);
+}
+
+.bar-row.selected:hover {
   background: var(--green-soft, #e8f5e9);
 }
 

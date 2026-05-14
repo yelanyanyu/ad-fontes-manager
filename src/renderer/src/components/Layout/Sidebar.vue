@@ -60,6 +60,7 @@ function isActive(item: (typeof navItems)[0]): boolean {
     <RouterLink
       to="/settings"
       title="Settings"
+      data-tour="settings-entry"
       :class="['nav-item', { active: route.path === '/settings' }]"
     >
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">

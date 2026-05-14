@@ -1,6 +1,6 @@
 appId: com.adfontes.manager
 productName: Ad Fontes Manager
-copyright: AGPL-3.0-only
+copyright: Copyright © 2026 yelanyanyu(Github)
 
 directories:
   buildResources: assets
@@ -17,7 +17,7 @@ asarUnpack:
   - "**/*.node"
 
 win:
-  icon: assets/icon.png
+  icon: assets/icon.ico
   target:
     - target: nsis
       arch:

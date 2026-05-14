@@ -163,6 +163,22 @@ function registerIpcHandlers(): void {
     if (result.canceled) return null;
     return result.filePaths[0];
   });
+
+  ipcMain.handle('get-app-version', () => {
+    const pkgPath = path.join(__dirname, '..', '..', 'package.json');
+    let version = '0.0.0';
+    try {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8')) as { version?: string };
+      version = pkg.version || version;
+    } catch {
+      // Return the fallback version.
+    }
+    const year = new Date().getFullYear();
+    return {
+      version,
+      copyright: `Copyright © ${year} yelanyanyu(Github)`,
+    };
+  });
 }
 
 async function createWindow(): Promise<void> {

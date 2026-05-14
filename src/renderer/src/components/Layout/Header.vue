@@ -56,7 +56,13 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
     </div>
 
     <div class="top-actions">
-      <button class="ai-generate-btn" type="button" title="AI Generate" @click="openAiGenerate">
+      <button
+        class="ai-generate-btn"
+        type="button"
+        title="AI Generate"
+        data-tour="ai-generate-entry"
+        @click="openAiGenerate"
+      >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
           <path d="M12 3l1.7 5.1L19 10l-5.3 1.9L12 17l-1.7-5.1L5 10l5.3-1.9L12 3z" />
           <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15z" />

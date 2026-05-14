@@ -1,5 +1,6 @@
 export const ONBOARDING_COMPLETE_KEY = 'onboarding_complete';
 export const ONBOARDING_REPLAY_EVENT = 'ad-fontes:onboarding-replay';
+export const ONBOARDING_NAVIGATE_EVENT = 'ad-fontes:onboarding-navigate';
 
 export function isOnboardingComplete(): boolean {
   try {

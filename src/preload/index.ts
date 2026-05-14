@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       message: string;
     }>,
   selectDirectory: () => ipcRenderer.invoke('select-directory') as Promise<string | null>,
+  getAppVersion: () =>
+    ipcRenderer.invoke('get-app-version') as Promise<{ version: string; copyright: string }>,
 });

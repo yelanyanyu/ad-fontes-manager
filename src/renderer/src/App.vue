@@ -8,6 +8,7 @@ import { pingAnkiConnect } from '@/services/ankiConnectService';
 import { hasStoredAnkiExportOptions } from '@/services/ankiExportOptionsStore';
 import { listStoredFieldMappingModelNames } from '@/services/ankiFieldMappingStore';
 import {
+  ONBOARDING_NAVIGATE_EVENT,
   ONBOARDING_REPLAY_EVENT,
   isOnboardingComplete,
 } from '@/components/Onboarding/onboardingState';
@@ -29,12 +30,19 @@ const replayTour = (event: Event): void => {
   });
 };
 
+const navigateForTour = (event: Event): void => {
+  const targetPath = (event as CustomEvent<{ targetPath?: string }>).detail?.targetPath;
+  if (!targetPath) return;
+  void router.push(targetPath);
+};
+
 onMounted(async () => {
   const startTourIfNeeded = (): void => {
     window.setTimeout(() => startOnboardingTour(), 350);
   };
 
   window.addEventListener(ONBOARDING_REPLAY_EVENT, replayTour);
+  window.addEventListener(ONBOARDING_NAVIGATE_EVENT, navigateForTour);
   if (!isOnboardingComplete()) {
     startTourIfNeeded();
   }
@@ -52,7 +60,10 @@ onMounted(async () => {
   }
 });
 
-onUnmounted(() => window.removeEventListener(ONBOARDING_REPLAY_EVENT, replayTour));
+onUnmounted(() => {
+  window.removeEventListener(ONBOARDING_REPLAY_EVENT, replayTour);
+  window.removeEventListener(ONBOARDING_NAVIGATE_EVENT, navigateForTour);
+});
 </script>
 
 <template>

@@ -163,6 +163,26 @@ router.get(
   })
 );
 
+router.get(
+  '/version',
+  asyncHandler(async (_req: Request, res: Response) => {
+    let version = '0.0.0';
+    try {
+      const pkg = require('../../../package.json') as {
+        version?: string;
+      };
+      version = pkg.version || version;
+    } catch {
+      // Return the fallback version.
+    }
+    const year = new Date().getFullYear();
+    res.json({
+      version,
+      copyright: `Copyright © ${year} yelanyanyu(Github)`,
+    });
+  })
+);
+
 router.post(
   '/anki/connect',
   asyncHandler(async (req: Request, res: Response) => {

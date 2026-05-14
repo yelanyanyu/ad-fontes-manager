@@ -39,6 +39,8 @@ const activeApiSection = ref<ApiSection>('providers');
 const ankiStatus = ref<AnkiStatus>('disconnected');
 const isElectron = computed(() => Boolean(window.electronAPI));
 const dataDir = ref('');
+const appVersion = ref('');
+const appCopyright = ref('');
 const dataDirStatus = ref('');
 const ankiConfig = ref<StoredAnkiExportOptionsSummary>(getStoredAnkiExportOptionsSummary());
 const ankiMappingModels = ref<string[]>([]);
@@ -71,6 +73,7 @@ const newModelEndpointType = ref<'' | AIProviderMasked['type']>('');
 const testModelId = ref('');
 
 const stageKeys: StageKey[] = ['fast', 'balanced', 'expert'];
+const dataDirDisplay = computed(() => dataDir.value || (isElectron.value ? 'Default' : '服务器默认数据库'));
 const reasoningEffortOptions: Array<{ value: ReasoningEffort; label: string }> = [
   { value: 'auto', label: 'Auto' },
   { value: 'none', label: 'None' },
@@ -588,6 +591,25 @@ const testAnkiConnection = async (notify = true): Promise<void> => {
   }
 };
 
+const loadAppVersion = async (): Promise<void> => {
+  const fallback = { version: '0.0.0', copyright: '' };
+  try {
+    if (window.electronAPI) {
+      const info = await window.electronAPI.getAppVersion();
+      appVersion.value = info.version;
+      appCopyright.value = info.copyright;
+    } else {
+      const res = await fetch('/api/version');
+      const info = (await res.json()) as { version?: string; copyright?: string };
+      appVersion.value = info.version || fallback.version;
+      appCopyright.value = info.copyright || fallback.copyright;
+    }
+  } catch {
+    appVersion.value = fallback.version;
+    appCopyright.value = fallback.copyright;
+  }
+};
+
 const loadDataDir = async (): Promise<void> => {
   if (!window.electronAPI) return;
   dataDir.value = await window.electronAPI.getDataDir();
@@ -602,11 +624,11 @@ const selectAndSetDataDir = async (): Promise<void> => {
     const result = await window.electronAPI.setDataDir(chosenPath);
     dataDir.value = chosenPath;
     dataDirStatus.value = result.message;
-    appStore.addToast('Data directory updated', 'success');
+    appStore.addToast('数据目录已更新', 'success');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     dataDirStatus.value = message;
-    appStore.addToast('Failed to update data directory', 'error');
+    appStore.addToast('数据目录更新失败', 'error');
   }
 };
 
@@ -620,6 +642,7 @@ onMounted(() => {
   void loadAIConfig();
   void testAnkiConnection(false);
   void loadDataDir();
+  void loadAppVersion();
 });
 </script>
 
@@ -650,6 +673,7 @@ onMounted(() => {
           <button
             type="button"
             class="settings-nav-item"
+            data-tour="settings-api-tab"
             :class="{ active: activeSettingsPage === 'api' }"
             @click="activeSettingsPage = 'api'"
           >
@@ -661,6 +685,7 @@ onMounted(() => {
             <button
               type="button"
               class="api-section-nav-item"
+              data-tour="settings-api-providers-nav"
               :class="{ active: activeApiSection === 'providers' }"
               @click="activeApiSection = 'providers'"
             >
@@ -694,6 +719,7 @@ onMounted(() => {
             <button
               type="button"
               class="api-section-nav-item"
+              data-tour="settings-search-api-nav"
               :class="{ active: activeApiSection === 'search' }"
               @click="activeApiSection = 'search'"
             >
@@ -754,6 +780,7 @@ onMounted(() => {
               :key="provider.id"
               type="button"
               class="provider-row"
+              :data-tour="provider.id === 'deepseek' ? 'settings-deepseek-provider' : undefined"
               :class="{ active: selectedProviderId === provider.id }"
               @click="selectProvider(provider.id)"
             >
@@ -811,6 +838,7 @@ onMounted(() => {
                 :href="getPresetWebsite(selectedProvider.id)"
                 target="_blank"
                 class="header-link-btn"
+                data-tour="settings-provider-website"
                 :title="getPresetWebsite(selectedProvider.id)"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
@@ -833,6 +861,7 @@ onMounted(() => {
                     <input
                       v-model="selectedProvider.apiKey"
                       class="field-control"
+                      data-tour="settings-provider-api-key"
                       :type="showApiKey[selectedProvider.id] ? 'text' : 'password'"
                       placeholder="输入 API Key"
                       @input="triggerAutoSave()"
@@ -858,6 +887,7 @@ onMounted(() => {
                   </select>
                   <button
                     class="btn btn-compact"
+                    data-tour="settings-provider-test"
                     type="button"
                     :disabled="testingProvider[selectedProvider.id]"
                     @click="handleTestProvider()"
@@ -1297,10 +1327,14 @@ onMounted(() => {
             <div class="section-title">关于</div>
             <div class="section-desc">Etymos / Ad Fontes Manager</div>
             <div class="about-grid">
+              <span class="config-label">版本号</span>
+              <span class="config-value">{{ appVersion || '—' }}</span>
               <span class="config-label">运行模式</span>
               <span class="config-value">{{ isElectron ? 'Desktop' : 'Web' }}</span>
               <span class="config-label">本地数据目录</span>
-              <span class="config-value">{{ dataDir || 'Default web runtime' }}</span>
+              <span class="config-value">{{ dataDirDisplay }}</span>
+              <span class="config-label">Copyright</span>
+              <span class="config-value">{{ appCopyright || '—' }}</span>
             </div>
           </div>
 
@@ -1328,12 +1362,16 @@ onMounted(() => {
 
           <div class="settings-section">
             <div class="section-title">数据</div>
-            <div class="section-desc">数据库存储位置。</div>
+            <div class="section-desc">数据库存储位置。桌面端可选择目录，Web 模式由服务端启动配置决定。</div>
             <div class="data-row" v-if="isElectron">
               <button class="btn" @click="selectAndSetDataDir">更改数据目录</button>
-              <span class="data-path">{{ dataDir || ' Default ' }}</span>
+              <span class="data-path">{{ dataDirDisplay }}</span>
               <span v-if="dataDirStatus" class="data-error">{{ dataDirStatus }}</span>
             </div>
+            <p v-else class="data-path">
+              Web 端不支持在界面中更改数据库路径。请在启动服务端前通过
+              <code>DATABASE_URL</code> 或服务端配置文件设置 SQLite 数据库位置。
+            </p>
             <p class="data-note">
               AnkiConnect {{ ankiStatusText }}
               <span :class="'status-badge ' + ankiStatus" />
@@ -2374,6 +2412,17 @@ onMounted(() => {
   font-size: 12px;
   color: var(--muted);
   word-break: break-all;
+  margin: 6px 0 0;
+}
+
+.data-path code {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
 }
 
 .data-error {
