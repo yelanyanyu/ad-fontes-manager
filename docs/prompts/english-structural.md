@@ -19,6 +19,9 @@ Critical rules:
 3. If the origin is uncertain, write "Origin Disputed" in the relevant origin field.
 4. Output raw YAML only. No markdown fences or commentary.
 5. Stop at `historical_origins`. Do not write creative Chinese fields.
+6. YAML Safety:
+   - PIE roots starting with `*` (e.g. `*segh-`) MUST be double-quoted: `"*segh-"`. Bare `*` at value start is a YAML alias marker.
+   - Plain scalar values containing `: ` (colon-space) MUST be double-quoted.
 
 Output format:
 

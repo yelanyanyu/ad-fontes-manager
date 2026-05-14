@@ -41,6 +41,24 @@ function escapeYamlDoubleQuoted(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
+function escapeUnescapedDoubleQuotes(value: string): string {
+  let result = '';
+  let backslashCount = 0;
+
+  for (const char of value) {
+    if (char === '"') {
+      result += backslashCount % 2 === 1 ? '"' : '\\"';
+      backslashCount = 0;
+      continue;
+    }
+
+    result += char;
+    backslashCount = char === '\\' ? backslashCount + 1 : 0;
+  }
+
+  return result;
+}
+
 function isBlockScalarStart(line: string): boolean {
   return /^(\s*[^:#\n][^:\n]*:\s*)[|>]/.test(line);
 }
@@ -104,15 +122,15 @@ export function repairCommonYamlScalarSlips(text: string): string {
 
 function repairLlmYamlQuirks(text: string): string {
   return repairYamlLinesSafely(text, line => {
-    // Fix 1: Double-quoted YAML scalar with unescaped ASCII " inside.
+    // Fix 1: Double-quoted YAML scalar containing unescaped ASCII quotes inside.
     //        LLMs often emit Chinese quotemarks as ASCII " which breaks the
     //        YAML string, e.g. logic: "根词"sever(严格)"的身体感知"
-    const dqLine = line.match(/^(\s*[^:#\n][^:\n]*:\s*)"(.*)"(\s*(?:#.*)?)$/);
-    if (dqLine) {
-      const [, prefix, inner, comment = ''] = dqLine;
-      if (/[^\\]"/.test(inner)) {
-        const escaped = inner.replace(/(?<!\\)"/g, '\\"');
-        return `${prefix}"${escaped}"${comment}`;
+    const dqFix = line.match(/^(\s*[^:#\n][^:\n]*:\s*)"(.*)"(\s*(?:#.*)?)$/);
+    if (dqFix) {
+      const [, prefix, inner, comment = ''] = dqFix;
+      const fixedInner = escapeUnescapedDoubleQuotes(inner);
+      if (fixedInner !== inner) {
+        return `${prefix}"${fixedInner}"${comment}`;
       }
       return line;
     }
@@ -123,7 +141,7 @@ function repairLlmYamlQuirks(text: string): string {
     const [, prefix, rawValue, comment = ''] = match;
     const value = rawValue.trim();
     if (!value) return line;
-    if (/^["'{[\]]/.test(value)) return line;
+    if (/^(["'{[]|[|>]|!|&)/.test(value)) return line;
 
     const startsWithAliasLikeStar = /^\*\S+/.test(value);
     const containsColonSpace = /:\s/.test(value);

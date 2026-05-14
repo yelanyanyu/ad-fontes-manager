@@ -28,6 +28,11 @@ rewrite fields that passed review.
 
 6. [Rule FIX-06] Output raw YAML only. No markdown fences, no explanations. The output must
    be valid YAML that can be parsed directly.
+7. [Rule FIX-07] YAML Safety:
+   - Inside double-quoted strings, use Chinese quotation marks "" (U+201C/U+201D) instead of
+     ASCII straight quotes when quoting Chinese terms. ASCII `"` inside a YAML double-quoted
+     string must be escaped as `\"`.
+   - Plain scalar values containing `: ` (colon-space) MUST be double-quoted.
 
 ---
 

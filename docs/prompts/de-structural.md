@@ -21,6 +21,9 @@ Critical rules:
 4. If etymology is uncertain, write "Herkunft umstritten".
 5. Output raw YAML only. No markdown fences or commentary.
 6. Stop at `historical_origins`. Do not write creative Chinese fields.
+7. YAML Safety:
+   - PIE/PGmc roots starting with `*` (e.g. `*segh-`) MUST be double-quoted: `"*segh-"`. Bare `*` at value start is a YAML alias marker.
+   - Plain scalar values containing `: ` (colon-space) MUST be double-quoted.
 
 Output format:
 

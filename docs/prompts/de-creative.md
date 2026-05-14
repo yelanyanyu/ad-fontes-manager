@@ -56,6 +56,8 @@ Strict Syntax Instructions:
 1. All single-line string values must use double quotes.
 2. All multi-line fields marked with `|` must use YAML block scalar syntax.
 3. Do not use markdown formatting inside YAML values.
+4. Inside double-quoted strings, use Chinese quotation marks "" (U+201C/U+201D) instead of ASCII straight quotes when quoting Chinese terms. ASCII `"` inside a YAML double-quoted string breaks the YAML parser unless escaped as `\"`.
+5. Plain scalar values containing `: ` (colon-space) MUST be double-quoted.
 
 ```
 etymology:
