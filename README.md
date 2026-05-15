@@ -18,7 +18,7 @@
 
 Ad Fontes 英语/德语词汇学习体系中的词条管理工具。支持 YAML 编辑、实时预览、Anki 导出。
 
-[功能概览](#功能概览) · [快速开始](#快速开始) · [构建](#构建) · [文档](./docs/) · [CHANGELOG](./CHANGELOG.md)
+[功能概览](#功能概览) · [新手教程](./docs/TUTORIAL.md) · [快速开始](#快速开始) · [构建](#构建) · [文档](./docs/) · [CHANGELOG](./CHANGELOG.md)
 
 </div>
 

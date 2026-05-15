@@ -294,7 +294,6 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
         model: createProvider(model),
         system: prompt.system,
         prompt: prompt.user,
-        maxOutputTokens: 4096,
         abortSignal: combinedSignal,
         ...(Object.keys(tools).length > 0 ? { tools, stopWhen: stepCountIs(3) } : {}),
         ...(Object.keys(reasoningParams.providerOptions).length > 0

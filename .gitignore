@@ -49,6 +49,7 @@ task-for-agent.md
 # Project Specific (from README)
 data/
 electron-user-data/
+.private/
 
 # Configuration files (contain sensitive data)
 config.yml
