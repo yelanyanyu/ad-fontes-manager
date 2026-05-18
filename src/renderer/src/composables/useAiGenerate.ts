@@ -4,6 +4,7 @@ import request, { type RequestConfig } from '@/utils/request';
 const LOCAL_QUEUE_REQUEST: RequestConfig = { skipRateLimit: true };
 const WORKSET_SAVE_REQUEST: RequestConfig = { skipRateLimit: true, timeout: 30000 };
 const WORKSET_SAVE_CHUNK_SIZE = 25;
+const MAX_ACTIVE_EVENT_SOURCES = 6;
 
 export interface StepState {
   step: string;
@@ -191,8 +192,8 @@ export function useAiGenerate() {
       LOCAL_QUEUE_REQUEST
     );
     registerJob(response.jobId, params, response);
-    subscribeToJob(response.jobId);
-    await fetchQueueOverview();
+    const overviewLoaded = await fetchQueueOverview();
+    if (!overviewLoaded) syncRunningEventSourcesFromJobs();
     return response.jobId;
   }
 
@@ -220,35 +221,43 @@ export function useAiGenerate() {
         },
         job
       );
-      subscribeToJob(job.jobId);
     }
     if (response.jobs[0]) selectedJobId.value = response.jobs[0].jobId;
-    await fetchQueueOverview();
+    const overviewLoaded = await fetchQueueOverview();
+    if (!overviewLoaded) syncRunningEventSourcesFromJobs();
     return response;
   }
 
   function ensureJobFromOverview(item: QueueJobOverview): JobState {
     const existing = jobs[item.jobId];
-    if (existing) return existing;
-
     const language = item.language === 'de' ? 'de' : 'en';
+    const status = normalizeOverviewStatus(item.status);
+    if (existing) {
+      existing.status = status;
+      existing.error = item.error;
+      if (status !== 'queued') existing.queuePosition = undefined;
+      return existing;
+    }
+
     const job: JobState = {
       jobId: item.jobId,
       word: item.word,
       language,
-      status:
-        item.status === 'paused'
-          ? 'paused'
-          : item.status === 'queued'
-            ? 'queued'
-            : item.status === 'error'
-              ? 'error'
-              : 'running',
+      status,
       steps: [],
       error: item.error,
     };
     jobs[item.jobId] = job;
     return job;
+  }
+
+  function normalizeOverviewStatus(status: string): JobState['status'] {
+    if (status === 'queued') return 'queued';
+    if (status === 'paused') return 'paused';
+    if (status === 'complete') return 'complete';
+    if (status === 'partial') return 'partial';
+    if (status === 'error') return 'error';
+    return 'running';
   }
 
   function upsertJobFromServer(
@@ -450,8 +459,7 @@ export function useAiGenerate() {
         job.status = 'error';
         job.error = data.error;
       }
-      es.close();
-      eventSources.delete(jobId);
+      closeJobEventSource(jobId);
 
       scheduleQueueOverviewRefresh();
     });
@@ -465,11 +473,7 @@ export function useAiGenerate() {
       job.currentStep = undefined;
       job.yaml = data.yaml;
       job.scores = data.scores;
-      const revisionNotes = data.scores?.revision_notes as string | undefined;
-      if (!revisionNotes || revisionNotes === '无需修改。') {
-        es.close();
-        eventSources.delete(jobId);
-      }
+      closeJobEventSource(jobId);
 
       scheduleQueueOverviewRefresh();
     });
@@ -487,8 +491,7 @@ export function useAiGenerate() {
       job.currentStep = undefined;
       job.yaml = data.yaml;
       job.scores = {};
-      es.close();
-      eventSources.delete(jobId);
+      closeJobEventSource(jobId);
 
       scheduleQueueOverviewRefresh();
     });
@@ -496,13 +499,45 @@ export function useAiGenerate() {
     es.onerror = () => {
       const job = jobs[jobId];
       if (!job || job.status === 'complete' || job.status === 'partial' || job.status === 'error') {
-        es.close();
-        eventSources.delete(jobId);
+        closeJobEventSource(jobId);
       } else if (job.status === 'paused') {
-        es.close();
-        eventSources.delete(jobId);
+        closeJobEventSource(jobId);
       }
     };
+  }
+
+  function closeJobEventSource(jobId: string): void {
+    eventSources.get(jobId)?.close();
+    eventSources.delete(jobId);
+  }
+
+  function syncRunningEventSourcesFromJobs(): void {
+    const runningIds = Object.values(jobs)
+      .filter(job => job.status === 'running')
+      .map(job => job.jobId);
+    syncRunningEventSources(runningIds);
+  }
+
+  function syncRunningEventSourcesFromOverview(): void {
+    const runningIds = queueOverview.value
+      .filter(item => item.status === 'running')
+      .map(item => item.jobId);
+    syncRunningEventSources(runningIds);
+  }
+
+  function syncRunningEventSources(runningIds: string[]): void {
+    const running = new Set(runningIds);
+    for (const jobId of Array.from(eventSources.keys())) {
+      if (!running.has(jobId)) {
+        closeJobEventSource(jobId);
+      }
+    }
+
+    for (const jobId of runningIds) {
+      if (eventSources.has(jobId)) continue;
+      if (eventSources.size >= MAX_ACTIVE_EVENT_SOURCES) break;
+      subscribeToJob(jobId);
+    }
   }
 
   async function resumeGeneration(
@@ -544,8 +579,8 @@ export function useAiGenerate() {
         newJob.steps = previousSteps.map(step => ({ ...step }));
       }
     }
-    subscribeToJob(response.jobId);
-    await fetchQueueOverview();
+    const overviewLoaded = await fetchQueueOverview();
+    if (!overviewLoaded) syncRunningEventSourcesFromJobs();
   }
 
   async function cancelGeneration(jobId: string): Promise<void> {
@@ -555,6 +590,7 @@ export function useAiGenerate() {
       job.status = 'error';
       job.error = 'User cancelled';
     }
+    closeJobEventSource(jobId);
     await fetchQueueOverview();
   }
 
@@ -569,6 +605,7 @@ export function useAiGenerate() {
         runningStep.summary = 'Paused';
       }
     }
+    closeJobEventSource(jobId);
     await fetchQueueOverview();
   }
 
@@ -579,10 +616,7 @@ export function useAiGenerate() {
     if (overviewItem) {
       const job = ensureJobFromOverview(overviewItem);
       job.status = overviewItem.status === 'queued' ? 'queued' : 'running';
-
-      if (overviewItem.status === 'queued' || overviewItem.status === 'running') {
-        subscribeToJob(jobId);
-      }
+      syncRunningEventSourcesFromOverview();
     }
   }
 
@@ -616,17 +650,19 @@ export function useAiGenerate() {
       const newJob = jobs[response.jobId];
       if (newJob) {
         newJob.steps = [...previousSteps];
+        if (!newJob.steps.some(step => step.step === 'fixing')) {
+          newJob.steps.push({ step: 'fixing', status: 'pending' });
+        }
       }
 
-      subscribeToJob(response.jobId);
-      await fetchQueueOverview();
+      const overviewLoaded = await fetchQueueOverview();
+      if (!overviewLoaded) syncRunningEventSourcesFromJobs();
     }
     return response.jobId;
   }
 
   function unsubscribeJob(jobId: string): void {
-    eventSources.get(jobId)?.close();
-    eventSources.delete(jobId);
+    closeJobEventSource(jobId);
   }
 
   function selectJob(jobId: string | null): void {
@@ -646,11 +682,7 @@ export function useAiGenerate() {
       const overviewItem = queueOverview.value.find(item => item.jobId === jobId);
       if (overviewItem) {
         ensureJobFromOverview(overviewItem);
-        if (
-          overviewItem.status === 'queued' ||
-          overviewItem.status === 'running' ||
-          overviewItem.status === 'paused'
-        ) {
+        if (overviewItem.status === 'running') {
           subscribeToJob(jobId);
         }
       }
@@ -669,15 +701,21 @@ export function useAiGenerate() {
     }, 200);
   }
 
-  async function fetchQueueOverview(): Promise<void> {
+  async function fetchQueueOverview(): Promise<boolean> {
     try {
       const res = await request.get<{ jobs: typeof queueOverview.value }>(
         '/v2/generate/queue/overview',
         LOCAL_QUEUE_REQUEST
       );
       queueOverview.value = res.jobs;
+      for (const item of res.jobs) {
+        ensureJobFromOverview(item);
+      }
+      syncRunningEventSourcesFromOverview();
+      return true;
     } catch {
       // Non-critical.
+      return false;
     }
   }
 
@@ -831,10 +869,7 @@ export function useAiGenerate() {
       if (!overviewItem) continue;
       const job = ensureJobFromOverview(overviewItem);
       job.status = overviewItem.status === 'queued' ? 'queued' : 'running';
-
-      if (overviewItem.status === 'queued' || overviewItem.status === 'running') {
-        subscribeToJob(jobId);
-      }
+      syncRunningEventSourcesFromOverview();
     }
   }
 

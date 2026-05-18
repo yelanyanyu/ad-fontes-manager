@@ -45,7 +45,7 @@ describe('useAiGenerate', () => {
   });
 
   it('stores queued state, tool calls, and raw text from SSE events', async () => {
-    requestPostMock.mockResolvedValue({ jobId: 'job-1', queued: true, position: 2 });
+    requestPostMock.mockResolvedValue({ jobId: 'job-1', queued: false });
     const ai = useAiGenerate();
 
     await ai.startGeneration({ word: 'conduct', language: 'en' });
@@ -85,14 +85,14 @@ describe('useAiGenerate', () => {
     });
   });
 
-  it('restores completed replay steps even when no running step exists', async () => {
+  it('restores completed replay steps when subscribing to a running job late', async () => {
     const ai = useAiGenerate();
 
     ai.queueOverview.value = [
       {
-        jobId: 'job-paused',
+        jobId: 'job-running',
         jobType: 'generate',
-        status: 'paused',
+        status: 'running',
         word: 'crate',
         language: 'en',
         priority: 'normal',
@@ -100,9 +100,8 @@ describe('useAiGenerate', () => {
       },
     ];
 
-    ai.selectJob('job-paused');
+    ai.selectJob('job-running');
     const source = MockEventSource.instances[0];
-    source.emit('job:paused', { step: 'pondering' });
     source.emit('step:complete', {
       step: 'searching',
       duration: 100,
@@ -112,9 +111,8 @@ describe('useAiGenerate', () => {
       reasoningText: 'search thinking',
     });
     source.emit('step:start', { step: 'pondering', message: 'Pondering' });
-    source.emit('job:paused', { step: 'pondering' });
 
-    expect(ai.currentJob.value?.status).toBe('paused');
+    expect(ai.currentJob.value?.status).toBe('running');
     expect(ai.currentJob.value?.steps).toMatchObject([
       {
         step: 'searching',
@@ -123,7 +121,7 @@ describe('useAiGenerate', () => {
         rawText: 'yield:\n  lemma: crate\n',
         reasoningText: 'search thinking',
       },
-      { step: 'pondering', status: 'pending' },
+      { step: 'pondering', status: 'running' },
     ]);
   });
 
@@ -144,7 +142,7 @@ describe('useAiGenerate', () => {
     );
   });
 
-  it('registers and subscribes to jobs returned by batch generation', async () => {
+  it('registers batch jobs and subscribes only to running jobs from the queue overview', async () => {
     requestPostMock.mockResolvedValue({
       batchId: 'batch-1',
       jobs: [
@@ -152,6 +150,28 @@ describe('useAiGenerate', () => {
         { jobId: 'job-b', word: 'ameliorate', queued: true, position: 2 },
       ],
       skipped: [],
+    });
+    requestGetMock.mockResolvedValueOnce({
+      jobs: [
+        {
+          jobId: 'job-a',
+          jobType: 'generate',
+          status: 'queued',
+          word: 'proliferate',
+          language: 'en',
+          priority: 'normal',
+          createdAt: 'now',
+        },
+        {
+          jobId: 'job-b',
+          jobType: 'generate',
+          status: 'running',
+          word: 'ameliorate',
+          language: 'en',
+          priority: 'normal',
+          createdAt: 'now',
+        },
+      ],
     });
     const ai = useAiGenerate();
 
@@ -168,7 +188,6 @@ describe('useAiGenerate', () => {
       queuePosition: 1,
     });
     expect(MockEventSource.instances.map(source => source.url)).toEqual([
-      '/api/v2/generate/job-a/stream',
       '/api/v2/generate/job-b/stream',
     ]);
     expect(ai.currentJob.value?.jobId).toBe('job-a');
@@ -225,6 +244,46 @@ describe('useAiGenerate', () => {
       undefined,
       expect.objectContaining({ skipRateLimit: true })
     );
+  });
+
+  it('closes an active SSE subscription when the queue overview no longer marks the job running', async () => {
+    requestPostMock.mockResolvedValue({ jobId: 'job-1', queued: false });
+    requestGetMock.mockResolvedValueOnce({
+      jobs: [
+        {
+          jobId: 'job-1',
+          jobType: 'generate',
+          status: 'running',
+          word: 'crate',
+          language: 'en',
+          priority: 'normal',
+          createdAt: 'now',
+        },
+      ],
+    });
+    requestGetMock.mockResolvedValueOnce({
+      jobs: [
+        {
+          jobId: 'job-1',
+          jobType: 'generate',
+          status: 'paused',
+          word: 'crate',
+          language: 'en',
+          priority: 'normal',
+          createdAt: 'now',
+        },
+      ],
+    });
+    const ai = useAiGenerate();
+
+    await ai.startGeneration({ word: 'crate', language: 'en' });
+    const source = MockEventSource.instances[0];
+    expect(source.closed).toBe(false);
+
+    await ai.fetchQueueOverview();
+
+    expect(source.closed).toBe(true);
+    expect(ai.jobs['job-1']?.status).toBe('paused');
   });
 
   it('keeps completed target steps visible when starting an auto fix job', async () => {
