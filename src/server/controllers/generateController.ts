@@ -362,12 +362,24 @@ async function handleFixJob(req: Request, res: Response): Promise<void> {
   const scores = job.result?.scores as Record<string, unknown> | undefined;
   const revisionNotes = scores?.revision_notes as string | undefined;
   const hasRevisionNotes = revisionNotes && revisionNotes !== '无需修改。';
+  const overallScore = scores?.overall_score;
+  const hasParseError = scores?._parse_error === true;
   const userNotes = parsed.data.notes?.trim();
+  if ((hasParseError || typeof overallScore !== 'number') && !userNotes) {
+    res.status(400).json({
+      code: 400,
+      message:
+        'Auditing 结果不完整，无法自动判断需要修改的内容。请重新 Auditing，或在 Revision notes 中提供具体修改意见。',
+    });
+    return;
+  }
   if (!hasRevisionNotes && !userNotes) {
     res.status(400).json({
       code: 400,
       message:
-        '已达满分（score=10），无需自动修复。如需继续修改，请在 Revision notes 中提供具体修改意见。',
+        overallScore === 10
+          ? '已达满分（score=10），无需自动修复。如需继续修改，请在 Revision notes 中提供具体修改意见。'
+          : '没有可用的 Revision notes，无法自动修复。如需继续修改，请在 Revision notes 中提供具体修改意见。',
     });
     return;
   }

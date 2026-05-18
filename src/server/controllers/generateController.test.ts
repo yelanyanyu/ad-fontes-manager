@@ -805,6 +805,30 @@ void describe('generateController with JobQueue', () => {
       assert.equal(res._status, 400);
     });
 
+    void it('returns an audit-incomplete error when review scores failed to parse', async () => {
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (id, job_type, priority, status, word, language, result_yaml, result_scores)
+         VALUES (?, 'generate', 'normal', 'complete', 'bad-audit', 'en', ?, ?)`,
+        'job-bad-audit',
+        FAKE_YAML,
+        JSON.stringify({ _raw: '', _parse_error: true })
+      );
+
+      const { handleFixJob } = require('./generateController') as {
+        handleFixJob: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const req = fakeReq({ params: { jobId: 'job-bad-audit' } });
+      const res = fakeRes();
+
+      await handleFixJob(req, res);
+
+      assert.equal(res._status, 400);
+      assert.match(String((res._body as { message?: string }).message), /Auditing.*不完整/);
+      assert.doesNotMatch(String((res._body as { message?: string }).message), /score=10/);
+    });
+
     void it('enqueues a high-priority fix job so it appears in the queue overview', async () => {
       const blockingRunner = new BlockingFakeRunner();
       const { initQueue, _resetQueue } = require('../services/ai/queue') as any;

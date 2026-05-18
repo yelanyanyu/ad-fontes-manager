@@ -203,11 +203,15 @@ function createProvider(model: ReturnType<typeof resolveModel>) {
 }
 
 const STAGE_TIMEOUT_MS: Record<string, number> = {
-  searching: 120_000,
-  pondering: 300_000,
-  auditing: 180_000,
-  fixing: 600_000,
+  searching: 240_000,
+  pondering: 600_000,
+  auditing: 600_000,
+  fixing: 1_200_000,
 };
+
+const AUDITING_MAX_COMPLETION_TOKENS = 384 * 1024;
+const DEFAULT_THINKING_BUDGET_TOKENS = 16_000;
+const AUDITING_MAX_OUTPUT_TOKENS = AUDITING_MAX_COMPLETION_TOKENS - DEFAULT_THINKING_BUDGET_TOKENS;
 
 const BACKOFF_SCHEDULE = [2000, 8000];
 
@@ -295,6 +299,7 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
         system: prompt.system,
         prompt: prompt.user,
         abortSignal: combinedSignal,
+        ...(stage.id === 'auditing' ? { maxOutputTokens: AUDITING_MAX_OUTPUT_TOKENS } : {}),
         ...(Object.keys(tools).length > 0 ? { tools, stopWhen: stepCountIs(3) } : {}),
         ...(Object.keys(reasoningParams.providerOptions).length > 0
           ? {

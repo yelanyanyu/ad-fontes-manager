@@ -867,6 +867,94 @@ void describe('SequentialRunner', () => {
     });
   });
 
+  void it('sets a large output token budget for auditing stages', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'deepseek',
+              name: 'DeepSeek',
+              type: 'anthropic',
+              baseUrl: 'https://api.deepseek.com',
+              anthropicBaseUrl: 'https://api.deepseek.com/anthropic',
+              apiKey: 'sk-live-test',
+              models: [
+                {
+                  id: 'deepseek-v4-pro',
+                  name: 'deepseek-v4-pro',
+                  endpointType: 'anthropic',
+                },
+              ],
+            },
+          ],
+          stages: {
+            expert: {
+              provider: 'deepseek',
+              model: 'deepseek-v4-pro',
+              reasoningEffort: 'high',
+            },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    let capturedMaxOutputTokens: unknown;
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: (options: Record<string, unknown>) => {
+        capturedMaxOutputTokens = options.maxOutputTokens;
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text: '{"overall_score":9}' };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      await new SequentialRunner().run({
+        definition: {
+          id: 'single-stage',
+          language: 'en',
+          stages: [
+            {
+              id: 'auditing',
+              description: 'Auditing',
+              type: 'llm',
+              modelKey: 'expert',
+              systemPromptFile: 'content-reviewer.md',
+              outputParser: (text: string) => ({ scores: JSON.parse(text) }),
+            },
+          ],
+        },
+        input: { word: 'amuse', language: 'en' },
+        previousContext: { researchYaml: 'yield:\n  lemma: amuse\n  language: en\n' },
+        onProgress: () => undefined,
+      });
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    assert.equal(capturedMaxOutputTokens, 377216);
+  });
+
   void it('uses fixing fullYaml as the final YAML instead of the pre-fix merged YAML', async () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
