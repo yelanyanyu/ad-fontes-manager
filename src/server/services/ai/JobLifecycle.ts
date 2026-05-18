@@ -84,6 +84,7 @@ export class JobLifecycle {
   private shouldPersist(event: PipelineProgressEvent): boolean {
     return (
       event.type === 'step:complete' ||
+      event.type === 'step:diagnostic' ||
       event.type === 'step:error' ||
       event.type === 'pipeline:complete' ||
       event.type === 'pipeline:stopped'
@@ -201,6 +202,14 @@ export class JobLifecycle {
         step.result = event.result;
         step.rawText = event.rawText;
         step.reasoningText = event.reasoningText;
+        step.diagnostics = event.diagnostics;
+      } else if (event.type === 'step:diagnostic') {
+        let step = steps.find(item => item.step === event.step);
+        if (!step) {
+          step = { step: event.step, status: 'running', startTime: Date.now() };
+          steps.push(step);
+        }
+        step.diagnostics = event.diagnostics;
       } else if (event.type === 'step:error') {
         let step = steps.find(item => item.step === event.step);
         if (!step) {
@@ -209,6 +218,7 @@ export class JobLifecycle {
         }
         step.status = 'error';
         step.error = event.error;
+        step.diagnostics = event.diagnostics;
       }
     }
     return steps;

@@ -215,6 +215,21 @@ const AUDITING_MAX_OUTPUT_TOKENS = AUDITING_MAX_COMPLETION_TOKENS - DEFAULT_THIN
 
 const BACKOFF_SCHEDULE = [2000, 8000];
 
+interface StageTextDiagnostics {
+  stageId: string;
+  provider: string;
+  modelId: string;
+  attempt: number;
+  finishReason?: unknown;
+  usage?: unknown;
+  textChars: number;
+  reasoningChars: number;
+  chunkCount: number;
+  reasoningChunkCount: number;
+  lastPartType?: string;
+  maxOutputTokens?: number;
+}
+
 function classifyLLMError(err: unknown): { code: string; willRetry: boolean } {
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
   if (msg.includes('429') || (msg.includes('rate') && msg.includes('limit'))) {
@@ -260,7 +275,9 @@ interface RunStageTextOptions {
   };
 }
 
-async function runStageText(options: RunStageTextOptions): Promise<string> {
+async function runStageText(
+  options: RunStageTextOptions
+): Promise<{ text: string; diagnostics: StageTextDiagnostics }> {
   const {
     stage,
     prompt,
@@ -274,9 +291,28 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
   } = options;
   const model = resolveModel(stage.modelKey || 'balanced');
   if (model.isMock) {
-    if (stage.id === 'auditing') return buildMockReview();
-    if (stage.id === 'searching') return buildStructuralMock(ctx.word, ctx.language, ctx.context);
-    return buildCreativeMock(ctx.word, ctx.language, ctx.context);
+    const mockDiagnostics: StageTextDiagnostics = {
+      stageId: stage.id,
+      provider: model.provider,
+      modelId: model.modelId,
+      attempt: 1,
+      finishReason: 'mock',
+      textChars: 0,
+      reasoningChars: 0,
+      chunkCount: 0,
+      reasoningChunkCount: 0,
+      lastPartType: 'mock',
+    };
+    if (stage.id === 'auditing') {
+      const text = buildMockReview();
+      return { text, diagnostics: { ...mockDiagnostics, textChars: text.length } };
+    }
+    if (stage.id === 'searching') {
+      const text = buildStructuralMock(ctx.word, ctx.language, ctx.context);
+      return { text, diagnostics: { ...mockDiagnostics, textChars: text.length } };
+    }
+    const text = buildCreativeMock(ctx.word, ctx.language, ctx.context);
+    return { text, diagnostics: { ...mockDiagnostics, textChars: text.length } };
   }
 
   const maxRetries = 1;
@@ -312,7 +348,15 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
       } as Parameters<typeof streamText>[0]);
 
       let fullText = '';
+      let finishReason: unknown;
+      let usage: unknown;
+      let textChars = 0;
+      let reasoningChars = 0;
+      let chunkCount = 0;
+      let reasoningChunkCount = 0;
+      let lastPartType: string | undefined;
       for await (const part of result.fullStream as AsyncIterable<Record<string, unknown>>) {
+        lastPartType = String(part.type || '');
         if (part.type === 'text-delta') {
           const text =
             typeof part.delta === 'string'
@@ -323,6 +367,8 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
                   ? part.textDelta
                   : '';
           fullText += text;
+          textChars += text.length;
+          chunkCount += 1;
           onChunk(text);
         } else if (part.type === 'reasoning-delta' || part.type === 'reasoning') {
           const reasoningText =
@@ -333,7 +379,11 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
                 : typeof (part as Record<string, unknown>).textDelta === 'string'
                   ? ((part as Record<string, unknown>).textDelta as string)
                   : '';
-          if (reasoningText) onReasoning?.(reasoningText);
+          if (reasoningText) {
+            reasoningChars += reasoningText.length;
+            reasoningChunkCount += 1;
+            onReasoning?.(reasoningText);
+          }
         } else if (part.type === 'tool-call') {
           const toolCallId = String(part.toolCallId || `${stage.id}-${Date.now()}`);
           const toolName = String(part.toolName || 'unknown_tool');
@@ -383,9 +433,55 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
               },
               'Search tool failed; switching searching stage to no-tool fallback'
             );
-            return '';
+            return {
+              text: '',
+              diagnostics: {
+                stageId: stage.id,
+                provider: model.provider,
+                modelId: model.modelId,
+                attempt: attempt + 1,
+                finishReason: 'tool-fallback',
+                textChars,
+                reasoningChars,
+                chunkCount,
+                reasoningChunkCount,
+                lastPartType,
+              },
+            };
           }
         }
+
+        if ('finishReason' in part) {
+          finishReason = part.finishReason;
+        }
+        if ('usage' in part) {
+          usage = part.usage;
+        } else if ('totalUsage' in part) {
+          usage = part.totalUsage;
+        }
+      }
+
+      const diagnostics: StageTextDiagnostics = {
+        stageId: stage.id,
+        provider: model.provider,
+        modelId: model.modelId,
+        attempt: attempt + 1,
+        finishReason,
+        usage,
+        textChars,
+        reasoningChars,
+        chunkCount,
+        reasoningChunkCount,
+        lastPartType,
+        ...(stage.id === 'auditing' ? { maxOutputTokens: AUDITING_MAX_OUTPUT_TOKENS } : {}),
+      };
+
+      runLogger?.info(diagnostics as unknown as Record<string, unknown>, 'LLM stream finished');
+
+      if (finishReason === 'length') {
+        const err = new Error(`${stage.id}: LLM output was truncated because finishReason=length`);
+        (err as Error & { diagnostics?: StageTextDiagnostics }).diagnostics = diagnostics;
+        throw err;
       }
 
       if (attempt > 0) {
@@ -394,7 +490,7 @@ async function runStageText(options: RunStageTextOptions): Promise<string> {
           'LLM call succeeded after retry'
         );
       }
-      return fullText;
+      return { text: fullText, diagnostics };
     } catch (error) {
       lastError = error;
       const { code, willRetry } = classifyLLMError(error);
@@ -562,7 +658,7 @@ export class SequentialRunner implements PipelineRunner {
 
       try {
         let reasoningText = '';
-        let text = await runStageText({
+        const stageRun = await runStageText({
           stage,
           prompt: assemblePrompt(stage, ctx),
           ctx,
@@ -576,7 +672,26 @@ export class SequentialRunner implements PipelineRunner {
           externalSignal: abortSignal as globalThis.AbortSignal | undefined,
           runLogger,
         });
+        let text = stageRun.text;
+        let streamDiagnostics = stageRun.diagnostics;
+        onProgress({
+          type: 'step:diagnostic',
+          step: stage.id,
+          diagnostics: streamDiagnostics,
+        });
         let parsed = stage.outputParser ? stage.outputParser(text) : { fullYaml: text };
+        if (stage.id === 'auditing' && parsed.scores?._parse_error) {
+          runLogger.error(
+            {
+              stageId: stage.id,
+              rawTextChars: text.length,
+              rawTextTail: text.slice(-500),
+              finishReason: streamDiagnostics.finishReason,
+              usage: streamDiagnostics.usage,
+            },
+            'Auditing output failed to parse'
+          );
+        }
         Object.assign(ctx, parsed);
 
         let stopResult = checkStopLoss(stage, text, parsed);
@@ -593,7 +708,7 @@ export class SequentialRunner implements PipelineRunner {
             const fallbackStage: PipelineStage = { ...stage, toolNames: [] };
             try {
               reasoningText = '';
-              fallbackText = await runStageText({
+              const fallbackRun = await runStageText({
                 stage: fallbackStage,
                 prompt: assemblePrompt(fallbackStage, ctx),
                 ctx,
@@ -604,6 +719,13 @@ export class SequentialRunner implements PipelineRunner {
                 },
                 externalSignal: abortSignal as globalThis.AbortSignal | undefined,
                 runLogger,
+              });
+              fallbackText = fallbackRun.text;
+              streamDiagnostics = fallbackRun.diagnostics;
+              onProgress({
+                type: 'step:diagnostic',
+                step: stage.id,
+                diagnostics: streamDiagnostics,
               });
               fallbackParsed = stage.outputParser
                 ? stage.outputParser(fallbackText)
@@ -627,6 +749,7 @@ export class SequentialRunner implements PipelineRunner {
               result: fallbackParsed,
               rawText: fallbackText,
               reasoningText,
+              diagnostics: streamDiagnostics,
             });
             runLogger.info(
               { step: stage.id, event: 'stopped', reason: stopResult.reason, durationMs: duration },
@@ -665,6 +788,7 @@ export class SequentialRunner implements PipelineRunner {
           result: parsed,
           rawText: text,
           reasoningText,
+          diagnostics: streamDiagnostics,
         });
         runLogger.info(
           { step: stage.id, event: 'complete', durationMs: duration },
@@ -672,6 +796,8 @@ export class SequentialRunner implements PipelineRunner {
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const errorDiagnostics = (error as { diagnostics?: StageTextDiagnostics } | undefined)
+          ?.diagnostics;
         if (stage.id === 'fixing') {
           const fallbackYaml = ctx.fullYaml || ctx.researchYaml || '';
           const duration = Date.now() - stepStart;
@@ -681,6 +807,7 @@ export class SequentialRunner implements PipelineRunner {
             duration,
             summary: `Fix interrupted: ${message}. Kept prior YAML.`,
             result: { fullYaml: fallbackYaml, fallback: true, error: message },
+            diagnostics: errorDiagnostics,
           });
           onProgress({
             type: 'pipeline:stopped',
@@ -697,7 +824,13 @@ export class SequentialRunner implements PipelineRunner {
             scores: { ...ctx.scores, fix_fallback: true, fix_error: message },
           };
         }
-        onProgress({ type: 'step:error', step: stage.id, error: message, willRetry: true });
+        onProgress({
+          type: 'step:error',
+          step: stage.id,
+          error: message,
+          willRetry: true,
+          diagnostics: errorDiagnostics,
+        });
         runLogger.error({ step: stage.id, event: 'error', error: message }, 'AI step failed');
         throw error;
       }

@@ -41,6 +41,7 @@ export interface StepResult {
   result?: unknown;
   rawText?: string;
   reasoningText?: string;
+  diagnostics?: unknown;
   toolCalls?: ToolCallRecord[];
   error?: string;
 }
@@ -111,8 +112,10 @@ export type PipelineProgressEvent =
       result?: unknown;
       rawText?: string;
       reasoningText?: string;
+      diagnostics?: unknown;
     }
-  | { type: 'step:error'; step: string; error: string; willRetry: boolean }
+  | { type: 'step:diagnostic'; step: string; diagnostics: unknown }
+  | { type: 'step:error'; step: string; error: string; willRetry: boolean; diagnostics?: unknown }
   | {
       type: 'pipeline:complete';
       yaml: string;

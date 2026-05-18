@@ -955,6 +955,181 @@ void describe('SequentialRunner', () => {
     assert.equal(capturedMaxOutputTokens, 377216);
   });
 
+  void it('records stream diagnostics for completed auditing stages', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-expert', name: 'model-expert' }],
+            },
+          ],
+          stages: {
+            expert: { provider: 'realish', model: 'model-expert', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const events: PipelineProgressEvent[] = [];
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: () => ({
+        fullStream: (async function* () {
+          yield { type: 'reasoning-delta', text: 'thinking' };
+          yield { type: 'text-delta', text: '{"overall_score":9}' };
+          yield {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5 },
+          };
+        })(),
+      }),
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      await new SequentialRunner().run({
+        definition: {
+          id: 'single-stage',
+          language: 'en',
+          stages: [
+            {
+              id: 'auditing',
+              description: 'Auditing',
+              type: 'llm',
+              modelKey: 'expert',
+              systemPromptFile: 'content-reviewer.md',
+              outputParser: (text: string) => ({ scores: JSON.parse(text) }),
+            },
+          ],
+        },
+        input: { word: 'amuse', language: 'en' },
+        previousContext: { researchYaml: 'yield:\n  lemma: amuse\n  language: en\n' },
+        onProgress: event => events.push(event),
+      });
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    const diagnostic = events.find(
+      (event): event is Extract<PipelineProgressEvent, { type: 'step:diagnostic' }> =>
+        event.type === 'step:diagnostic'
+    );
+    assert.equal((diagnostic?.diagnostics as Record<string, unknown>).finishReason, 'stop');
+    assert.equal((diagnostic?.diagnostics as Record<string, unknown>).textChars, 19);
+    assert.equal((diagnostic?.diagnostics as Record<string, unknown>).reasoningChars, 8);
+
+    const complete = events.find(
+      (event): event is Extract<PipelineProgressEvent, { type: 'step:complete' }> =>
+        event.type === 'step:complete'
+    );
+    assert.equal((complete?.diagnostics as Record<string, unknown>).finishReason, 'stop');
+  });
+
+  void it('fails auditing stages when the stream finish reason is length', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-expert', name: 'model-expert' }],
+            },
+          ],
+          stages: {
+            expert: { provider: 'realish', model: 'model-expert', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const events: PipelineProgressEvent[] = [];
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: () => ({
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: '{"overall_score":3,"field_scores":{' };
+          yield { type: 'finish', finishReason: 'length', usage: { outputTokens: 4096 } };
+        })(),
+      }),
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      await assert.rejects(
+        () =>
+          new SequentialRunner().run({
+            definition: {
+              id: 'single-stage',
+              language: 'en',
+              stages: [
+                {
+                  id: 'auditing',
+                  description: 'Auditing',
+                  type: 'llm',
+                  modelKey: 'expert',
+                  systemPromptFile: 'content-reviewer.md',
+                  outputParser: (text: string) => ({ scores: JSON.parse(text) }),
+                },
+              ],
+            },
+            input: { word: 'amuse', language: 'en' },
+            previousContext: { researchYaml: 'yield:\n  lemma: amuse\n  language: en\n' },
+            onProgress: event => events.push(event),
+          }),
+        /finishReason=length/
+      );
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    const error = events.find(
+      (event): event is Extract<PipelineProgressEvent, { type: 'step:error' }> =>
+        event.type === 'step:error'
+    );
+    assert.equal((error?.diagnostics as Record<string, unknown>).finishReason, 'length');
+  });
+
   void it('uses fixing fullYaml as the final YAML instead of the pre-fix merged YAML', async () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
