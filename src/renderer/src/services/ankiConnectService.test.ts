@@ -144,7 +144,9 @@ describe('ankiConnectService duplicate safeguards', () => {
 
   it('uses a precise target word field query and returns null when no note matches', async () => {
     mockPrepareTarget();
-    requestPostMock.mockResolvedValueOnce(asAnkiResponse([]));
+    requestPostMock
+      .mockResolvedValueOnce(asAnkiResponse([]))
+      .mockResolvedValueOnce(asAnkiResponse([]));
 
     const conflict = await checkDuplicateConflict(payload);
 
@@ -183,6 +185,7 @@ describe('ankiConnectService duplicate safeguards', () => {
   it('skips repeated preparation when importing with a pre-prepared target', async () => {
     requestPostMock
       .mockResolvedValueOnce(asAnkiResponse([]))
+      .mockResolvedValueOnce(asAnkiResponse([]))
       .mockResolvedValueOnce(asAnkiResponse(123));
 
     await expect(
@@ -191,7 +194,7 @@ describe('ankiConnectService duplicate safeguards', () => {
       })
     ).resolves.toEqual({ noteId: 123, mode: 'added' });
 
-    expect(requestPostMock).toHaveBeenCalledTimes(2);
+    expect(requestPostMock).toHaveBeenCalledTimes(3);
     expect(requestPostMock).toHaveBeenNthCalledWith(
       1,
       '/anki/connect',
@@ -200,6 +203,12 @@ describe('ankiConnectService duplicate safeguards', () => {
     );
     expect(requestPostMock).toHaveBeenNthCalledWith(
       2,
+      '/anki/connect',
+      expect.objectContaining({ action: 'findNotes' }),
+      expect.objectContaining({ skipErrorToast: true })
+    );
+    expect(requestPostMock).toHaveBeenNthCalledWith(
+      3,
       '/anki/connect',
       expect.objectContaining({ action: 'addNote' }),
       expect.objectContaining({ skipErrorToast: true })
@@ -238,6 +247,52 @@ describe('ankiConnectService duplicate safeguards', () => {
     });
   });
 
+  it('falls back to note details filtering when the precise word-field query misses', async () => {
+    mockPrepareTarget();
+    requestPostMock
+      .mockResolvedValueOnce(asAnkiResponse([]))
+      .mockResolvedValueOnce(asAnkiResponse([1751855393543, 1751855393544]))
+      .mockResolvedValueOnce(
+        asAnkiResponse([
+          asNoteInfo(1751855393543, {
+            Word: 'other',
+            Context: 'contains craft somewhere outside the word field',
+          }),
+          asNoteInfo(1751855393544, {
+            Word: 'craft',
+            Context: 'existing context',
+            Back: '<p>existing back</p>',
+          }),
+        ])
+      );
+
+    const conflict = await checkDuplicateConflict(payload);
+
+    expect(conflict).toEqual({
+      noteId: 1751855393544,
+      deckName: payload.options.deckName,
+      modelName: payload.options.modelName,
+      word: 'craft',
+      existingFields: {
+        Word: 'craft',
+        Context: 'existing context',
+        Back: '<p>existing back</p>',
+      },
+      incomingFields: payload.fields,
+    });
+    expect(requestPostMock).toHaveBeenNthCalledWith(
+      4,
+      '/anki/connect',
+      expect.objectContaining({
+        action: 'findNotes',
+        params: {
+          query: 'deck:"English::English-word" note:"单词模板-Quizify" "craft"',
+        },
+      }),
+      expect.objectContaining({ skipErrorToast: true })
+    );
+  });
+
   it('throws an ambiguity error when multiple notes match the target word query', async () => {
     mockPrepareTarget();
     requestPostMock.mockResolvedValueOnce(asAnkiResponse([1, 2]));
@@ -252,7 +307,9 @@ describe('ankiConnectService duplicate safeguards', () => {
     requestPostMock
       .mockResolvedValueOnce(asAnkiResponse(6))
       .mockResolvedValueOnce(asAnkiResponse([payload.options.deckName]));
-    requestPostMock.mockResolvedValueOnce(asAnkiResponse([]));
+    requestPostMock
+      .mockResolvedValueOnce(asAnkiResponse([]))
+      .mockResolvedValueOnce(asAnkiResponse([]));
 
     await checkDuplicateConflict({
       ...payload,

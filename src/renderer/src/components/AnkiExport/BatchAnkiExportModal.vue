@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import AnkiFieldMappingEditor from '@/components/AnkiExport/AnkiFieldMappingEditor.vue';
 import type {
   AnkiModelTemplate,
@@ -7,7 +8,7 @@ import type {
   FieldMappingConfig,
 } from '@/types/anki';
 
-defineProps<{
+const props = defineProps<{
   open: boolean;
   busy: boolean;
   error: string;
@@ -62,6 +63,17 @@ const statusClassMap: Record<string, string> = {
   skipped: 'bg-[var(--surface-soft)] text-[var(--muted)] border-[var(--border)]',
   overwritten: 'bg-[var(--amber-soft)] text-[var(--amber)] border-[var(--amber-border)]',
   failed: 'bg-[var(--red-soft)] text-[var(--red)] border-[var(--red-border)]',
+};
+
+const hasResolvedDuplicates = computed(() =>
+  props.items.some(item => item.status === 'duplicate' && item.conflict)
+);
+
+const duplicateResolutionLabel = (item: BatchAnkiExportItem): string => {
+  if (item.status !== 'duplicate' || !item.conflict) return '';
+  if (item.resolution === 'overwrite') return 'Overwrite selected';
+  if (item.resolution === 'skip') return 'Skip selected';
+  return 'Needs action';
 };
 </script>
 
@@ -191,17 +203,17 @@ const statusClassMap: Record<string, string> = {
           </button>
           <button
             class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] text-sm hover:bg-[var(--surface-soft)]"
-            :disabled="busy || !items.length"
+            :disabled="busy || !hasResolvedDuplicates"
             @click="emit('ignore-all-duplicates')"
           >
-            Ignore All Duplicates
+            Mark Duplicates to Skip
           </button>
           <button
             class="px-3 py-1.5 rounded-lg border border-[var(--amber-border)] bg-[var(--surface)] text-[var(--amber)] text-sm hover:bg-[var(--amber-soft)]"
-            :disabled="busy || !items.length"
+            :disabled="busy || !hasResolvedDuplicates"
             @click="emit('overwrite-all-duplicates')"
           >
-            Overwrite All Duplicates
+            Mark Duplicates to Overwrite
           </button>
           <button
             class="px-3 py-1.5 rounded-lg bg-[var(--blue)] text-white text-sm hover:opacity-85 disabled:opacity-50"
@@ -215,7 +227,7 @@ const statusClassMap: Record<string, string> = {
             :disabled="busy || !items.length"
             @click="emit('import-ready-items')"
           >
-            Import Ready Items
+            Apply Import Plan
           </button>
           <button
             v-if="canCancel"
@@ -319,7 +331,21 @@ const statusClassMap: Record<string, string> = {
                 </span>
               </td>
               <td class="px-4 py-3 text-xs text-[var(--muted)]">
-                <span v-if="item.conflict">Duplicate noteId: {{ item.conflict.noteId }}</span>
+                <span v-if="item.conflict">
+                  Duplicate noteId: {{ item.conflict.noteId }}
+                  <span
+                    class="ml-2 inline-flex items-center rounded border px-1.5 py-0.5 font-semibold"
+                    :class="
+                      item.resolution === 'overwrite'
+                        ? 'border-[var(--amber-border)] bg-[var(--amber-soft)] text-[var(--amber)]'
+                        : item.resolution === 'skip'
+                          ? 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)]'
+                          : 'border-[var(--red-border)] bg-[var(--red-soft)] text-[var(--red)]'
+                    "
+                  >
+                    {{ duplicateResolutionLabel(item) }}
+                  </span>
+                </span>
                 <span v-else-if="item.noteId">NoteId: {{ item.noteId }}</span>
                 <span v-else-if="item.error" class="text-[var(--red)]">{{ item.error }}</span>
                 <span v-else>-</span>

@@ -16,6 +16,7 @@ const {
   getModelStylingMock,
   getModelTemplatesMock,
   hasStoredFieldMappingMock,
+  importPayloadWithStrategyMock,
   loadFieldMappingMock,
   saveFieldMappingMock,
   pingAnkiConnectMock,
@@ -33,6 +34,7 @@ const {
   getModelStylingMock: vi.fn(),
   getModelTemplatesMock: vi.fn(),
   hasStoredFieldMappingMock: vi.fn(),
+  importPayloadWithStrategyMock: vi.fn(),
   loadFieldMappingMock: vi.fn(),
   saveFieldMappingMock: vi.fn(),
   pingAnkiConnectMock: vi.fn(),
@@ -56,7 +58,7 @@ vi.mock('@/services/ankiConnectService', () => ({
   getModelNames: getModelNamesMock,
   getModelStyling: getModelStylingMock,
   getModelTemplates: getModelTemplatesMock,
-  importPayloadWithStrategy: vi.fn(),
+  importPayloadWithStrategy: importPayloadWithStrategyMock,
   isAnkiDuplicateConflictError: () => false,
   pingAnkiConnect: pingAnkiConnectMock,
 }));
@@ -123,6 +125,7 @@ describe('useBatchAnkiExport', () => {
     getModelStylingMock.mockReset();
     getModelTemplatesMock.mockReset();
     hasStoredFieldMappingMock.mockReset();
+    importPayloadWithStrategyMock.mockReset();
     loadFieldMappingMock.mockReset();
     saveFieldMappingMock.mockReset();
     pingAnkiConnectMock.mockReset();
@@ -163,6 +166,7 @@ describe('useBatchAnkiExport', () => {
       ok: true,
       fileName: 'english-words-batch.apkg',
     });
+    importPayloadWithStrategyMock.mockResolvedValue({ noteId: 123, mode: 'added' });
 
     ({ useBatchAnkiExport } = await import('@/composables/useBatchAnkiExport'));
   });
@@ -201,5 +205,47 @@ describe('useBatchAnkiExport', () => {
       '.card { color: #222; }',
       'English::Words-batch.apkg'
     );
+  });
+
+  it('overwrites batch duplicate items selected for overwrite', async () => {
+    const { checkDuplicateConflict } = await import('@/services/ankiConnectService');
+    const checkDuplicateConflictMock = vi.mocked(checkDuplicateConflict);
+    checkDuplicateConflictMock
+      .mockResolvedValueOnce({
+        noteId: 42,
+        deckName: payload.options.deckName,
+        modelName: payload.options.modelName,
+        word: 'craft',
+        existingFields: { Word: 'craft', Back: '<p>old</p>' },
+        incomingFields: payload.fields,
+      })
+      .mockResolvedValueOnce(null);
+    importPayloadWithStrategyMock
+      .mockResolvedValueOnce({ noteId: 42, mode: 'overwritten' })
+      .mockResolvedValueOnce({ noteId: 43, mode: 'added' });
+
+    const batch = useBatchAnkiExport();
+    await batch.open(records);
+    await batch.checkDuplicates();
+
+    batch.setDuplicatesResolutionAll('overwrite');
+    await batch.importReadyItems();
+
+    expect(importPayloadWithStrategyMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ sourceWordId: 'word-1' }),
+      'overwrite_if_duplicate',
+      'duplicate',
+      { skipPrepare: true }
+    );
+    expect(importPayloadWithStrategyMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ sourceWordId: 'word-2' }),
+      'add_if_not_duplicate',
+      'ready',
+      { skipPrepare: true }
+    );
+    expect(batch.items.value.map(item => item.status)).toEqual(['overwritten', 'imported']);
+    expect(batch.items.value.map(item => item.noteId)).toEqual([42, 43]);
   });
 });

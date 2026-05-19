@@ -142,6 +142,33 @@ const escapeAnkiQueryValue = (value: string): string => value.replace(/(["\\])/g
 export const isDuplicateAddNoteError = (message: string): boolean =>
   DUPLICATE_NOTE_ERROR_PATTERN.test(String(message || ''));
 
+const getSingleMatchingNoteInfo = async (
+  noteIds: number[],
+  wordFieldName: string,
+  incomingWord: string
+): Promise<NoteInfoResponse | null> => {
+  if (!noteIds.length) return null;
+
+  const noteInfos = await invoke<Array<NoteInfoResponse>>({
+    action: 'notesInfo',
+    version: ANKI_CONNECT_VERSION,
+    params: { notes: noteIds },
+  });
+  const matchingNotes = noteInfos.filter(
+    noteInfo => normalizeFieldValue(noteInfo.fields[wordFieldName]?.value) === incomingWord
+  );
+
+  if (!matchingNotes.length) return null;
+  if (matchingNotes.length > 1) {
+    throw new AnkiDuplicateNotesAmbiguityError(
+      incomingWord,
+      matchingNotes.map(note => note.noteId)
+    );
+  }
+
+  return matchingNotes[0];
+};
+
 const getExistingNoteByWord = async (
   payload: AnkiExportPayload
 ): Promise<AnkiDuplicateConflict | null> => {
@@ -167,19 +194,23 @@ const getExistingNoteByWord = async (
     params: { query },
   });
 
-  if (!noteIds.length) {
-    return null;
-  }
-
   if (noteIds.length > 1) {
     throw new AnkiDuplicateNotesAmbiguityError(incomingWord, noteIds);
   }
 
-  const [matchingNoteInfo] = await invoke<Array<NoteInfoResponse>>({
-    action: 'notesInfo',
-    version: ANKI_CONNECT_VERSION,
-    params: { notes: noteIds },
-  });
+  let matchingNoteInfo = await getSingleMatchingNoteInfo(noteIds, wordFieldName, incomingWord);
+
+  if (!matchingNoteInfo) {
+    const broadQuery = [`deck:"${escapedDeck}"`, `note:"${escapedModel}"`, `"${escapedWord}"`].join(
+      ' '
+    );
+    const broadNoteIds = await invoke<number[]>({
+      action: 'findNotes',
+      version: ANKI_CONNECT_VERSION,
+      params: { query: broadQuery },
+    });
+    matchingNoteInfo = await getSingleMatchingNoteInfo(broadNoteIds, wordFieldName, incomingWord);
+  }
 
   if (!matchingNoteInfo) return null;
 
@@ -375,26 +406,6 @@ export const applyDuplicateResolution = async (
       if (actualValue === expectedValue) {
         return [];
       }
-
-      // [DEBUG-d4f1] dump field state for diagnosis
-      const ankiFieldKeys = Object.keys(noteInfoAfterUpdate.fields ?? {});
-      const updateFieldKeys = Object.keys(fieldsToUpdate);
-      const existingFieldKeys = Object.keys(conflict.existingFields ?? {});
-      console.warn('[DEBUG-d4f1] Verification mismatch', {
-        fieldName,
-        expectedValue,
-        actualValue,
-        previousValue,
-        expectedLen: expectedValue.length,
-        actualLen: actualValue.length,
-        previousLen: previousValue.length,
-        fieldExistsInAnki: fieldName in (noteInfoAfterUpdate.fields ?? {}),
-        ankiFieldKeys,
-        updateFieldKeys,
-        existingFieldKeys,
-        rawAnkiValue: noteInfoAfterUpdate.fields?.[fieldName]?.value,
-        rawExistingValue: conflict.existingFields?.[fieldName],
-      });
 
       return [
         `${fieldName} mismatch (expected len=${expectedValue.length}, actual len=${actualValue.length}, previous len=${previousValue.length})`,
