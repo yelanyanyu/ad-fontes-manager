@@ -16,6 +16,11 @@ const ANKI_CONNECT_VERSION = 6;
 type NoteInfoResponse = {
   noteId: number;
   fields: Record<string, { value: string }>;
+  cards?: number[];
+};
+
+type CardInfoResponse = {
+  deckName?: string;
 };
 
 const DUPLICATE_NOTE_ERROR_PATTERN = /duplicate/i;
@@ -107,6 +112,18 @@ const flattenNoteFields = (noteInfo: NoteInfoResponse): Record<string, string> =
   );
 };
 
+const getFirstCardDeckName = async (noteInfo: NoteInfoResponse): Promise<string | null> => {
+  if (!noteInfo.cards?.length) return null;
+
+  const [cardInfo] = await invoke<Array<CardInfoResponse>>({
+    action: 'cardsInfo',
+    version: ANKI_CONNECT_VERSION,
+    params: { cards: [noteInfo.cards[0]] },
+  });
+
+  return cardInfo?.deckName?.trim() || null;
+};
+
 const invoke = async <T>(payload: AnkiConnectInvokePayload): Promise<T> => {
   const data = await request.post<AnkiConnectInvokeResult<T>>('/anki/connect', payload, {
     skipErrorToast: true,
@@ -179,14 +196,9 @@ const getExistingNoteByWord = async (
   }
 
   const escapedWord = escapeAnkiQueryValue(incomingWord);
-  const escapedDeck = escapeAnkiQueryValue(payload.options.deckName);
   const escapedModel = escapeAnkiQueryValue(payload.options.modelName);
 
-  const query = [
-    `deck:"${escapedDeck}"`,
-    `note:"${escapedModel}"`,
-    `${wordFieldName}:"${escapedWord}"`,
-  ].join(' ');
+  const query = [`note:"${escapedModel}"`, `${wordFieldName}:"${escapedWord}"`].join(' ');
 
   const noteIds = await invoke<number[]>({
     action: 'findNotes',
@@ -201,9 +213,7 @@ const getExistingNoteByWord = async (
   let matchingNoteInfo = await getSingleMatchingNoteInfo(noteIds, wordFieldName, incomingWord);
 
   if (!matchingNoteInfo) {
-    const broadQuery = [`deck:"${escapedDeck}"`, `note:"${escapedModel}"`, `"${escapedWord}"`].join(
-      ' '
-    );
+    const broadQuery = [`note:"${escapedModel}"`, `"${escapedWord}"`].join(' ');
     const broadNoteIds = await invoke<number[]>({
       action: 'findNotes',
       version: ANKI_CONNECT_VERSION,
@@ -214,9 +224,11 @@ const getExistingNoteByWord = async (
 
   if (!matchingNoteInfo) return null;
 
+  const existingDeckName = await getFirstCardDeckName(matchingNoteInfo);
+
   return {
     noteId: matchingNoteInfo.noteId,
-    deckName: payload.options.deckName,
+    deckName: existingDeckName || payload.options.deckName,
     modelName: payload.options.modelName,
     word: incomingWord,
     existingFields: flattenNoteFields(matchingNoteInfo),

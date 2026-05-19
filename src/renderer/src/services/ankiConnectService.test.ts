@@ -59,9 +59,10 @@ const payload: AnkiExportPayload = {
 
 const asAnkiResponse = <T>(result: T, error: string | null = null) => ({ result, error });
 
-const asNoteInfo = (noteId: number, fields: Record<string, string>) => ({
+const asNoteInfo = (noteId: number, fields: Record<string, string>, cards?: number[]) => ({
   noteId,
   fields: Object.fromEntries(Object.entries(fields).map(([name, value]) => [name, { value }])),
+  ...(cards ? { cards } : {}),
 });
 
 const mockPrepareTarget = (): void => {
@@ -157,7 +158,7 @@ describe('ankiConnectService duplicate safeguards', () => {
       expect.objectContaining({
         action: 'findNotes',
         params: {
-          query: 'deck:"English::English-word" note:"单词模板-Quizify" Word:"craft"',
+          query: 'note:"单词模板-Quizify" Word:"craft"',
         },
       }),
       expect.objectContaining({ skipErrorToast: true })
@@ -286,8 +287,75 @@ describe('ankiConnectService duplicate safeguards', () => {
       expect.objectContaining({
         action: 'findNotes',
         params: {
-          query: 'deck:"English::English-word" note:"单词模板-Quizify" "craft"',
+          query: 'note:"单词模板-Quizify" "craft"',
         },
+      }),
+      expect.objectContaining({ skipErrorToast: true })
+    );
+  });
+
+  it('detects duplicates in the same model even when the existing note is in another deck', async () => {
+    const miseryPayload: AnkiExportPayload = {
+      ...payload,
+      fields: {
+        ...payload.fields,
+        Word: 'misery',
+      },
+      options: {
+        ...payload.options,
+        deckName: 'English::English-word',
+        modelName: 'quizify-word-by:yelanyanyu',
+      },
+      sourceLemma: 'misery',
+    };
+
+    mockPrepareTarget();
+    requestPostMock
+      .mockResolvedValueOnce(asAnkiResponse([1761277429400]))
+      .mockResolvedValueOnce(
+        asAnkiResponse([
+          asNoteInfo(
+            1761277429400,
+            {
+              Word: 'misery',
+              Back: '<h3>单词解析：misery</h3>',
+            },
+            [1761277429400]
+          ),
+        ])
+      )
+      .mockResolvedValueOnce(asAnkiResponse([{ deckName: 'English' }]));
+
+    const conflict = await checkDuplicateConflict(miseryPayload);
+
+    expect(conflict).toEqual({
+      noteId: 1761277429400,
+      deckName: 'English',
+      modelName: 'quizify-word-by:yelanyanyu',
+      word: 'misery',
+      existingFields: {
+        Word: 'misery',
+        Back: '<h3>单词解析：misery</h3>',
+      },
+      incomingFields: miseryPayload.fields,
+    });
+    expect(requestPostMock).toHaveBeenNthCalledWith(
+      3,
+      '/anki/connect',
+      expect.objectContaining({
+        action: 'findNotes',
+        params: {
+          query: 'note:"quizify-word-by:yelanyanyu" Word:"misery"',
+        },
+      }),
+      expect.objectContaining({ skipErrorToast: true })
+    );
+    expect(requestPostMock).toHaveBeenNthCalledWith(
+      5,
+      '/anki/connect',
+      expect.objectContaining({
+        action: 'cardsInfo',
+        params: { cards: [1761277429400] },
       }),
       expect.objectContaining({ skipErrorToast: true })
     );
@@ -333,7 +401,7 @@ describe('ankiConnectService duplicate safeguards', () => {
       expect.objectContaining({
         action: 'findNotes',
         params: {
-          query: 'deck:"English::English-word" note:"QuestionAnswerMapped" id:"craft"',
+          query: 'note:"QuestionAnswerMapped" id:"craft"',
         },
       }),
       expect.objectContaining({ skipErrorToast: true })
@@ -430,7 +498,7 @@ describe('ankiConnectService duplicate safeguards', () => {
       expect.objectContaining({
         action: 'findNotes',
         params: {
-          query: 'deck:"English::English-word" note:"单词模板-Quizify" Word:"craft"',
+          query: 'note:"单词模板-Quizify" Word:"craft"',
         },
       }),
       expect.objectContaining({ skipErrorToast: true })
