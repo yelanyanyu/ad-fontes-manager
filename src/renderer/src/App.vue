@@ -123,6 +123,7 @@ onUnmounted(() => {
 }
 
 .workspace {
+  position: relative;
   min-width: 0;
   height: 100%;
   min-height: 0;

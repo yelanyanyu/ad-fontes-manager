@@ -1,64 +1,19 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useAppStore } from '@/stores/appStore';
+import { useUpdateStore } from '@/stores/updateStore';
 import { renderReleaseNotesHtml } from '@/utils/releaseNotes';
 
-const appStore = useAppStore();
+const updateStore = useUpdateStore();
 const isElectron = computed(() => Boolean(window.electronAPI));
-const updateSnapshot = ref<UpdateSnapshot>({ status: 'idle', info: null });
-const updateInstallBlocked = ref<{ activeCount: number } | null>(null);
-const showUpdateDialog = ref(false);
 const maximized = ref(false);
-let unsubscribeUpdateEvent: (() => void) | null = null;
 let unsubscribeMaximized: (() => void) | null = null;
 
-const currentUpdateVersion = computed(() => updateSnapshot.value.info?.version || '');
-const hasUpdateEntry = computed(() =>
-  ['available', 'downloading', 'downloaded'].includes(updateSnapshot.value.status)
-);
-const canInstallUpdate = computed(() => updateSnapshot.value.status === 'downloaded');
-const canSkipUpdate = computed(() =>
-  ['available', 'downloading', 'downloaded'].includes(updateSnapshot.value.status)
-);
-const renderedReleaseNotesHtml = computed(() => renderReleaseNotesHtml(updateSnapshot.value.info));
+const renderedReleaseNotesHtml = computed(() => renderReleaseNotesHtml(updateStore.snapshot.info));
 const entryLabel = computed(() => {
-  if (updateSnapshot.value.status === 'downloaded') return `新版本 ${currentUpdateVersion.value} 已就绪`;
-  if (updateSnapshot.value.status === 'downloading') return `正在下载 ${currentUpdateVersion.value}`;
+  if (updateStore.snapshot.status === 'downloaded') return `新版本 ${updateStore.currentVersion} 已就绪`;
+  if (updateStore.snapshot.status === 'downloading') return `正在下载 ${updateStore.currentVersion}`;
   return '有可用更新';
 });
-const dialogSubtitle = computed(() => {
-  if (updateSnapshot.value.status === 'downloaded') return '更新已下载，安装后会重启应用。';
-  if (updateSnapshot.value.status === 'downloading') return '正在下载更新，下载完成后即可安装。';
-  return '更新细则如下。';
-});
-
-const applyUpdateSnapshot = (snapshot: UpdateSnapshot): void => {
-  updateSnapshot.value = snapshot;
-  if (snapshot.status !== 'error') {
-    updateInstallBlocked.value = null;
-  }
-};
-
-const skipCurrentUpdate = async (): Promise<void> => {
-  if (!window.electronAPI || !currentUpdateVersion.value) return;
-  await window.electronAPI.skipReleaseVersion(currentUpdateVersion.value);
-  updateSnapshot.value = { ...updateSnapshot.value, status: 'skipped' };
-  showUpdateDialog.value = false;
-  appStore.addToast(`已跳过 ${currentUpdateVersion.value}`, 'info');
-};
-
-const installCurrentUpdate = async (force = false): Promise<void> => {
-  if (!window.electronAPI || !canInstallUpdate.value) return;
-  const result = await window.electronAPI.installUpdate({ force });
-  if (result.ok) {
-    showUpdateDialog.value = false;
-    return;
-  }
-
-  updateInstallBlocked.value = { activeCount: result.activeCount };
-  showUpdateDialog.value = true;
-  appStore.addToast('队列仍有任务运行，安装更新前请确认', 'warning');
-};
 
 const minimize = (): void => {
   void window.electronAPI?.minimizeWindow();
@@ -75,7 +30,7 @@ const closeWindow = (): void => {
 
 onMounted(async () => {
   if (!window.electronAPI) return;
-  unsubscribeUpdateEvent = window.electronAPI.onUpdateEvent(applyUpdateSnapshot);
+  await updateStore.initialize();
   unsubscribeMaximized = window.electronAPI.onWindowMaximized(value => {
     maximized.value = value;
   });
@@ -83,8 +38,6 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  unsubscribeUpdateEvent?.();
-  unsubscribeUpdateEvent = null;
   unsubscribeMaximized?.();
   unsubscribeMaximized = null;
 });
@@ -101,11 +54,11 @@ onUnmounted(() => {
 
     <div class="titlebar-actions">
       <button
-        v-if="hasUpdateEntry"
+        v-if="updateStore.hasDialogContent"
         type="button"
         class="update-entry"
-        :class="'status-' + updateSnapshot.status"
-        @click="showUpdateDialog = true"
+        :class="'status-' + updateStore.snapshot.status"
+        @click="updateStore.openDialog()"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M21 12a9 9 0 0 1-15.4 6.36" />
@@ -141,16 +94,16 @@ onUnmounted(() => {
     </div>
 
     <Teleport to="body">
-      <div v-if="showUpdateDialog" class="update-overlay" @click.self="showUpdateDialog = false">
+      <div v-if="updateStore.showDialog" class="update-overlay" @click.self="updateStore.closeDialog()">
         <div class="update-card">
           <div class="update-card-header">
-            <h3>{{ currentUpdateVersion ? `发现新版本 ${currentUpdateVersion}` : '发现新版本' }}</h3>
-            <p>{{ dialogSubtitle }}</p>
+            <h3>{{ updateStore.dialogTitle }}</h3>
+            <p>{{ updateStore.dialogSubtitle }}</p>
           </div>
 
-          <div class="update-meta" v-if="updateSnapshot.info">
-            <span>版本 {{ updateSnapshot.info.version }}</span>
-            <span v-if="updateSnapshot.info.releaseName">{{ updateSnapshot.info.releaseName }}</span>
+          <div class="update-meta" v-if="updateStore.snapshot.info">
+            <span>版本 {{ updateStore.snapshot.info.version }}</span>
+            <span v-if="updateStore.snapshot.info.releaseName">{{ updateStore.snapshot.info.releaseName }}</span>
           </div>
 
           <div class="update-body">
@@ -158,23 +111,23 @@ onUnmounted(() => {
             <div class="update-release-notes" v-html="renderedReleaseNotesHtml"></div>
           </div>
 
-          <div v-if="updateInstallBlocked" class="update-warning">
-            <span>队列中还有 {{ updateInstallBlocked.activeCount }} 个任务，安装会重启应用。</span>
-            <button class="btn danger compact" type="button" @click="installCurrentUpdate(true)">
+          <div v-if="updateStore.installBlocked" class="update-warning">
+            <span>队列中还有 {{ updateStore.installBlocked.activeCount }} 个任务，安装会重启应用。</span>
+            <button class="btn danger compact" type="button" @click="updateStore.installCurrent(true)">
               仍然安装
             </button>
           </div>
 
           <div class="update-actions">
-            <button class="btn" type="button" @click="showUpdateDialog = false">稍后</button>
-            <button v-if="canSkipUpdate" class="btn" type="button" @click="skipCurrentUpdate">
+            <button class="btn" type="button" @click="updateStore.closeDialog()">稍后</button>
+            <button v-if="updateStore.canSkip" class="btn" type="button" @click="updateStore.skipCurrent()">
               跳过此版本
             </button>
             <button
-              v-if="canInstallUpdate"
+              v-if="updateStore.canInstall"
               class="btn primary"
               type="button"
-              @click="installCurrentUpdate(false)"
+              @click="updateStore.installCurrent(false)"
             >
               安装更新
             </button>

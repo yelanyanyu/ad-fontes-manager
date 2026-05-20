@@ -70,6 +70,7 @@ interface DesktopUpdateServiceOptions {
 }
 
 export interface DesktopUpdateService {
+  getSnapshot(): UpdateSnapshot;
   getPreference(): UpdatePreference;
   setAutomaticSoftwareUpdate(enabled: boolean): UpdatePreference;
   skipReleaseVersion(version: string): UpdatePreference;
@@ -133,6 +134,10 @@ export function createDesktopUpdateService(
   };
 
   return {
+    getSnapshot(): UpdateSnapshot {
+      return currentSnapshot;
+    },
+
     getPreference: readPreference,
 
     setAutomaticSoftwareUpdate(enabled: boolean): UpdatePreference {
@@ -142,6 +147,10 @@ export function createDesktopUpdateService(
 
     skipReleaseVersion(version: string): UpdatePreference {
       writeUpdates({ skippedReleaseVersion: version });
+      emitSnapshot({
+        status: 'skipped',
+        info: currentSnapshot.info?.version === version ? currentSnapshot.info : null,
+      });
       return readPreference();
     },
 

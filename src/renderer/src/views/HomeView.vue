@@ -163,6 +163,7 @@ onUnmounted(() => {
 
 <style scoped>
 .grid-layout {
+  position: relative;
   height: 100%;
   min-height: 0;
   display: flex;

@@ -38,6 +38,7 @@ interface ElectronAPI {
   selectDirectory: () => Promise<string | null>;
   getAppVersion: () => Promise<{ version: string; copyright: string }>;
   getUpdatePreference: () => Promise<UpdatePreference>;
+  getUpdateSnapshot: () => Promise<UpdateSnapshot>;
   setAutomaticSoftwareUpdate: (enabled: boolean) => Promise<UpdatePreference>;
   checkForUpdates: (manual?: boolean) => Promise<UpdateSnapshot>;
   installUpdate: (options?: { force?: boolean }) => Promise<InstallUpdateResult>;

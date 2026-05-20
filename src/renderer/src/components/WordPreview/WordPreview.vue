@@ -328,8 +328,9 @@ const copyRichText = (): void => {
     <!-- Preview Header -->
     <div class="preview-header">
       <button
+        type="button"
         class="text-stone-500 hover:text-slate-800 flex items-center gap-2 font-bold text-sm transition-colors group"
-        @click="close"
+        @click.stop.prevent="close"
       >
         <div
           class="w-8 h-8 rounded-full bg-stone-100 flex items-center justify-center group-hover:bg-emerald-100 transition-colors"

@@ -242,6 +242,7 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('updates:get-preference', () => getUpdateService().getPreference());
+  ipcMain.handle('updates:get-snapshot', () => getUpdateService().getSnapshot());
   ipcMain.handle('updates:set-automatic', (_event, enabled: boolean) =>
     getUpdateService().setAutomaticSoftwareUpdate(Boolean(enabled))
   );

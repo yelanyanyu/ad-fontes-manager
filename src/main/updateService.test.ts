@@ -115,6 +115,47 @@ void describe('desktop update service', () => {
     assert.deepEqual(updater.quitAndInstallCalls, [{ isSilent: false, isForceRunAfter: true }]);
   });
 
+  void it('exposes the latest snapshot after an update event for remounted renderers', async () => {
+    const updater = new FakeUpdater('2.0.1');
+    const service = createDesktopUpdateService({
+      updater,
+      readConfig: () => ({ updates: { automatic: false } }),
+      writeConfig: () => undefined,
+      getActiveQueueCount: async () => 0,
+      isPackaged: true,
+      currentVersion: '2.0.0',
+      now: () => new Date('2026-05-20T00:00:00.000Z'),
+    });
+
+    assert.deepEqual(service.getSnapshot(), { status: 'idle', info: null });
+
+    await service.checkForUpdates({ manual: true });
+
+    assert.equal(service.getSnapshot().status, 'available');
+    assert.equal(service.getSnapshot().info?.version, '2.0.1');
+  });
+
+  void it('broadcasts skipped state so all renderer update surfaces stay in sync', async () => {
+    const snapshots: string[] = [];
+    const updater = new FakeUpdater('2.0.1');
+    const service = createDesktopUpdateService({
+      updater,
+      readConfig: () => ({ updates: { automatic: false } }),
+      writeConfig: () => undefined,
+      getActiveQueueCount: async () => 0,
+      isPackaged: true,
+      currentVersion: '2.0.0',
+      now: () => new Date('2026-05-20T00:00:00.000Z'),
+      onEvent: snapshot => snapshots.push(snapshot.status),
+    });
+
+    await service.checkForUpdates({ manual: true });
+    service.skipReleaseVersion('2.0.1');
+
+    assert.equal(service.getSnapshot().status, 'skipped');
+    assert.equal(snapshots.at(-1), 'skipped');
+  });
+
   void it('does not auto-download in development mode', async () => {
     const updater = new FakeUpdater('2.0.1');
     const service = createDesktopUpdateService({

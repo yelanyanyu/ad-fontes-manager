@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '@/stores/appStore';
+import { useUpdateStore } from '@/stores/updateStore';
 import { useThemeStore, type ThemePreference } from '@/stores/themeStore';
 import { pingAnkiConnect } from '@/services/ankiConnectService';
 import {
@@ -22,7 +23,6 @@ import {
 import { mergeSavedAIConfigWithDraft } from '@/services/aiConfigDraft';
 import { aiProviderPresets, type AIProviderPreset } from '@/constants/aiProviderPresets';
 import { requestOnboardingReplay } from '@/components/Onboarding/onboardingState';
-import { renderReleaseNotesHtml } from '@/utils/releaseNotes';
 
 type AnkiStatus = 'connected' | 'disconnected' | 'testing';
 type StageKey = 'fast' | 'balanced' | 'expert';
@@ -33,6 +33,7 @@ type ApiSection = 'providers' | 'stages' | 'search' | 'review' | 'runtime';
 
 const router = useRouter();
 const appStore = useAppStore();
+const updateStore = useUpdateStore();
 const themeStore = useThemeStore();
 
 const activeSettingsPage = ref<SettingsPage>('api');
@@ -43,9 +44,6 @@ const dataDir = ref('');
 const appVersion = ref('');
 const appCopyright = ref('');
 const dataDirStatus = ref('');
-const updatePreference = ref<UpdatePreference | null>(null);
-const updateSnapshot = ref<UpdateSnapshot>({ status: 'idle', info: null });
-const updateInstallBlocked = ref<{ activeCount: number } | null>(null);
 const ankiConfig = ref<StoredAnkiExportOptionsSummary>(getStoredAnkiExportOptionsSummary());
 const ankiMappingModels = ref<string[]>([]);
 const aiConfig = ref<AIConfigMasked | null>(null);
@@ -54,7 +52,6 @@ const aiSaving = ref(false);
 const aiError = ref('');
 const selectedProviderId = ref<string | null>(null);
 const showAddProviderPopup = ref(false);
-const showUpdateDialog = ref(false);
 const showApiKey = reactive<Record<string, boolean>>({});
 const testingProvider = reactive<Record<string, boolean>>({});
 const testResults = reactive<Record<string, TestProviderResult>>({});
@@ -62,7 +59,6 @@ const testingSearch = ref(false);
 const searchTestResult = ref<TestProviderResult | null>(null);
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let autoSaveBusy = false;
-let unsubscribeUpdateEvent: (() => void) | null = null;
 const domainDrafts = reactive<Record<DomainGroup, string>>({
   common: '',
   en: '',
@@ -80,48 +76,6 @@ const testModelId = ref('');
 
 const stageKeys: StageKey[] = ['fast', 'balanced', 'expert'];
 const dataDirDisplay = computed(() => dataDir.value || (isElectron.value ? 'Default' : '服务器默认数据库'));
-const updateBusy = computed(
-  () => updateSnapshot.value.status === 'checking' || updateSnapshot.value.status === 'downloading'
-);
-const currentUpdateVersion = computed(() => updateSnapshot.value.info?.version || '');
-const canInstallUpdate = computed(() => updateSnapshot.value.status === 'downloaded');
-const canSkipUpdate = computed(() =>
-  ['available', 'downloading', 'downloaded'].includes(updateSnapshot.value.status)
-);
-const hasUpdateDialogContent = computed(() =>
-  ['available', 'downloading', 'downloaded'].includes(updateSnapshot.value.status)
-);
-const updateDialogTitle = computed(() =>
-  currentUpdateVersion.value ? `发现新版本 ${currentUpdateVersion.value}` : '发现新版本'
-);
-const updateDialogSubtitle = computed(() => {
-  if (updateSnapshot.value.status === 'downloaded') return '更新已下载，安装后会重启应用。';
-  if (updateSnapshot.value.status === 'downloading') return '正在下载更新，下载完成后即可安装。';
-  return '更新细则如下。';
-});
-const renderedReleaseNotesHtml = computed(() => {
-  return renderReleaseNotesHtml(updateSnapshot.value.info);
-});
-const updateStatusText = computed(() => {
-  switch (updateSnapshot.value.status) {
-    case 'checking':
-      return '正在检查更新...';
-    case 'available':
-      return `发现新版本 ${currentUpdateVersion.value}`;
-    case 'downloading':
-      return `正在下载 ${currentUpdateVersion.value || '新版本'}...`;
-    case 'downloaded':
-      return `新版本 ${currentUpdateVersion.value} 已下载`;
-    case 'not-available':
-      return '当前已是最新版本';
-    case 'skipped':
-      return `已跳过版本 ${currentUpdateVersion.value}`;
-    case 'error':
-      return updateSnapshot.value.error || '更新检查失败';
-    default:
-      return '尚未检查';
-  }
-});
 const reasoningEffortOptions: Array<{ value: ReasoningEffort; label: string }> = [
   { value: 'auto', label: 'Auto' },
   { value: 'none', label: 'None' },
@@ -663,71 +617,6 @@ const loadDataDir = async (): Promise<void> => {
   dataDir.value = await window.electronAPI.getDataDir();
 };
 
-const openUpdateDialog = (): void => {
-  if (!hasUpdateDialogContent.value) return;
-  showUpdateDialog.value = true;
-};
-
-const applyUpdateSnapshot = (snapshot: UpdateSnapshot): void => {
-  updateSnapshot.value = snapshot;
-  if (snapshot.status !== 'error') {
-    updateInstallBlocked.value = null;
-  }
-  if (snapshot.status === 'downloaded') {
-    openUpdateDialog();
-  }
-};
-
-const loadUpdatePreference = async (): Promise<void> => {
-  if (!window.electronAPI) return;
-  updatePreference.value = await window.electronAPI.getUpdatePreference();
-};
-
-const setAutomaticSoftwareUpdate = async (enabled: boolean): Promise<void> => {
-  if (!window.electronAPI) return;
-  updatePreference.value = await window.electronAPI.setAutomaticSoftwareUpdate(enabled);
-  appStore.addToast(enabled ? '已开启自动更新' : '已关闭自动更新', 'success');
-};
-
-const checkForUpdates = async (): Promise<void> => {
-  if (!window.electronAPI || updateBusy.value) return;
-  updateInstallBlocked.value = null;
-  const snapshot = await window.electronAPI.checkForUpdates(true);
-  applyUpdateSnapshot(snapshot);
-
-  if (snapshot.status === 'not-available') {
-    appStore.addToast('当前已是最新版本', 'info');
-  } else if (snapshot.status === 'error') {
-    appStore.addToast(snapshot.error || '更新检查失败', 'error');
-  } else if (snapshot.status === 'downloaded') {
-    appStore.addToast('更新已下载，可以安装', 'success');
-  }
-  if (snapshot.status === 'available' || snapshot.status === 'downloaded') {
-    openUpdateDialog();
-  }
-};
-
-const skipCurrentUpdate = async (): Promise<void> => {
-  if (!window.electronAPI || !currentUpdateVersion.value) return;
-  updatePreference.value = await window.electronAPI.skipReleaseVersion(currentUpdateVersion.value);
-  updateSnapshot.value = { ...updateSnapshot.value, status: 'skipped' };
-  showUpdateDialog.value = false;
-  appStore.addToast(`已跳过 ${currentUpdateVersion.value}`, 'info');
-};
-
-const installCurrentUpdate = async (force = false): Promise<void> => {
-  if (!window.electronAPI || !canInstallUpdate.value) return;
-  const result = await window.electronAPI.installUpdate({ force });
-  if (result.ok) {
-    showUpdateDialog.value = false;
-    return;
-  }
-
-  updateInstallBlocked.value = { activeCount: result.activeCount };
-  showUpdateDialog.value = true;
-  appStore.addToast('队列仍有任务运行，安装更新前请确认', 'warning');
-};
-
 const selectAndSetDataDir = async (): Promise<void> => {
   if (!window.electronAPI) return;
   const chosenPath = await window.electronAPI.selectDirectory();
@@ -756,16 +645,9 @@ onMounted(() => {
   void testAnkiConnection(false);
   void loadDataDir();
   void loadAppVersion();
-  void loadUpdatePreference();
-  if (window.electronAPI) {
-    unsubscribeUpdateEvent = window.electronAPI.onUpdateEvent(applyUpdateSnapshot);
-  }
+  void updateStore.initialize();
 });
 
-onUnmounted(() => {
-  unsubscribeUpdateEvent?.();
-  unsubscribeUpdateEvent = null;
-});
 </script>
 
 <template>
@@ -1468,39 +1350,39 @@ onUnmounted(() => {
               <label class="toggle-row">
                 <input
                   type="checkbox"
-                  :checked="updatePreference?.automatic ?? true"
-                  @change="setAutomaticSoftwareUpdate(($event.target as HTMLInputElement).checked)"
+                  :checked="updateStore.preference?.automatic ?? true"
+                  @change="updateStore.setAutomatic(($event.target as HTMLInputElement).checked)"
                 />
                 <span>自动检查并下载更新</span>
               </label>
-              <button class="btn btn-compact" :disabled="updateBusy" @click="checkForUpdates">
-                {{ updateBusy ? '检查中...' : '检查更新' }}
+              <button class="btn btn-compact" :disabled="updateStore.busy" @click="updateStore.checkForUpdates()">
+                {{ updateStore.busy ? '检查中...' : '检查更新' }}
               </button>
             </div>
 
-            <div class="update-status" :class="'status-' + updateSnapshot.status">
-              {{ updateStatusText }}
+            <div class="update-status" :class="'status-' + updateStore.snapshot.status">
+              {{ updateStore.statusText }}
             </div>
 
-            <div v-if="canSkipUpdate || canInstallUpdate" class="update-actions">
-              <button v-if="hasUpdateDialogContent" class="btn btn-compact" @click="openUpdateDialog">
+            <div v-if="updateStore.canSkip || updateStore.canInstall" class="update-actions">
+              <button v-if="updateStore.hasDialogContent" class="btn btn-compact" @click="updateStore.openDialog()">
                 查看更新细则
               </button>
-              <button v-if="canSkipUpdate" class="btn btn-compact" @click="skipCurrentUpdate">
+              <button v-if="updateStore.canSkip" class="btn btn-compact" @click="updateStore.skipCurrent()">
                 跳过此版本
               </button>
               <button
-                v-if="canInstallUpdate"
+                v-if="updateStore.canInstall"
                 class="btn btn-primary btn-compact"
-                @click="installCurrentUpdate(false)"
+                @click="updateStore.installCurrent(false)"
               >
                 安装更新
               </button>
             </div>
 
-            <div v-if="updateInstallBlocked" class="update-warning">
-              <span>队列中还有 {{ updateInstallBlocked.activeCount }} 个任务，安装会重启应用。</span>
-              <button class="btn danger btn-compact" @click="installCurrentUpdate(true)">
+            <div v-if="updateStore.installBlocked" class="update-warning">
+              <span>队列中还有 {{ updateStore.installBlocked.activeCount }} 个任务，安装会重启应用。</span>
+              <button class="btn danger btn-compact" @click="updateStore.installCurrent(true)">
                 仍然安装
               </button>
             </div>
@@ -1558,52 +1440,6 @@ onUnmounted(() => {
 
     <!-- Add Provider Popup -->
     <Teleport to="body">
-      <div v-if="showUpdateDialog" class="modal-overlay" @click.self="showUpdateDialog = false">
-        <div class="modal-card update-modal">
-          <div class="update-modal-header">
-            <h3>{{ updateDialogTitle }}</h3>
-            <p>{{ updateDialogSubtitle }}</p>
-          </div>
-
-          <div class="update-modal-meta" v-if="updateSnapshot.info">
-            <span>版本 {{ updateSnapshot.info.version }}</span>
-            <span v-if="updateSnapshot.info.releaseName">{{ updateSnapshot.info.releaseName }}</span>
-          </div>
-
-          <div class="update-modal-body">
-            <!-- eslint-disable-next-line vue/no-v-html -- sanitized allowlisted release notes -->
-            <div class="update-release-notes" v-html="renderedReleaseNotesHtml"></div>
-          </div>
-
-          <div v-if="updateInstallBlocked" class="update-warning update-modal-warning">
-            <span>队列中还有 {{ updateInstallBlocked.activeCount }} 个任务，安装会重启应用。</span>
-            <button class="btn danger btn-compact" @click="installCurrentUpdate(true)">
-              仍然安装
-            </button>
-          </div>
-
-          <div class="modal-actions">
-            <button class="btn" type="button" @click="showUpdateDialog = false">稍后</button>
-            <button
-              v-if="canSkipUpdate"
-              class="btn"
-              type="button"
-              @click="skipCurrentUpdate"
-            >
-              跳过此版本
-            </button>
-            <button
-              v-if="canInstallUpdate"
-              class="btn btn-primary"
-              type="button"
-              @click="installCurrentUpdate(false)"
-            >
-              安装更新
-            </button>
-          </div>
-        </div>
-      </div>
-
       <div v-if="showAddProviderPopup" class="modal-overlay" @click.self="showAddProviderPopup = false">
         <div class="modal-card add-provider-modal">
           <h3>添加 API 服务</h3>

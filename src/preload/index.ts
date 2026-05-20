@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () =>
     ipcRenderer.invoke('get-app-version') as Promise<{ version: string; copyright: string }>,
   getUpdatePreference: () => ipcRenderer.invoke('updates:get-preference'),
+  getUpdateSnapshot: () => ipcRenderer.invoke('updates:get-snapshot') as Promise<unknown>,
   setAutomaticSoftwareUpdate: (enabled: boolean) =>
     ipcRenderer.invoke('updates:set-automatic', enabled),
   checkForUpdates: (manual = true) => ipcRenderer.invoke('updates:check', manual),
