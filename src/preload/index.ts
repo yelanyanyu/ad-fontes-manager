@@ -19,6 +19,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: (manual = true) => ipcRenderer.invoke('updates:check', manual),
   installUpdate: (options?: { force?: boolean }) => ipcRenderer.invoke('updates:install', options),
   skipReleaseVersion: (version: string) => ipcRenderer.invoke('updates:skip-version', version),
+  minimizeWindow: () => ipcRenderer.invoke('window:minimize') as Promise<void>,
+  toggleMaximizeWindow: () => ipcRenderer.invoke('window:toggle-maximize') as Promise<boolean>,
+  closeWindow: () => ipcRenderer.invoke('window:close') as Promise<void>,
+  isWindowMaximized: () => ipcRenderer.invoke('window:is-maximized') as Promise<boolean>,
+  onWindowMaximized: (callback: (maximized: boolean) => void) => {
+    const listener = (_event: IpcRendererEvent, maximized: boolean) => callback(maximized);
+    ipcRenderer.on('window:maximized', listener);
+    return () => ipcRenderer.removeListener('window:maximized', listener);
+  },
   onUpdateEvent: (callback: (snapshot: unknown) => void) => {
     const listener = (_event: IpcRendererEvent, snapshot: unknown) => callback(snapshot);
     ipcRenderer.on('updates:event', listener);

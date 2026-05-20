@@ -18,6 +18,7 @@ export interface UpdateInfo {
   version: string;
   releaseName?: string;
   releaseNotesText: string;
+  releaseNotesFormat: 'html' | 'markdown' | 'text';
 }
 
 export type UpdateStatus =
@@ -63,6 +64,7 @@ interface DesktopUpdateServiceOptions {
   writeConfig: (config: DesktopUpdateConfig) => void;
   getActiveQueueCount: () => Promise<number>;
   isPackaged: boolean;
+  currentVersion: string;
   now: () => Date;
   onEvent?: (snapshot: UpdateSnapshot) => void;
 }
@@ -151,7 +153,7 @@ export function createDesktopUpdateService(
         const result = await updater.checkForUpdates();
         const info = normalizeUpdateInfo(result?.updateInfo);
 
-        if (!info) {
+        if (!info || !isNewerVersion(info.version, options.currentVersion)) {
           return emitSnapshot({ status: 'not-available', info: null });
         }
 
@@ -209,13 +211,46 @@ export function selectReleaseNotesText(
   return rawText.trim();
 }
 
+export function detectReleaseNotesFormat(text: string): UpdateInfo['releaseNotesFormat'] {
+  const trimmed = text.trim();
+  if (!trimmed) return 'text';
+  if (/<\/?(h[1-6]|p|ul|ol|li|code|pre|strong|em|a|br|blockquote)\b/i.test(trimmed)) {
+    return 'html';
+  }
+  if (/^#{1,6}\s|\n#{1,6}\s|^\s*[-*+]\s|\n\s*[-*+]\s|`[^`]+`|\*\*[^*]+\*\*/m.test(trimmed)) {
+    return 'markdown';
+  }
+  return 'text';
+}
+
+export function isNewerVersion(candidate: string, current: string): boolean {
+  const candidateParts = parseVersion(candidate);
+  const currentParts = parseVersion(current);
+  if (!candidateParts || !currentParts) return candidate !== current;
+
+  for (let index = 0; index < 3; index += 1) {
+    if (candidateParts[index] > currentParts[index]) return true;
+    if (candidateParts[index] < currentParts[index]) return false;
+  }
+
+  return false;
+}
+
 function normalizeUpdateInfo(rawInfo: RawUpdateInfo | null | undefined): UpdateInfo | null {
   if (!rawInfo?.version) return null;
+  const releaseNotesText = selectReleaseNotesText(rawInfo.releaseNotes);
   return {
     version: rawInfo.version,
     releaseName: rawInfo.releaseName ?? undefined,
-    releaseNotesText: selectReleaseNotesText(rawInfo.releaseNotes),
+    releaseNotesText,
+    releaseNotesFormat: detectReleaseNotesFormat(releaseNotesText),
   };
+}
+
+function parseVersion(version: string): [number, number, number] | null {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version.trim());
+  if (!match) return null;
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
 function releaseNotesToText(notes: RawReleaseNotes | null | undefined): string {

@@ -148,6 +148,7 @@ function getUpdateService(): DesktopUpdateService {
       writeConfig: writeDesktopConfigObject,
       getActiveQueueCount,
       isPackaged: electronApp.isPackaged,
+      currentVersion: electronApp.getVersion(),
       now: () => new Date(),
       onEvent: snapshot => {
         mainWindow?.webContents.send('updates:event', snapshot);
@@ -256,6 +257,23 @@ function registerIpcHandlers(): void {
     }
     return getUpdateService().skipReleaseVersion(version);
   });
+
+  ipcMain.handle('window:minimize', () => {
+    mainWindow?.minimize();
+  });
+  ipcMain.handle('window:toggle-maximize', () => {
+    if (!mainWindow) return false;
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+    return mainWindow.isMaximized();
+  });
+  ipcMain.handle('window:close', () => {
+    mainWindow?.close();
+  });
+  ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false);
 }
 
 async function createWindow(): Promise<void> {
@@ -301,6 +319,9 @@ async function createWindow(): Promise<void> {
         height: 800,
         minWidth: 960,
         minHeight: 600,
+        frame: false,
+        titleBarStyle: 'hidden',
+        trafficLightPosition: { x: 12, y: 12 },
         webPreferences: {
           preload: path.join(__dirname, '..', 'preload', 'index.js'),
           contextIsolation: true,
@@ -317,6 +338,12 @@ async function createWindow(): Promise<void> {
       });
       mainWindow.on('close', () => {
         writeDiagnosticLog('browser-window-close');
+      });
+      mainWindow.on('maximize', () => {
+        mainWindow?.webContents.send('window:maximized', true);
+      });
+      mainWindow.on('unmaximize', () => {
+        mainWindow?.webContents.send('window:maximized', false);
       });
       const rendererDevUrl = process.env.ELECTRON_RENDERER_URL;
       void mainWindow.loadURL(rendererDevUrl || `http://localhost:${DESKTOP_SERVER_PORT}`);

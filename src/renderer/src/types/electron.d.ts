@@ -8,6 +8,7 @@ interface UpdateInfo {
   version: string;
   releaseName?: string;
   releaseNotesText: string;
+  releaseNotesFormat: 'html' | 'markdown' | 'text';
 }
 
 type UpdateStatus =
@@ -41,6 +42,11 @@ interface ElectronAPI {
   checkForUpdates: (manual?: boolean) => Promise<UpdateSnapshot>;
   installUpdate: (options?: { force?: boolean }) => Promise<InstallUpdateResult>;
   skipReleaseVersion: (version: string) => Promise<UpdatePreference>;
+  minimizeWindow: () => Promise<void>;
+  toggleMaximizeWindow: () => Promise<boolean>;
+  closeWindow: () => Promise<void>;
+  isWindowMaximized: () => Promise<boolean>;
+  onWindowMaximized: (callback: (maximized: boolean) => void) => () => void;
   onUpdateEvent: (callback: (snapshot: UpdateSnapshot) => void) => () => void;
 }
 

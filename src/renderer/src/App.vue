@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import Sidebar from './components/Layout/Sidebar.vue';
 import Header from './components/Layout/Header.vue';
 import ToastContainer from './components/ui/ToastContainer.vue';
+import DesktopTitleBar from './components/Layout/DesktopTitleBar.vue';
 import { pingAnkiConnect } from '@/services/ankiConnectService';
 import { hasStoredAnkiExportOptions } from '@/services/ankiExportOptionsStore';
 import { listStoredFieldMappingModelNames } from '@/services/ankiFieldMappingStore';
@@ -17,6 +18,7 @@ import { useAppStore } from '@/stores/appStore';
 
 const appStore = useAppStore();
 const router = useRouter();
+const isElectron = computed(() => Boolean(window.electronAPI));
 
 const hasSavedAnkiConfiguration = (): boolean =>
   hasStoredAnkiExportOptions() || listStoredFieldMappingModelNames().length > 0;
@@ -67,20 +69,24 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app">
-    <Sidebar />
+  <div class="app" :class="{ desktop: isElectron }">
+    <DesktopTitleBar />
 
-    <main class="main">
-      <Header />
+    <div class="app-body">
+      <Sidebar />
 
-      <section class="workspace">
-        <RouterView v-slot="{ Component }">
-          <KeepAlive include="HomeView">
-            <component :is="Component" />
-          </KeepAlive>
-        </RouterView>
-      </section>
-    </main>
+      <main class="main">
+        <Header />
+
+        <section class="workspace">
+          <RouterView v-slot="{ Component }">
+            <KeepAlive include="HomeView">
+              <component :is="Component" />
+            </KeepAlive>
+          </RouterView>
+        </section>
+      </main>
+    </div>
 
     <ToastContainer />
   </div>
@@ -91,23 +97,39 @@ onUnmounted(() => {
   height: 100%;
   min-height: 0;
   display: grid;
+  grid-template-rows: 1fr;
+  overflow: hidden;
+}
+
+.app.desktop {
+  grid-template-rows: 38px 1fr;
+}
+
+.app-body {
+  height: 100%;
+  min-height: 0;
+  display: grid;
   grid-template-columns: 58px 1fr;
+  overflow: hidden;
 }
 
 .main {
   min-width: 0;
+  height: 100%;
   min-height: 0;
   display: grid;
   grid-template-rows: 58px 1fr;
+  overflow: hidden;
 }
 
 .workspace {
   min-width: 0;
+  height: 100%;
   min-height: 0;
   padding: 16px 14px 14px;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: hidden;
   background: transparent;
 }
 </style>

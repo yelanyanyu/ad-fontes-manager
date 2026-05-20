@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   createDesktopUpdateService,
+  detectReleaseNotesFormat,
+  isNewerVersion,
   selectReleaseNotesText,
   type DesktopUpdateConfig,
   type UpdaterLike,
@@ -73,6 +75,7 @@ void describe('desktop update service', () => {
       writeConfig: configStore.write,
       getActiveQueueCount: async () => 0,
       isPackaged: true,
+      currentVersion: '2.0.0',
       now: () => new Date('2026-05-20T00:00:00.000Z'),
     });
 
@@ -85,6 +88,7 @@ void describe('desktop update service', () => {
     assert.equal(result.status, 'downloaded');
     assert.equal(result.info?.version, '2.0.1');
     assert.equal(result.info?.releaseNotesText, '中文更新');
+    assert.equal(result.info?.releaseNotesFormat, 'text');
     assert.equal(updater.checkCalls, 1);
     assert.equal(updater.downloadCalls, 1);
     assert.equal(configStore.snapshot().updates?.lastCheckedAt, '2026-05-20T00:00:00.000Z');
@@ -98,6 +102,7 @@ void describe('desktop update service', () => {
       writeConfig: () => undefined,
       getActiveQueueCount: async () => 2,
       isPackaged: true,
+      currentVersion: '2.0.0',
       now: () => new Date('2026-05-20T00:00:00.000Z'),
     });
 
@@ -118,6 +123,7 @@ void describe('desktop update service', () => {
       writeConfig: () => undefined,
       getActiveQueueCount: async () => 0,
       isPackaged: false,
+      currentVersion: '2.0.0',
       now: () => new Date('2026-05-20T00:00:00.000Z'),
     });
 
@@ -138,5 +144,37 @@ void describe('desktop update service', () => {
 
     assert.equal(selectReleaseNotesText(notes, 'zh-CN'), '中文');
     assert.equal(selectReleaseNotesText(notes, 'en-US'), 'English');
+  });
+
+  void it('keeps html release notes as html instead of treating them as markdown', () => {
+    const notes = '<h1>2.0.2</h1><ul><li>测试发布</li></ul>';
+
+    assert.equal(selectReleaseNotesText(notes, 'zh-CN'), notes);
+    assert.equal(detectReleaseNotesFormat(notes), 'html');
+  });
+
+  void it('does not treat the current version as a newer release', async () => {
+    const updater = new FakeUpdater('2.0.2');
+    const service = createDesktopUpdateService({
+      updater,
+      readConfig: () => ({}),
+      writeConfig: () => undefined,
+      getActiveQueueCount: async () => 0,
+      isPackaged: true,
+      currentVersion: '2.0.2',
+      now: () => new Date('2026-05-20T00:00:00.000Z'),
+    });
+
+    const result = await service.checkForUpdates({ manual: true });
+
+    assert.equal(result.status, 'not-available');
+    assert.equal(result.info, null);
+    assert.equal(updater.downloadCalls, 0);
+  });
+
+  void it('compares semver versions without accepting equal versions', () => {
+    assert.equal(isNewerVersion('2.0.2', '2.0.1'), true);
+    assert.equal(isNewerVersion('2.0.2', '2.0.2'), false);
+    assert.equal(isNewerVersion('2.0.1', '2.0.2'), false);
   });
 });

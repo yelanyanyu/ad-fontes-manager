@@ -163,11 +163,13 @@ onUnmounted(() => {
 
 <style scoped>
 .grid-layout {
-  height: calc(100vh - 88px);
+  height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: row;
   gap: 0;
   align-items: stretch;
+  overflow: hidden;
 }
 
 .left-panel {

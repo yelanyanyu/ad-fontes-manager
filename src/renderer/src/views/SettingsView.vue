@@ -22,6 +22,7 @@ import {
 import { mergeSavedAIConfigWithDraft } from '@/services/aiConfigDraft';
 import { aiProviderPresets, type AIProviderPreset } from '@/constants/aiProviderPresets';
 import { requestOnboardingReplay } from '@/components/Onboarding/onboardingState';
+import { renderReleaseNotesHtml } from '@/utils/releaseNotes';
 
 type AnkiStatus = 'connected' | 'disconnected' | 'testing';
 type StageKey = 'fast' | 'balanced' | 'expert';
@@ -53,6 +54,7 @@ const aiSaving = ref(false);
 const aiError = ref('');
 const selectedProviderId = ref<string | null>(null);
 const showAddProviderPopup = ref(false);
+const showUpdateDialog = ref(false);
 const showApiKey = reactive<Record<string, boolean>>({});
 const testingProvider = reactive<Record<string, boolean>>({});
 const testResults = reactive<Record<string, TestProviderResult>>({});
@@ -86,6 +88,20 @@ const canInstallUpdate = computed(() => updateSnapshot.value.status === 'downloa
 const canSkipUpdate = computed(() =>
   ['available', 'downloading', 'downloaded'].includes(updateSnapshot.value.status)
 );
+const hasUpdateDialogContent = computed(() =>
+  ['available', 'downloading', 'downloaded'].includes(updateSnapshot.value.status)
+);
+const updateDialogTitle = computed(() =>
+  currentUpdateVersion.value ? `发现新版本 ${currentUpdateVersion.value}` : '发现新版本'
+);
+const updateDialogSubtitle = computed(() => {
+  if (updateSnapshot.value.status === 'downloaded') return '更新已下载，安装后会重启应用。';
+  if (updateSnapshot.value.status === 'downloading') return '正在下载更新，下载完成后即可安装。';
+  return '更新细则如下。';
+});
+const renderedReleaseNotesHtml = computed(() => {
+  return renderReleaseNotesHtml(updateSnapshot.value.info);
+});
 const updateStatusText = computed(() => {
   switch (updateSnapshot.value.status) {
     case 'checking':
@@ -647,10 +663,18 @@ const loadDataDir = async (): Promise<void> => {
   dataDir.value = await window.electronAPI.getDataDir();
 };
 
+const openUpdateDialog = (): void => {
+  if (!hasUpdateDialogContent.value) return;
+  showUpdateDialog.value = true;
+};
+
 const applyUpdateSnapshot = (snapshot: UpdateSnapshot): void => {
   updateSnapshot.value = snapshot;
   if (snapshot.status !== 'error') {
     updateInstallBlocked.value = null;
+  }
+  if (snapshot.status === 'downloaded') {
+    openUpdateDialog();
   }
 };
 
@@ -678,21 +702,29 @@ const checkForUpdates = async (): Promise<void> => {
   } else if (snapshot.status === 'downloaded') {
     appStore.addToast('更新已下载，可以安装', 'success');
   }
+  if (snapshot.status === 'available' || snapshot.status === 'downloaded') {
+    openUpdateDialog();
+  }
 };
 
 const skipCurrentUpdate = async (): Promise<void> => {
   if (!window.electronAPI || !currentUpdateVersion.value) return;
   updatePreference.value = await window.electronAPI.skipReleaseVersion(currentUpdateVersion.value);
   updateSnapshot.value = { ...updateSnapshot.value, status: 'skipped' };
+  showUpdateDialog.value = false;
   appStore.addToast(`已跳过 ${currentUpdateVersion.value}`, 'info');
 };
 
 const installCurrentUpdate = async (force = false): Promise<void> => {
   if (!window.electronAPI || !canInstallUpdate.value) return;
   const result = await window.electronAPI.installUpdate({ force });
-  if (result.ok) return;
+  if (result.ok) {
+    showUpdateDialog.value = false;
+    return;
+  }
 
   updateInstallBlocked.value = { activeCount: result.activeCount };
+  showUpdateDialog.value = true;
   appStore.addToast('队列仍有任务运行，安装更新前请确认', 'warning');
 };
 
@@ -1450,19 +1482,10 @@ onUnmounted(() => {
               {{ updateStatusText }}
             </div>
 
-            <div v-if="updateSnapshot.info" class="update-detail">
-              <div class="about-grid">
-                <span class="config-label">最新版本</span>
-                <span class="config-value">{{ updateSnapshot.info.version }}</span>
-                <span class="config-label">Release</span>
-                <span class="config-value">{{ updateSnapshot.info.releaseName || '—' }}</span>
-              </div>
-              <pre v-if="updateSnapshot.info.releaseNotesText" class="release-notes">{{
-                updateSnapshot.info.releaseNotesText
-              }}</pre>
-            </div>
-
             <div v-if="canSkipUpdate || canInstallUpdate" class="update-actions">
+              <button v-if="hasUpdateDialogContent" class="btn btn-compact" @click="openUpdateDialog">
+                查看更新细则
+              </button>
               <button v-if="canSkipUpdate" class="btn btn-compact" @click="skipCurrentUpdate">
                 跳过此版本
               </button>
@@ -1535,6 +1558,52 @@ onUnmounted(() => {
 
     <!-- Add Provider Popup -->
     <Teleport to="body">
+      <div v-if="showUpdateDialog" class="modal-overlay" @click.self="showUpdateDialog = false">
+        <div class="modal-card update-modal">
+          <div class="update-modal-header">
+            <h3>{{ updateDialogTitle }}</h3>
+            <p>{{ updateDialogSubtitle }}</p>
+          </div>
+
+          <div class="update-modal-meta" v-if="updateSnapshot.info">
+            <span>版本 {{ updateSnapshot.info.version }}</span>
+            <span v-if="updateSnapshot.info.releaseName">{{ updateSnapshot.info.releaseName }}</span>
+          </div>
+
+          <div class="update-modal-body">
+            <!-- eslint-disable-next-line vue/no-v-html -- sanitized allowlisted release notes -->
+            <div class="update-release-notes" v-html="renderedReleaseNotesHtml"></div>
+          </div>
+
+          <div v-if="updateInstallBlocked" class="update-warning update-modal-warning">
+            <span>队列中还有 {{ updateInstallBlocked.activeCount }} 个任务，安装会重启应用。</span>
+            <button class="btn danger btn-compact" @click="installCurrentUpdate(true)">
+              仍然安装
+            </button>
+          </div>
+
+          <div class="modal-actions">
+            <button class="btn" type="button" @click="showUpdateDialog = false">稍后</button>
+            <button
+              v-if="canSkipUpdate"
+              class="btn"
+              type="button"
+              @click="skipCurrentUpdate"
+            >
+              跳过此版本
+            </button>
+            <button
+              v-if="canInstallUpdate"
+              class="btn btn-primary"
+              type="button"
+              @click="installCurrentUpdate(false)"
+            >
+              安装更新
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div v-if="showAddProviderPopup" class="modal-overlay" @click.self="showAddProviderPopup = false">
         <div class="modal-card add-provider-modal">
           <h3>添加 API 服务</h3>
@@ -2561,26 +2630,6 @@ onUnmounted(() => {
   color: var(--red);
 }
 
-.update-detail {
-  margin-top: 10px;
-}
-
-.release-notes {
-  max-height: 180px;
-  overflow: auto;
-  margin: 10px 0 0;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface-soft);
-  color: var(--text);
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1.55;
-}
-
 .update-actions {
   margin-top: 10px;
 }
@@ -2825,6 +2874,127 @@ select.field-control {
   margin: 0 0 16px;
   font-size: 16px;
   color: var(--text);
+}
+
+.update-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-width: 720px;
+  max-height: calc(100vh - 72px);
+  display: flex;
+  flex-direction: column;
+}
+
+.update-modal-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.update-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.update-modal-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.update-modal-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.update-modal-meta span {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 11px;
+}
+
+.update-modal-body {
+  max-height: 450px;
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.update-release-notes {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.update-release-notes :deep(h1),
+.update-release-notes :deep(h2),
+.update-release-notes :deep(h3),
+.update-release-notes :deep(h4),
+.update-release-notes :deep(h5),
+.update-release-notes :deep(h6) {
+  margin: 16px 0 8px;
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.update-release-notes :deep(h1:first-child),
+.update-release-notes :deep(h2:first-child),
+.update-release-notes :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+.update-release-notes :deep(h1) {
+  font-size: 18px;
+}
+
+.update-release-notes :deep(h2) {
+  font-size: 15px;
+}
+
+.update-release-notes :deep(p) {
+  margin: 0 0 10px;
+  color: var(--text-soft);
+}
+
+.update-release-notes :deep(ul),
+.update-release-notes :deep(ol) {
+  margin: 8px 0;
+  padding-left: 22px;
+  color: var(--text-soft);
+}
+
+.update-release-notes :deep(li) {
+  margin: 4px 0;
+}
+
+.update-release-notes :deep(code) {
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.update-release-notes :deep(pre) {
+  padding: 10px;
+  overflow-x: auto;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.update-modal-warning {
+  margin-top: 12px;
 }
 
 .add-provider-modal .field-stack {
