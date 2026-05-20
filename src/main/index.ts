@@ -5,13 +5,20 @@ process.env.ADFONTES_DESKTOP = '1';
 process.env.ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'dev-token-not-for-production';
 
 import { app as electronApp, BrowserWindow, dialog, ipcMain } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import type { createApp as createServerApp } from '../server/app';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import {
+  createDesktopUpdateService,
+  type DesktopUpdateConfig,
+  type DesktopUpdateService,
+} from './updateService';
 
 let mainWindow: BrowserWindow | null = null;
 let serverInstance: http.Server | null = null;
+let updateService: DesktopUpdateService | null = null;
 
 // Desktop server port — shared with electron.vite.config.mts via env var.
 // Keep in sync with the proxy target in electron.vite.config.mts.
@@ -87,14 +94,10 @@ function defaultDataDir(): string {
 
 function readDataDir(): string {
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      const desktopConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8')) as {
-        dataDir?: unknown;
-      };
+    const desktopConfig = readDesktopConfig();
 
-      if (typeof desktopConfig.dataDir === 'string' && fs.existsSync(desktopConfig.dataDir)) {
-        return desktopConfig.dataDir;
-      }
+    if (typeof desktopConfig.dataDir === 'string' && fs.existsSync(desktopConfig.dataDir)) {
+      return desktopConfig.dataDir;
     }
   } catch {
     // Fall back to the default data directory.
@@ -105,8 +108,7 @@ function readDataDir(): string {
   return fallbackDir;
 }
 
-function writeDesktopConfig(dataDir: string): void {
-  ensureDirectory(path.dirname(CONFIG_FILE));
+function readDesktopConfig(): DesktopUpdateConfig & { dataDir?: unknown } {
   let existingConfig: Record<string, unknown> = {};
   try {
     if (fs.existsSync(CONFIG_FILE)) {
@@ -118,7 +120,16 @@ function writeDesktopConfig(dataDir: string): void {
   } catch {
     existingConfig = {};
   }
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ ...existingConfig, dataDir }, null, 2));
+  return existingConfig as DesktopUpdateConfig & { dataDir?: unknown };
+}
+
+function writeDesktopConfigObject(config: DesktopUpdateConfig & { dataDir?: unknown }): void {
+  ensureDirectory(path.dirname(CONFIG_FILE));
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+function writeDesktopConfig(dataDir: string): void {
+  writeDesktopConfigObject({ ...readDesktopConfig(), dataDir });
 }
 
 function ensureConfig(): void {
@@ -127,6 +138,55 @@ function ensureConfig(): void {
     ensureDirectory(dataDir);
     writeDesktopConfig(dataDir);
   }
+}
+
+function getUpdateService(): DesktopUpdateService {
+  if (!updateService) {
+    updateService = createDesktopUpdateService({
+      updater: autoUpdater,
+      readConfig: readDesktopConfig,
+      writeConfig: writeDesktopConfigObject,
+      getActiveQueueCount,
+      isPackaged: electronApp.isPackaged,
+      now: () => new Date(),
+      onEvent: snapshot => {
+        mainWindow?.webContents.send('updates:event', snapshot);
+      },
+    });
+  }
+  return updateService;
+}
+
+async function getActiveQueueCount(): Promise<number> {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${DESKTOP_SERVER_PORT}/api/v2/generate/queue/overview`
+    );
+    if (!response.ok) return 0;
+
+    const body = (await response.json()) as {
+      jobs?: Array<{ status?: unknown }>;
+    };
+    return (body.jobs ?? []).filter(
+      job => job.status === 'queued' || job.status === 'running' || job.status === 'paused'
+    ).length;
+  } catch (error) {
+    writeDiagnosticLog('update-active-queue-check-failed', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return 0;
+  }
+}
+
+function scheduleAutomaticUpdateCheck(): void {
+  if (!electronApp.isPackaged) return;
+
+  const service = getUpdateService();
+  if (!service.getPreference().automatic) return;
+
+  setTimeout(() => {
+    void service.checkForUpdates({ manual: false });
+  }, 10_000);
 }
 
 function registerIpcHandlers(): void {
@@ -178,6 +238,23 @@ function registerIpcHandlers(): void {
       version,
       copyright: `Copyright © ${year} yelanyanyu(Github)`,
     };
+  });
+
+  ipcMain.handle('updates:get-preference', () => getUpdateService().getPreference());
+  ipcMain.handle('updates:set-automatic', (_event, enabled: boolean) =>
+    getUpdateService().setAutomaticSoftwareUpdate(Boolean(enabled))
+  );
+  ipcMain.handle('updates:check', (_event, manual: boolean) =>
+    getUpdateService().checkForUpdates({ manual })
+  );
+  ipcMain.handle('updates:install', (_event, options?: { force?: boolean }) =>
+    getUpdateService().installUpdate(options)
+  );
+  ipcMain.handle('updates:skip-version', (_event, version: string) => {
+    if (typeof version !== 'string' || version.trim().length === 0) {
+      throw new Error('Version is required.');
+    }
+    return getUpdateService().skipReleaseVersion(version);
   });
 }
 
@@ -262,6 +339,7 @@ void electronApp.whenReady().then(async () => {
 
   try {
     await createWindow();
+    scheduleAutomaticUpdateCheck();
   } catch (err) {
     writeDiagnosticLog('startup-failed', {
       message: err instanceof Error ? err.message : String(err),

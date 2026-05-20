@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '@/stores/appStore';
 import { useThemeStore, type ThemePreference } from '@/stores/themeStore';
@@ -42,6 +42,9 @@ const dataDir = ref('');
 const appVersion = ref('');
 const appCopyright = ref('');
 const dataDirStatus = ref('');
+const updatePreference = ref<UpdatePreference | null>(null);
+const updateSnapshot = ref<UpdateSnapshot>({ status: 'idle', info: null });
+const updateInstallBlocked = ref<{ activeCount: number } | null>(null);
 const ankiConfig = ref<StoredAnkiExportOptionsSummary>(getStoredAnkiExportOptionsSummary());
 const ankiMappingModels = ref<string[]>([]);
 const aiConfig = ref<AIConfigMasked | null>(null);
@@ -57,6 +60,7 @@ const testingSearch = ref(false);
 const searchTestResult = ref<TestProviderResult | null>(null);
 let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let autoSaveBusy = false;
+let unsubscribeUpdateEvent: (() => void) | null = null;
 const domainDrafts = reactive<Record<DomainGroup, string>>({
   common: '',
   en: '',
@@ -74,6 +78,34 @@ const testModelId = ref('');
 
 const stageKeys: StageKey[] = ['fast', 'balanced', 'expert'];
 const dataDirDisplay = computed(() => dataDir.value || (isElectron.value ? 'Default' : '服务器默认数据库'));
+const updateBusy = computed(
+  () => updateSnapshot.value.status === 'checking' || updateSnapshot.value.status === 'downloading'
+);
+const currentUpdateVersion = computed(() => updateSnapshot.value.info?.version || '');
+const canInstallUpdate = computed(() => updateSnapshot.value.status === 'downloaded');
+const canSkipUpdate = computed(() =>
+  ['available', 'downloading', 'downloaded'].includes(updateSnapshot.value.status)
+);
+const updateStatusText = computed(() => {
+  switch (updateSnapshot.value.status) {
+    case 'checking':
+      return '正在检查更新...';
+    case 'available':
+      return `发现新版本 ${currentUpdateVersion.value}`;
+    case 'downloading':
+      return `正在下载 ${currentUpdateVersion.value || '新版本'}...`;
+    case 'downloaded':
+      return `新版本 ${currentUpdateVersion.value} 已下载`;
+    case 'not-available':
+      return '当前已是最新版本';
+    case 'skipped':
+      return `已跳过版本 ${currentUpdateVersion.value}`;
+    case 'error':
+      return updateSnapshot.value.error || '更新检查失败';
+    default:
+      return '尚未检查';
+  }
+});
 const reasoningEffortOptions: Array<{ value: ReasoningEffort; label: string }> = [
   { value: 'auto', label: 'Auto' },
   { value: 'none', label: 'None' },
@@ -615,6 +647,55 @@ const loadDataDir = async (): Promise<void> => {
   dataDir.value = await window.electronAPI.getDataDir();
 };
 
+const applyUpdateSnapshot = (snapshot: UpdateSnapshot): void => {
+  updateSnapshot.value = snapshot;
+  if (snapshot.status !== 'error') {
+    updateInstallBlocked.value = null;
+  }
+};
+
+const loadUpdatePreference = async (): Promise<void> => {
+  if (!window.electronAPI) return;
+  updatePreference.value = await window.electronAPI.getUpdatePreference();
+};
+
+const setAutomaticSoftwareUpdate = async (enabled: boolean): Promise<void> => {
+  if (!window.electronAPI) return;
+  updatePreference.value = await window.electronAPI.setAutomaticSoftwareUpdate(enabled);
+  appStore.addToast(enabled ? '已开启自动更新' : '已关闭自动更新', 'success');
+};
+
+const checkForUpdates = async (): Promise<void> => {
+  if (!window.electronAPI || updateBusy.value) return;
+  updateInstallBlocked.value = null;
+  const snapshot = await window.electronAPI.checkForUpdates(true);
+  applyUpdateSnapshot(snapshot);
+
+  if (snapshot.status === 'not-available') {
+    appStore.addToast('当前已是最新版本', 'info');
+  } else if (snapshot.status === 'error') {
+    appStore.addToast(snapshot.error || '更新检查失败', 'error');
+  } else if (snapshot.status === 'downloaded') {
+    appStore.addToast('更新已下载，可以安装', 'success');
+  }
+};
+
+const skipCurrentUpdate = async (): Promise<void> => {
+  if (!window.electronAPI || !currentUpdateVersion.value) return;
+  updatePreference.value = await window.electronAPI.skipReleaseVersion(currentUpdateVersion.value);
+  updateSnapshot.value = { ...updateSnapshot.value, status: 'skipped' };
+  appStore.addToast(`已跳过 ${currentUpdateVersion.value}`, 'info');
+};
+
+const installCurrentUpdate = async (force = false): Promise<void> => {
+  if (!window.electronAPI || !canInstallUpdate.value) return;
+  const result = await window.electronAPI.installUpdate({ force });
+  if (result.ok) return;
+
+  updateInstallBlocked.value = { activeCount: result.activeCount };
+  appStore.addToast('队列仍有任务运行，安装更新前请确认', 'warning');
+};
+
 const selectAndSetDataDir = async (): Promise<void> => {
   if (!window.electronAPI) return;
   const chosenPath = await window.electronAPI.selectDirectory();
@@ -643,6 +724,15 @@ onMounted(() => {
   void testAnkiConnection(false);
   void loadDataDir();
   void loadAppVersion();
+  void loadUpdatePreference();
+  if (window.electronAPI) {
+    unsubscribeUpdateEvent = window.electronAPI.onUpdateEvent(applyUpdateSnapshot);
+  }
+});
+
+onUnmounted(() => {
+  unsubscribeUpdateEvent?.();
+  unsubscribeUpdateEvent = null;
 });
 </script>
 
@@ -1335,6 +1425,61 @@ onMounted(() => {
               <span class="config-value">{{ dataDirDisplay }}</span>
               <span class="config-label">Copyright</span>
               <span class="config-value">{{ appCopyright || '—' }}</span>
+            </div>
+          </div>
+
+          <div v-if="isElectron" class="settings-section update-section">
+            <div class="section-title">软件更新</div>
+            <div class="section-desc">检查 GitHub Release 中发布的新版本。</div>
+
+            <div class="update-toolbar">
+              <label class="toggle-row">
+                <input
+                  type="checkbox"
+                  :checked="updatePreference?.automatic ?? true"
+                  @change="setAutomaticSoftwareUpdate(($event.target as HTMLInputElement).checked)"
+                />
+                <span>自动检查并下载更新</span>
+              </label>
+              <button class="btn btn-compact" :disabled="updateBusy" @click="checkForUpdates">
+                {{ updateBusy ? '检查中...' : '检查更新' }}
+              </button>
+            </div>
+
+            <div class="update-status" :class="'status-' + updateSnapshot.status">
+              {{ updateStatusText }}
+            </div>
+
+            <div v-if="updateSnapshot.info" class="update-detail">
+              <div class="about-grid">
+                <span class="config-label">最新版本</span>
+                <span class="config-value">{{ updateSnapshot.info.version }}</span>
+                <span class="config-label">Release</span>
+                <span class="config-value">{{ updateSnapshot.info.releaseName || '—' }}</span>
+              </div>
+              <pre v-if="updateSnapshot.info.releaseNotesText" class="release-notes">{{
+                updateSnapshot.info.releaseNotesText
+              }}</pre>
+            </div>
+
+            <div v-if="canSkipUpdate || canInstallUpdate" class="update-actions">
+              <button v-if="canSkipUpdate" class="btn btn-compact" @click="skipCurrentUpdate">
+                跳过此版本
+              </button>
+              <button
+                v-if="canInstallUpdate"
+                class="btn btn-primary btn-compact"
+                @click="installCurrentUpdate(false)"
+              >
+                安装更新
+              </button>
+            </div>
+
+            <div v-if="updateInstallBlocked" class="update-warning">
+              <span>队列中还有 {{ updateInstallBlocked.activeCount }} 个任务，安装会重启应用。</span>
+              <button class="btn danger btn-compact" @click="installCurrentUpdate(true)">
+                仍然安装
+              </button>
             </div>
           </div>
 
@@ -2364,6 +2509,89 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text);
   word-break: break-all;
+}
+
+.update-toolbar,
+.update-actions,
+.update-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.update-toolbar {
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.toggle-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.toggle-row input {
+  accent-color: var(--green);
+}
+
+.update-status {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.update-status.status-downloaded,
+.update-status.status-available {
+  border-color: var(--green-border);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.update-status.status-error,
+.update-warning {
+  border-color: var(--red-border);
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.update-detail {
+  margin-top: 10px;
+}
+
+.release-notes {
+  max-height: 180px;
+  overflow: auto;
+  margin: 10px 0 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.update-actions {
+  margin-top: 10px;
+}
+
+.update-warning {
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid;
+  border-radius: var(--radius-md);
+  font-size: 12px;
 }
 
 .theme-options {

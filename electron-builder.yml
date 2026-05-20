@@ -2,6 +2,11 @@ appId: com.adfontes.manager
 productName: ad-fontes-manager
 copyright: Copyright © 2026 yelanyanyu(Github)
 
+publish:
+  provider: github
+  owner: yelanyanyu
+  repo: ad-fontes-manager
+
 directories:
   buildResources: assets
   output: release
@@ -27,6 +32,7 @@ asarUnpack:
 
 win:
   icon: assets/icon.ico
+  artifactName: ${productName}-${version}-win-${arch}-setup.${ext}
   target:
     - target: nsis
       arch:
@@ -35,6 +41,9 @@ win:
   # electron-builder's rcedit path disabled avoids the legacy winCodeSign
   # bundle extraction failure on Windows environments without symlink privilege.
   signAndEditExecutable: false
+  # TODO(security): enable Windows code-signature verification after a signing
+  # certificate is available for release builds.
+  verifyUpdateCodeSignature: false
 
 nsis:
   oneClick: false
@@ -46,6 +55,7 @@ nsis:
 
 mac:
   icon: assets/icon.png
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
   target:
     - target: dmg
       arch:

@@ -1,6 +1,6 @@
 {
   "name": "ad-fontes-manager",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Ad Fontes Manager web and desktop application",
   "license": "AGPL-3.0-only",
   "main": "out/main/index.js",
@@ -55,6 +55,7 @@
     "dotenv": "^16.6.1",
     "driver.js": "^1.4.0",
     "drizzle-orm": "^0.45.2",
+    "electron-updater": "^6.8.3",
     "express": "^5.0.0",
     "github-markdown-css": "^5.8.1",
     "helmet": "^8.1.0",

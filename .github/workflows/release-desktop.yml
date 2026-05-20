@@ -1,0 +1,188 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - '[0-9]*.[0-9]*.[0-9]*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version without a v prefix, for example 2.0.1'
+        required: true
+        type: string
+      release_notes_path:
+        description: 'Markdown file used as the GitHub Release body'
+        required: false
+        type: string
+      draft:
+        description: 'Create or keep the GitHub Release as draft'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate release inputs
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      release_notes_path: ${{ steps.release.outputs.release_notes_path }}
+      draft: ${{ steps.release.outputs.draft }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+            DRAFT="${{ inputs.draft }}"
+            NOTES_PATH="${{ inputs.release_notes_path }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+            DRAFT="false"
+            NOTES_PATH=""
+          fi
+
+          if [[ "${VERSION}" == v* ]]; then
+            echo "Use a bare semver tag like 2.0.1, not ${VERSION}."
+            exit 1
+          fi
+
+          if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Version must look like 2.0.1 or 2.0.1-beta.1."
+            exit 1
+          fi
+
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [[ "${PACKAGE_VERSION}" != "${VERSION}" ]]; then
+            echo "package.json version (${PACKAGE_VERSION}) does not match release version (${VERSION})."
+            exit 1
+          fi
+
+          if [[ -z "${NOTES_PATH}" ]]; then
+            NOTES_PATH="docs/releases/${VERSION}.md"
+          fi
+
+          if [[ ! -f "${NOTES_PATH}" ]]; then
+            echo "Release notes file not found: ${NOTES_PATH}"
+            exit 1
+          fi
+
+          {
+            echo "version=${VERSION}"
+            echo "release_notes_path=${NOTES_PATH}"
+            echo "draft=${DRAFT}"
+          } >> "${GITHUB_OUTPUT}"
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run type-check
+      - run: npm run lint
+      - run: node ./node_modules/tsx/dist/cli.mjs --test src/main/updateService.test.ts
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    needs: test
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:desktop:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml
+          if-no-files-found: error
+
+  build-mac:
+    name: Build macOS
+    runs-on: macos-latest
+    needs: test
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:desktop:mac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-mac
+          path: |
+            release/*.dmg
+            release/*.dmg.blockmap
+            release/latest-mac.yml
+          if-no-files-found: warn
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - validate
+      - build-windows
+      - build-mac
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+          RELEASE_NOTES_PATH: ${{ needs.validate.outputs.release_notes_path }}
+          RELEASE_DRAFT: ${{ needs.validate.outputs.draft }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t ASSETS < <(find release-assets -type f | sort)
+          if [[ "${#ASSETS[@]}" -eq 0 ]]; then
+            echo "No release assets were downloaded."
+            exit 1
+          fi
+
+          if gh release view "${RELEASE_VERSION}" >/dev/null 2>&1; then
+            gh release edit "${RELEASE_VERSION}" \
+              --title "${RELEASE_VERSION}" \
+              --notes-file "${RELEASE_NOTES_PATH}"
+          else
+            CREATE_ARGS=(release create "${RELEASE_VERSION}" --title "${RELEASE_VERSION}" --notes-file "${RELEASE_NOTES_PATH}")
+            if [[ "${RELEASE_DRAFT}" == "true" ]]; then
+              CREATE_ARGS+=(--draft)
+            fi
+            gh "${CREATE_ARGS[@]}"
+          fi
+
+          gh release upload "${RELEASE_VERSION}" "${ASSETS[@]}" --clobber

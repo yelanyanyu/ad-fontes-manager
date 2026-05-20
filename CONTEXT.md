@@ -76,6 +76,76 @@ _Avoid_: Field key, extractor key
 **Card Template**:
 The HTML/CSS structure defining how a single Anki card type renders. Templates are currently hardcoded in the server-side field extractor.
 
+### Software update
+
+**Software Update** (软件更新):
+The desktop app's update flow: compare the local App Version with the latest Release Version, notify the user when a newer Platform Installer Asset is available, and optionally download the update before handing installation to the user.
+_Avoid_: Silent update
+
+**Auto Update Check** (自动检查更新):
+The user-controlled setting that allows the desktop app to check GitHub Releases automatically, typically at startup. Turning it off disables automatic checks, but should not prevent a user from manually checking for updates.
+_Avoid_: Auto install
+
+**Auto Update Download** (自动下载更新):
+The user-controlled behavior that downloads an available update after Software Update discovers a newer Release Version. Downloading an update is distinct from installing it.
+_Avoid_: Auto install, silent update
+
+**Automatic Software Update** (自动软件更新):
+The single user-facing toggle for the first implementation. When enabled, the desktop app performs Auto Update Check and Auto Update Download; when disabled, the app only performs Manual Update Check. It never performs Install Update without explicit user action.
+_Avoid_: Silent update, forced update
+
+**Install Update** (安装更新):
+The explicit user action that exits the desktop app and runs the already-downloaded update installer. The app must not install automatically on quit or run an installer without a user choosing this action.
+_Avoid_: Silent install, auto install, run update
+
+**Update Install Guard** (更新安装保护):
+The safety check before Install Update. If the Active Queue contains `queued`, `running`, or `paused` Jobs, the app warns that installing will close the app and may interrupt Queue work, then lets the user cancel or explicitly continue.
+_Avoid_: Forced install, queue lock
+
+**Manual Update Check** (手动检查更新):
+A user-triggered Software Update check, available regardless of whether Auto Update Check is enabled. Manual checks are not blocked by the automatic check interval.
+_Avoid_: Forced update, manual update install
+
+**Update Check Interval** (更新检查间隔):
+The minimum time between automatic Software Update checks. The first implementation checks at most once every 24 hours and delays startup checks briefly so update discovery does not slow app startup.
+_Avoid_: Polling rate, refresh interval
+
+**Update Preference** (更新偏好):
+Desktop-only user preferences for Software Update behavior, stored in Electron's userData `config.json` separately from the Word database and server configuration. Includes whether Auto Update Check is enabled and metadata such as the last automatic check time.
+_Avoid_: Update config, database setting
+
+**Update Reminder** (更新提醒):
+The non-blocking in-app notice shown when an automatic Software Update check finds a newer Release Version. It should not steal focus or require an immediate decision. Manual Update Check results may show fuller details and a download action.
+_Avoid_: Update dialog, forced update prompt
+
+**Release Announcement** (发布公告):
+An Announcement entry derived from Software Update release information, especially Release Version and release notes. It should appear through the existing Announcement surface rather than a separate release-message system.
+_Avoid_: Separate release message, update-only bulletin
+
+**Skipped Release Version** (跳过版本):
+The Release Version the user chose not to be reminded about automatically. Automatic Software Update suppresses reminders while the latest Release Version matches the skipped version, but Manual Update Check still shows it.
+_Avoid_: Ignored update, hidden update
+
+**Installer Asset** (安装包资产):
+A downloadable installer file attached to a GitHub Release, such as a Windows NSIS `.exe` or macOS `.dmg`. It is the artifact users open manually to update the app in the first Software Update implementation.
+_Avoid_: Package, binary, release file
+
+**Platform Installer Asset** (平台安装包资产):
+An Installer Asset whose file name identifies both the target platform and the App Version, allowing the desktop app to choose the correct download for the current device automatically. Windows and macOS assets must use distinct names.
+_Avoid_: Generic installer, latest package
+
+**Windows Installer Update** (Windows 安装版更新):
+The first supported Software Update target: a Windows x64 NSIS-installed desktop app updated through `electron-updater`. Portable Windows builds and macOS DMG updates are out of scope for the first implementation.
+_Avoid_: Portable update, macOS update
+
+**Release Version** (发布版本):
+The App Version declared by the GitHub Release tag. Software Update compares the local App Version against the Release Version, while the Platform Installer Asset file name must contain the same version as a consistency check.
+_Avoid_: Installer version, asset version
+
+**Update Feed** (更新源):
+The metadata consumed by `electron-updater` to discover the latest Release Version, select the current platform's Platform Installer Asset, and download it. The Update Feed is generated by the desktop packaging/release process, not manually inferred from arbitrary GitHub asset URLs at runtime.
+_Avoid_: GitHub latest API, raw download link
+
 ### AI generation
 
 **Pipeline** (流水线):

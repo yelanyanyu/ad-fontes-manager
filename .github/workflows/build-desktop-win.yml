@@ -1,9 +1,6 @@
 name: Build Desktop (Windows)
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -21,4 +18,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: AdFontesManager-Windows
-          path: release/*.exe
+          path: |
+            release/*.exe
+            release/*.exe.blockmap
+            release/latest.yml

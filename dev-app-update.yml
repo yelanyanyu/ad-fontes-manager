@@ -1,0 +1,4 @@
+provider: github
+owner: yelanyanyu
+repo: ad-fontes-manager
+updaterCacheDirName: ad-fontes-manager-updater
