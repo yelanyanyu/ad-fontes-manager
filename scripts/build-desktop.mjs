@@ -24,7 +24,7 @@ try {
   run('npm', ['run', 'build:desktop:server']);
   cpSync('docs/prompts', 'out/server/prompts', { recursive: true });
   run('npm', ['run', 'native:electron']);
-  run('electron-builder', [`--${target}`]);
+  run('electron-builder', [`--${target}`, '--publish=never']);
 } catch (error) {
   buildStatus = error instanceof CommandError ? error.status : 1;
 } finally {
