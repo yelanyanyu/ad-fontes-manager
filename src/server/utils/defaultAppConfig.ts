@@ -1,0 +1,190 @@
+type Primitive = string | number | boolean | null;
+type ConfigValue = Primitive | ConfigObject | ConfigValue[];
+export interface ConfigObject {
+  [key: string]: ConfigValue | undefined;
+}
+
+export interface DefaultAIProvider {
+  id: string;
+  name: string;
+  type: 'openai' | 'anthropic';
+  baseUrl: string;
+  anthropicBaseUrl?: string;
+  apiKey: string;
+  models: Array<{ id: string; name: string; endpointType?: 'openai' | 'anthropic' }>;
+}
+
+export interface DefaultAIConfig {
+  providers: DefaultAIProvider[];
+  queue_concurrency: number;
+  search: {
+    provider: 'brave' | 'tavily';
+    apiKey: string;
+    autoDomains: boolean;
+    domains: {
+      common: string[];
+      en: string[];
+      de: string[];
+    };
+  };
+  stages: {
+    fast: { provider: string; model: string; reasoningEffort: 'none' };
+    balanced: { provider: string; model: string; reasoningEffort: 'low' };
+    expert: { provider: string; model: string; reasoningEffort: 'medium' };
+  };
+  review: {
+    threshold: number;
+    thresholdByLanguage: Record<string, number>;
+  };
+}
+
+export const CURRENT_CONFIG_SCHEMA_VERSION = 1;
+
+const defaultAIConfig: DefaultAIConfig = {
+  providers: [
+    {
+      id: 'deepseek',
+      name: 'deepseek',
+      type: 'openai',
+      baseUrl: 'https://api.deepseek.com',
+      anthropicBaseUrl: 'https://api.deepseek.com/anthropic',
+      apiKey: '',
+      models: [
+        {
+          id: 'deepseek-v4-pro[1m]',
+          name: 'deepseek-v4-pro[1m]',
+          endpointType: 'anthropic',
+        },
+        {
+          id: 'deepseek-v4-flash[1m]',
+          name: 'deepseek-v4-flash[1m]',
+          endpointType: 'anthropic',
+        },
+      ],
+    },
+    {
+      id: 'openrouter',
+      name: 'OpenRouter',
+      type: 'openai',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      anthropicBaseUrl: 'https://openrouter.ai/api',
+      apiKey: '',
+      models: [
+        { id: 'google/gemini-2.5-flash-preview', name: 'Google: Gemini 2.5 Flash Preview' },
+        { id: 'deepseek/deepseek-chat', name: 'DeepSeek: V3' },
+      ],
+    },
+    {
+      id: 'dashscope',
+      name: 'Bailian',
+      type: 'openai',
+      baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1/',
+      anthropicBaseUrl: 'https://dashscope.aliyuncs.com/apps/anthropic',
+      apiKey: '',
+      models: [
+        { id: 'qwen3.5-plus', name: 'Qwen3.5-Plus' },
+        { id: 'qwen3.5-flash', name: 'Qwen3.5-Flash' },
+      ],
+    },
+    {
+      id: 'silicon',
+      name: 'Silicon',
+      type: 'openai',
+      baseUrl: 'https://api.siliconflow.cn',
+      anthropicBaseUrl: 'https://api.siliconflow.cn',
+      apiKey: '',
+      models: [{ id: 'deepseek-ai/DeepSeek-V3.2', name: 'deepseek-ai/DeepSeek-V3.2' }],
+    },
+    {
+      id: 'aihubmix',
+      name: 'AiHubMix',
+      type: 'openai',
+      baseUrl: 'https://aihubmix.com/v1',
+      anthropicBaseUrl: 'https://aihubmix.com',
+      apiKey: '',
+      models: [
+        { id: 'gpt-5', name: 'gpt-5' },
+        { id: 'claude-sonnet-4-20250514', name: 'claude-sonnet-4-20250514' },
+      ],
+    },
+  ],
+  queue_concurrency: 5,
+  search: {
+    provider: 'tavily',
+    apiKey: '',
+    autoDomains: true,
+    domains: {
+      common: ['etymonline.com', 'wiktionary.org', 'merriam-webster.com'],
+      en: ['oed.com'],
+      de: [],
+    },
+  },
+  stages: {
+    fast: { provider: 'deepseek', model: 'deepseek-v4-flash[1m]', reasoningEffort: 'none' },
+    balanced: { provider: 'deepseek', model: 'deepseek-v4-pro[1m]', reasoningEffort: 'low' },
+    expert: { provider: 'deepseek', model: 'deepseek-v4-pro[1m]', reasoningEffort: 'medium' },
+  },
+  review: {
+    threshold: 6,
+    thresholdByLanguage: {
+      en: 6,
+      de: 6,
+    },
+  },
+};
+
+const defaultAppConfig: ConfigObject = {
+  schemaVersion: CURRENT_CONFIG_SCHEMA_VERSION,
+  core: {
+    env: 'development',
+    admin_token: 'dev-token-not-for-production',
+  },
+  server: {
+    port: 8080,
+    host: '127.0.0.1',
+    cors_origins: ['*'],
+    rate_limit: 0,
+    timeout_ms: 10000,
+  },
+  database: {
+    url: './data/ad_fontes.db',
+    ssl: false,
+    pool_size: null,
+  },
+  client: {
+    dev_port: 5173,
+  },
+  anki: {
+    host: '127.0.0.1',
+    port: 8765,
+  },
+  storage: {
+    max_items: 100,
+  },
+  logging: {
+    level: 'info',
+    dir: './logs',
+    rotation: {
+      interval: '1d',
+      max_size: '10M',
+      max_files: 30,
+    },
+  },
+  security: {
+    helmet: true,
+    hsts: true,
+  },
+  ai: defaultAIConfig as unknown as ConfigObject,
+};
+
+function clone<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+export function getDefaultAIConfig(): DefaultAIConfig {
+  return clone(defaultAIConfig);
+}
+
+export function getDefaultAppConfig(): ConfigObject {
+  return clone(defaultAppConfig);
+}

@@ -27,7 +27,7 @@ const AIProviderSchema = z.object({
 const AISearchConfigSchema = z.object({
   provider: z.enum(['brave', 'tavily']).default('brave'),
   apiKey: z.string().default(''),
-  autoDomains: z.boolean().default(false),
+  autoDomains: z.boolean().default(true),
   domains: z
     .object({
       common: z.array(z.string().trim().min(1)).default([]),
@@ -62,7 +62,7 @@ const AIReviewConfigSchema = z
 
 const AIConfigSchema = z.object({
   providers: z.array(AIProviderSchema).default([]),
-  queue_concurrency: z.number().int().min(1).default(1),
+  queue_concurrency: z.number().int().min(1).default(5),
   search: AISearchConfigSchema.optional(),
   stages: AIStageMapSchema,
   review: AIReviewConfigSchema,

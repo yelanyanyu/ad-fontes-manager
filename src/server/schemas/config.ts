@@ -40,6 +40,7 @@ const DatabaseUrlSchema = z.string().trim().min(1, 'DATABASE_URL must be a SQLit
 
 const ConfigSchema = z
   .object({
+    schemaVersion: z.number().int().positive().default(1),
     core: z.object({
       env: SupportedEnvSchema,
       admin_token: z.string().trim().min(1, 'ADMIN_TOKEN must not be empty'),

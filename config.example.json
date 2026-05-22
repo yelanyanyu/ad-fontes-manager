@@ -1,4 +1,5 @@
 {
+  "schemaVersion": 1,
   "core": {
     "env": "development",
     "admin_token": "dev-token-not-for-production"
@@ -39,7 +40,7 @@
     "hsts": true
   },
   "ai": {
-    "queue_concurrency": 1,
+    "queue_concurrency": 5,
     "providers": [
       {
         "id": "deepseek",
@@ -54,7 +55,11 @@
             "name": "deepseek-v4-pro[1m]",
             "endpointType": "anthropic"
           },
-          { "id": "deepseek-v4-flash", "name": "deepseek-v4-flash[1m]" }
+          {
+            "id": "deepseek-v4-flash[1m]",
+            "name": "deepseek-v4-flash[1m]",
+            "endpointType": "anthropic"
+          }
         ]
       },
       {
@@ -102,7 +107,7 @@
       }
     ],
     "search": {
-      "provider": "brave",
+      "provider": "tavily",
       "apiKey": "",
       "autoDomains": true,
       "domains": {
@@ -112,9 +117,9 @@
       }
     },
     "stages": {
-      "fast": { "provider": "", "model": "" },
-      "balanced": { "provider": "", "model": "" },
-      "expert": { "provider": "", "model": "" }
+      "fast": { "provider": "deepseek", "model": "deepseek-v4-flash[1m]", "reasoningEffort": "none" },
+      "balanced": { "provider": "deepseek", "model": "deepseek-v4-pro[1m]", "reasoningEffort": "low" },
+      "expert": { "provider": "deepseek", "model": "deepseek-v4-pro[1m]", "reasoningEffort": "medium" }
     },
     "review": {
       "threshold": 6,

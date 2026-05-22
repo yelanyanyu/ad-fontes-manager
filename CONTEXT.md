@@ -148,6 +148,22 @@ _Avoid_: GitHub latest API, raw download link
 
 ### AI generation
 
+**Default App Configuration** (默认应用配置):
+The built-in, safe configuration shipped with the app and used to initialise a new user's editable settings. It may include Provider presets, model assignments, Queue concurrency, search domains, update preferences, and other Settings-page defaults, but must not include real API keys or user secrets.
+_Avoid_: Example config, user config, hardcoded defaults
+
+**User Configuration** (用户配置):
+The persisted, user-owned configuration stored outside the packaged app, such as Electron `userData/config.json`. It records the user's API keys, Provider edits, Stage assignments, Queue concurrency, update preferences, and other Settings-page choices. App upgrades must not overwrite User Configuration without an explicit migration rule.
+_Avoid_: Default config, bundled config
+
+**Configuration Migration** (配置迁移):
+A versioned transformation that upgrades existing User Configuration from an older shape to the current schema while preserving user-owned values such as API keys and custom Providers. Migrations may add new safe defaults, rename fields, or repair obsolete values, but should be deterministic and testable.
+_Avoid_: Reset config, overwrite defaults
+
+**Configuration Export** (配置导出):
+A user action that packages User Configuration for backup or transfer to another device. Export should distinguish between ordinary settings and sensitive secrets, so users can choose whether API keys are included.
+_Avoid_: Dump config, copy config file
+
 **Pipeline** (流水线):
 A multi-stage AI workflow that generates a Word's YAML from a lemma and context. Currently a 3-stage linear sequence: searching → pondering → auditing.
 _Avoid_: Workflow, chain, process

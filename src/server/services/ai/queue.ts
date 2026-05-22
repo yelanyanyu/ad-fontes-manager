@@ -46,7 +46,7 @@ function initQueue(overrides?: {
   runner?: PipelineRunner;
 }): void {
   const maxConcurrency =
-    overrides?.maxConcurrency ?? Math.max(1, Number(config.get<number>('ai.queue_concurrency', 1)));
+    overrides?.maxConcurrency ?? Math.max(1, Number(config.get<number>('ai.queue_concurrency', 5)));
   _queue = new JobQueueCtor({
     getDb: overrides?.getDb ?? createSqliteAdapter,
     maxConcurrency,

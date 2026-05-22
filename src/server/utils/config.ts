@@ -11,6 +11,12 @@ const { ConfigSchema } = require('../schemas/config') as {
     };
   };
 };
+const { getDefaultAppConfig } = require('./defaultAppConfig') as {
+  getDefaultAppConfig: () => ConfigObject;
+};
+const { migrateUserConfig } = require('./configMigration') as {
+  migrateUserConfig: (input: ConfigObject) => { config: ConfigObject; changed: boolean };
+};
 
 type Primitive = string | number | boolean | null;
 type ConfigValue = Primitive | ConfigObject | ConfigValue[];
@@ -80,56 +86,7 @@ if (!isProduction) {
   }
 }
 
-const defaultConfig: ConfigObject = {
-  core: {
-    env: 'development',
-    admin_token: 'dev-token-not-for-production',
-  },
-  server: {
-    port: 8080,
-    host: '127.0.0.1',
-    cors_origins: ['*'],
-    rate_limit: 0,
-    timeout_ms: 10000,
-  },
-  database: {
-    url: './data/ad_fontes.db',
-    ssl: false,
-    pool_size: null,
-  },
-  client: {
-    dev_port: 5173,
-  },
-  anki: {
-    host: '127.0.0.1',
-    port: 8765,
-  },
-  storage: {
-    max_items: 100,
-  },
-  logging: {
-    level: 'info',
-    dir: './logs',
-    rotation: {
-      interval: '1d',
-      max_size: '10M',
-      max_files: 30,
-    },
-  },
-  security: {
-    helmet: true,
-    hsts: true,
-  },
-  ai: {
-    providers: [],
-    queue_concurrency: 1,
-    stages: {},
-    review: {
-      threshold: 6,
-      thresholdByLanguage: {},
-    },
-  },
-};
+const defaultConfig: ConfigObject = getDefaultAppConfig();
 
 function resolveConfigPath(): string {
   if (process.env.ADFONTES_CONFIG_PATH) return process.env.ADFONTES_CONFIG_PATH;
@@ -144,7 +101,11 @@ function loadConfigFile(): ConfigObject {
     const raw = fs.readFileSync(configPath, 'utf-8');
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed as ConfigObject;
+      const migration = migrateUserConfig(parsed as ConfigObject);
+      if (migration.changed) {
+        fs.writeFileSync(configPath, JSON.stringify(migration.config, null, 2), 'utf-8');
+      }
+      return migration.config;
     }
     console.warn(`config.json at ${configPath} is not a valid object, ignoring`);
   } catch (error) {

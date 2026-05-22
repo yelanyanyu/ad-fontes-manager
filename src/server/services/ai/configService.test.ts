@@ -329,6 +329,41 @@ void describe('configService', () => {
     assert.equal(saved.ai?.queue_concurrency, 3);
   });
 
+  void it('returns safe Default App Configuration for a new user without AI settings', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(configPath, JSON.stringify({ dataDir: 'C:\\Users\\tester\\data' }), 'utf8');
+
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const { getAIConfig } = loadService();
+
+    const result = getAIConfig();
+
+    assert.equal(result.queue_concurrency, 5);
+    assert.equal(result.search?.provider, 'tavily');
+    assert.equal(result.search?.apiKey, '');
+    assert.equal(result.search?.autoDomains, true);
+    assert.equal(result.stages.fast?.provider, 'deepseek');
+    assert.equal(result.stages.fast?.model, 'deepseek-v4-flash[1m]');
+    assert.equal(result.stages.fast?.reasoningEffort, 'none');
+    assert.equal(result.stages.balanced?.model, 'deepseek-v4-pro[1m]');
+    assert.equal(result.stages.balanced?.reasoningEffort, 'low');
+    assert.equal(result.stages.expert?.model, 'deepseek-v4-pro[1m]');
+    assert.equal(result.stages.expert?.reasoningEffort, 'medium');
+    assert.equal(
+      result.providers.some((provider: { id: string }) => provider.id === 'deepseek'),
+      true
+    );
+    assert.equal(
+      result.providers.every((provider: { apiKey: string }) => provider.apiKey === ''),
+      true
+    );
+  });
+
   void it('reads AI queue concurrency from the environment', () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),

@@ -15,6 +15,7 @@ import {
   type DesktopUpdateConfig,
   type DesktopUpdateService,
 } from './updateService';
+import { getDefaultAppConfig } from '../server/utils/defaultAppConfig';
 
 let mainWindow: BrowserWindow | null = null;
 let serverInstance: http.Server | null = null;
@@ -136,7 +137,7 @@ function ensureConfig(): void {
   if (!fs.existsSync(CONFIG_FILE)) {
     const dataDir = defaultDataDir();
     ensureDirectory(dataDir);
-    writeDesktopConfig(dataDir);
+    writeDesktopConfigObject({ ...getDefaultAppConfig(), dataDir });
   }
 }
 

@@ -51,7 +51,12 @@ export const aiProviderPresets: AIProviderPreset[] = [
         group: 'deepseek',
         endpointType: 'anthropic',
       },
-      { id: 'deepseek-v4-flash', name: 'deepseek-v4-flash[1m]', group: 'deepseek' },
+      {
+        id: 'deepseek-v4-flash[1m]',
+        name: 'deepseek-v4-flash[1m]',
+        group: 'deepseek',
+        endpointType: 'anthropic',
+      },
     ],
   },
   {

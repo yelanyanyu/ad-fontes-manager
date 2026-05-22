@@ -15,6 +15,9 @@ const { AIConfigSchema, AIConfigUpdateSchema } = require('../../schemas/aiConfig
   AIConfigSchema: { parse: (value: unknown) => AIConfig };
   AIConfigUpdateSchema: { parse: (value: unknown) => AIConfigUpdate };
 };
+const { getDefaultAIConfig } = require('../../utils/defaultAppConfig') as {
+  getDefaultAIConfig: () => AIConfig;
+};
 
 interface AIModel {
   id: string;
@@ -71,15 +74,7 @@ const knownAnthropicBaseUrls: Record<string, string> = {
   deepseek: 'https://api.deepseek.com/anthropic',
 };
 
-const defaultAIConfig = (): AIConfig => ({
-  providers: [],
-  queue_concurrency: 1,
-  stages: {},
-  review: {
-    threshold: 6,
-    thresholdByLanguage: {},
-  },
-});
+const defaultAIConfig = (): AIConfig => getDefaultAIConfig();
 
 function maskApiKey(key: string): string {
   if (!key) return '';

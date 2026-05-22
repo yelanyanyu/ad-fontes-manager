@@ -129,7 +129,7 @@ const close = (): void => {
 };
 
 const createEmptySearch = (): NonNullable<AIConfigMasked['search']> => ({
-  provider: 'brave',
+  provider: 'tavily',
   apiKey: '',
   autoDomains: true,
   domains: {
@@ -196,7 +196,7 @@ const getPresetWebsite = (providerId: string): string | undefined =>
 const normalizeAIConfig = (config: AIConfigMasked): AIConfigMasked => ({
   ...config,
   providers: mergePresetProviders(config.providers || []),
-  queue_concurrency: Math.max(1, Number(config.queue_concurrency || 1)),
+  queue_concurrency: Math.max(1, Number(config.queue_concurrency || 5)),
   search: config.search || createEmptySearch(),
   stages: config.stages || {},
   review: {
@@ -242,10 +242,12 @@ const getStage = (stageKey: StageKey): AIStageConfig => {
     stages[stageKey] = {
       provider: '',
       model: '',
-      reasoningEffort: stageKey === 'expert' ? 'high' : 'auto',
+      reasoningEffort:
+        stageKey === 'fast' ? 'none' : stageKey === 'balanced' ? 'low' : 'medium',
     };
   } else if (!stages[stageKey].reasoningEffort) {
-    stages[stageKey].reasoningEffort = stageKey === 'expert' ? 'high' : 'auto';
+    stages[stageKey].reasoningEffort =
+      stageKey === 'fast' ? 'none' : stageKey === 'balanced' ? 'low' : 'medium';
   }
   return stages[stageKey] as AIStageConfig;
 };
