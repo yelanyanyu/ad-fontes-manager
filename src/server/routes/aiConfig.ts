@@ -20,10 +20,11 @@ const { TestProviderInputSchema, TestSearchInputSchema } = require('../schemas/a
   TestProviderInputSchema: ZodType<unknown>;
   TestSearchInputSchema: ZodType<unknown>;
 };
-const { getAIConfigMasked, updateAIConfig, resolveProviderApiKeyForTest } =
+const { getAIConfigMasked, updateAIConfig, clearSensitiveAIConfig, resolveProviderApiKeyForTest } =
   require('../services/ai/configService') as {
     getAIConfigMasked: () => unknown;
     updateAIConfig: (input: unknown) => unknown;
+    clearSensitiveAIConfig: () => unknown;
     resolveProviderApiKeyForTest: (providerId: string | undefined, inputApiKey: string) => string;
   };
 const { loggers } = require('../utils/logger') as {
@@ -92,6 +93,14 @@ router.put(
       }
       throw error;
     }
+  })
+);
+
+router.delete(
+  '/config/ai/secrets',
+  requireWriteAccess,
+  asyncHandler(async (_req: Request, res: Response) => {
+    res.json(clearSensitiveAIConfig());
   })
 );
 

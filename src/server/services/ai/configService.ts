@@ -69,6 +69,11 @@ interface AIConfig {
 
 type AIConfigUpdate = Partial<AIConfig>;
 type AIConfigMasked = AIConfig;
+interface ClearSensitiveAIConfigResult {
+  clearedProviderKeys: number;
+  clearedSearchKey: boolean;
+  config: AIConfigMasked;
+}
 
 const knownAnthropicBaseUrls: Record<string, string> = {
   deepseek: 'https://api.deepseek.com/anthropic',
@@ -206,11 +211,45 @@ function updateAIConfig(input: unknown): AIConfigMasked {
   };
 }
 
+function clearSensitiveAIConfig(): ClearSensitiveAIConfigResult {
+  const existing = getAIConfig();
+  const clearedProviderKeys = existing.providers.filter(provider => provider.apiKey).length;
+  const clearedSearchKey = Boolean(existing.search?.apiKey);
+  const cleared: AIConfig = {
+    ...existing,
+    providers: existing.providers.map(provider => ({ ...provider, apiKey: '' })),
+    search: existing.search ? { ...existing.search, apiKey: '' } : existing.search,
+  };
+
+  const fullValidated = withAIEndpointDefaults(AIConfigSchema.parse(cleared));
+  config.saveConfigFile({ ...config.loadConfigFile(), ai: fullValidated });
+
+  loggers.ai.info(
+    {
+      clearedProviderKeys,
+      clearedSearchKey,
+      providerCount: fullValidated.providers.length,
+    },
+    'AI sensitive config cleared'
+  );
+
+  return {
+    clearedProviderKeys,
+    clearedSearchKey,
+    config: {
+      ...fullValidated,
+      providers: fullValidated.providers,
+      search: fullValidated.search,
+    },
+  };
+}
+
 module.exports = {
   maskApiKey,
   getAIConfig,
   getAIConfigMasked,
   updateAIConfig,
+  clearSensitiveAIConfig,
   mergeProviderWithMaskedCheck,
   mergeSearchWithMaskedCheck,
   resolveProviderApiKeyForTest,

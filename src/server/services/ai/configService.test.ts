@@ -441,4 +441,75 @@ void describe('configService', () => {
     const result = resolveProviderApiKeyForTest('deepseek', 'sk-***0d1c');
     assert.equal(result, 'sk-real-key-0d1c');
   });
+
+  void it('clearSensitiveAIConfig removes stored API keys without resetting user settings', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const { clearSensitiveAIConfig, updateAIConfig } = loadService();
+
+    updateAIConfig({
+      providers: [
+        {
+          id: 'deepseek',
+          name: 'deepseek',
+          type: 'openai',
+          baseUrl: 'https://api.deepseek.com',
+          apiKey: 'sk-user-provider-key',
+          models: [{ id: 'deepseek-v4-pro[1m]', name: 'deepseek-v4-pro[1m]' }],
+        },
+        {
+          id: 'openrouter',
+          name: 'OpenRouter',
+          type: 'openai',
+          baseUrl: 'https://openrouter.ai/api/v1',
+          apiKey: 'sk-user-openrouter-key',
+          models: [{ id: 'deepseek/deepseek-chat', name: 'DeepSeek: V3' }],
+        },
+      ],
+      queue_concurrency: 4,
+      search: {
+        provider: 'tavily',
+        apiKey: 'tvly-user-search-key',
+        autoDomains: true,
+        domains: { common: ['etymonline.com'], en: ['oed.com'], de: [] },
+      },
+      stages: {
+        fast: { provider: 'deepseek', model: 'deepseek-v4-pro[1m]', reasoningEffort: 'low' },
+      },
+    });
+
+    const result = clearSensitiveAIConfig();
+
+    assert.equal(result.clearedProviderKeys, 2);
+    assert.equal(result.clearedSearchKey, true);
+
+    const saved = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+      ai?: {
+        providers?: Array<{ id: string; apiKey: string }>;
+        queue_concurrency?: number;
+        search?: { apiKey: string; domains: { common: string[] } };
+        stages?: { fast?: { provider?: string; model?: string; reasoningEffort?: string } };
+      };
+    };
+
+    assert.deepEqual(
+      saved.ai?.providers?.map(provider => ({ id: provider.id, apiKey: provider.apiKey })),
+      [
+        { id: 'deepseek', apiKey: '' },
+        { id: 'openrouter', apiKey: '' },
+      ]
+    );
+    assert.equal(saved.ai?.search?.apiKey, '');
+    assert.deepEqual(saved.ai?.search?.domains.common, ['etymonline.com']);
+    assert.equal(saved.ai?.queue_concurrency, 4);
+    assert.equal(saved.ai?.stages?.fast?.provider, 'deepseek');
+    assert.equal(saved.ai?.stages?.fast?.model, 'deepseek-v4-pro[1m]');
+    assert.equal(saved.ai?.stages?.fast?.reasoningEffort, 'low');
+  });
 });
