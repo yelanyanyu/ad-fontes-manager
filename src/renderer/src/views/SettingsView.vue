@@ -11,7 +11,6 @@ import {
 } from '@/services/ankiExportOptionsStore';
 import { listStoredFieldMappingModelNames } from '@/services/ankiFieldMappingStore';
 import {
-  clearSensitiveAIConfig,
   fetchAIConfig,
   saveAIConfig,
   testProvider,
@@ -367,27 +366,6 @@ const flushAutoSave = async (): Promise<void> => {
     await handleSaveAIConfig(true);
   } finally {
     autoSaveBusy = false;
-  }
-};
-
-const handleClearSensitiveAIConfig = async (): Promise<void> => {
-  if (!aiConfig.value) return;
-  const confirmed = window.confirm(
-    '将清除所有 AI 提供商和搜索 API Key，但保留模型、阶段、并发和域名配置。是否继续？'
-  );
-  if (!confirmed) return;
-
-  try {
-    await flushAutoSave();
-    const result = await clearSensitiveAIConfig();
-    aiConfig.value = normalizeAIConfig(result.config);
-    Object.keys(showApiKey).forEach(key => {
-      showApiKey[key] = false;
-    });
-    const clearedCount = result.clearedProviderKeys + (result.clearedSearchKey ? 1 : 0);
-    appStore.addToast(`已清除 ${clearedCount} 个 API Key`, 'success');
-  } catch (error) {
-    appStore.addToast(error instanceof Error ? error.message : '清除敏感数据失败', 'error');
   }
 };
 
@@ -1343,24 +1321,6 @@ onMounted(() => {
                     @change="updateQueueConcurrency(($event.target as HTMLInputElement).valueAsNumber)"
                   />
                   <span class="range-hint">≥ 1</span>
-                </div>
-
-                <div class="runtime-setting-row runtime-danger-row">
-                  <span class="search-field-label">
-                    敏感数据
-                    <span class="stage-info-icon">
-                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
-                      <span class="stage-tooltip">清除本机保存的 AI Provider API Key 和搜索 API Key；不会删除模型、阶段、并发或域名设置。</span>
-                    </span>
-                  </span>
-                  <button
-                    class="btn danger btn-compact"
-                    type="button"
-                    :disabled="aiSaving"
-                    @click="handleClearSensitiveAIConfig()"
-                  >
-                    清除 API Key
-                  </button>
                 </div>
               </section>
             </div>

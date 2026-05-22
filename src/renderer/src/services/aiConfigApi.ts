@@ -42,12 +42,6 @@ export interface AIConfigMasked {
   };
 }
 
-export interface ClearSensitiveAIConfigResult {
-  clearedProviderKeys: number;
-  clearedSearchKey: boolean;
-  config: AIConfigMasked;
-}
-
 export interface TestProviderInput {
   providerId?: string;
   baseUrl: string;
@@ -69,9 +63,6 @@ export const fetchAIConfig = (): Promise<AIConfigMasked> => request.get('/v2/con
 
 export const saveAIConfig = (config: AIConfigMasked): Promise<AIConfigMasked> =>
   request.put('/v2/config/ai', config);
-
-export const clearSensitiveAIConfig = (): Promise<ClearSensitiveAIConfigResult> =>
-  request.delete('/v2/config/ai/secrets');
 
 export const testProvider = (input: TestProviderInput): Promise<TestProviderResult> =>
   request.post('/v2/config/ai/test-provider', input, { skipErrorToast: true });

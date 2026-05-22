@@ -48,6 +48,7 @@ win:
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  include: assets/installer.nsh
   createDesktopShortcut: always
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
