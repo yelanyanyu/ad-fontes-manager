@@ -560,7 +560,7 @@ async function handleClearHistory(): Promise<void> {
             :disabled="eligibleWorksetJobs.length === 0 || improvingWorkset"
             @click="openImproveSelection"
           >
-            Improve Low
+            Improve All
           </button>
           <button
             v-if="conflictJobIds.length > 0"
