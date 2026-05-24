@@ -372,11 +372,10 @@ async function handleClearHistory(): Promise<void> {
 
       <div v-if="mode === 'active'" class="bar-list queue-table queue-table-active">
         <div v-if="queueOverview.length > 0" class="queue-table-header">
-          <span class="queue-cell cell-status cell-dot" />
           <span class="queue-cell cell-type">Type</span>
           <span class="queue-cell cell-word">Word</span>
-          <span class="queue-cell cell-lang">L</span>
-          <span class="queue-cell cell-state">St</span>
+          <span class="queue-cell cell-lang">Lang</span>
+          <span class="queue-cell cell-state">Status</span>
           <span class="queue-cell cell-action">Act</span>
           <span class="queue-cell cell-remove" />
         </div>
@@ -387,10 +386,8 @@ async function handleClearHistory(): Promise<void> {
           :class="{ selected: qj.jobId === selectedJobId, ['q-' + qj.status]: true }"
           @click="handleSelect(qj.jobId)"
         >
-          <span class="queue-cell cell-status">
-            <span class="q-dot" :class="qj.status" />
-          </span>
           <span class="queue-cell cell-type">
+            <span class="q-dot" :class="qj.status" />
             <span class="q-kind">{{ qj.jobType === 'fix' ? 'fix' : 'gen' }}</span>
           </span>
           <span class="queue-cell cell-word q-word">{{ qj.word }}</span>
@@ -481,23 +478,20 @@ async function handleClearHistory(): Promise<void> {
           :aria-busy="queueHistoryLoading"
         >
           <div v-if="queueHistory.length > 0" class="queue-table-header">
-            <span class="queue-cell cell-status cell-dot" />
             <span class="queue-cell cell-type">Type</span>
             <span class="queue-cell cell-word">Word</span>
-            <span class="queue-cell cell-state">St</span>
+            <span class="queue-cell cell-state">Status</span>
             <span class="queue-cell cell-remove" />
           </div>
           <div
             v-for="job in queueHistory"
             :key="job.jobId"
-            class="bar-row history-row queue-table-row"
+            class="bar-row queue-table-row"
             :class="{ selected: job.jobId === selectedJobId, ['q-' + job.status]: true }"
             @click="handleHistorySelect(job)"
           >
-            <span class="queue-cell cell-status">
-              <span class="q-dot" :class="job.status" />
-            </span>
             <span class="queue-cell cell-type">
+              <span class="q-dot" :class="job.status" />
               <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
             </span>
             <span class="queue-cell cell-word q-word">{{ job.word }}</span>
@@ -597,9 +591,8 @@ async function handleClearHistory(): Promise<void> {
 
         <div class="bar-list workset-list queue-table queue-table-workset">
           <div v-if="todayWorkset.length > 0" class="queue-table-header">
-            <span class="queue-cell cell-status cell-dot" />
-            <span class="queue-cell cell-type">Type</span>
-            <span class="queue-cell cell-word">Word</span>
+          <span class="queue-cell cell-type">Type</span>
+          <span class="queue-cell cell-word">Word</span>
             <span class="queue-cell cell-score">Score</span>
             <span class="queue-cell cell-fix">Fix</span>
             <span class="queue-cell cell-note">Note</span>
@@ -611,13 +604,11 @@ async function handleClearHistory(): Promise<void> {
             :class="{ selected: job.jobId === selectedJobId, ['q-' + job.status]: true }"
             @click="handleHistorySelect(job)"
           >
-            <span class="queue-cell cell-status" :title="formatCompactStatus(job.status)">
-              <span class="q-dot" :class="job.status" />
-            </span>
             <span
-              class="queue-cell cell-type"
+              class="queue-cell cell-type workset-type-cell"
               :title="`${job.language === 'de' ? 'DE' : 'EN'} · ${formatCompactStatus(job.status)}`"
             >
+              <span class="q-dot" :class="job.status" />
               <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
             </span>
             <span class="queue-cell cell-word q-word">{{ job.word }}</span>
@@ -627,7 +618,10 @@ async function handleClearHistory(): Promise<void> {
               </span>
             </span>
             <span class="queue-cell cell-fix" title="Improve count">
-              <span class="improve-count-chip">#{{ job.improveCount }}</span>
+              <span
+                class="improve-count-chip"
+                :class="{ muted: job.improveCount === 0 }"
+              >#{{ job.improveCount }}</span>
             </span>
             <span
               v-if="worksetSaveResults.get(job.jobId)"
@@ -881,18 +875,55 @@ async function handleClearHistory(): Promise<void> {
   --queue-gap: 6px;
 }
 
+/* ---- Active view: TYPE | WORD | LANG | STATUS | ACTION | REMOVE ---- */
 .queue-table-active {
-  --queue-columns: 12px 44px minmax(140px, 1fr) 40px 54px 36px 28px;
+  --queue-columns: 56px minmax(0, 1fr) 36px 48px 36px 28px;
 }
 
+.queue-table-active .cell-type,
+.queue-table-active .cell-word {
+  text-align: left;
+}
+
+.queue-table-active .cell-lang,
+.queue-table-active .cell-state,
+.queue-table-active .cell-action,
+.queue-table-active .cell-remove {
+  text-align: center;
+}
+
+/* ---- History view: TYPE | WORD | STATUS | REMOVE ---- */
 .queue-table-history {
-  --queue-columns: 12px 44px minmax(160px, 1fr) 54px 28px;
+  --queue-columns: 56px minmax(0, 1fr) 64px 28px;
 }
 
+.queue-table-history .cell-type,
+.queue-table-history .cell-word {
+  text-align: left;
+}
+
+.queue-table-history .cell-state,
+.queue-table-history .cell-remove {
+  text-align: center;
+}
+
+/* ---- Today / Workset view: TYPE | WORD | SCORE | FIX | NOTE ---- */
 .queue-table-workset {
-  --queue-columns: 12px 48px minmax(160px, 1fr) 64px 48px 88px;
+  --queue-columns: 76px minmax(0, 1fr) 64px 40px 78px;
 }
 
+.queue-table-workset .cell-type,
+.queue-table-workset .cell-word {
+  text-align: left;
+}
+
+.queue-table-workset .cell-score,
+.queue-table-workset .cell-fix,
+.queue-table-workset .cell-note {
+  text-align: center;
+}
+
+/* ---- shared grid layout (header and rows use same columns) ---- */
 .queue-table-header,
 .queue-table-row {
   display: grid;
@@ -921,57 +952,22 @@ async function handleClearHistory(): Promise<void> {
   gap: 0;
 }
 
+/* ---- base cell: no alignment opinion ---- */
 .queue-cell {
   min-width: 0;
   box-sizing: border-box;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: center;
 }
 
-.cell-status {
-  justify-self: center;
-  display: grid;
-  place-items: center;
+/* ---- TYPE cell: dot + label inline ---- */
+.cell-type {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
-.cell-type,
-.cell-lang,
-.cell-state,
-.cell-action,
-.cell-remove,
-.cell-score,
-.cell-fix,
-.cell-note {
-  justify-self: stretch;
-  text-align: center;
-}
-
-.cell-type,
-.cell-score,
-.cell-fix,
-.cell-note {
-  display: grid;
-  place-items: center;
-}
-
-.cell-word {
-  justify-self: stretch;
-  text-align: center;
-}
-
-.queue-table-row .q-word {
-  flex: initial;
-}
-
-.queue-table-row .q-lang,
-.queue-table-row .q-status {
-  min-width: 0;
-  text-align: center;
-}
-
-.cell-dot,
 .q-action-placeholder {
   width: 8px;
   height: 8px;
@@ -1016,9 +1012,9 @@ async function handleClearHistory(): Promise<void> {
   text-transform: uppercase;
 }
 
-.q-word { flex: 1; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.q-lang { color: var(--muted); font-size: 10px; min-width: 20px; }
-.q-status { font-size: 10px; min-width: 0; text-align: center; color: var(--muted); }
+.q-word { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.q-lang { color: var(--muted); font-size: 10px; }
+.q-status { font-size: 10px; color: var(--muted); }
 
 .q-running .q-status { color: var(--blue, #1976d2); }
 .q-error .q-status { color: var(--red); }
@@ -1264,6 +1260,13 @@ async function handleClearHistory(): Promise<void> {
   text-overflow: ellipsis;
 }
 
+/* #0 in workset fix column is not actionable — weak visual */
+.queue-table-workset .improve-count-chip.muted {
+  color: var(--muted);
+  border-color: transparent;
+  background: transparent;
+}
+
 .blocked-chip {
   color: var(--amber);
   border-color: var(--amber-border, var(--line));
@@ -1363,10 +1366,6 @@ async function handleClearHistory(): Promise<void> {
 .history-list.loading {
   opacity: 0.72;
   transition: opacity 0.12s ease;
-}
-
-.history-row {
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
 }
 
 .history-pager {
