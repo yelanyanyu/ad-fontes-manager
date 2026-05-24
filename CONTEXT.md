@@ -184,6 +184,30 @@ _Avoid_: YAML repair, schema fix
 A Queue-based creative-field rewrite against a `complete` Job whose `overall_score < 6`. Uses the existing `fixing` Pipeline Stage (with `content-fixer.md` prompt and existing revision notes), then re-runs `auditing` to produce a new score. Can be triggered per-word or as a Workset batch operation (one Fix Job per word, grouped by `batchId`). Requires `complete` status and valid revision notes from a prior auditing stage.
 _Avoid_: Creative fix, quality fix, rewrite
 
+**Workset Improve** (工作集优化):
+A user action that applies Content Fix to eligible low-score Jobs in the current Workset. It only considers the visible, deduplicated latest `complete` Job Result for each Lemma + Language in the Workset; older hidden History Jobs, `partial` Jobs, `error` Jobs, and high-score Jobs are excluded. Improve Count is displayed as user context, but it does not by itself make a low-score Job ineligible.
+_Avoid_: Improve all history, improve today history
+
+**Improve Count** (优化次数):
+The number of Content Fix rounds in the current Job Result chain. A Generate Job starts at `0`; a Fix Job created from Workset Improve inherits its source Job's Improve Count plus one. A newly generated Job for the same Lemma + Language starts a new chain at `0`; Improve Count is not a lifetime counter across all Job History.
+_Avoid_: Total edit count, word history count
+
+**Pending Improve Selection** (待优化选择):
+The temporary, user-editable set of Workset Items that will become Fix Jobs when Workset Improve is confirmed. It defaults to all eligible low-score Workset Items, but users may remove any item before submission. Removing an item from Pending Improve Selection does not delete the Workset Item or its Job History row.
+_Avoid_: Deleted workset items, selected history
+
+**Blocked Improve Item** (受阻优化项):
+A low-score Workset Item that cannot be included in Pending Improve Selection because automatic Content Fix lacks required inputs, such as valid Revision Notes, parseable score metadata, or usable YAML. Workset Improve shows the blocking reason instead of silently dropping the item or failing the whole batch.
+_Avoid_: Failed selection, skipped item
+
+**Improving Workset Item** (优化中的工作集项):
+A Workset Item whose source Job has been submitted to Workset Improve and now has a linked Fix Job in the Queue. The original Workset Item remains visible until the Fix Job completes; then the Workset refreshes and the newer Fix Job Result naturally replaces it. If the Fix Job fails, the original item remains visible with the failed improve state.
+_Avoid_: Removed item, hidden source result
+
+**Audit Incomplete** (审核不完整):
+A Job Result state where the auditing Stage did not produce parseable, trustworthy Review Score metadata. It must not be treated as a perfect Review Score. Such Jobs are blocked from automatic Workset Improve until the user re-runs auditing or supplies explicit Revision Notes through a manual fix path.
+_Avoid_: Score 10 fallback, hidden audit failure
+
 **Generation Notes** (生成备注):
 Optional user guidance supplied before starting a new Generate Job. Generation Notes shape the initial Pipeline run but are not the same as later correction feedback.
 _Avoid_: Notes, comments
@@ -195,6 +219,18 @@ _Avoid_: Notes, comments
 **Review Score** (审核分数):
 The final quality score produced by a Job's auditing Stage. It is used to decide whether Content Fix is available and to help users prioritize Workset review before saving.
 _Avoid_: Rating, database score
+
+**AI Review Score** (AI 审核分数):
+The original Review Score produced by the auditing Stage and stored with the Job Result. It should remain available even when the user later overrides the score.
+_Avoid_: Original score, model score
+
+**User Review Score** (用户审核分数):
+An explicit user override for a Job Result's quality score. It does not erase the AI Review Score; it records the user's judgment when the automatic score is wrong or incomplete. It is persisted with the Job Result's score metadata so the Workset remains stable after refresh or restart.
+_Avoid_: Manual score, edited overall_score
+
+**Effective Review Score** (有效审核分数):
+The score used by Workset and Workset Improve decisions. It equals User Review Score when present, otherwise AI Review Score.
+_Avoid_: Final score, displayed score
 
 **Priority**:
 Either `normal` (for Generate Jobs) or `high` (for Fix and Audit-Fix Jobs). The Queue always dequeues high-priority Jobs before normal-priority ones, ensuring user-facing fixes are not blocked by batch generation.
@@ -270,6 +306,9 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - A **Workset** is derived from **Job History** rows but is not itself History: it answers "what latest YAML results should I save now?" and can batch-save through the Word save path, reporting per-Word save outcomes such as saved, conflict, invalid, missing, or error
 - A **Format Fix** applies only to `complete` Jobs whose YAML fails `yaml.load`; `partial` and `error` Jobs are rejected. It runs synchronously in-place on the original Job, reusing the same SSE step panel. Basic (code-driven) runs first; Enhanced (LLM-driven) runs only if Basic fails.
 - A **Content Fix** applies to `complete` Jobs whose `overall_score < 6`. It creates a new Queue-based Fix Job (priority `high`) that runs `fixing` then re-runs `auditing`. Can be triggered per-word or as a Workset batch.
+- **Workset Improve** applies Content Fix only to eligible low-score Jobs in the current visible **Workset**, never to older deduplicated **Job History** rows. A user can remove Jobs from the **Pending Improve Selection** before creating Fix Jobs.
+- **Effective Review Score** is the score used for Workset ordering and Workset Improve eligibility: User Review Score overrides AI Review Score without deleting the original AI judgment.
+- **Improve Count** follows the Job Result chain: a Workset Improve Fix Job receives source Improve Count + 1, while a fresh Generate Job starts again at 0.
 - Each **Stage** may use one **Provider** + model and zero or more **Tools**
 - A **Field Mapping** connects a **Data Source** (from a Word's YAML) to an Anki **Field**
 - **AnkiConnect** and **APKG** are two export paths; both use the same **Field Mapping** and **Card Template**
