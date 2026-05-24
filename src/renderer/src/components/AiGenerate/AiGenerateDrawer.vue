@@ -35,6 +35,7 @@ const {
   cancelGeneration,
   resumeGeneration,
   fixGeneration,
+  setUserReviewScore,
 } = inject(AI_STATE_KEY)!;
 
 type EntryMode = 'single' | 'batch';
@@ -77,8 +78,10 @@ const progressPercent = computed(() => {
 });
 
 const reviewScore = computed(() => {
-  const score = currentJob.value?.scores?.overall_score;
-  return typeof score === 'number' ? score : null;
+  const userScore = currentJob.value?.scores?.user_review_score;
+  if (typeof userScore === 'number') return userScore;
+  const aiScore = currentJob.value?.scores?.overall_score;
+  return typeof aiScore === 'number' ? aiScore : null;
 });
 const canStart = computed(() => word.value.trim().length > 0);
 const batchParseResult = computed(() =>
@@ -260,14 +263,19 @@ async function saveGeneratedYaml(): Promise<void> {
   }
 }
 
-function handleScoreChange(e: Event): void {
+async function handleScoreChange(e: Event): Promise<void> {
   const target = e.target as HTMLInputElement;
   const value = parseInt(target.value, 10);
-  if (currentJob.value?.scores && !isNaN(value)) {
-    (currentJob.value.scores as Record<string, unknown>).overall_score = Math.max(
-      0,
-      Math.min(10, value)
-    );
+  const job = currentJob.value;
+  if (!job?.scores || !job.jobId || isNaN(value)) return;
+
+  const normalizedScore = Math.max(0, Math.min(10, value));
+  try {
+    await setUserReviewScore(job.jobId, normalizedScore);
+    (job.scores as Record<string, unknown>).user_review_score = normalizedScore;
+  } catch (error) {
+    errorMessage.value =
+      error instanceof Error ? error.message : 'Failed to save user review score';
   }
 }
 

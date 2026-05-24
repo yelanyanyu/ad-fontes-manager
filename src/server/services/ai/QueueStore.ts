@@ -85,24 +85,104 @@ export interface WorksetJob {
   completedAt?: string;
   hasResult: boolean;
   finalScore: number | null;
+  aiReviewScore: number | null;
+  userReviewScore: number | null;
+  effectiveReviewScore: number | null;
+  auditState: 'complete' | 'incomplete' | 'missing';
+  improveCount: number;
+  improveEligible: boolean;
+  improveBlockedReason?:
+    | 'score-not-low'
+    | 'partial-result'
+    | 'audit-incomplete'
+    | 'missing-revision-notes';
 }
 
-function parseFinalScore(rawScores: unknown): number | null {
-  if (typeof rawScores !== 'string' || !rawScores.trim()) return null;
+export interface WorksetImproveSubmission {
+  jobs: Array<{ sourceJobId: string; jobId: string; queued: boolean; position?: number }>;
+  blocked: Array<{
+    jobId: string;
+    reason: NonNullable<WorksetJob['improveBlockedReason']>;
+  }>;
+  missing: string[];
+}
+
+interface ParsedWorksetScores {
+  aiReviewScore: number | null;
+  userReviewScore: number | null;
+  effectiveReviewScore: number | null;
+  auditState: 'complete' | 'incomplete' | 'missing';
+  improveCount: number;
+  hasRevisionNotes: boolean;
+}
+
+const DEFAULT_WORKSET_IMPROVE_THRESHOLD = 6;
+
+function parseNumericScore(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const numericScore = Number(value);
+    return Number.isFinite(numericScore) ? numericScore : null;
+  }
+  return null;
+}
+
+function parseWorksetScores(rawScores: unknown): ParsedWorksetScores {
+  const missing: ParsedWorksetScores = {
+    aiReviewScore: null,
+    userReviewScore: null,
+    effectiveReviewScore: null,
+    auditState: 'missing',
+    improveCount: 0,
+    hasRevisionNotes: false,
+  };
+
+  if (typeof rawScores !== 'string' || !rawScores.trim()) return missing;
 
   try {
     const scores = JSON.parse(rawScores) as Record<string, unknown>;
-    const overallScore = scores.overall_score;
-    if (typeof overallScore === 'number' && Number.isFinite(overallScore)) return overallScore;
-    if (typeof overallScore === 'string') {
-      const numericScore = Number(overallScore);
-      return Number.isFinite(numericScore) ? numericScore : null;
-    }
-  } catch {
-    return null;
-  }
+    const aiReviewScore = parseNumericScore(scores.overall_score);
+    const userReviewScore = parseNumericScore(scores.user_review_score);
+    const hasParseError = scores._parse_error === true;
+    const effectiveReviewScore = hasParseError ? null : (userReviewScore ?? aiReviewScore);
+    const improveCount = Math.max(0, Math.floor(parseNumericScore(scores.improve_count) ?? 0));
+    const revisionNotes = scores.revision_notes;
+    const hasRevisionNotes =
+      typeof revisionNotes === 'string' &&
+      revisionNotes.trim().length > 0 &&
+      revisionNotes !== '无需修改。';
+    const auditState = hasParseError || effectiveReviewScore === null ? 'incomplete' : 'complete';
 
-  return null;
+    return {
+      aiReviewScore,
+      userReviewScore,
+      effectiveReviewScore,
+      auditState,
+      improveCount,
+      hasRevisionNotes,
+    };
+  } catch {
+    return { ...missing, auditState: 'incomplete' };
+  }
+}
+
+function resolveWorksetImproveEligibility(
+  status: string,
+  scores: ParsedWorksetScores
+): Pick<WorksetJob, 'improveEligible' | 'improveBlockedReason'> {
+  if (status !== 'complete') {
+    return { improveEligible: false, improveBlockedReason: 'partial-result' };
+  }
+  if (scores.auditState !== 'complete' || scores.effectiveReviewScore === null) {
+    return { improveEligible: false, improveBlockedReason: 'audit-incomplete' };
+  }
+  if (!scores.hasRevisionNotes) {
+    return { improveEligible: false, improveBlockedReason: 'missing-revision-notes' };
+  }
+  if (scores.effectiveReviewScore >= DEFAULT_WORKSET_IMPROVE_THRESHOLD) {
+    return { improveEligible: false, improveBlockedReason: 'score-not-low' };
+  }
+  return { improveEligible: true };
 }
 
 export class QueueStore {
@@ -580,21 +660,80 @@ export class QueueStore {
        ORDER BY COALESCE(completed_at, created_at) DESC`
     );
 
-    const jobs = rows.map(row => ({
-      jobId: row.id as string,
-      jobType: row.job_type as string,
-      status: row.status as string,
-      word: row.word as string,
-      language: row.language as string,
-      priority: row.priority as string,
-      batchId: row.batch_id as string | undefined,
-      createdAt: row.created_at as string,
-      completedAt: row.completed_at as string | undefined,
-      hasResult: Boolean(row.has_result),
-      finalScore: parseFinalScore(row.result_scores),
-    }));
+    const jobs = rows.map(row => {
+      const scores = parseWorksetScores(row.result_scores);
+      const eligibility = resolveWorksetImproveEligibility(row.status as string, scores);
+      return {
+        jobId: row.id as string,
+        jobType: row.job_type as string,
+        status: row.status as string,
+        word: row.word as string,
+        language: row.language as string,
+        priority: row.priority as string,
+        batchId: row.batch_id as string | undefined,
+        createdAt: row.created_at as string,
+        completedAt: row.completed_at as string | undefined,
+        hasResult: Boolean(row.has_result),
+        finalScore: scores.effectiveReviewScore,
+        aiReviewScore: scores.aiReviewScore,
+        userReviewScore: scores.userReviewScore,
+        effectiveReviewScore: scores.effectiveReviewScore,
+        auditState: scores.auditState,
+        improveCount: scores.improveCount,
+        ...eligibility,
+      };
+    });
 
     return { jobs, total: jobs.length };
+  }
+
+  setUserReviewScore(jobId: string, score: number): 'updated' | 'not-found' | 'not-reviewable' {
+    const row = this.getDb().get(
+      `SELECT status, result_yaml, result_scores
+       FROM job_queue
+       WHERE id = ?`,
+      jobId
+    );
+
+    if (!row) return 'not-found';
+    if (
+      row.status !== 'complete' ||
+      typeof row.result_yaml !== 'string' ||
+      !row.result_yaml.trim()
+    ) {
+      return 'not-reviewable';
+    }
+
+    let scores: Record<string, unknown> = {};
+    if (typeof row.result_scores === 'string' && row.result_scores.trim()) {
+      try {
+        scores = JSON.parse(row.result_scores) as Record<string, unknown>;
+      } catch {
+        scores = {};
+      }
+    }
+
+    scores.user_review_score = score;
+
+    const result = this.getDb().run(
+      `UPDATE job_queue SET result_scores = ? WHERE id = ?`,
+      JSON.stringify(scores),
+      jobId
+    );
+    return result.changes > 0 ? 'updated' : 'not-found';
+  }
+
+  getNextImproveCount(jobId: string): number {
+    const row = this.getDb().get('SELECT result_scores FROM job_queue WHERE id = ?', jobId);
+    if (!row || typeof row.result_scores !== 'string') return 1;
+
+    try {
+      const scores = JSON.parse(row.result_scores) as Record<string, unknown>;
+      const current = parseNumericScore(scores.improve_count) ?? 0;
+      return Math.max(0, Math.floor(current)) + 1;
+    } catch {
+      return 1;
+    }
   }
 
   getWorksetYaml(jobIds: string[]): Array<{ jobId: string; yaml: string }> {

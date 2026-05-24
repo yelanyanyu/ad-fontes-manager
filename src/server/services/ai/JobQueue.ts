@@ -3,7 +3,13 @@ import { fixPipeline } from './definitions/fix';
 import { auditFixPipeline } from './definitions/audit-fix';
 import { englishPipeline } from './definitions/english';
 import { germanPipeline } from './definitions/german';
-import { QueueStore, type SqliteLike, type BatchStatus, type JobState } from './QueueStore';
+import {
+  QueueStore,
+  type SqliteLike,
+  type BatchStatus,
+  type JobState,
+  type WorksetImproveSubmission,
+} from './QueueStore';
 import { JobLifecycle } from './JobLifecycle';
 import { QueueGate } from './QueueGate';
 
@@ -296,10 +302,76 @@ export class JobQueue {
       completedAt?: string;
       hasResult: boolean;
       finalScore: number | null;
+      aiReviewScore: number | null;
+      userReviewScore: number | null;
+      effectiveReviewScore: number | null;
+      auditState: 'complete' | 'incomplete' | 'missing';
+      improveCount: number;
+      improveEligible: boolean;
+      improveBlockedReason?:
+        | 'score-not-low'
+        | 'partial-result'
+        | 'audit-incomplete'
+        | 'missing-revision-notes';
     }>;
     total: number;
   } {
     return this.store.getTodayWorkset();
+  }
+
+  setUserReviewScore(jobId: string, score: number): 'updated' | 'not-found' | 'not-reviewable' {
+    return this.store.setUserReviewScore(jobId, score);
+  }
+
+  submitWorksetImprove(jobIds: string[]): WorksetImproveSubmission {
+    const uniqueIds = [...new Set(jobIds.map(id => id.trim()).filter(Boolean))];
+    const workset = new Map(this.store.getTodayWorkset().jobs.map(job => [job.jobId, job]));
+    const result: WorksetImproveSubmission = { jobs: [], blocked: [], missing: [] };
+
+    for (const sourceJobId of uniqueIds) {
+      const worksetJob = workset.get(sourceJobId);
+      if (!worksetJob) {
+        result.missing.push(sourceJobId);
+        continue;
+      }
+      if (!worksetJob.improveEligible) {
+        result.blocked.push({
+          jobId: sourceJobId,
+          reason: worksetJob.improveBlockedReason || 'audit-incomplete',
+        });
+        continue;
+      }
+
+      const sourceJob = this.getJob(sourceJobId);
+      const revisionNotes = sourceJob?.result?.scores.revision_notes;
+      if (!sourceJob?.result?.yaml || typeof revisionNotes !== 'string' || !revisionNotes.trim()) {
+        result.blocked.push({ jobId: sourceJobId, reason: 'missing-revision-notes' });
+        continue;
+      }
+
+      const fixJobId = this.enqueue({
+        type: 'fix',
+        priority: 'high',
+        word: sourceJob.word,
+        language: sourceJob.language,
+        context: sourceJob.context,
+        notes: revisionNotes,
+        targetJobId: sourceJobId,
+        resumeFromStage: 'fixing',
+        previousSteps: this.buildFixPreviousSteps(sourceJobId),
+      });
+
+      const fixJob = this.getJob(fixJobId);
+      const isQueued = fixJob?.status === 'queued';
+      result.jobs.push({
+        sourceJobId,
+        jobId: fixJobId,
+        queued: isQueued,
+        position: isQueued ? this.getQueuePosition(fixJobId) : undefined,
+      });
+    }
+
+    return result;
   }
 
   getWorksetYaml(jobIds: string[]): Array<{ jobId: string; yaml: string }> {
@@ -490,6 +562,26 @@ export class JobQueue {
     return this.lifecycle.getCompletedSteps(jobId);
   }
 
+  private buildFixPreviousSteps(jobId: string): Array<{
+    step: string;
+    summary?: string;
+    duration?: number;
+    result?: unknown;
+    rawText?: string;
+    reasoningText?: string;
+  }> {
+    return this.getCompletedSteps(jobId)
+      .filter(event => event.type === 'step:complete')
+      .map(event => ({
+        step: event.step as string,
+        summary: event.summary as string | undefined,
+        duration: event.duration as number | undefined,
+        result: event.result,
+        rawText: event.rawText as string | undefined,
+        reasoningText: event.reasoningText as string | undefined,
+      }));
+  }
+
   /** Returns true if a queued or running job with this word+language already exists. */
   isDuplicate(word: string, language: string): boolean {
     return this.store.isDuplicate(word, language);
@@ -670,7 +762,10 @@ export class JobQueue {
           return;
         }
         const yamlText = result.yaml || '';
-        const scores = result.scores || {};
+        const scores = { ...(result.scores || {}) };
+        if (row.job_type === 'fix' && row.target_job_id) {
+          scores.improve_count = this.store.getNextImproveCount(row.target_job_id as string);
+        }
         // If the pipeline stopped early (stop-loss), mark as partial.
         const stoppedEvent = steps.find(e => e.type === 'pipeline:stopped');
         const status = stoppedEvent ? 'partial' : 'complete';

@@ -430,7 +430,13 @@ describe('useAiGenerate', () => {
           createdAt: '2026-05-12 10:00:00',
           completedAt: '2026-05-12 10:03:00',
           hasResult: true,
-          finalScore: 8,
+          finalScore: 4,
+          aiReviewScore: 8,
+          userReviewScore: 4,
+          effectiveReviewScore: 4,
+          auditState: 'complete',
+          improveCount: 2,
+          improveEligible: true,
         },
       ],
       total: 1,
@@ -448,7 +454,13 @@ describe('useAiGenerate', () => {
 
     await ai.fetchTodayWorkset();
     expect(ai.todayWorkset.value[0]?.jobId).toBe('job-latest');
-    expect(ai.todayWorkset.value[0]?.finalScore).toBe(8);
+    expect(ai.todayWorkset.value[0]?.finalScore).toBe(4);
+    expect(ai.todayWorkset.value[0]?.aiReviewScore).toBe(8);
+    expect(ai.todayWorkset.value[0]?.userReviewScore).toBe(4);
+    expect(ai.todayWorkset.value[0]?.effectiveReviewScore).toBe(4);
+    expect(ai.todayWorkset.value[0]?.auditState).toBe('complete');
+    expect(ai.todayWorkset.value[0]?.improveCount).toBe(2);
+    expect(ai.todayWorkset.value[0]?.improveEligible).toBe(true);
     const result = await ai.saveTodayWorkset();
 
     expect(requestPostMock).toHaveBeenCalledWith(
@@ -460,6 +472,42 @@ describe('useAiGenerate', () => {
       expect.objectContaining({ skipRateLimit: true, timeout: 30000 })
     );
     expect(result.saved).toBe(1);
+  });
+
+  it('persists user review scores through the queue history API', async () => {
+    requestPostMock.mockResolvedValue({ ok: true, jobId: 'job-review', userReviewScore: 3 });
+    const ai = useAiGenerate();
+
+    const result = await ai.setUserReviewScore('job-review', 3);
+
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/v2/generate/queue/history/job-review/user-review-score',
+      { score: 3 },
+      expect.objectContaining({ skipRateLimit: true })
+    );
+    expect(result).toEqual({ ok: true, jobId: 'job-review', userReviewScore: 3 });
+  });
+
+  it('submits selected workset jobs for improve', async () => {
+    requestPostMock.mockResolvedValue({
+      ok: true,
+      jobs: [{ sourceJobId: 'job-low', jobId: 'fix-low', queued: false }],
+      blocked: [{ jobId: 'job-high', reason: 'score-not-low' }],
+      missing: [],
+    });
+    requestGetMock.mockResolvedValueOnce({ jobs: [] });
+    requestGetMock.mockResolvedValueOnce({ jobs: [], total: 0 });
+    const ai = useAiGenerate();
+
+    const result = await ai.improveTodayWorkset(['job-low', 'job-high']);
+
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/v2/generate/workset/improve',
+      { jobIds: ['job-low', 'job-high'] },
+      expect.objectContaining({ skipRateLimit: true })
+    );
+    expect(result.jobs[0].jobId).toBe('fix-low');
+    expect(result.blocked[0].reason).toBe('score-not-low');
   });
 
   it('can explicitly force update selected workset jobs', async () => {

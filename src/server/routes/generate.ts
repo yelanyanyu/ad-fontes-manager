@@ -21,6 +21,8 @@ const {
   handleQueueHistory,
   handleQueueHistoryJob,
   handleTodayWorkset,
+  handleSetUserReviewScore,
+  handleImproveWorkset,
   handleSaveWorkset,
   handleDeleteHistoryJob,
   handleClearQueueHistory,
@@ -40,6 +42,8 @@ const {
   handleQueueHistory: (req: Request, res: Response) => Promise<void>;
   handleQueueHistoryJob: (req: Request, res: Response) => Promise<void>;
   handleTodayWorkset: (req: Request, res: Response) => Promise<void>;
+  handleSetUserReviewScore: (req: Request, res: Response) => Promise<void>;
+  handleImproveWorkset: (req: Request, res: Response) => Promise<void>;
   handleSaveWorkset: (req: Request, res: Response) => Promise<void>;
   handleDeleteHistoryJob: (req: Request, res: Response) => Promise<void>;
   handleClearQueueHistory: (req: Request, res: Response) => Promise<void>;
@@ -65,6 +69,12 @@ router.post('/generate/:jobId/fix', requireWriteAccess, asyncHandler(handleFixJo
 router.get('/generate/queue/overview', asyncHandler(handleQueueOverview));
 router.get('/generate/queue/history', asyncHandler(handleQueueHistory));
 router.get('/generate/workset/today', asyncHandler(handleTodayWorkset));
+router.post('/generate/workset/improve', requireWriteAccess, asyncHandler(handleImproveWorkset));
+router.post(
+  '/generate/queue/history/:jobId/user-review-score',
+  requireWriteAccess,
+  asyncHandler(handleSetUserReviewScore)
+);
 router.post('/generate/workset/save', requireWriteAccess, asyncHandler(handleSaveWorkset));
 router.post(
   '/generate/queue/history/clear',

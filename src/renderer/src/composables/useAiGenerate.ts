@@ -100,6 +100,17 @@ export interface QueueHistoryJob extends QueueJobOverview {
 export interface WorksetJob extends QueueHistoryJob {
   batchId?: string;
   finalScore: number | null;
+  aiReviewScore: number | null;
+  userReviewScore: number | null;
+  effectiveReviewScore: number | null;
+  auditState: 'complete' | 'incomplete' | 'missing';
+  improveCount: number;
+  improveEligible: boolean;
+  improveBlockedReason?:
+    | 'score-not-low'
+    | 'partial-result'
+    | 'audit-incomplete'
+    | 'missing-revision-notes';
 }
 
 interface QueueHistoryResponse {
@@ -121,6 +132,19 @@ export interface WorksetSaveResponse {
   failed: number;
   missing: string[];
   results: Array<{ jobId: string; result: Record<string, unknown> }>;
+}
+
+export interface UserReviewScoreResponse {
+  ok: boolean;
+  jobId: string;
+  userReviewScore: number;
+}
+
+export interface WorksetImproveResponse {
+  ok: boolean;
+  jobs: Array<{ sourceJobId: string; jobId: string; queued: boolean; position?: number }>;
+  blocked: Array<{ jobId: string; reason: NonNullable<WorksetJob['improveBlockedReason']> }>;
+  missing: string[];
 }
 
 export type AiGenerateState = ReturnType<typeof useAiGenerate>;
@@ -837,6 +861,28 @@ export function useAiGenerate() {
     return mergeWorksetSaveResponses(responses);
   }
 
+  async function setUserReviewScore(
+    jobId: string,
+    score: number
+  ): Promise<UserReviewScoreResponse> {
+    return request.post<UserReviewScoreResponse>(
+      `/v2/generate/queue/history/${encodeURIComponent(jobId)}/user-review-score`,
+      { score },
+      LOCAL_QUEUE_REQUEST
+    );
+  }
+
+  async function improveTodayWorkset(jobIds: string[]): Promise<WorksetImproveResponse> {
+    const response = await request.post<WorksetImproveResponse>(
+      '/v2/generate/workset/improve',
+      { jobIds },
+      LOCAL_QUEUE_REQUEST
+    );
+    await fetchQueueOverview();
+    await fetchTodayWorkset();
+    return response;
+  }
+
   async function queueCancelAll(): Promise<void> {
     await request.post('/v2/generate/queue/cancel-all', undefined, LOCAL_QUEUE_REQUEST);
     await fetchQueueOverview();
@@ -914,6 +960,8 @@ export function useAiGenerate() {
     todayWorksetTotal,
     fetchTodayWorkset,
     saveTodayWorkset,
+    setUserReviewScore,
+    improveTodayWorkset,
     queueCancelAll,
     queuePauseAll,
     queueResumeAll,

@@ -67,6 +67,12 @@ const WorksetSaveSchema = z.object({
   jobIds: z.array(z.string().trim().min(1)).min(1).max(200),
   forceUpdate: z.boolean().default(false),
 });
+const WorksetImproveSchema = z.object({
+  jobIds: z.array(z.string().trim().min(1)).min(1).max(200),
+});
+const UserReviewScoreSchema = z.object({
+  score: z.number().min(0).max(10),
+});
 
 // ---- Helpers ----
 
@@ -464,6 +470,45 @@ async function handleTodayWorkset(_req: Request, res: Response): Promise<void> {
   res.json(queue.getTodayWorkset());
 }
 
+async function handleSetUserReviewScore(req: Request, res: Response): Promise<void> {
+  const jobId = firstParam(req.params.jobId);
+  const parsed = UserReviewScoreSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    res.status(400).json({ code: 400, message: 'Invalid request', errors: parsed.error.issues });
+    return;
+  }
+
+  const queue = getQueue();
+  const result = queue.setUserReviewScore(jobId, parsed.data.score);
+
+  if (result === 'not-found') {
+    res.status(404).json({ code: 404, message: 'Job not found' });
+    return;
+  }
+
+  if (result === 'not-reviewable') {
+    res.status(400).json({
+      code: 400,
+      message: 'Only completed jobs with YAML results can receive a user review score',
+    });
+    return;
+  }
+
+  res.json({ ok: true, jobId, userReviewScore: parsed.data.score });
+}
+
+async function handleImproveWorkset(req: Request, res: Response): Promise<void> {
+  const parsed = WorksetImproveSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    res.status(400).json({ code: 400, message: 'Invalid request', errors: parsed.error.issues });
+    return;
+  }
+
+  const queue = getQueue();
+  const result = queue.submitWorksetImprove(parsed.data.jobIds);
+  res.status(202).json({ ok: true, ...result });
+}
+
 async function handleSaveWorkset(req: Request, res: Response): Promise<void> {
   const parsed = WorksetSaveSchema.safeParse(req.body || {});
   if (!parsed.success) {
@@ -564,6 +609,8 @@ module.exports = {
   handleQueueHistory,
   handleQueueHistoryJob,
   handleTodayWorkset,
+  handleSetUserReviewScore,
+  handleImproveWorkset,
   handleSaveWorkset,
   handleDeleteHistoryJob,
   handleClearQueueHistory,

@@ -4,6 +4,7 @@ import {
   AI_STATE_KEY,
   type QueueHistoryJob,
   type QueueHistoryStatus,
+  type WorksetJob,
   type WorksetSaveResponse,
 } from '@/composables/useAiGenerate';
 import { useAppStore } from '@/stores/appStore';
@@ -34,6 +35,7 @@ const {
   fetchQueueHistory,
   fetchTodayWorkset,
   saveTodayWorkset,
+  improveTodayWorkset,
   queueCancelAll,
   queuePauseAll,
   queueResumeAll,
@@ -52,6 +54,9 @@ const expanded = ref(false);
 const mode = ref<'active' | 'history' | 'workset'>('active');
 const historySearch = ref('');
 const savingWorkset = ref(false);
+const improvingWorkset = ref(false);
+const improveSelectionOpen = ref(false);
+const pendingImproveJobIds = ref(new Set<string>());
 const worksetSaveResults = ref(new Map<string, WorksetSaveDetail>());
 
 onMounted(() => {
@@ -86,6 +91,10 @@ const conflictJobIds = computed(() =>
     .filter(([, detail]) => detail.status === 'conflict')
     .map(([jobId]) => jobId)
 );
+const eligibleWorksetJobs = computed(() => todayWorkset.value.filter(job => job.improveEligible));
+const pendingImproveJobs = computed(() =>
+  todayWorkset.value.filter(job => pendingImproveJobIds.value.has(job.jobId))
+);
 
 function formatFinalScore(score: number | null | undefined): string {
   if (typeof score !== 'number' || !Number.isFinite(score)) return '--';
@@ -97,6 +106,40 @@ function finalScoreClass(score: number | null | undefined): string {
   if (score >= 8) return 'score-strong';
   if (score >= 6) return 'score-ok';
   return 'score-low';
+}
+
+function formatBlockedReason(reason: WorksetJob['improveBlockedReason']): string {
+  switch (reason) {
+    case 'score-not-low':
+      return '';
+    case 'partial-result':
+      return 'partial';
+    case 'audit-incomplete':
+      return 'audit';
+    case 'missing-revision-notes':
+      return 'no notes';
+    default:
+      return 'blocked';
+  }
+}
+
+function shouldShowBlockedReason(reason: WorksetJob['improveBlockedReason']): boolean {
+  return Boolean(reason && reason !== 'score-not-low');
+}
+
+function formatCompactStatus(status: string): string {
+  switch (status) {
+    case 'complete':
+      return 'done';
+    case 'partial':
+      return 'part';
+    case 'running':
+      return 'run';
+    case 'queued':
+      return 'queue';
+    default:
+      return status;
+  }
 }
 
 function recordWorksetSave(response: WorksetSaveResponse): void {
@@ -203,6 +246,48 @@ async function handleSaveWorkset(): Promise<void> {
   }
 }
 
+function openImproveSelection(): void {
+  if (eligibleWorksetJobs.value.length === 0) {
+    appStore.addToast('No low-score Workset jobs are eligible for Improve.', 'info');
+    return;
+  }
+  pendingImproveJobIds.value = new Set(eligibleWorksetJobs.value.map(job => job.jobId));
+  improveSelectionOpen.value = true;
+}
+
+function removePendingImproveJob(jobId: string): void {
+  const next = new Set(pendingImproveJobIds.value);
+  next.delete(jobId);
+  pendingImproveJobIds.value = next;
+}
+
+function closeImproveSelection(): void {
+  improveSelectionOpen.value = false;
+  pendingImproveJobIds.value = new Set();
+}
+
+async function submitWorksetImprove(): Promise<void> {
+  const jobIds = [...pendingImproveJobIds.value];
+  if (jobIds.length === 0 || improvingWorkset.value) return;
+
+  improvingWorkset.value = true;
+  try {
+    const result = await improveTodayWorkset(jobIds);
+    if (result.jobs.length > 0) {
+      appStore.addToast(`Created ${result.jobs.length} Improve jobs`, 'success');
+    }
+    if (result.blocked.length || result.missing.length) {
+      appStore.addToast(
+        `Skipped ${result.blocked.length + result.missing.length} Workset items`,
+        'warning'
+      );
+    }
+    closeImproveSelection();
+  } finally {
+    improvingWorkset.value = false;
+  }
+}
+
 async function handleOverwriteConflicts(): Promise<void> {
   if (conflictJobIds.value.length === 0 || savingWorkset.value) return;
   if (!confirm(`Overwrite ${conflictJobIds.value.length} conflicting words?`)) return;
@@ -285,23 +370,36 @@ async function handleClearHistory(): Promise<void> {
         <button type="button" class="qbtn danger" @click="handleCancelAll">Clear</button>
       </div>
 
-      <div v-if="mode === 'active'" class="bar-list">
+      <div v-if="mode === 'active'" class="bar-list queue-table queue-table-active">
+        <div v-if="queueOverview.length > 0" class="queue-table-header">
+          <span class="queue-cell cell-status cell-dot" />
+          <span class="queue-cell cell-type">Type</span>
+          <span class="queue-cell cell-word">Word</span>
+          <span class="queue-cell cell-lang">L</span>
+          <span class="queue-cell cell-state">St</span>
+          <span class="queue-cell cell-action">Act</span>
+          <span class="queue-cell cell-remove" />
+        </div>
         <div
           v-for="qj in queueOverview"
           :key="qj.jobId"
-          class="bar-row"
+          class="bar-row queue-table-row"
           :class="{ selected: qj.jobId === selectedJobId, ['q-' + qj.status]: true }"
           @click="handleSelect(qj.jobId)"
         >
-          <span class="q-dot" :class="qj.status" />
-          <span class="q-kind">{{ qj.jobType === 'fix' ? 'fix' : 'gen' }}</span>
-          <span class="q-word">{{ qj.word }}</span>
-          <span class="q-lang">{{ qj.language === 'de' ? 'DE' : 'EN' }}</span>
-          <span class="q-status">{{ qj.status }}</span>
+          <span class="queue-cell cell-status">
+            <span class="q-dot" :class="qj.status" />
+          </span>
+          <span class="queue-cell cell-type">
+            <span class="q-kind">{{ qj.jobType === 'fix' ? 'fix' : 'gen' }}</span>
+          </span>
+          <span class="queue-cell cell-word q-word">{{ qj.word }}</span>
+          <span class="queue-cell cell-lang q-lang">{{ qj.language === 'de' ? 'DE' : 'EN' }}</span>
+          <span class="queue-cell cell-state q-status">{{ formatCompactStatus(qj.status) }}</span>
           <button
             v-if="qj.status === 'running' || qj.status === 'queued'"
             type="button"
-            class="q-icon-btn"
+            class="queue-cell cell-action q-icon-btn"
             title="Pause"
             aria-label="Pause job"
             @click.stop="handlePauseJob(qj.jobId)"
@@ -313,7 +411,7 @@ async function handleClearHistory(): Promise<void> {
           <button
             v-else-if="qj.status === 'paused'"
             type="button"
-            class="q-icon-btn"
+            class="queue-cell cell-action q-icon-btn"
             title="Resume"
             aria-label="Resume job"
             @click.stop="handleResumeJob(qj.jobId)"
@@ -322,9 +420,10 @@ async function handleClearHistory(): Promise<void> {
               <path d="M8 5v14l11-7z" />
             </svg>
           </button>
+          <span v-else class="queue-cell cell-action q-action-placeholder" aria-hidden="true" />
           <button
             type="button"
-            class="qbtn danger q-close"
+            class="queue-cell cell-remove qbtn danger q-close"
             title="Remove"
             @click.stop="cancelGeneration(qj.jobId)"
           >
@@ -377,24 +476,35 @@ async function handleClearHistory(): Promise<void> {
         </div>
 
         <div
-          class="bar-list history-list"
+          class="bar-list history-list queue-table queue-table-history"
           :class="{ loading: queueHistoryLoading }"
           :aria-busy="queueHistoryLoading"
         >
+          <div v-if="queueHistory.length > 0" class="queue-table-header">
+            <span class="queue-cell cell-status cell-dot" />
+            <span class="queue-cell cell-type">Type</span>
+            <span class="queue-cell cell-word">Word</span>
+            <span class="queue-cell cell-state">St</span>
+            <span class="queue-cell cell-remove" />
+          </div>
           <div
             v-for="job in queueHistory"
             :key="job.jobId"
-            class="bar-row history-row"
+            class="bar-row history-row queue-table-row"
             :class="{ selected: job.jobId === selectedJobId, ['q-' + job.status]: true }"
             @click="handleHistorySelect(job)"
           >
-            <span class="q-dot" :class="job.status" />
-            <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
-            <span class="q-word">{{ job.word }}</span>
-            <span class="q-status">{{ job.status }}</span>
+            <span class="queue-cell cell-status">
+              <span class="q-dot" :class="job.status" />
+            </span>
+            <span class="queue-cell cell-type">
+              <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
+            </span>
+            <span class="queue-cell cell-word q-word">{{ job.word }}</span>
+            <span class="queue-cell cell-state q-status">{{ formatCompactStatus(job.status) }}</span>
             <button
               type="button"
-              class="qbtn danger q-close"
+              class="queue-cell cell-remove qbtn danger q-close"
               title="Delete"
               @click.stop="handleDeleteHistoryJob(job.jobId)"
             >
@@ -451,6 +561,14 @@ async function handleClearHistory(): Promise<void> {
             Save All
           </button>
           <button
+            type="button"
+            class="qbtn primary"
+            :disabled="eligibleWorksetJobs.length === 0 || improvingWorkset"
+            @click="openImproveSelection"
+          >
+            Improve Low
+          </button>
+          <button
             v-if="conflictJobIds.length > 0"
             type="button"
             class="qbtn danger"
@@ -477,33 +595,60 @@ async function handleClearHistory(): Promise<void> {
           </span>
         </div>
 
-        <div class="bar-list workset-list">
+        <div class="bar-list workset-list queue-table queue-table-workset">
+          <div v-if="todayWorkset.length > 0" class="queue-table-header">
+            <span class="queue-cell cell-status cell-dot" />
+            <span class="queue-cell cell-type">Type</span>
+            <span class="queue-cell cell-word">Word</span>
+            <span class="queue-cell cell-score">Score</span>
+            <span class="queue-cell cell-fix">Fix</span>
+            <span class="queue-cell cell-note">Note</span>
+          </div>
           <div
             v-for="job in todayWorkset"
             :key="job.jobId"
-            class="bar-row workset-row"
+            class="bar-row workset-row queue-table-row"
             :class="{ selected: job.jobId === selectedJobId, ['q-' + job.status]: true }"
             @click="handleHistorySelect(job)"
           >
-            <span class="q-dot" :class="job.status" />
-            <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
-            <span class="q-word">{{ job.word }}</span>
-            <span class="q-lang">{{ job.language === 'de' ? 'DE' : 'EN' }}</span>
-            <span class="q-status">{{ job.status }}</span>
+            <span class="queue-cell cell-status" :title="formatCompactStatus(job.status)">
+              <span class="q-dot" :class="job.status" />
+            </span>
             <span
-              class="score-chip"
-              :class="finalScoreClass(job.finalScore)"
-              title="Final review score"
+              class="queue-cell cell-type"
+              :title="`${job.language === 'de' ? 'DE' : 'EN'} · ${formatCompactStatus(job.status)}`"
             >
-              {{ formatFinalScore(job.finalScore) }}
+              <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
+            </span>
+            <span class="queue-cell cell-word q-word">{{ job.word }}</span>
+            <span class="queue-cell cell-score" title="Effective review score">
+              <span class="score-chip" :class="finalScoreClass(job.effectiveReviewScore)">
+                {{ formatFinalScore(job.effectiveReviewScore) }}
+              </span>
+            </span>
+            <span class="queue-cell cell-fix" title="Improve count">
+              <span class="improve-count-chip">#{{ job.improveCount }}</span>
             </span>
             <span
               v-if="worksetSaveResults.get(job.jobId)"
-              class="save-chip"
-              :class="`save-${worksetSaveResults.get(job.jobId)?.status}`"
+              class="queue-cell cell-note"
               :title="worksetSaveResults.get(job.jobId)?.message"
             >
-              {{ worksetSaveResults.get(job.jobId)?.label }}
+              <span class="save-chip" :class="`save-${worksetSaveResults.get(job.jobId)?.status}`">
+                {{ worksetSaveResults.get(job.jobId)?.label }}
+              </span>
+            </span>
+            <span
+              v-else
+              class="queue-cell cell-note"
+              :title="job.improveBlockedReason || ''"
+            >
+              <span
+                class="blocked-chip"
+                :class="{ empty: !shouldShowBlockedReason(job.improveBlockedReason) }"
+              >
+                {{ formatBlockedReason(job.improveBlockedReason) }}
+              </span>
             </span>
           </div>
           <div v-if="todayWorkset.length === 0" class="bar-empty-list">
@@ -513,6 +658,71 @@ async function handleClearHistory(): Promise<void> {
       </div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <div
+      v-if="improveSelectionOpen"
+      class="pending-improve-overlay"
+      role="presentation"
+      @click.self="closeImproveSelection"
+    >
+      <section
+        class="pending-improve-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pending-improve-title"
+      >
+        <div class="pending-improve-head">
+          <div>
+            <strong id="pending-improve-title">Pending Improve Selection</strong>
+            <p>Review low-score words before creating Improve jobs.</p>
+          </div>
+          <span>{{ pendingImproveJobs.length }} selected</span>
+        </div>
+        <div class="pending-improve-list">
+          <div v-for="job in pendingImproveJobs" :key="job.jobId" class="pending-improve-row">
+            <span class="q-word">{{ job.word }}</span>
+            <span
+              class="score-chip"
+              :class="finalScoreClass(job.effectiveReviewScore)"
+            >
+              {{ formatFinalScore(job.effectiveReviewScore) }}
+            </span>
+            <span class="improve-count-chip">#{{ job.improveCount }}</span>
+            <button
+              type="button"
+              class="qbtn"
+              :disabled="improvingWorkset"
+              @click="removePendingImproveJob(job.jobId)"
+            >
+              Remove
+            </button>
+          </div>
+          <div v-if="pendingImproveJobs.length === 0" class="bar-empty-list">
+            No selected jobs
+          </div>
+        </div>
+        <div class="pending-improve-actions">
+          <button
+            type="button"
+            class="qbtn"
+            :disabled="improvingWorkset"
+            @click="closeImproveSelection"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="qbtn primary"
+            :disabled="pendingImproveJobs.length === 0 || improvingWorkset"
+            @click="submitWorksetImprove"
+          >
+            Create Improve Jobs
+          </button>
+        </div>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -651,6 +861,7 @@ async function handleClearHistory(): Promise<void> {
 .bar-list {
   flex: 1;
   overflow-y: auto;
+  overflow-x: auto;
   padding: 0 14px 10px;
   min-height: 0;
 }
@@ -664,6 +875,106 @@ async function handleClearHistory(): Promise<void> {
   border-radius: 3px;
   cursor: pointer;
   font-size: 12px;
+}
+
+.queue-table {
+  --queue-gap: 6px;
+}
+
+.queue-table-active {
+  --queue-columns: 12px 44px minmax(140px, 1fr) 40px 54px 36px 28px;
+}
+
+.queue-table-history {
+  --queue-columns: 12px 44px minmax(160px, 1fr) 54px 28px;
+}
+
+.queue-table-workset {
+  --queue-columns: 12px 48px minmax(160px, 1fr) 64px 48px 88px;
+}
+
+.queue-table-header,
+.queue-table-row {
+  display: grid;
+  grid-template-columns: var(--queue-columns);
+  column-gap: var(--queue-gap);
+  align-items: center;
+  min-width: max-content;
+}
+
+.queue-table-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 26px;
+  padding: 4px 7px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-panel);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.queue-table-row {
+  gap: 0;
+}
+
+.queue-cell {
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.cell-status {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+}
+
+.cell-type,
+.cell-lang,
+.cell-state,
+.cell-action,
+.cell-remove,
+.cell-score,
+.cell-fix,
+.cell-note {
+  justify-self: stretch;
+  text-align: center;
+}
+
+.cell-type,
+.cell-score,
+.cell-fix,
+.cell-note {
+  display: grid;
+  place-items: center;
+}
+
+.cell-word {
+  justify-self: stretch;
+  text-align: center;
+}
+
+.queue-table-row .q-word {
+  flex: initial;
+}
+
+.queue-table-row .q-lang,
+.queue-table-row .q-status {
+  min-width: 0;
+  text-align: center;
+}
+
+.cell-dot,
+.q-action-placeholder {
+  width: 8px;
+  height: 8px;
 }
 
 .bar-row:hover {
@@ -680,10 +991,10 @@ async function handleClearHistory(): Promise<void> {
 }
 
 .q-dot {
+  display: block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  flex-shrink: 0;
 }
 
 .q-dot.running { background: var(--blue, #1976d2); }
@@ -694,7 +1005,8 @@ async function handleClearHistory(): Promise<void> {
 .q-dot.partial  { background: var(--green); }
 
 .q-kind {
-  width: 28px;
+  display: inline-block;
+  width: 34px;
   border: 1px solid var(--line);
   border-radius: 3px;
   color: var(--muted);
@@ -706,7 +1018,7 @@ async function handleClearHistory(): Promise<void> {
 
 .q-word { flex: 1; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .q-lang { color: var(--muted); font-size: 10px; min-width: 20px; }
-.q-status { font-size: 10px; min-width: 56px; text-align: right; color: var(--muted); }
+.q-status { font-size: 10px; min-width: 0; text-align: center; color: var(--muted); }
 
 .q-running .q-status { color: var(--blue, #1976d2); }
 .q-error .q-status { color: var(--red); }
@@ -715,12 +1027,16 @@ async function handleClearHistory(): Promise<void> {
 
 .q-close {
   visibility: hidden;
-  padding: 0 5px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
 }
 
 .q-icon-btn {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: 1px solid var(--line);
   border-radius: 4px;
   background: var(--surface);
@@ -820,12 +1136,87 @@ async function handleClearHistory(): Promise<void> {
   color: var(--muted);
 }
 
-.workset-list {
-  padding-bottom: 8px;
+.pending-improve-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2400;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(17 24 39 / 0.28);
 }
 
-.workset-row {
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto;
+.pending-improve-panel {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgb(15 23 42 / 0.22);
+  overflow: hidden;
+}
+
+.pending-improve-head,
+.pending-improve-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  font-size: 12px;
+}
+
+.pending-improve-head {
+  border-bottom: 1px solid var(--line);
+}
+
+.pending-improve-head strong {
+  display: block;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.pending-improve-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pending-improve-head span {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pending-improve-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 96px;
+  max-height: min(380px, calc(100vh - 220px));
+  overflow: auto;
+}
+
+.pending-improve-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.pending-improve-row:last-child {
+  border-bottom: 0;
+}
+
+.pending-improve-actions {
+  border-top: 1px solid var(--line);
+  justify-content: flex-end;
+}
+
+.workset-list {
+  padding-bottom: 8px;
 }
 
 .score-chip {
@@ -856,6 +1247,32 @@ async function handleClearHistory(): Promise<void> {
   color: var(--red);
   border-color: var(--red-border);
   background: var(--red-soft);
+}
+
+.improve-count-chip,
+.blocked-chip {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--muted);
+  background: var(--surface);
+  white-space: nowrap;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.blocked-chip {
+  color: var(--amber);
+  border-color: var(--amber-border, var(--line));
+  background: var(--amber-soft, var(--surface));
+}
+
+.blocked-chip.empty,
+.save-chip.empty {
+  visibility: hidden;
 }
 
 .save-chip {

@@ -639,6 +639,7 @@ void describe('SequentialRunner', () => {
           ],
           stages: {
             expert: { provider: 'realish', model: 'model-expert', reasoningEffort: 'auto' },
+            balanced: { provider: 'realish', model: 'model-expert', reasoningEffort: 'auto' },
           },
           review: { threshold: 6, thresholdByLanguage: {} },
         },

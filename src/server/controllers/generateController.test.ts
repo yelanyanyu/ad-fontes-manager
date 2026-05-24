@@ -1071,6 +1071,140 @@ void describe('generateController with JobQueue', () => {
         body.jobs.find((job: Record<string, unknown>) => job.jobId === 'workset-new')?.finalScore,
         8
       );
+      assert.equal(
+        body.jobs.find((job: Record<string, unknown>) => job.jobId === 'workset-other')
+          ?.improveBlockedReason,
+        'partial-result'
+      );
+    });
+
+    void it('persists a user review score for a completed history job', async () => {
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (id, job_type, priority, status, word, language, result_yaml, result_scores)
+         VALUES (?, 'generate', 'normal', 'complete', 'review-me', 'en', ?, ?)`,
+        'review-score-job',
+        FAKE_YAML,
+        JSON.stringify({ overall_score: 8, revision_notes: 'Could be sharper.' })
+      );
+
+      const { handleSetUserReviewScore } = require('./generateController') as {
+        handleSetUserReviewScore: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const res = fakeRes();
+      await handleSetUserReviewScore(
+        fakeReq({ params: { jobId: 'review-score-job' }, body: { score: 4 } }),
+        res
+      );
+
+      assert.equal(res._status, 200);
+      assert.deepEqual(res._body, { ok: true, jobId: 'review-score-job', userReviewScore: 4 });
+
+      const row = db.get('SELECT result_scores FROM job_queue WHERE id = ?', 'review-score-job');
+      assert.equal(JSON.parse(row?.result_scores as string).overall_score, 8);
+      assert.equal(JSON.parse(row?.result_scores as string).user_review_score, 4);
+    });
+
+    void it('creates high-priority fix jobs for selected eligible workset jobs', async () => {
+      const calls: Array<Parameters<PipelineRunner['run']>[0]> = [];
+      const captureRunner: PipelineRunner = {
+        async run(params) {
+          calls.push(params);
+          return {
+            yaml: FAKE_YAML,
+            scores: { overall_score: 9, revision_notes: '无需修改。' },
+          };
+        },
+      };
+      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      _resetQueue();
+      initQueue({ getDb, maxConcurrency: 1, runner: captureRunner });
+      delete require.cache[require.resolve('./generateController')];
+
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (
+          id, job_type, priority, status, word, language, result_yaml, result_scores, progress_events, completed_at, created_at
+        )
+         VALUES
+         (
+          'eligible-improve',
+          'generate',
+          'normal',
+          'complete',
+          'eligible',
+          'en',
+          ?,
+          ?,
+          ?,
+          datetime('now'),
+          datetime('now')
+         ),
+         (
+          'blocked-improve',
+          'generate',
+          'normal',
+          'complete',
+          'blocked',
+          'en',
+          ?,
+          '{"overall_score":9,"revision_notes":"Minor."}',
+          '[]',
+          datetime('now'),
+          datetime('now')
+         )`,
+        FAKE_YAML,
+        JSON.stringify({
+          overall_score: 5,
+          user_review_score: 4,
+          revision_notes: 'Fix the weak imagery.',
+          improve_count: 2,
+        }),
+        JSON.stringify([
+          {
+            type: 'step:complete',
+            step: 'auditing',
+            duration: 20,
+            summary: 'Audited',
+            result: { overall_score: 5 },
+            rawText: '{"overall_score":5}',
+          },
+        ]),
+        FAKE_YAML
+      );
+
+      const { handleImproveWorkset } = require('./generateController') as {
+        handleImproveWorkset: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const res = fakeRes();
+      await handleImproveWorkset(
+        fakeReq({ body: { jobIds: ['eligible-improve', 'blocked-improve', 'missing-job'] } }),
+        res
+      );
+      await new Promise(r => setTimeout(r, 0));
+
+      assert.equal(res._status, 202);
+      const body = res._body as any;
+      assert.equal(body.jobs.length, 1);
+      assert.equal(body.jobs[0].sourceJobId, 'eligible-improve');
+      assert.equal(body.blocked[0].jobId, 'blocked-improve');
+      assert.equal(body.blocked[0].reason, 'score-not-low');
+      assert.deepEqual(body.missing, ['missing-job']);
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].resumeFromStage, 'fixing');
+      assert.equal(calls[0].input.notes, 'Fix the weak imagery.');
+
+      const fixRow = db.get(
+        `SELECT job_type, priority, target_job_id, result_scores
+         FROM job_queue
+         WHERE target_job_id = ?`,
+        'eligible-improve'
+      );
+      assert.equal(fixRow?.job_type, 'fix');
+      assert.equal(fixRow?.priority, 'high');
+      assert.equal(JSON.parse(fixRow?.result_scores as string).improve_count, 3);
     });
   });
 });

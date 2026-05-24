@@ -153,6 +153,93 @@ void describe('QueueStore', () => {
     assert.equal(workset.jobs.find(job => job.jobId === 'de-crate')?.finalScore, 7);
   });
 
+  void it('uses user review score as the effective workset score', () => {
+    db.run(
+      `INSERT INTO job_queue (
+         id, job_type, priority, status, word, language, result_yaml, result_scores, completed_at, created_at
+       )
+       VALUES
+       (
+         'reviewed-crate',
+         'generate',
+         'normal',
+         'complete',
+         'crate',
+         'en',
+         'yaml',
+         '{"overall_score":8,"user_review_score":4,"improve_count":2}',
+         datetime('now'),
+         datetime('now')
+       )`
+    );
+
+    const [job] = store.getTodayWorkset().jobs;
+
+    assert.equal(job.aiReviewScore, 8);
+    assert.equal(job.userReviewScore, 4);
+    assert.equal(job.effectiveReviewScore, 4);
+    assert.equal(job.finalScore, 4);
+    assert.equal(job.auditState, 'complete');
+    assert.equal(job.improveCount, 2);
+  });
+
+  void it('marks only low-score complete workset jobs with revision notes as improve eligible', () => {
+    db.run(
+      `INSERT INTO job_queue (
+         id, job_type, priority, status, word, language, result_yaml, result_scores, completed_at, created_at
+       )
+       VALUES
+       ('eligible-low', 'generate', 'normal', 'complete', 'eligible', 'en', 'yaml', '{"overall_score":5,"revision_notes":"Fix weak imagery."}', datetime('now'), datetime('now')),
+       ('high-score', 'generate', 'normal', 'complete', 'high', 'en', 'yaml', '{"overall_score":8,"revision_notes":"Minor."}', datetime('now'), datetime('now')),
+       ('partial-low', 'generate', 'normal', 'partial', 'partial', 'en', 'yaml', '{"overall_score":4,"revision_notes":"Fix."}', datetime('now'), datetime('now')),
+       ('missing-notes', 'generate', 'normal', 'complete', 'notes', 'en', 'yaml', '{"overall_score":4}', datetime('now'), datetime('now')),
+       ('audit-incomplete', 'generate', 'normal', 'complete', 'audit', 'en', 'yaml', '{"_parse_error":true}', datetime('now'), datetime('now'))`
+    );
+
+    const jobs = new Map(store.getTodayWorkset().jobs.map(job => [job.jobId, job]));
+
+    assert.equal(jobs.get('eligible-low')?.improveEligible, true);
+    assert.equal(jobs.get('eligible-low')?.improveBlockedReason, undefined);
+    assert.equal(jobs.get('high-score')?.improveEligible, false);
+    assert.equal(jobs.get('high-score')?.improveBlockedReason, 'score-not-low');
+    assert.equal(jobs.get('partial-low')?.improveEligible, false);
+    assert.equal(jobs.get('partial-low')?.improveBlockedReason, 'partial-result');
+    assert.equal(jobs.get('missing-notes')?.improveEligible, false);
+    assert.equal(jobs.get('missing-notes')?.improveBlockedReason, 'missing-revision-notes');
+    assert.equal(jobs.get('audit-incomplete')?.improveEligible, false);
+    assert.equal(jobs.get('audit-incomplete')?.improveBlockedReason, 'audit-incomplete');
+  });
+
+  void it('does not expose malformed audit output as an effective perfect score', () => {
+    db.run(
+      `INSERT INTO job_queue (
+         id, job_type, priority, status, word, language, result_yaml, result_scores, completed_at, created_at
+       )
+       VALUES
+       (
+         'bad-perfect',
+         'generate',
+         'normal',
+         'complete',
+         'perfect',
+         'en',
+         'yaml',
+         '{"_parse_error":true,"overall_score":10,"revision_notes":"Truncated"}',
+         datetime('now'),
+         datetime('now')
+       )`
+    );
+
+    const [job] = store.getTodayWorkset().jobs;
+
+    assert.equal(job.aiReviewScore, 10);
+    assert.equal(job.effectiveReviewScore, null);
+    assert.equal(job.finalScore, null);
+    assert.equal(job.auditState, 'incomplete');
+    assert.equal(job.improveEligible, false);
+    assert.equal(job.improveBlockedReason, 'audit-incomplete');
+  });
+
   void it('returns today workset without correlated scans over repeated words', () => {
     const insert = `
       INSERT INTO job_queue (
