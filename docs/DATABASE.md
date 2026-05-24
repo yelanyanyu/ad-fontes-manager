@@ -82,9 +82,9 @@ DATABASE_URL=./data/ad_fontes.db \
 npm run import:pg-v2
 ```
 
-## v1 Legacy Tables
+## Removed v1 Schema
 
-The old 6-table schema (`words`, `etymologies`, `cognates`, `examples`, `synonyms`, `user_requests`) still exists but is no longer used by any active code paths. Migrations only apply to `words_v2`.
+The old 6-table schema (`words`, `etymologies`, `cognates`, `examples`, `synonyms`, `user_requests`) is no longer part of the active SQLite schema. Active code paths and migrations use `words_v2`.
 
 ## See Also
 

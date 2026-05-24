@@ -10,9 +10,9 @@ Ad Fontes Manager REST API
 
 ---
 
-## Words v2 (Recommended)
+## Words API
 
-所有词条操作应使用 v2 API (`/api/v2/words`)。v1 API (`/api/words`) 仅保留向后兼容，不再修改。
+所有词条操作使用 v2 API (`/api/v2/words`)。旧的 v1 API (`/api/words`) 已不再挂载。
 
 ### List Words
 

@@ -30,7 +30,11 @@ Desktop.ini
 # Editor/IDE
 .idea/
 .vscode/
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+!.claude/hooks/**
+.claude/settings.local.json
 .opencode/
 .trae/
 *.suo
@@ -40,7 +44,7 @@ Desktop.ini
 *.sw?
 skills
 CLAUDE.md
-AGENTS.md
+docs/AGENTS.md
 ad-fontes-host.code-workspace
 task_plan_phase2.md
 task_plan.md
