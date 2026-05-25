@@ -13,6 +13,15 @@ import {
   describeWorksetSaveResult,
   type WorksetSaveDetail,
 } from '@/services/worksetSaveResult';
+import QueueTable from './QueueTable.vue';
+import {
+  activeQueueColumns,
+  historyQueueColumns,
+  formatReviewScore,
+  reviewScoreClass,
+  worksetQueueColumns,
+  type QueueTableRow,
+} from './queueTable';
 
 const props = defineProps<{
   expanded: boolean;
@@ -106,18 +115,8 @@ const eligibleWorksetJobs = computed(() => todayWorkset.value.filter(job => job.
 const pendingImproveJobs = computed(() =>
   todayWorkset.value.filter(job => pendingImproveJobIds.value.has(job.jobId))
 );
-
-function formatFinalScore(score: number | null | undefined): string {
-  if (typeof score !== 'number' || !Number.isFinite(score)) return '--';
-  return `${score}/10`;
-}
-
-function finalScoreClass(score: number | null | undefined): string {
-  if (typeof score !== 'number' || !Number.isFinite(score)) return 'score-missing';
-  if (score >= 8) return 'score-strong';
-  if (score >= 6) return 'score-ok';
-  return 'score-low';
-}
+const formatFinalScore = formatReviewScore;
+const finalScoreClass = reviewScoreClass;
 
 function formatBlockedReason(reason: WorksetJob['improveBlockedReason']): string {
   switch (reason) {
@@ -138,20 +137,69 @@ function shouldShowBlockedReason(reason: WorksetJob['improveBlockedReason']): bo
   return Boolean(reason && reason !== 'score-not-low');
 }
 
-function formatCompactStatus(status: string): string {
-  switch (status) {
-    case 'complete':
-      return 'done';
-    case 'partial':
-      return 'part';
-    case 'running':
-      return 'run';
-    case 'queued':
-      return 'queue';
-    default:
-      return status;
-  }
-}
+const activeQueueRows = computed<QueueTableRow[]>(() =>
+  queueOverview.value.map(job => ({
+    id: job.jobId,
+    status: job.status,
+    jobType: job.jobType,
+    word: job.word,
+    language: job.language,
+    action:
+      job.status === 'running' || job.status === 'queued'
+        ? { kind: 'pause', title: 'Pause job' }
+        : job.status === 'paused'
+          ? { kind: 'resume', title: 'Resume job' }
+          : undefined,
+    raw: job,
+  }))
+);
+
+const historyQueueRows = computed<QueueTableRow[]>(() =>
+  queueHistory.value.map(job => ({
+    id: job.jobId,
+    status: job.status,
+    jobType: job.jobType,
+    word: job.word,
+    language: job.language,
+    raw: job,
+  }))
+);
+
+const worksetQueueRows = computed<QueueTableRow[]>(() =>
+  todayWorkset.value.map(job => {
+    const saveResult = worksetSaveResults.value.get(job.jobId);
+    return {
+      id: job.jobId,
+      status: job.status,
+      jobType: job.jobType,
+      word: job.word,
+      language: job.language,
+      score: job.effectiveReviewScore,
+      improveCount: job.improveCount,
+      note: saveResult
+        ? {
+            label: saveResult.label,
+            title: saveResult.message,
+            tone:
+              saveResult.status === 'saved'
+                ? 'success'
+                : saveResult.status === 'conflict'
+                  ? 'warning'
+                  : saveResult.status === 'missing'
+                    ? 'muted'
+                    : 'danger',
+          }
+        : shouldShowBlockedReason(job.improveBlockedReason)
+          ? {
+              label: formatBlockedReason(job.improveBlockedReason),
+              title: job.improveBlockedReason,
+              tone: 'warning',
+            }
+          : undefined,
+      raw: job,
+    };
+  })
+);
 
 function recordWorksetSave(response: WorksetSaveResponse): void {
   const next = new Map(worksetSaveResults.value);
@@ -232,6 +280,24 @@ async function gotoHistoryPage(page: number): Promise<void> {
 
 function handleHistorySelect(job: QueueHistoryJob): void {
   emit('history-job-selected', job);
+}
+
+function handleActiveRowAction(row: QueueTableRow): void {
+  if (row.action?.kind === 'pause') {
+    void handlePauseJob(row.id);
+    return;
+  }
+  if (row.action?.kind === 'resume') {
+    void handleResumeJob(row.id);
+  }
+}
+
+function handleHistoryRowSelect(row: QueueTableRow): void {
+  if (row.raw) handleHistorySelect(row.raw as QueueHistoryJob);
+}
+
+function handleWorksetRowSelect(row: QueueTableRow): void {
+  if (row.raw) handleHistorySelect(row.raw as QueueHistoryJob);
 }
 
 async function handleSaveWorkset(): Promise<void> {
@@ -381,65 +447,16 @@ async function handleClearHistory(): Promise<void> {
         <button type="button" class="qbtn danger" @click="handleCancelAll">Clear</button>
       </div>
 
-      <div v-if="mode === 'active'" class="bar-list queue-table queue-table-active">
-        <div v-if="queueOverview.length > 0" class="queue-table-header">
-          <span class="queue-cell cell-type">Type</span>
-          <span class="queue-cell cell-word">Word</span>
-          <span class="queue-cell cell-lang">Lang</span>
-          <span class="queue-cell cell-state">Status</span>
-          <span class="queue-cell cell-action">Act</span>
-          <span class="queue-cell cell-remove" />
-        </div>
-        <div
-          v-for="qj in queueOverview"
-          :key="qj.jobId"
-          class="bar-row queue-table-row"
-          :class="{ selected: qj.jobId === selectedJobId, ['q-' + qj.status]: true }"
-          @click="handleSelect(qj.jobId)"
-        >
-          <span class="queue-cell cell-type">
-            <span class="q-dot" :class="qj.status" />
-            <span class="q-kind">{{ qj.jobType === 'fix' ? 'fix' : 'gen' }}</span>
-          </span>
-          <span class="queue-cell cell-word q-word">{{ qj.word }}</span>
-          <span class="queue-cell cell-lang q-lang">{{ qj.language === 'de' ? 'DE' : 'EN' }}</span>
-          <span class="queue-cell cell-state q-status">{{ formatCompactStatus(qj.status) }}</span>
-          <button
-            v-if="qj.status === 'running' || qj.status === 'queued'"
-            type="button"
-            class="queue-cell cell-action q-icon-btn"
-            title="Pause"
-            aria-label="Pause job"
-            @click.stop="handlePauseJob(qj.jobId)"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M7 5h4v14H7zM13 5h4v14h-4z" />
-            </svg>
-          </button>
-          <button
-            v-else-if="qj.status === 'paused'"
-            type="button"
-            class="queue-cell cell-action q-icon-btn"
-            title="Resume"
-            aria-label="Resume job"
-            @click.stop="handleResumeJob(qj.jobId)"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </button>
-          <span v-else class="queue-cell cell-action q-action-placeholder" aria-hidden="true" />
-          <button
-            type="button"
-            class="queue-cell cell-remove qbtn danger q-close"
-            title="Remove"
-            @click.stop="cancelGeneration(qj.jobId)"
-          >
-            ×
-          </button>
-        </div>
-        <div v-if="queueOverview.length === 0" class="bar-empty-list">No active jobs</div>
-      </div>
+      <QueueTable
+        v-if="mode === 'active'"
+        :columns="activeQueueColumns"
+        :rows="activeQueueRows"
+        :selected-row-id="selectedJobId"
+        empty-text="No active jobs"
+        @row-select="row => handleSelect(row.id)"
+        @row-action="handleActiveRowAction"
+        @row-remove="row => cancelGeneration(row.id)"
+      />
 
       <div v-else-if="mode === 'history'" class="history-panel">
         <div class="history-tools">
@@ -483,41 +500,15 @@ async function handleClearHistory(): Promise<void> {
           </button>
         </div>
 
-        <div
-          class="bar-list history-list queue-table queue-table-history"
-          :class="{ loading: queueHistoryLoading }"
-          :aria-busy="queueHistoryLoading"
-        >
-          <div v-if="queueHistory.length > 0" class="queue-table-header">
-            <span class="queue-cell cell-type">Type</span>
-            <span class="queue-cell cell-word">Word</span>
-            <span class="queue-cell cell-state">Status</span>
-            <span class="queue-cell cell-remove" />
-          </div>
-          <div
-            v-for="job in queueHistory"
-            :key="job.jobId"
-            class="bar-row queue-table-row"
-            :class="{ selected: job.jobId === selectedJobId, ['q-' + job.status]: true }"
-            @click="handleHistorySelect(job)"
-          >
-            <span class="queue-cell cell-type">
-              <span class="q-dot" :class="job.status" />
-              <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
-            </span>
-            <span class="queue-cell cell-word q-word">{{ job.word }}</span>
-            <span class="queue-cell cell-state q-status">{{ formatCompactStatus(job.status) }}</span>
-            <button
-              type="button"
-              class="queue-cell cell-remove qbtn danger q-close"
-              title="Delete"
-              @click.stop="handleDeleteHistoryJob(job.jobId)"
-            >
-              ×
-            </button>
-          </div>
-          <div v-if="queueHistory.length === 0" class="bar-empty-list">No history jobs</div>
-        </div>
+        <QueueTable
+          :columns="historyQueueColumns"
+          :rows="historyQueueRows"
+          :selected-row-id="selectedJobId"
+          :loading="queueHistoryLoading"
+          empty-text="No history jobs"
+          @row-select="handleHistoryRowSelect"
+          @row-remove="row => handleDeleteHistoryJob(row.id)"
+        />
 
         <div class="history-pager">
           <span>{{ queueHistoryTotal }} jobs</span>
@@ -600,66 +591,13 @@ async function handleClearHistory(): Promise<void> {
           </span>
         </div>
 
-        <div class="bar-list workset-list queue-table queue-table-workset">
-          <div v-if="todayWorkset.length > 0" class="queue-table-header">
-          <span class="queue-cell cell-type">Type</span>
-          <span class="queue-cell cell-word">Word</span>
-            <span class="queue-cell cell-score">Score</span>
-            <span class="queue-cell cell-fix">Fix</span>
-            <span class="queue-cell cell-note">Note</span>
-          </div>
-          <div
-            v-for="job in todayWorkset"
-            :key="job.jobId"
-            class="bar-row workset-row queue-table-row"
-            :class="{ selected: job.jobId === selectedJobId, ['q-' + job.status]: true }"
-            @click="handleHistorySelect(job)"
-          >
-            <span
-              class="queue-cell cell-type workset-type-cell"
-              :title="`${job.language === 'de' ? 'DE' : 'EN'} · ${formatCompactStatus(job.status)}`"
-            >
-              <span class="q-dot" :class="job.status" />
-              <span class="q-kind">{{ job.jobType === 'fix' ? 'fix' : 'gen' }}</span>
-            </span>
-            <span class="queue-cell cell-word q-word">{{ job.word }}</span>
-            <span class="queue-cell cell-score" title="Effective review score">
-              <span class="score-chip" :class="finalScoreClass(job.effectiveReviewScore)">
-                {{ formatFinalScore(job.effectiveReviewScore) }}
-              </span>
-            </span>
-            <span class="queue-cell cell-fix" title="Improve count">
-              <span
-                class="improve-count-chip"
-                :class="{ muted: job.improveCount === 0 }"
-              >#{{ job.improveCount }}</span>
-            </span>
-            <span
-              v-if="worksetSaveResults.get(job.jobId)"
-              class="queue-cell cell-note"
-              :title="worksetSaveResults.get(job.jobId)?.message"
-            >
-              <span class="save-chip" :class="`save-${worksetSaveResults.get(job.jobId)?.status}`">
-                {{ worksetSaveResults.get(job.jobId)?.label }}
-              </span>
-            </span>
-            <span
-              v-else
-              class="queue-cell cell-note"
-              :title="job.improveBlockedReason || ''"
-            >
-              <span
-                class="blocked-chip"
-                :class="{ empty: !shouldShowBlockedReason(job.improveBlockedReason) }"
-              >
-                {{ formatBlockedReason(job.improveBlockedReason) }}
-              </span>
-            </span>
-          </div>
-          <div v-if="todayWorkset.length === 0" class="bar-empty-list">
-            No latest results today
-          </div>
-        </div>
+        <QueueTable
+          :columns="worksetQueueColumns"
+          :rows="worksetQueueRows"
+          :selected-row-id="selectedJobId"
+          empty-text="No latest results today"
+          @row-select="handleWorksetRowSelect"
+        />
       </div>
     </div>
   </div>
@@ -863,211 +801,6 @@ async function handleClearHistory(): Promise<void> {
   color: #fff;
 }
 
-.bar-list {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: auto;
-  padding: 0 14px 10px;
-  min-height: 0;
-}
-
-.bar-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 5px 7px;
-  border-radius: 3px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.queue-table {
-  --queue-gap: 6px;
-}
-
-/* ---- Active view: TYPE | WORD | LANG | STATUS | ACTION | REMOVE ---- */
-.queue-table-active {
-  --queue-columns: 56px minmax(0, 1fr) 36px 48px 36px 28px;
-}
-
-.queue-table-active .cell-type,
-.queue-table-active .cell-word {
-  text-align: left;
-}
-
-.queue-table-active .cell-lang,
-.queue-table-active .cell-state,
-.queue-table-active .cell-action,
-.queue-table-active .cell-remove {
-  text-align: center;
-}
-
-/* ---- History view: TYPE | WORD | STATUS | REMOVE ---- */
-.queue-table-history {
-  --queue-columns: 56px minmax(0, 1fr) 64px 28px;
-}
-
-.queue-table-history .cell-type,
-.queue-table-history .cell-word {
-  text-align: left;
-}
-
-.queue-table-history .cell-state,
-.queue-table-history .cell-remove {
-  text-align: center;
-}
-
-/* ---- Today / Workset view: TYPE | WORD | SCORE | FIX | NOTE ---- */
-.queue-table-workset {
-  --queue-columns: 76px minmax(0, 1fr) 64px 40px 78px;
-}
-
-.queue-table-workset .cell-type,
-.queue-table-workset .cell-word {
-  text-align: left;
-}
-
-.queue-table-workset .cell-score,
-.queue-table-workset .cell-fix,
-.queue-table-workset .cell-note {
-  text-align: center;
-}
-
-/* ---- shared grid layout (header and rows use same columns) ---- */
-.queue-table-header,
-.queue-table-row {
-  display: grid;
-  grid-template-columns: var(--queue-columns);
-  column-gap: var(--queue-gap);
-  align-items: center;
-  min-width: max-content;
-}
-
-.queue-table-header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  min-height: 26px;
-  padding: 4px 7px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-panel);
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.queue-table-row {
-  gap: 0;
-}
-
-/* ---- base cell: no alignment opinion ---- */
-.queue-cell {
-  min-width: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* ---- TYPE cell: dot + label inline ---- */
-.cell-type {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.q-action-placeholder {
-  width: 8px;
-  height: 8px;
-}
-
-.bar-row:hover {
-  background: var(--surface);
-}
-
-.bar-row.selected {
-  background: var(--green-soft, #e8f5e9);
-  box-shadow: inset 3px 0 0 var(--green);
-}
-
-.bar-row.selected:hover {
-  background: var(--green-soft, #e8f5e9);
-}
-
-.q-dot {
-  display: block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.q-dot.running { background: var(--blue, #1976d2); }
-.q-dot.queued  { background: var(--muted); }
-.q-dot.paused  { background: var(--amber); }
-.q-dot.error   { background: var(--red); }
-.q-dot.complete,
-.q-dot.partial  { background: var(--green); }
-
-.q-kind {
-  display: inline-block;
-  width: 34px;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.q-word { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.q-lang { color: var(--muted); font-size: 10px; }
-.q-status { font-size: 10px; color: var(--muted); }
-
-.q-running .q-status { color: var(--blue, #1976d2); }
-.q-error .q-status { color: var(--red); }
-.q-partial .q-status { color: var(--amber); }
-.q-complete .q-status { color: var(--green); }
-
-.q-close {
-  visibility: hidden;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-}
-
-.q-icon-btn {
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: var(--surface);
-  color: var(--green);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.q-icon-btn:hover {
-  border-color: var(--green-border);
-  background: var(--green-soft);
-}
-
-.q-icon-btn svg {
-  width: 12px;
-  height: 12px;
-}
-
-.bar-row:hover .q-close {
-  visibility: visible;
-}
-
 .bar-empty-list {
   text-align: center;
   color: var(--muted);
@@ -1269,13 +1002,6 @@ async function handleClearHistory(): Promise<void> {
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* #0 in workset fix column is not actionable — weak visual */
-.queue-table-workset .improve-count-chip.muted {
-  color: var(--muted);
-  border-color: transparent;
-  background: transparent;
 }
 
 .blocked-chip {

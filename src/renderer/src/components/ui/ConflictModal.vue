@@ -116,15 +116,15 @@ const badgeToneClass = cls => {
 <template>
   <div
     v-if="open"
-    class="conflict-backdrop fixed inset-0 z-40 flex items-center justify-center p-4"
+    class="conflict-backdrop fixed inset-0 z-40 flex items-center justify-center overflow-hidden p-3 sm:p-4"
     role="dialog"
     aria-modal="true"
   >
-    <div class="conflict-modal w-full max-w-5xl rounded-xl shadow-lg overflow-hidden">
-      <div class="conflict-header px-4 py-3 font-bold flex items-center justify-between">
-        <span>{{ title }}</span>
+    <div class="conflict-modal flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-xl shadow-lg">
+      <div class="conflict-header flex shrink-0 items-center justify-between gap-3 px-4 py-3 font-bold">
+        <span class="min-w-0 truncate">{{ title }}</span>
         <button
-          class="conflict-close transition-colors"
+          class="conflict-close shrink-0 transition-colors"
           aria-label="Close"
           @click="$emit('close')"
         >
@@ -132,13 +132,13 @@ const badgeToneClass = cls => {
         </button>
       </div>
 
-      <div v-if="subtitle" class="conflict-subtitle px-4 py-2 text-sm">
+      <div v-if="subtitle" class="conflict-subtitle shrink-0 px-4 py-2 text-sm">
         {{ subtitle }}
       </div>
 
       <div
         v-if="modules.length || badges.length"
-        class="conflict-meta px-4 py-3 text-sm"
+        class="conflict-meta max-h-[22vh] shrink-0 overflow-auto px-4 py-3 text-sm"
       >
         <div class="flex flex-wrap items-center gap-2">
           <span class="conflict-meta-label font-bold">Modules:</span>
@@ -161,22 +161,22 @@ const badgeToneClass = cls => {
         </div>
       </div>
 
-      <div class="grid grid-cols-2 gap-0">
-        <div class="conflict-pane border-r">
-          <div class="conflict-pane-head px-4 py-2 text-xs font-bold">
+      <div class="conflict-body grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden md:grid-cols-2">
+        <div class="conflict-pane min-h-0 border-b md:border-b-0 md:border-r">
+          <div class="conflict-pane-head shrink-0 px-4 py-2 text-xs font-bold">
             {{ leftLabel }}
           </div>
-          <pre class="conflict-code p-4 text-xs overflow-auto max-h-[50vh]">{{ format(leftData) }}</pre>
+          <pre class="conflict-code min-h-0 flex-1 overflow-auto p-4 text-xs">{{ format(leftData) }}</pre>
         </div>
-        <div>
-          <div class="conflict-pane-head px-4 py-2 text-xs font-bold">
+        <div class="conflict-pane min-h-0">
+          <div class="conflict-pane-head shrink-0 px-4 py-2 text-xs font-bold">
             {{ rightLabel }}
           </div>
-          <pre class="conflict-code p-4 text-xs overflow-auto max-h-[50vh]">{{ format(rightData) }}</pre>
+          <pre class="conflict-code min-h-0 flex-1 overflow-auto p-4 text-xs">{{ format(rightData) }}</pre>
         </div>
       </div>
 
-      <div class="conflict-actions px-4 py-3 flex justify-end gap-2">
+      <div class="conflict-actions flex shrink-0 flex-wrap justify-end gap-2 px-4 py-3">
         <button
           v-if="tertiaryLabel"
           class="conflict-secondary px-3 py-1.5 rounded-lg border text-sm transition-colors"
@@ -230,6 +230,11 @@ const badgeToneClass = cls => {
 }
 
 .conflict-close {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
   color: var(--faint);
 }
 
@@ -292,6 +297,9 @@ const badgeToneClass = cls => {
 }
 
 .conflict-pane {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   border-color: var(--line);
 }
 
@@ -302,6 +310,7 @@ const badgeToneClass = cls => {
 }
 
 .conflict-code {
+  min-width: 0;
   background: var(--editor-field);
   color: var(--text-soft);
 }
