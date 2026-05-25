@@ -93,6 +93,7 @@ const emit = defineEmits<{
   color: var(--text-soft);
   font-size: 14px;
   line-height: 1.55;
+  white-space: pre-line;
 }
 
 .confirm-actions {

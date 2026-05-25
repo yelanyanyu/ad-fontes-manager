@@ -9,10 +9,12 @@ import {
 } from '@/composables/useAiGenerate';
 import { useAppStore } from '@/stores/appStore';
 import { useWordStore } from '@/stores/wordStore';
+import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import {
   describeWorksetSaveResult,
   type WorksetSaveDetail,
 } from '@/services/worksetSaveResult';
+import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import QueueTable from './QueueTable.vue';
 import {
   activeQueueColumns,
@@ -68,6 +70,11 @@ const {
   selectJob,
   selectedJobId,
 } = inject(AI_STATE_KEY)!;
+const {
+  dialog: queueConfirmDialog,
+  requestConfirm: requestQueueConfirm,
+  settleConfirm: settleQueueConfirm,
+} = useConfirmDialog();
 
 const appStore = useAppStore();
 const wordStore = useWordStore();
@@ -78,6 +85,8 @@ const improvingWorkset = ref(false);
 const improveSelectionOpen = ref(false);
 const pendingImproveJobIds = ref(new Set<string>());
 const worksetSaveResults = ref(new Map<string, WorksetSaveDetail>());
+const HISTORY_TODAY_DEPENDENCY_NOTICE =
+  'Today is built from History. Deleting History jobs can remove items from Today and make them unavailable for Save or Improve.';
 
 onMounted(() => {
   fetchQueueOverview();
@@ -240,7 +249,13 @@ async function setMode(nextMode: 'active' | 'history' | 'workset'): Promise<void
 }
 
 async function handleCancelAll(): Promise<void> {
-  if (!confirm('Cancel ALL jobs?')) return;
+  const confirmed = await requestQueueConfirm({
+    title: 'Cancel all jobs?',
+    message: 'Queued and running Queue jobs will be cancelled.',
+    confirmLabel: 'Cancel Jobs',
+    variant: 'danger',
+  });
+  if (!confirmed) return;
   await queueCancelAll();
 }
 
@@ -302,7 +317,12 @@ function handleWorksetRowSelect(row: QueueTableRow): void {
 
 async function handleSaveWorkset(): Promise<void> {
   if (todayWorkset.value.length === 0 || savingWorkset.value) return;
-  if (!confirm(`Save ${todayWorkset.value.length} latest YAML results to DB?`)) return;
+  const confirmed = await requestQueueConfirm({
+    title: 'Save Today workset?',
+    message: `Save ${todayWorkset.value.length} latest YAML results to the word database?`,
+    confirmLabel: 'Save All',
+  });
+  if (!confirmed) return;
 
   savingWorkset.value = true;
   try {
@@ -367,7 +387,13 @@ async function submitWorksetImprove(): Promise<void> {
 
 async function handleOverwriteConflicts(): Promise<void> {
   if (conflictJobIds.value.length === 0 || savingWorkset.value) return;
-  if (!confirm(`Overwrite ${conflictJobIds.value.length} conflicting words?`)) return;
+  const confirmed = await requestQueueConfirm({
+    title: 'Overwrite conflicts?',
+    message: `Overwrite ${conflictJobIds.value.length} existing word entries with these generated results?`,
+    confirmLabel: 'Overwrite',
+    variant: 'danger',
+  });
+  if (!confirmed) return;
 
   savingWorkset.value = true;
   try {
@@ -389,18 +415,37 @@ async function handleOverwriteConflicts(): Promise<void> {
 }
 
 async function handleDeleteHistoryJob(jobId: string): Promise<void> {
+  const confirmed = await requestQueueConfirm({
+    title: 'Delete history job?',
+    message: `${HISTORY_TODAY_DEPENDENCY_NOTICE}\n\nDelete this history job?`,
+    confirmLabel: 'Delete',
+    variant: 'danger',
+  });
+  if (!confirmed) return;
   await deleteHistoryJob(jobId);
 }
 
 async function handleClearHistory(): Promise<void> {
   const totalLabel = queueHistoryTotal.value || queueHistory.value.length;
-  if (!confirm(`Delete ${totalLabel} history jobs?`)) return;
+  const confirmed = await requestQueueConfirm({
+    title: 'Clear history?',
+    message: `${HISTORY_TODAY_DEPENDENCY_NOTICE}\n\nDelete ${totalLabel} history jobs?`,
+    confirmLabel: 'Clear History',
+    variant: 'danger',
+  });
+  if (!confirmed) return;
   await clearQueueHistory();
 }
 </script>
 
 <template>
   <div class="queue-bar" :class="{ expanded: queueOpen }" data-tour="ai-generate-queue">
+    <ConfirmDialog
+      v-bind="queueConfirmDialog"
+      @cancel="settleQueueConfirm(false)"
+      @confirm="settleQueueConfirm(true)"
+    />
+
     <div class="bar-summary" @click="toggleExpand">
       <span class="bar-label">Queue</span>
       <span v-if="total === 0" class="bar-empty">empty</span>
@@ -459,6 +504,10 @@ async function handleClearHistory(): Promise<void> {
       />
 
       <div v-else-if="mode === 'history'" class="history-panel">
+        <p class="history-dependency-note">
+          Today is built from History. Clear History can remove Today items.
+        </p>
+
         <div class="history-tools">
           <form class="history-search" @submit.prevent="applyHistorySearch">
             <input v-model="historySearch" type="search" placeholder="Search lemma" />
@@ -1058,6 +1107,14 @@ async function handleClearHistory(): Promise<void> {
   grid-template-columns: 1fr auto;
   gap: 6px;
   padding: 6px 14px;
+}
+
+.history-dependency-note {
+  margin: 0;
+  padding: 6px 14px 0;
+  color: var(--amber);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .history-search {

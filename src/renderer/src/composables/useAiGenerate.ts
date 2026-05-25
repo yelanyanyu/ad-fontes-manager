@@ -808,6 +808,7 @@ export function useAiGenerate() {
     if (selectedJobId.value === jobId) selectedJobId.value = null;
 
     await fetchQueueHistory();
+    await fetchTodayWorkset();
   }
 
   async function clearQueueHistory(): Promise<number> {
@@ -827,6 +828,7 @@ export function useAiGenerate() {
     }
 
     await fetchQueueHistory({ page: 1 });
+    await fetchTodayWorkset();
     return res.deleted;
   }
 

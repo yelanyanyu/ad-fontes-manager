@@ -263,7 +263,7 @@ The operational Queue view containing Jobs that can still affect execution: `que
 _Avoid_: Queue history, completed queue
 
 **Job History** (任务历史):
-The review-oriented Queue view containing non-active Jobs worth revisiting: `complete`, `partial`, and `error`. It is backed by persisted rows in `job_queue`, not by in-memory SSE replay state. It is paginated for display, with 20 Jobs per page by default, and orders statuses by recovery urgency: `error` before `partial` before `complete`. `cancelled` Jobs are hidden by default because they represent intentionally discarded work. Users can hard-delete individual History Jobs or use **Clear History** to hard-delete the current filtered History set, preventing unbounded clutter without forcing page-by-page cleanup. Hard deletion is only allowed for non-executing Jobs, never for `queued`, `running`, or `paused` Jobs.
+The review-oriented Queue view containing non-active Jobs worth revisiting: `complete`, `partial`, and `error`. It is backed by persisted rows in `job_queue`, not by in-memory SSE replay state. It is paginated for display, with 20 Jobs per page by default, and orders statuses by recovery urgency: `error` before `partial` before `complete`. `cancelled` Jobs are hidden by default because they represent intentionally discarded work. Users can hard-delete individual History Jobs or use **Clear History** to hard-delete the current filtered History set, preventing unbounded clutter without forcing page-by-page cleanup. Hard deletion is only allowed for non-executing Jobs, never for `queued`, `running`, or `paused` Jobs. Job History is also the source for the current **Workset**, so deleting History Jobs can remove Today items and make them unavailable for Workset Save or Workset Improve.
 _Avoid_: Archive, completed tasks
 
 **Job Result Preview** (任务结果预览):
@@ -271,7 +271,7 @@ A read-only detail view for a `complete` Job's generated YAML before or after it
 _Avoid_: Word detail, saved preview
 
 **Workset** (工作集):
-A review-and-save surface for the latest generated YAML results the user is actively working through. The current Workset is derived from today's persisted `complete` and `partial` Jobs, deduplicated by Lemma + Language so only the newest Job result for each Word remains. It displays each Job's Review Score when available, helping the user spot low-quality results before saving. It batch-saves through the same Word save path used by the Editor, first detecting conflicts without overwriting and only overwriting conflict items after an explicit user action.
+A review-and-save surface for the latest generated YAML results the user is actively working through. The current Workset is the Queue Today view: it is derived from today's persisted `complete` and `partial` Job History rows, deduplicated by Lemma + Language so only the newest Job result for each Word remains. It is not an independent saved list or cache; deleting the backing History Job removes the corresponding Workset item. It displays each Job's Review Score when available, helping the user spot low-quality results before saving. It batch-saves through the same Word save path used by the Editor, first detecting conflicts without overwriting and only overwriting conflict items after an explicit user action.
 _Avoid_: Current batch, History subset, temporary database
 
 **Circuit Breaker** (熔断):

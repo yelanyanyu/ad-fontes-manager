@@ -171,6 +171,11 @@ const {
   requestConfirm: requestSelectAllMatchingConfirm,
   settleConfirm: settleSelectAllMatchingConfirm,
 } = useConfirmDialog();
+const {
+  dialog: batchCancelConfirmDialog,
+  requestConfirm: requestBatchCancelConfirm,
+  settleConfirm: settleBatchCancelConfirm,
+} = useConfirmDialog();
 
 // ----- Column visibility -----
 type ColumnKey = 'language' | 'partOfSpeech' | 'revisionCount' | 'createdAt' | 'updatedAt';
@@ -525,10 +530,13 @@ const openBatchPanelFromSummary = (): void => {
   reopenBatchAnkiPanel();
 };
 
-const cancelBatchFromSummary = (): void => {
-  const confirmed = window.confirm(
-    'Cancel the current batch operation? The current item will finish, then remaining items will stop.'
-  );
+const cancelBatchFromSummary = async (): Promise<void> => {
+  const confirmed = await requestBatchCancelConfirm({
+    title: 'Cancel batch operation?',
+    message: 'The current item will finish, then remaining items will stop.',
+    confirmLabel: 'Cancel Batch',
+    variant: 'danger',
+  });
   if (!confirmed) return;
   cancelBatchOperation();
 };
@@ -537,10 +545,13 @@ const resumeBatchFromSummary = async (): Promise<void> => {
   await resumeBatchOperation();
 };
 
-const handleCancelBatchOperation = (): void => {
-  const confirmed = window.confirm(
-    'Cancel the current batch operation? The current item will finish, then remaining items will stop.'
-  );
+const handleCancelBatchOperation = async (): Promise<void> => {
+  const confirmed = await requestBatchCancelConfirm({
+    title: 'Cancel batch operation?',
+    message: 'The current item will finish, then remaining items will stop.',
+    confirmLabel: 'Cancel Batch',
+    variant: 'danger',
+  });
   if (!confirmed) return;
   cancelBatchOperation();
 };
@@ -812,6 +823,11 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       v-bind="selectAllMatchingConfirmDialog"
       @cancel="settleSelectAllMatchingConfirm(false)"
       @confirm="settleSelectAllMatchingConfirm(true)"
+    />
+    <ConfirmDialog
+      v-bind="batchCancelConfirmDialog"
+      @cancel="settleBatchCancelConfirm(false)"
+      @confirm="settleBatchCancelConfirm(true)"
     />
     <AnkiExportModal
       :open="ankiExportOpen"

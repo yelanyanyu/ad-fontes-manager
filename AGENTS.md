@@ -6,6 +6,7 @@ Ad Fontes Manager is a Vue 3 + Express + Electron app for generating, reviewing,
 
 - Use CodeGraph before broad code exploration or edits. Prefer `codegraph_context` for feature, architecture, and bug questions; use `codegraph_files` for project structure; use focused file reads only after CodeGraph narrows the target.
 - Check [CONTEXT.md](CONTEXT.md) for domain terms and [docs/adr/](docs/adr/) for hard-to-reverse decisions.
+- Check [DESIGN.md](DESIGN.md) before UI, layout, dialog, table, or interaction changes. It is the source of truth for product feel, modal usage, Queue UI rules, responsive behavior, and accessibility expectations.
 - Agent workflow docs live in [docs/agents/domain.md](docs/agents/domain.md), [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md), and [docs/agents/triage-labels.md](docs/agents/triage-labels.md).
 
 ## Local Rules
