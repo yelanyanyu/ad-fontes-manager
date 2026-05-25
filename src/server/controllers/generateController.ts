@@ -325,7 +325,7 @@ async function handleResumeJob(req: Request, res: Response): Promise<void> {
     word: oldJob.word,
     language: oldJob.language,
     context: oldJob.context,
-    notes: parsed.data.notes ?? oldJob.notes,
+    notes: parsed.data.notes,
     resumeFromStage,
     previousContext,
     previousSteps: snapshot.previousSteps,

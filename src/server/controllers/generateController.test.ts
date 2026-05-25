@@ -721,6 +721,59 @@ void describe('generateController with JobQueue', () => {
       });
     });
 
+    void it('does not inherit old job notes when regenerating without explicit notes', async () => {
+      const calls: Array<Parameters<PipelineRunner['run']>[0]> = [];
+      const capturingRunner: PipelineRunner = {
+        async run(params) {
+          calls.push(params);
+          return { yaml: FAKE_YAML, scores: FAKE_SCORES };
+        },
+      };
+      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      _resetQueue();
+      initQueue({ getDb, maxConcurrency: 1, runner: capturingRunner });
+      delete require.cache[require.resolve('./generateController')];
+
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (
+          id, job_type, priority, status, word, language, context, notes,
+          result_yaml, result_scores, progress_events
+        )
+        VALUES (?, 'fix', 'high', 'complete', 'resume-clean', 'en', 'ctx', ?, ?, ?, ?)`,
+        'job-resume-clean',
+        'old auditing revision notes',
+        'yield:\n  lemma: resume-clean\n',
+        JSON.stringify({ overall_score: 8, revision_notes: 'old auditing revision notes' }),
+        JSON.stringify([
+          { type: 'job:started' },
+          { type: 'step:start', step: 'searching', message: 'Searching' },
+          {
+            type: 'step:complete',
+            step: 'searching',
+            duration: 12,
+            summary: 'Searched',
+            result: { researchYaml: 'from-search' },
+          },
+        ])
+      );
+
+      const { handleResumeJob } = require('./generateController') as {
+        handleResumeJob: (req: Record<string, unknown>, res: FakeRes) => Promise<void>;
+      };
+
+      const res = fakeRes();
+      await handleResumeJob(
+        fakeReq({ params: { jobId: 'job-resume-clean' }, body: { fromStage: 'pondering' } }),
+        res
+      );
+      await new Promise(r => setTimeout(r, 0));
+
+      assert.equal(res._status, 202);
+      assert.equal(calls[0].resumeFromStage, 'pondering');
+      assert.equal(calls[0].input.notes, undefined);
+    });
+
     void it('returns 400 with invalid resume body', async () => {
       // Create a completed job in the DB first so the job lookup succeeds.
       const db = getDb();
