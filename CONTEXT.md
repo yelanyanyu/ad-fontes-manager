@@ -250,6 +250,14 @@ _Avoid_: Multi-word job, combined job
 A SQLite-backed durable scheduler that gates Job execution across a global Concurrency Pool. Dequeues by Priority then by `created_at`. Supports restart recovery (`running` → `queued`), pause/resume/cancel per Job and per Batch, and automatic retry with circuit breaker.
 _Avoid_: Job pool, task queue
 
+**Queue Table** (队列表格):
+The shared presentation surface for row-based Queue views, including Active Queue, Job History, and Workset. It is a Queue-specific table, not a generic DataTable: it knows how to present Job status dots, Job type chips, Lemma/Word text, compact status, Review Score, Improve Count, Blocked Improve Item notes, and row actions with consistent column alignment and horizontal scrolling when space is constrained. Callers configure Queue Table with semantic column types rather than arbitrary cell markup, so column alignment and chip styling remain local to the Queue Table Module. The first implementation lives inside the AI Generate area rather than a global common UI folder; Active Queue, Job History, and Workset pane extraction can happen later after Queue Table has stabilized.
+_Avoid_: Generic table, data grid
+
+**Queue Table Row** (队列表格行):
+The display model passed into Queue Table by Active Queue, Job History, or Workset. It is not a persisted Job row and not a Workset Item; it is the normalized presentation input containing the row id, Job type, Lemma/Word text, status, optional Language, optional Review Score, optional Improve Count, optional note chip, and optional row action metadata.
+_Avoid_: Job row, Workset row
+
 **Active Queue** (活动队列):
 The operational Queue view containing Jobs that can still affect execution: `queued`, `running`, and `paused`. It is used for live control actions such as pause, resume, cancel, and selecting an active Job.
 _Avoid_: Queue history, completed queue
