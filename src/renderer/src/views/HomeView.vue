@@ -133,6 +133,7 @@ onUnmounted(() => {
       </div>
       <AiQueueBar
         class="queue-shell"
+        :expanded="queueExpanded"
         @expanded-change="queueExpanded = $event"
         @job-selected="openAiJob"
         @history-job-selected="openHistoryJob"

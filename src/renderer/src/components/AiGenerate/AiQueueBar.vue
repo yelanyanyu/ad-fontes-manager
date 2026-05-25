@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref } from 'vue';
+import { computed, inject, onMounted, ref, watch } from 'vue';
 import {
   AI_STATE_KEY,
   type QueueHistoryJob,
@@ -14,11 +14,23 @@ import {
   type WorksetSaveDetail,
 } from '@/services/worksetSaveResult';
 
+const props = defineProps<{
+  expanded: boolean;
+}>();
+
 const emit = defineEmits<{
   'expanded-change': [expanded: boolean];
   'job-selected': [jobId: string];
   'history-job-selected': [job: QueueHistoryJob];
 }>();
+
+const queueOpen = ref(props.expanded);
+watch(
+  () => props.expanded,
+  next => {
+    queueOpen.value = next;
+  },
+);
 
 const {
   queueOverview,
@@ -50,7 +62,6 @@ const {
 
 const appStore = useAppStore();
 const wordStore = useWordStore();
-const expanded = ref(false);
 const mode = ref<'active' | 'history' | 'workset'>('active');
 const historySearch = ref('');
 const savingWorkset = ref(false);
@@ -158,9 +169,9 @@ function recordWorksetSave(response: WorksetSaveResponse): void {
 }
 
 function toggleExpand(): void {
-  expanded.value = !expanded.value;
-  emit('expanded-change', expanded.value);
-  if (expanded.value) {
+  queueOpen.value = !queueOpen.value;
+  emit('expanded-change', queueOpen.value);
+  if (queueOpen.value) {
     if (mode.value === 'active') fetchQueueOverview();
     else if (mode.value === 'history') fetchQueueHistory();
     else fetchTodayWorkset();
@@ -323,7 +334,7 @@ async function handleClearHistory(): Promise<void> {
 </script>
 
 <template>
-  <div class="queue-bar" :class="{ expanded }" data-tour="ai-generate-queue">
+  <div class="queue-bar" :class="{ expanded: queueOpen }" data-tour="ai-generate-queue">
     <div class="bar-summary" @click="toggleExpand">
       <span class="bar-label">Queue</span>
       <span v-if="total === 0" class="bar-empty">empty</span>
@@ -334,10 +345,10 @@ async function handleClearHistory(): Promise<void> {
         <span v-if="counts.error" class="bar-count error">{{ counts.error }}e</span>
         <span v-if="counts.done || !total" class="bar-count done">{{ counts.done }}d</span>
       </template>
-      <span class="bar-chevron">{{ expanded ? '▼' : '▲' }}</span>
+      <span class="bar-chevron">{{ queueOpen ? '▼' : '▲' }}</span>
     </div>
 
-    <div v-if="expanded" class="bar-panel">
+    <div v-if="queueOpen" class="bar-panel">
       <div class="mode-row">
         <div class="mode-control" aria-label="Queue mode">
           <button
