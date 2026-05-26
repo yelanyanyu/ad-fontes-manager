@@ -172,6 +172,10 @@ _Avoid_: Workflow, chain, process
 One step in a Pipeline. Each Stage has a model assignment (`fast`/`balanced`/`expert`), an optional system prompt, optional tools, and an output parser. Stages run sequentially; each receives the previous Stage's output.
 _Avoid_: Step, phase, node
 
+**Creative Stage Structured Output** (创意阶段结构化输出):
+The `pondering` Stage's intermediate JSON object containing creative fields such as visual imagery, meaning evolution, cognates, examples, and nuance. It is streamed as raw JSON for inspection, parsed and validated by the server, then merged with structural research data before the program serializes the final Word YAML. The LLM should not author creative YAML directly.
+_Avoid_: Creative YAML, final YAML, raw prose
+
 **Job** (任务):
 A unit of work in the Queue. Three types: **Generate Job** (runs a full Pipeline for one Word), **Fix Job** (runs a single fix Stage against a completed Generate Job's output), **Audit-Fix Job** (audits and fixes a Word already saved to the database). Every Job has a lifecycle (`queued` → `running` → `complete` / `partial` / `error`) and a **Priority** (`normal` or `high`).
 _Avoid_: Task, execution, run
@@ -305,6 +309,7 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - A **Word** is identified by a **Lemma** + **Language** pair
 - A **Word**'s full data lives in its **Content** (the JSON column holding the **YAML**)
 - A **Pipeline** contains 3 **Stages**: searching → pondering → auditing
+- The `pondering` Stage produces **Creative Stage Structured Output** as JSON; final **YAML** is produced by program serialization after merging with structural research output
 - A **Job** is one run of a **Pipeline** for one **Word**
 - A **Batch** contains N **Jobs**, executed by the **Queue** with configurable concurrency
 - The **Active Queue** is for controlling live Jobs; **Job History** is for revisiting completed, partial, or failed Jobs
