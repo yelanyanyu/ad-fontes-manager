@@ -51,6 +51,7 @@ const saving = ref(false);
 const repairing = ref(false);
 let validateTimer: ReturnType<typeof setTimeout> | null = null;
 let clientParseTimer: ReturnType<typeof setTimeout> | null = null;
+let validationRequestId = 0;
 
 const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
 
@@ -62,6 +63,22 @@ const syncScroll = () => {
 
 function updateCursorPos(): void {
   cursorPos.value = textareaRef.value?.selectionStart ?? 0;
+}
+
+function scheduleValidation(delay = 150): void {
+  if (clientParseTimer) clearTimeout(clientParseTimer);
+  clientParseTimer = setTimeout(() => handleInput(), delay);
+}
+
+function markPendingValidation(): void {
+  validationRequestId += 1;
+  if (!input.value || input.value.trim().length === 0) {
+    status.value = '';
+    schemaErrors.value = [];
+    if (validateTimer) clearTimeout(validateTimer);
+    return;
+  }
+  status.value = 'Checking YAML';
 }
 
 function handleKeydown(e: KeyboardEvent): void {
@@ -99,12 +116,14 @@ function handleKeydown(e: KeyboardEvent): void {
     void nextTick(() => {
       ta.selectionStart = newStart;
       ta.selectionEnd = newEnd;
+      updateCursorPos();
     });
   } else {
     if (start === end) {
       input.value = input.value.slice(0, start) + indent + input.value.slice(end);
       void nextTick(() => {
         ta.selectionStart = ta.selectionEnd = start + indent.length;
+        updateCursorPos();
       });
     } else {
       const lines = input.value.split('\n');
@@ -121,6 +140,7 @@ function handleKeydown(e: KeyboardEvent): void {
       void nextTick(() => {
         ta.selectionStart = start + indent.length;
         ta.selectionEnd = end + addedChars;
+        updateCursorPos();
       });
     }
   }
@@ -145,30 +165,38 @@ function formatValidationMessages(res: FormatValidationResponse): string[] {
 }
 
 const handleInput = () => {
+  validationRequestId += 1;
+  const requestId = validationRequestId;
+
   if (!input.value || input.value.trim().length === 0) {
     status.value = '';
     schemaErrors.value = [];
     if (clientParseTimer) clearTimeout(clientParseTimer);
+    if (validateTimer) clearTimeout(validateTimer);
     return;
   }
 
+  const yamlToValidate = input.value;
   try {
-    const result = yaml.load(input.value) as Record<string, unknown> | null;
+    const result = yaml.load(yamlToValidate) as Record<string, unknown> | null;
     if (
       result &&
       typeof result === 'object' &&
       !Array.isArray(result) &&
       result.yield !== undefined
     ) {
-      status.value = 'Valid YAML';
+      status.value = 'Checking YAML';
+      schemaErrors.value = [];
     } else {
       status.value = 'Invalid YAML';
       schemaErrors.value = [];
+      if (validateTimer) clearTimeout(validateTimer);
       return;
     }
   } catch {
     status.value = 'Invalid YAML';
     schemaErrors.value = [];
+    if (validateTimer) clearTimeout(validateTimer);
     return;
   }
 
@@ -177,10 +205,12 @@ const handleInput = () => {
     validating.value = true;
     try {
       const res = await request.post<FormatValidationResponse>('/v2/words/validate', {
-        yaml: input.value,
+        yaml: yamlToValidate,
+        repair: false,
       });
+      if (requestId !== validationRequestId || input.value !== yamlToValidate) return;
 
-      if (res.valid && !res.changed) {
+      if (res.valid) {
         schemaErrors.value = [];
         status.value = 'Valid YAML';
       } else {
@@ -188,16 +218,14 @@ const handleInput = () => {
         status.value = 'Invalid YAML';
       }
     } catch {
+      if (requestId !== validationRequestId || input.value !== yamlToValidate) return;
       schemaErrors.value = [];
     } finally {
-      validating.value = false;
+      if (requestId === validationRequestId) {
+        validating.value = false;
+      }
     }
   }, 300);
-};
-
-const onEditorInput = () => {
-  if (clientParseTimer) clearTimeout(clientParseTimer);
-  clientParseTimer = setTimeout(() => handleInput(), 150);
 };
 
 onUnmounted(() => {
@@ -206,12 +234,20 @@ onUnmounted(() => {
 });
 
 watch(
+  input,
+  () => {
+    markPendingValidation();
+    scheduleValidation(500);
+  },
+  { flush: 'post' }
+);
+
+watch(
   editorReloadToken,
   () => {
     if (typeof editorYaml.value === 'string') {
       input.value = editorYaml.value;
       cursorPos.value = 0;
-      handleInput();
     }
   },
   { immediate: true }
@@ -253,7 +289,6 @@ const repairFormat = async () => {
         res.valid ? 'Format repaired.' : 'Format partly repaired; remaining errors need review.',
         res.valid ? 'success' : 'warning'
       );
-      handleInput();
       return;
     }
 
@@ -283,7 +318,6 @@ const useExisting = () => {
   if (conflictData.value.source === 'local' && conflictData.value.id) {
     wordStore.setEditingContext({ id: conflictData.value.id });
   }
-  handleInput();
   closeConflict();
 };
 
@@ -303,7 +337,6 @@ const overwrite = async () => {
 
 const applyGeneratedYaml = (yamlContent: string) => {
   input.value = yamlContent;
-  handleInput();
 };
 
 defineExpose({ applyGeneratedYaml });
@@ -339,6 +372,7 @@ defineExpose({ applyGeneratedYaml });
             :class="{
               'dot-valid': status === 'Valid YAML',
               'dot-invalid': status === 'Invalid YAML',
+              'dot-checking': status === 'Checking YAML',
               'dot-ready': status === '',
             }"
           />
@@ -430,7 +464,6 @@ defineExpose({ applyGeneratedYaml });
           v-model="input"
           spellcheck="false"
           placeholder="每行输入 YAML 内容，例如：lemma: apple..."
-          @input="onEditorInput"
           @scroll="syncScroll"
           @click="updateCursorPos"
           @keyup="updateCursorPos"
@@ -529,6 +562,11 @@ defineExpose({ applyGeneratedYaml });
   box-shadow: 0 0 0 3px rgba(155, 148, 138, 0.1);
 }
 
+.dot-checking {
+  background: var(--blue);
+  box-shadow: 0 0 0 3px rgba(44, 96, 143, 0.1);
+}
+
 [data-theme="dark"] .dot-valid {
   box-shadow: 0 0 0 3px rgba(67, 179, 127, 0.1);
 }
@@ -539,6 +577,10 @@ defineExpose({ applyGeneratedYaml });
 
 [data-theme="dark"] .dot-ready {
   box-shadow: 0 0 0 3px rgba(127, 119, 111, 0.1);
+}
+
+[data-theme="dark"] .dot-checking {
+  box-shadow: 0 0 0 3px rgba(89, 158, 216, 0.14);
 }
 
 .head-actions {

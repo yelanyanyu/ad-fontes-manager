@@ -6,9 +6,11 @@ import { prepareYamlForWordSave } from '../src/server/services/word/formatFix';
 const wordService = require('../src/server/services/word/WordServiceV2') as {
   validateYaml: (
     req: Record<string, unknown>,
-    yaml: string
+    yaml: string,
+    options?: { repair?: boolean }
   ) => Promise<{
     valid: boolean;
+    errors: string[];
     yaml?: string;
     changed?: boolean;
     repairs?: Array<{ type: string }>;
@@ -191,6 +193,46 @@ cognate_family:
       logic: "bad indentation"
 `;
 
+const englishWithOnlyApplicationNestedUnderEtymology = `
+yield:
+  user_word: compelling
+  lemma: compelling
+  syllabification: com-pel-ling
+  user_context_sentence: The evidence was compelling.
+  part_of_speech: adjective
+  contextual_meaning:
+    en: very convincing
+    zh: 令人信服的
+  other_common_meanings:
+    - irresistible
+etymology:
+  root_and_affixes:
+    prefix: com-
+    root: pel
+    suffix: '-ing'
+    structure_analysis: compelling is formed from compel plus -ing
+  historical_origins:
+    history_myth: N/A
+    source_word: Latin compellere
+    pie_root: '*pel-'
+  visual_imagery_zh: 驱赶之力
+  meaning_evolution_zh: 从驱赶到信服
+  application:
+    selected_examples:
+      - type: Current Context
+        sentence: The evidence was compelling.
+        translation_zh: 这份证据令人信服。
+cognate_family:
+  cognates:
+    - word: compel
+      logic: com- plus pel
+nuance:
+  synonyms:
+    - word: convincing
+      meaning_zh: 令人相信
+  image_differentiation_zh: compelling 带有驱赶感
+`;
+
 void test('Basic Format Fix promotes misplaced English root sections and returns saveable YAML', () => {
   const result = prepareYamlForWordSave('abandon', englishWithCreativeSectionsNestedUnderEtymology);
 
@@ -280,4 +322,29 @@ void test('validateYaml returns editable YAML when indentation errors prevent pa
   assert(result.yaml);
   assert(result.yaml.includes('logic: "bad indentation"'));
   assert(result.diagnostics?.some(diagnostic => diagnostic.code === 'yaml.parse_error'));
+});
+
+void test('validateYaml can validate the current YAML without applying Basic Format Fix', async () => {
+  const result = await wordService.validateYaml(
+    {},
+    englishWithCreativeSectionsNestedUnderEtymology,
+    { repair: false }
+  );
+
+  assert.equal(result.valid, false);
+  assert.equal(result.changed, false);
+  assert.equal(result.repairs?.length, 0);
+  assert(result.diagnostics?.some(diagnostic => diagnostic.code === 'schema.invalid'));
+});
+
+void test('strict validate reports current YAML invalid when application is only nested under etymology', async () => {
+  const result = await wordService.validateYaml(
+    {},
+    englishWithOnlyApplicationNestedUnderEtymology,
+    { repair: false }
+  );
+
+  assert.equal(result.valid, false);
+  assert.equal(result.changed, false);
+  assert(result.errors.some(error => error.includes('application')));
 });

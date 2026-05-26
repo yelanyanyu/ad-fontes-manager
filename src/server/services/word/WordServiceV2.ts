@@ -11,6 +11,13 @@ const conflictService = require('../conflictService') as {
     newData: unknown
   ) => { hasConflict: boolean; diff: unknown[] | undefined };
 };
+const validator = require('./WordValidator') as {
+  validate: (
+    data: unknown,
+    wordLower: string,
+    language?: string
+  ) => { valid: boolean; errors: string[] };
+};
 const repositoryV2 = require('./WordRepositoryV2') as WordRepositoryV2Like;
 const assemblerV2 = require('./WordAssemblerV2') as WordAssemblerV2Like;
 const { createContextLogger } = require('../../utils/logger') as {
@@ -225,7 +232,8 @@ class WordServiceV2 {
 
   async validateYaml(
     req: RequestLike,
-    yamlStr: string
+    yamlStr: string,
+    options: { repair?: boolean } = {}
   ): Promise<{
     valid: boolean;
     errors: string[];
@@ -238,6 +246,75 @@ class WordServiceV2 {
   }> {
     if (!yamlStr) {
       return { valid: false, errors: ['YAML content is required'] };
+    }
+
+    if (options.repair === false) {
+      try {
+        const data = yaml.load(yamlStr) as Record<string, any>;
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+          return {
+            valid: false,
+            errors: ['YAML must be an object'],
+            yaml: yamlStr,
+            changed: false,
+            canSave: false,
+            repairs: [],
+            diagnostics: [
+              {
+                severity: 'error',
+                code: 'yaml.not_object',
+                path: 'root',
+                message: 'YAML must be an object',
+              },
+            ],
+          };
+        }
+
+        const language = this.detectLanguage(data);
+        const lemma = data?.yield?.lemma;
+        const wordLower = String(lemma || '')
+          .trim()
+          .toLowerCase();
+        const validation = wordLower
+          ? validator.validate(data, wordLower, language)
+          : { valid: false, errors: ['yield.lemma is required'] };
+        const diagnostics = validation.errors.map(error => ({
+          severity: 'error',
+          code: 'schema.invalid',
+          path: 'root',
+          message: error,
+        }));
+
+        return {
+          valid: validation.valid,
+          errors: validation.errors,
+          language,
+          yaml: yamlStr,
+          changed: false,
+          canSave: validation.valid,
+          repairs: [],
+          diagnostics,
+        };
+      } catch (error) {
+        const err = error as { message?: string };
+        const message = `YAML parse error: ${err.message}`;
+        return {
+          valid: false,
+          errors: [message],
+          yaml: yamlStr,
+          changed: false,
+          canSave: false,
+          repairs: [],
+          diagnostics: [
+            {
+              severity: 'error',
+              code: 'yaml.parse_error',
+              path: 'root',
+              message,
+            },
+          ],
+        };
+      }
     }
 
     const rawData = (() => {

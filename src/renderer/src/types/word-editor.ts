@@ -1,4 +1,4 @@
-export type EditorStatus = '' | 'Valid YAML' | 'Invalid YAML';
+export type EditorStatus = '' | 'Checking YAML' | 'Valid YAML' | 'Invalid YAML';
 
 export type SaveTarget = 'local' | 'db';
 

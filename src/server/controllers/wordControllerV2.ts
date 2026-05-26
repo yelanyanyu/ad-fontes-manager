@@ -10,7 +10,8 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
   deleteWord: (req: Request, id: string) => Promise<unknown>;
   validateYaml: (
     req: Request,
-    yamlStr: string
+    yamlStr: string,
+    options?: { repair?: boolean }
   ) => Promise<{ valid: boolean; errors: string[]; language?: string }>;
 };
 
@@ -126,12 +127,12 @@ class WordControllerV2 {
   });
 
   validate = asyncHandler(async (req: Request, res: Response) => {
-    const { yaml: yamlStr } = req.body as { yaml?: string };
+    const { yaml: yamlStr, repair } = req.body as { yaml?: string; repair?: boolean };
     if (!yamlStr) {
       res.status(422).json({ valid: false, errors: ['YAML content is required'] });
       return;
     }
-    const result = await wordServiceV2.validateYaml(req, yamlStr);
+    const result = await wordServiceV2.validateYaml(req, yamlStr, { repair });
     res.json(result);
   });
 }
