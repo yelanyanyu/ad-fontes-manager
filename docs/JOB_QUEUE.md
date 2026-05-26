@@ -16,7 +16,7 @@
 |------|------|
 | **Job（作业）** | 一个待执行的 AI 任务，包含类型、优先级、状态、输入参数 |
 | **Queue（队列）** | SQLite `job_queue` 表中按优先级和创建时间排序的待处理作业集合 |
-| **Pipeline（流水线）** | 多阶段 AI 处理流程，如 `searching → pondering → auditing → fixing` |
+| **Pipeline（流水线）** | 多阶段 AI 处理流程，如 `searching → pondering → auditing` |
 | **Concurrency Pool（并发池）** | `maxConcurrency` 限制的并发执行槽位（默认 1，可在设置中配置） |
 | **SSE（Server-Sent Events）** | 作业进度实时推送协议 |
 
@@ -66,7 +66,7 @@
 
 | 类型 | 流水线阶段 | 说明 |
 |------|-----------|------|
-| `generate` | searching → pondering → auditing → fixing | 从零生成词条 YAML |
+| `generate` | searching → pondering → auditing | 从零生成词条 YAML |
 | `fix` | fixing → auditing | 根据审核修改建议修复并重新评分 |
 | `audit-fix` | auditing → fixing | 审核已有词条并自动修复低分字段 |
 
@@ -81,10 +81,11 @@
 | POST | `/api/v2/generate/single` | 提交一个生成作业（409 = 重复） |
 | GET | `/api/v2/generate/:jobId/stream` | SSE 进度流 |
 | POST | `/api/v2/generate/:jobId/cancel` | 取消单个作业 |
-| POST | `/api/v2/generate/:jobId/resume` | 从断点恢复（创建新作业） |
-| POST | `/api/v2/generate/batch` | 批量提交多个生成作业 |
 | POST | `/api/v2/generate/:jobId/pause` | 暂停单个作业 |
-| POST | `/api/v2/generate/:jobId/fix` | 同步修复（返回 YAML） |
+| POST | `/api/v2/generate/:jobId/resume` | 从断点恢复（创建新作业） |
+| POST | `/api/v2/generate/:jobId/resume-active` | 恢复被中断的运行中作业（服务重启后） |
+| POST | `/api/v2/generate/:jobId/fix` | 同步修复（返回 YAML，超时 180 秒） |
+| POST | `/api/v2/generate/batch` | 批量提交多个生成作业 |
 
 ### 队列管理
 
@@ -96,10 +97,27 @@
 | POST | `/api/v2/generate/queue/resume-all` | 恢复所有暂停作业 |
 | GET | `/api/v2/generate/queue/history` | 作业历史列表 |
 | GET | `/api/v2/generate/queue/history/:jobId` | 单个历史作业详情 |
+| POST | `/api/v2/generate/queue/history/:jobId/user-review-score` | 设置用户审核评分 |
 | DELETE | `/api/v2/generate/queue/history/:jobId` | 删除单个历史作业 |
 | POST | `/api/v2/generate/queue/history/clear` | 清除所有历史作业 |
-| GET | `/api/v2/generate/workset/today` | 获取今日工作集 |
-| POST | `/api/v2/generate/workset/save` | 保存工作集 |
+
+### 工作集
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/v2/generate/workset/today` | 获取今日工作集（按 Lemma+Language 去重的最新结果） |
+| POST | `/api/v2/generate/workset/save` | 批量保存工作集词条到数据库 |
+| POST | `/api/v2/generate/workset/improve` | 对低分工作集项批量创建 Fix Job |
+
+---
+
+## 用户审核评分
+
+用户可通过 API 对已完成作业的结果设置覆盖评分。User Review Score 不影响原始 AI Review Score（仍保留在 Job 元数据中），但会作为 Effective Review Score 用于工作集排序和 Workset Improve 的资格判断。
+
+- `effectiveScore = userReviewScore ?? aiReviewScore`
+- 工作集按 Effective Review Score 排序
+- Workset Improve 检查 Effective Review Score 是否低于阈值
 
 ---
 
@@ -122,7 +140,7 @@
 | `target_word_id` | TEXT | audit-fix 类型的目标词条 ID |
 | `provider_id` | TEXT | AI Provider 标识（用于断路器） |
 | `result_yaml` | TEXT | 生成的 YAML 输出 |
-| `result_scores` | TEXT | JSON 格式的评分结果 |
+| `result_scores` | TEXT | JSON 格式的评分结果（含 AI review score 和 user review score） |
 | `progress_events` | TEXT | JSON 格式的进度事件（用于断点续传） |
 | `error` | TEXT | 错误信息 |
 | `retry_count` | INTEGER | 重试次数 |
@@ -140,7 +158,7 @@
 1. 按 `priority DESC, created_at ASC` 排序
 2. 跳过 Provider 被断路器阻塞的作业
 3. 乐观锁：`UPDATE ... WHERE status = 'queued'`
-4. 最大并发数由 `maxConcurrency` 控制（默认 1，可通过 `ai.queue_concurrency` 配置）
+4. 最大并发数由 `maxConcurrency` 控制（默认 1，可通过 `ai.queue_concurrency` 或 `AI_QUEUE_CONCURRENCY` 环境变量配置）
 
 ### 重启恢复
 
@@ -194,7 +212,7 @@
 
 | 配置键 | 默认值 | 说明 |
 |--------|--------|------|
-| `ai.queue_concurrency` | 1 | 最大并发作业数 |
+| `ai.queue_concurrency` | 1 | 最大并发作业数（桌面端可在设置页修改） |
 
 桌面端口通过环境变量 `DESKTOP_SERVER_PORT` 配置（默认 19876），在 `src/main/index.ts` 和 `electron.vite.config.mts` 之间共享。
 

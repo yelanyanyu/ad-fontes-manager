@@ -4,7 +4,7 @@ Ad Fontes Manager REST API
 
 ## Base Info
 
-- **Base URL**: `http://localhost:<port>/api`（Web 模式默认 8080，桌面模式端口随机）
+- **Base URL**: `http://localhost:<port>/api`（Web 模式默认 8080，桌面模式默认 19876）
 - **Content-Type**: `application/json`
 - **Authentication**: 写操作需要 `X-Admin-Token` 请求头
 
@@ -12,12 +12,12 @@ Ad Fontes Manager REST API
 
 ## Words API
 
-所有词条操作使用 v2 API (`/api/v2/words`)。旧的 v1 API (`/api/words`) 已不再挂载。
+所有词条操作使用 v2 API (`/api/v2/words`)。旧的 v1 API 已移除。
 
 ### List Words
 
 ```http
-GET /v2/words?page=1&limit=20&search=keyword&sort=newest&language=en
+GET /api/v2/words?page=1&limit=20&search=keyword&sort=newest&language=en
 ```
 
 | Param | Type | Required | Description |
@@ -52,7 +52,7 @@ Response:
 ### Get Word Details (by Lemma)
 
 ```http
-GET /v2/words/details?word=example&language=en
+GET /api/v2/words/details?word=example&language=en
 ```
 
 Response:
@@ -77,13 +77,13 @@ Response:
 ### Get Word by ID
 
 ```http
-GET /v2/words/:id
+GET /api/v2/words/:id
 ```
 
 ### Check Existence
 
 ```http
-GET /v2/words/check?word=test&language=en
+GET /api/v2/words/check?word=test&language=en
 ```
 
 Response: `{ "found": true, "lemma": "test", "language": "en", "data": {...} }`
@@ -91,18 +91,20 @@ Response: `{ "found": true, "lemma": "test", "language": "en", "data": {...} }`
 ### Validate YAML
 
 ```http
-POST /v2/words/validate
+POST /api/v2/words/validate
 Content-Type: application/json
 
-{ "yaml": "yield:\n  lemma: example\n  ..." }
+{ "yaml": "yield:\n  lemma: example\n  ...", "repair": false }
 ```
+
+`repair` 参数（可选，默认 `false`）：设为 `false` 时执行严格校验（不自动修复），用于编辑器实时校验；设为 `true` 时执行格式修复后再校验。
 
 Response: `{ "valid": true, "errors": [], "language": "en" }`
 
 ### Save / Upsert Word
 
 ```http
-POST /v2/words
+POST /api/v2/words
 X-Admin-Token: <token>
 Content-Type: application/json
 
@@ -129,29 +131,37 @@ Response (conflict, when `forceUpdate` is false):
 }
 ```
 
+### Add Word
+
+```http
+POST /api/v2/words/add
+X-Admin-Token: <token>
+Content-Type: application/json
+
+{ "yaml": "yield:\n  lemma: example\n  ..." }
+```
+
+与 Save 的区别：不会检测冲突，直接新增。
+
 ### Delete Word
 
 ```http
-DELETE /v2/words/:id
+DELETE /api/v2/words/:id
 X-Admin-Token: <token>
 ```
 
 Response: `{ "success": true }`
 
----
+### Format Fix
 
-## Words v1 (Legacy, Frozen)
+```http
+POST /api/v2/words/format-fix
+Content-Type: application/json
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/words` | 列表 |
-| GET | `/words/details` | 详情（需要 `include` 参数） |
-| GET | `/words/:id` | 按 ID 获取 |
-| POST | `/words` | 保存/更新 |
-| POST | `/words/add` | 新增 |
-| DELETE | `/words/:id` | 删除 |
+{ "yaml": "yield:\n  lemma: example\n  ..." }
+```
 
-**不再修改 v1 端点。** 所有新功能在 v2 中实现。
+对 YAML 执行语法修复、区块提升等确定性格式修复。返回修复后的 YAML 和诊断信息。
 
 ---
 
@@ -160,7 +170,7 @@ Response: `{ "success": true }`
 ### AnkiConnect Proxy
 
 ```http
-POST /anki/connect
+POST /api/anki/connect
 Content-Type: application/json
 
 { "action": "deckNames", "version": 6 }
@@ -171,13 +181,31 @@ Content-Type: application/json
 ### Export .apkg
 
 ```http
-POST /anki/export-apkg
+POST /api/anki/export-apkg
 Content-Type: application/json
 
 { "payloads": [...], "deckName": "...", "modelName": "..." }
 ```
 
 返回 `.apkg` 二进制流。
+
+### Export .apkg by Word IDs
+
+```http
+POST /api/anki/export-apkg-by-ids
+Content-Type: application/json
+
+{
+  "wordIds": ["uuid-1", "uuid-2"],
+  "fieldMapping": [{ "source": "lemma", "target": "Front" }],
+  "options": { "deckName": "...", "modelName": "...", "tags": [] },
+  "modelFields": ["Front", "Back"],
+  "selectedTemplate": { "name": "...", "front": "...", "back": "..." },
+  "css": "..."
+}
+```
+
+按词条 ID 列表批量导出，服务端直接从数据库读取词条内容构建 apkg。返回 `.apkg` 二进制流。
 
 ---
 
@@ -220,22 +248,23 @@ Response:
       "name": "deepseek",
       "type": "openai",
       "baseUrl": "https://api.deepseek.com",
+      "anthropicBaseUrl": "https://api.deepseek.com/anthropic",
       "apiKey": "****yz12",
       "models": [
-        { "id": "deepseek-v4-pro", "name": "deepseek-v4-pro[1m]" }
+        { "id": "deepseek-v4-pro[1m]", "name": "deepseek-v4-pro[1m]", "endpointType": "anthropic" }
       ]
     }
   ],
   "search": {
-    "provider": "brave",
+    "provider": "tavily",
     "apiKey": "****ab34",
     "autoDomains": true,
     "domains": { "common": ["etymonline.com"], "en": [], "de": [] }
   },
   "stages": {
-    "fast": { "provider": "deepseek", "model": "deepseek-v4-flash", "reasoningEffort": "low" },
-    "balanced": { "provider": "deepseek", "model": "deepseek-v4-pro", "reasoningEffort": "medium" },
-    "expert": { "provider": "deepseek", "model": "deepseek-v4-pro", "reasoningEffort": "high" }
+    "fast": { "provider": "deepseek", "model": "deepseek-v4-flash[1m]", "reasoningEffort": "none" },
+    "balanced": { "provider": "deepseek", "model": "deepseek-v4-pro[1m]", "reasoningEffort": "low" },
+    "expert": { "provider": "deepseek", "model": "deepseek-v4-pro[1m]", "reasoningEffort": "medium" }
   },
   "review": {
     "threshold": 6,
@@ -264,12 +293,15 @@ Content-Type: application/json
 {
   "providerId": "deepseek",
   "baseUrl": "https://api.deepseek.com",
+  "anthropicBaseUrl": "https://api.deepseek.com/anthropic",
   "apiKey": "sk-xxx",
-  "type": "openai"
+  "type": "openai",
+  "modelEndpointType": "anthropic",
+  "model": "deepseek-v4-pro[1m]"
 }
 ```
 
-超时 15 秒。成功返回 `{ "success": true }`，失败返回错误信息。
+超时 15 秒。成功返回 `{ "ok": true, "latencyMs": 1234 }`，失败返回 `{ "ok": false, "error": "...", "latencyMs": ... }`。
 
 ### Test Search API
 
@@ -279,12 +311,12 @@ X-Admin-Token: <token>
 Content-Type: application/json
 
 {
-  "provider": "brave",
-  "apiKey": "BSA-xxx"
+  "provider": "tavily",
+  "apiKey": "tvly-xxx"
 }
 ```
 
-超时 15 秒。成功返回 `{ "success": true }`，失败返回错误信息。
+`provider` 可选值：`brave`、`tavily`。超时 15 秒。成功返回 `{ "ok": true, "latencyMs": 1234 }`，失败返回 `{ "ok": false, "error": "...", "latencyMs": ... }`。
 
 ---
 
@@ -357,6 +389,15 @@ X-Admin-Token: <token>
 
 取消正在运行或排队中的任务。
 
+### Pause Job
+
+```http
+POST /api/v2/generate/:jobId/pause
+X-Admin-Token: <token>
+```
+
+暂停正在运行的单个作业。暂停后可通过 `/queue/resume-all` 恢复。
+
 ### Resume Job
 
 ```http
@@ -377,6 +418,15 @@ Content-Type: application/json
 | notes | string | no | 更新的生成指示 |
 | userScore | number | no | 用户评分（0-10），回传给审核阶段 |
 
+### Resume Active Job
+
+```http
+POST /api/v2/generate/:jobId/resume-active
+X-Admin-Token: <token>
+```
+
+恢复一个正在运行但被中断的作业（服务重启后使用）。
+
 ### Auto Fix
 
 ```http
@@ -384,7 +434,7 @@ POST /api/v2/generate/:jobId/fix
 X-Admin-Token: <token>
 ```
 
-根据审核阶段（auditing）的 `revision_notes` 自动修复 YAML。超时 180 秒。修复过程通过 SSE 流式返回（复用 stream 端点）。
+根据审核阶段（auditing）的 `revision_notes` 自动修复 YAML。修复过程通过 SSE 流式返回（复用 stream 端点）。
 
 Response:
 
@@ -418,14 +468,23 @@ Content-Type: application/json
 }
 ```
 
-### Pause Job
+### Queue Overview
 
 ```http
-POST /api/v2/generate/:jobId/pause
-X-Admin-Token: <token>
+GET /api/v2/generate/queue/overview
 ```
 
-暂停正在运行的单个作业。暂停后可通过 `/queue/resume-all` 恢复。
+返回队列状态快照（queued / running / paused / error 数量）。
+
+### Queue Management
+
+```http
+POST /api/v2/generate/queue/cancel-all
+POST /api/v2/generate/queue/pause-all
+POST /api/v2/generate/queue/resume-all
+```
+
+均需 `X-Admin-Token`。批量取消/暂停/恢复队列中所有作业。
 
 ### Queue History
 
@@ -441,17 +500,51 @@ DELETE /api/v2/generate/queue/history/:jobId
 POST /api/v2/generate/queue/history/clear
 ```
 
-查看、删除单个历史作业或清空全部历史。
+查看、删除单个历史作业或清空全部历史。均需 `X-Admin-Token`（除 GET）。
+
+### User Review Score
+
+```http
+POST /api/v2/generate/queue/history/:jobId/user-review-score
+X-Admin-Token: <token>
+Content-Type: application/json
+
+{ "userScore": 8 }
+```
+
+为用户覆盖 AI 审核评分。不影响原始的 AI Review Score，仅设置 User Review Score。
 
 ### Workset
 
 ```http
 GET /api/v2/generate/workset/today
+```
+
+获取今日工作集——当日完成和部分完成的作业去重后按 Lemma + Language 分组的最新结果。
+
+```http
 POST /api/v2/generate/workset/save
 X-Admin-Token: <token>
 ```
 
-获取今日工作集或保存当前生成结果到工作集。
+批量保存工作集中的词条到数据库。
+
+```http
+POST /api/v2/generate/workset/improve
+X-Admin-Token: <token>
+```
+
+对工作集中评分低于阈值的词条批量创建 Content Fix 作业。
+
+---
+
+## Announcements
+
+```http
+GET /api/announcements
+```
+
+返回系统公告列表。
 
 ---
 
@@ -468,10 +561,26 @@ Response: `{ "status": "ok" }`
 ### Database Status
 
 ```http
-GET /status
+GET /api/status
 ```
 
 Response: `{ "connected": true }`
+
+### Version
+
+```http
+GET /api/core/version
+```
+
+Response: `{ "version": "2.0.2", "copyright": "Copyright © 2026 yelanyanyu(Github)" }`
+
+### Word Check
+
+```http
+GET /api/core/check?word=test&language=en
+```
+
+检查词条是否存在。Response: `{ "found": true, ... }`
 
 ---
 

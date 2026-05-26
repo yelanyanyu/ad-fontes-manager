@@ -77,7 +77,7 @@ npm run native:node
 node -e "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close();"
 ```
 
-### `scripts/rebuild-electron-native.mjs`
+### `scripts/ensure-electron-native.mjs`
 
 对应命令：
 
@@ -87,16 +87,29 @@ npm run native:electron
 
 用途：
 
-1. Windows 下先检查是否有进程正在加载 `better_sqlite3.node`
-2. 如果发现锁定进程，提前输出 PID 和进程路径并退出
-3. 如果未锁定，执行 `@electron/rebuild`
-4. 用 Electron 当前版本重编译 `better-sqlite3`
+1. 读取 `.forge-meta` 检查当前 ABI 是否已是 140
+2. 如果已是 Electron ABI 140，直接跳过
+3. 如果不是，先检查是否有进程正在加载 `better_sqlite3.node`
+4. 如果发现锁定进程，自动终止这些进程
+5. 执行 `@electron/rebuild` 重编译
+
+这保证桌面构建不会因为 ABI 不匹配而闪退。
 
 核心命令等价于：
 
 ```bash
 npx @electron/rebuild --version <electron version> --which-module better-sqlite3 --force --build-from-source
 ```
+
+### `scripts/rebuild-electron-native.mjs`
+
+对应命令：
+
+```bash
+npm run rebuild:electron:native
+```
+
+强制重建（不检查当前 ABI，始终执行 rebuild）。用于手动修复或调试场景，日常应优先使用 `npm run native:electron`。
 
 ### `scripts/build-desktop.mjs`
 
