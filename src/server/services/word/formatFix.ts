@@ -57,6 +57,13 @@ interface SectionSchema {
   safeParse: (value: unknown) => { success: boolean };
 }
 
+interface DuplicateKeyInfo {
+  key: string;
+  path: string;
+  firstLine: number;
+  duplicateLine: number;
+}
+
 const EXPECTED_ROOT_SECTIONS: Record<WordLanguage, string[]> = {
   en: ['yield', 'etymology', 'cognate_family', 'application', 'nuance'],
   de: [
@@ -231,6 +238,94 @@ function getLemma(data: Record<string, unknown>): string {
   return typeof yieldValue.lemma === 'string' ? yieldValue.lemma : '';
 }
 
+function findDuplicateMappingKey(text: string): DuplicateKeyInfo | null {
+  const seen = new Map<string, { key: string; line: number }>();
+  const stack: Array<{ indent: number; key: string }> = [];
+  let blockScalarIndent: number | null = null;
+  const lines = text.split(/\r?\n/);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const indent = line.length - line.trimStart().length;
+    if (blockScalarIndent !== null) {
+      if (indent > blockScalarIndent || trimmed === '') continue;
+      blockScalarIndent = null;
+    }
+
+    const keyMatch = line.match(/^(\s*)(?:-\s*)?(['"]?)([^:'"#][^:#]*?)\2\s*:\s*(.*)$/);
+    if (!keyMatch) continue;
+
+    const key = keyMatch[3].trim();
+    const value = keyMatch[4].trim();
+    if (!key) continue;
+
+    while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+
+    const path = [...stack.map(item => item.key), key].join('.');
+    const existing = seen.get(path);
+    if (existing) {
+      return {
+        key,
+        path,
+        firstLine: existing.line,
+        duplicateLine: index + 1,
+      };
+    }
+
+    seen.set(path, { key, line: index + 1 });
+
+    if (
+      value === '' ||
+      value === '|' ||
+      value === '>' ||
+      value.startsWith('|') ||
+      value.startsWith('>')
+    ) {
+      stack.push({ indent, key });
+      if (value.startsWith('|') || value.startsWith('>')) {
+        blockScalarIndent = indent;
+      }
+    }
+  }
+
+  return null;
+}
+
+export function buildYamlParseDiagnostic(
+  error: { message?: string; code?: string; actual?: string },
+  text: string
+): FormatDiagnostic {
+  const duplicate = findDuplicateMappingKey(text);
+  if (duplicate && /duplicated mapping key/i.test(String(error.message || ''))) {
+    return {
+      severity: 'error',
+      code: 'yaml.duplicate_key',
+      path: duplicate.path || duplicate.key,
+      expected: `One mapping entry named ${duplicate.key}`,
+      actual: `First at line ${duplicate.firstLine}, duplicated at line ${duplicate.duplicateLine}`,
+      message: `Duplicate YAML key "${duplicate.key}": first seen at line ${duplicate.firstLine}, duplicated at line ${duplicate.duplicateLine}.`,
+      suggestion: `Merge the two ${duplicate.key} sections or keep only one canonical section.`,
+    };
+  }
+
+  return {
+    severity: 'error',
+    code: error.code || 'yaml.parse_error',
+    path: 'root',
+    expected: 'Parseable YAML object',
+    actual: error.actual || error.message,
+    message:
+      error.code === 'yaml.not_object'
+        ? 'YAML must be an object.'
+        : `YAML parse error: ${error.message}`,
+  };
+}
+
 export function prepareYamlForWordSave(wordText: string, yamlText: string): FormatFixResult {
   const strippedYaml = stripMarkdownFences(String(yamlText || ''));
   const repairs: FormatRepair[] = [];
@@ -262,17 +357,7 @@ export function prepareYamlForWordSave(wordText: string, yamlText: string): Form
       } catch {
         const err = error as { message?: string; code?: string; actual?: string };
         return buildInvalidResult(
-          {
-            severity: 'error',
-            code: err.code || 'yaml.parse_error',
-            path: 'root',
-            expected: 'Parseable YAML object',
-            actual: err.actual || err.message,
-            message:
-              err.code === 'yaml.not_object'
-                ? 'YAML must be an object.'
-                : `YAML parse error: ${err.message}`,
-          },
+          buildYamlParseDiagnostic(err, syntaxRepairedYaml),
           syntaxRepairedYaml,
           undefined,
           undefined,
@@ -281,20 +366,7 @@ export function prepareYamlForWordSave(wordText: string, yamlText: string): Form
       }
     } else {
       const err = error as { message?: string; code?: string; actual?: string };
-      return buildInvalidResult(
-        {
-          severity: 'error',
-          code: err.code || 'yaml.parse_error',
-          path: 'root',
-          expected: 'Parseable YAML object',
-          actual: err.actual || err.message,
-          message:
-            err.code === 'yaml.not_object'
-              ? 'YAML must be an object.'
-              : `YAML parse error: ${err.message}`,
-        },
-        parseableYaml
-      );
+      return buildInvalidResult(buildYamlParseDiagnostic(err, parseableYaml), parseableYaml);
     }
   }
 
@@ -335,4 +407,5 @@ export function prepareYamlForWordSave(wordText: string, yamlText: string): Form
 
 module.exports = {
   prepareYamlForWordSave,
+  buildYamlParseDiagnostic,
 };

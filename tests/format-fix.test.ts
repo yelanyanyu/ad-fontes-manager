@@ -193,6 +193,16 @@ cognate_family:
       logic: "bad indentation"
 `;
 
+const yamlWithDuplicateTopLevelEtymology = `
+yield:
+  lemma: vanish
+etymology:
+  historical_origins:
+    pie_root: "*wā-"
+etymology:
+  visual_imagery_zh: 变空
+`;
+
 const englishWithOnlyApplicationNestedUnderEtymology = `
 yield:
   user_word: compelling
@@ -347,4 +357,16 @@ void test('strict validate reports current YAML invalid when application is only
   assert.equal(result.valid, false);
   assert.equal(result.changed, false);
   assert(result.errors.some(error => error.includes('application')));
+});
+
+void test('strict validate reports duplicate YAML key with first and duplicate line numbers', async () => {
+  const result = await wordService.validateYaml({}, yamlWithDuplicateTopLevelEtymology, {
+    repair: false,
+  });
+
+  assert.equal(result.valid, false);
+  assert(result.diagnostics?.some(diagnostic => diagnostic.code === 'yaml.duplicate_key'));
+  assert(result.errors.some(error => error.includes('"etymology"')));
+  assert(result.errors.some(error => error.includes('line 4')));
+  assert(result.errors.some(error => error.includes('line 7')));
 });

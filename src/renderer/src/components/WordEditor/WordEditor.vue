@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onUnmounted, nextTick } from 'vue';
+import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import type { Ref } from 'vue';
 import yaml from 'js-yaml';
 import { useWordStore } from '@/stores/wordStore';
@@ -42,6 +42,8 @@ const { editorYaml, editorReloadToken } = storeToRefs(wordStore as any) as {
 const input = ref<string>('');
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const lineNumberRef = ref<HTMLElement | null>(null);
+const lineMeasureRef = ref<HTMLElement | null>(null);
+const lineHeights = ref<number[]>([]);
 const cursorPos = ref(0);
 const status = ref<EditorStatus>('');
 const conflictData = ref<ConflictData | null>(null);
@@ -52,6 +54,8 @@ const repairing = ref(false);
 let validateTimer: ReturnType<typeof setTimeout> | null = null;
 let clientParseTimer: ReturnType<typeof setTimeout> | null = null;
 let validationRequestId = 0;
+let lineMeasureFrame: number | null = null;
+let editorResizeObserver: ResizeObserver | null = null;
 
 const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
 
@@ -60,6 +64,43 @@ const syncScroll = () => {
     lineNumberRef.value.scrollTop = textareaRef.value.scrollTop;
   }
 };
+
+function getDefaultLineHeight(): number {
+  const textarea = textareaRef.value;
+  if (!textarea) return 22;
+  const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight);
+  return Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 22;
+}
+
+function measureLineHeights(): void {
+  const textarea = textareaRef.value;
+  const measure = lineMeasureRef.value;
+  if (!textarea || !measure) return;
+
+  measure.style.width = `${textarea.clientWidth}px`;
+  measure.textContent = '';
+
+  const defaultHeight = getDefaultLineHeight();
+  const nextHeights = input.value.split('\n').map(line => {
+    const row = document.createElement('div');
+    row.className = 'line-measure-row';
+    row.textContent = line.length > 0 ? line : ' ';
+    measure.appendChild(row);
+    return Math.max(defaultHeight, row.getBoundingClientRect().height);
+  });
+
+  lineHeights.value = nextHeights.length > 0 ? nextHeights : [defaultHeight];
+  measure.textContent = '';
+  syncScroll();
+}
+
+function scheduleLineMeasure(): void {
+  if (lineMeasureFrame !== null) window.cancelAnimationFrame(lineMeasureFrame);
+  lineMeasureFrame = window.requestAnimationFrame(() => {
+    lineMeasureFrame = null;
+    measureLineHeights();
+  });
+}
 
 function updateCursorPos(): void {
   cursorPos.value = textareaRef.value?.selectionStart ?? 0;
@@ -231,11 +272,14 @@ const handleInput = () => {
 onUnmounted(() => {
   if (validateTimer) clearTimeout(validateTimer);
   if (clientParseTimer) clearTimeout(clientParseTimer);
+  if (lineMeasureFrame !== null) window.cancelAnimationFrame(lineMeasureFrame);
+  editorResizeObserver?.disconnect();
 });
 
 watch(
   input,
   () => {
+    void nextTick(scheduleLineMeasure);
     markPendingValidation();
     scheduleValidation(500);
   },
@@ -248,10 +292,19 @@ watch(
     if (typeof editorYaml.value === 'string') {
       input.value = editorYaml.value;
       cursorPos.value = 0;
+      void nextTick(scheduleLineMeasure);
     }
   },
   { immediate: true }
 );
+
+onMounted(() => {
+  scheduleLineMeasure();
+  if (textareaRef.value) {
+    editorResizeObserver = new ResizeObserver(() => scheduleLineMeasure());
+    editorResizeObserver.observe(textareaRef.value);
+  }
+});
 
 const clear = () => {
   if (saving.value) return;
@@ -446,6 +499,7 @@ defineExpose({ applyGeneratedYaml });
           :key="idx"
           class="ln-row"
           :class="{ 'ln-row-active': idx === cursorLine }"
+          :style="{ height: `${lineHeights[idx] || getDefaultLineHeight()}px` }"
         >
           <span class="ln-num">{{ idx + 1 }}</span>
           <span v-if="info.depth > 0" class="ln-dots">
@@ -469,6 +523,7 @@ defineExpose({ applyGeneratedYaml });
           @keyup="updateCursorPos"
           @keydown="handleKeydown"
         />
+        <div ref="lineMeasureRef" class="line-measure" aria-hidden="true" />
       </div>
     </div>
 
@@ -713,12 +768,14 @@ defineExpose({ applyGeneratedYaml });
 
 .line-number {
   padding-top: 18px;
+  padding-bottom: 18px;
   color: #b5ada2;
   border-right: 1px solid var(--line);
   user-select: none;
   overflow: hidden;
   line-height: 1.72;
   font-size: 13px;
+  box-sizing: border-box;
 }
 
 [data-theme="dark"] .line-number {
@@ -728,7 +785,7 @@ defineExpose({ applyGeneratedYaml });
 
 .ln-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   height: calc(1em * 1.72);
   padding: 0 4px;
 }
@@ -767,7 +824,7 @@ defineExpose({ applyGeneratedYaml });
 }
 
 .editor-input {
-  padding: 18px 16px;
+  position: relative;
   min-height: 0;
   overflow: hidden;
 }
@@ -783,6 +840,31 @@ defineExpose({ applyGeneratedYaml });
   color: inherit;
   font: inherit;
   line-height: inherit;
+  box-sizing: border-box;
+  padding: 18px 16px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.line-measure {
+  position: absolute;
+  inset: 0 auto auto 0;
+  box-sizing: border-box;
+  padding: 18px 16px;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font: inherit;
+  line-height: inherit;
+  color: transparent;
+  z-index: -1;
+}
+
+:deep(.line-measure-row) {
+  min-height: calc(1em * 1.72);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
 }
 
 .editor-input textarea::placeholder {

@@ -23,7 +23,7 @@ const assemblerV2 = require('./WordAssemblerV2') as WordAssemblerV2Like;
 const { createContextLogger } = require('../../utils/logger') as {
   createContextLogger: (context: Record<string, unknown>) => LoggerLike;
 };
-const { prepareYamlForWordSave } = require('./formatFix') as {
+const { prepareYamlForWordSave, buildYamlParseDiagnostic } = require('./formatFix') as {
   prepareYamlForWordSave: (
     wordText: string,
     yamlText: string
@@ -37,6 +37,10 @@ const { prepareYamlForWordSave } = require('./formatFix') as {
     repairs: unknown[];
     diagnostics: unknown[];
   };
+  buildYamlParseDiagnostic: (
+    error: { message?: string; code?: string; actual?: string },
+    text: string
+  ) => { severity: string; code: string; path: string; message: string };
 };
 
 interface LoggerLike {
@@ -296,23 +300,15 @@ class WordServiceV2 {
           diagnostics,
         };
       } catch (error) {
-        const err = error as { message?: string };
-        const message = `YAML parse error: ${err.message}`;
+        const diagnostic = buildYamlParseDiagnostic(error as { message?: string }, yamlStr);
         return {
           valid: false,
-          errors: [message],
+          errors: [diagnostic.message],
           yaml: yamlStr,
           changed: false,
           canSave: false,
           repairs: [],
-          diagnostics: [
-            {
-              severity: 'error',
-              code: 'yaml.parse_error',
-              path: 'root',
-              message,
-            },
-          ],
+          diagnostics: [diagnostic],
         };
       }
     }
