@@ -1,0 +1,283 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { prepareYamlForWordSave } from '../src/server/services/word/formatFix';
+
+const wordService = require('../src/server/services/word/WordServiceV2') as {
+  validateYaml: (
+    req: Record<string, unknown>,
+    yaml: string
+  ) => Promise<{
+    valid: boolean;
+    yaml?: string;
+    changed?: boolean;
+    repairs?: Array<{ type: string }>;
+    diagnostics?: Array<{ code: string }>;
+  }>;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+  assert(value && typeof value === 'object' && !Array.isArray(value));
+  return value as Record<string, unknown>;
+}
+
+const englishWithCreativeSectionsNestedUnderEtymology = `
+yield:
+  user_word: abandon
+  lemma: abandon
+  syllabification: a-ban-don
+  user_context_sentence: He decided to abandon the plan.
+  part_of_speech: verb
+  contextual_meaning:
+    en: to leave behind
+    zh: 放弃
+  other_common_meanings:
+    - to give up
+etymology:
+  root_and_affixes:
+    prefix: a-
+    root: band
+    suffix: -on
+    structure_analysis: a structure note
+  historical_origins:
+    history_myth: a history note
+    source_word: abandonner
+    pie_root: '*bha-'
+  visual_imagery_zh: 一个人离开旧计划
+  meaning_evolution_zh: 从交付到放弃
+  cognate_family:
+    cognates:
+      - word: abandonner
+        logic: French source form
+  application:
+    selected_examples:
+      - type: daily
+        sentence: He decided to abandon the plan.
+        translation_zh: 他决定放弃这个计划。
+  nuance:
+    image_differentiation_zh: abandon 强调主动离开
+    synonyms:
+      - word: desert
+        meaning_zh: 遗弃
+`;
+
+const englishWithDuplicateCognateFamily = `
+yield:
+  user_word: abandon
+  lemma: abandon
+  syllabification: a-ban-don
+  user_context_sentence: He decided to abandon the plan.
+  part_of_speech: verb
+  contextual_meaning:
+    en: to leave behind
+    zh: 放弃
+  other_common_meanings:
+    - to give up
+etymology:
+  root_and_affixes:
+    prefix: a-
+    root: band
+    suffix: -on
+    structure_analysis: a structure note
+  historical_origins:
+    history_myth: a history note
+    source_word: abandonner
+    pie_root: '*bha-'
+  visual_imagery_zh: 一个人离开旧计划
+  meaning_evolution_zh: 从交付到放弃
+  cognate_family:
+    cognates:
+      - word: duplicate
+        logic: nested duplicate
+cognate_family:
+  cognates:
+    - word: abandonner
+      logic: canonical root section
+application:
+  selected_examples:
+    - type: daily
+      sentence: He decided to abandon the plan.
+      translation_zh: 他决定放弃这个计划。
+nuance:
+  image_differentiation_zh: abandon 强调主动离开
+  synonyms:
+    - word: desert
+      meaning_zh: 遗弃
+`;
+
+const englishWithAliasLikePieRoot = `
+yield:
+  user_word: abandon
+  lemma: abandon
+  syllabification: a-ban-don
+  user_context_sentence: He decided to abandon the plan.
+  part_of_speech: verb
+  contextual_meaning:
+    en: to leave behind
+    zh: 放弃
+  other_common_meanings:
+    - to give up
+etymology:
+  root_and_affixes:
+    prefix: a-
+    root: band
+    suffix: -on
+    structure_analysis: a structure note
+  historical_origins:
+    history_myth: a history note
+    source_word: abandonner
+    pie_root: *bha-
+  visual_imagery_zh: 一个人离开旧计划
+  meaning_evolution_zh: 从交付到放弃
+cognate_family:
+  cognates:
+    - word: abandonner
+      logic: French source form
+application:
+  selected_examples:
+    - type: daily
+      sentence: He decided to abandon the plan.
+      translation_zh: 他决定放弃这个计划。
+nuance:
+  image_differentiation_zh: abandon 强调主动离开
+  synonyms:
+    - word: desert
+      meaning_zh: 遗弃
+`;
+
+const englishWithPartialSectionPromotion = `
+yield:
+  user_word: abandon
+  lemma: abandon
+  syllabification: a-ban-don
+  user_context_sentence: He decided to abandon the plan.
+  part_of_speech: verb
+  contextual_meaning:
+    en: to leave behind
+    zh: 放弃
+  other_common_meanings:
+    - to give up
+etymology:
+  root_and_affixes:
+    prefix: a-
+    root: band
+    suffix: -on
+    structure_analysis: a structure note
+  historical_origins:
+    history_myth: a history note
+    source_word: abandonner
+    pie_root: '*bha-'
+  visual_imagery_zh: 一个人离开旧计划
+  meaning_evolution_zh: 从交付到放弃
+  cognate_family:
+    cognates:
+      - word: abandonner
+        logic: French source form
+nuance:
+  image_differentiation_zh: abandon 强调主动离开
+  synonyms:
+    - word: desert
+      meaning_zh: 遗弃
+`;
+
+const yamlWithBadIndentation = `
+yield:
+  lemma: drive
+cognate_family:
+  cognates:
+    - word: "drive"
+      logic: "direct root"
+       - word: "draft"
+      logic: "bad indentation"
+`;
+
+void test('Basic Format Fix promotes misplaced English root sections and returns saveable YAML', () => {
+  const result = prepareYamlForWordSave('abandon', englishWithCreativeSectionsNestedUnderEtymology);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.canSave, true);
+  assert.equal(result.changed, true);
+  assert.equal(result.language, 'en');
+  assert.equal(result.diagnostics.length, 0);
+  assert(result.yaml);
+  assert(result.data);
+  assert.deepEqual(
+    result.repairs.map(repair => repair.type),
+    ['promote-section', 'promote-section', 'promote-section']
+  );
+
+  assert.equal(typeof result.data.cognate_family, 'object');
+  assert.equal(typeof result.data.application, 'object');
+  assert.equal(typeof result.data.nuance, 'object');
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(
+      result.data.etymology as Record<string, unknown>,
+      'nuance'
+    ),
+    false
+  );
+});
+
+void test('Basic Format Fix reports duplicate sections instead of overwriting root content', () => {
+  const result = prepareYamlForWordSave('abandon', englishWithDuplicateCognateFamily);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.canSave, false);
+  const cognateFamily = asRecord(result.data?.cognate_family);
+  const cognates = cognateFamily.cognates as Array<Record<string, unknown>>;
+  assert.equal(cognates[0].word, 'abandonner');
+  assert(result.diagnostics.some(diagnostic => diagnostic.code === 'section.duplicate'));
+  assert.equal(
+    result.repairs.some(repair => repair.to === 'cognate_family'),
+    false
+  );
+});
+
+void test('Basic Format Fix repairs alias-like root values before parsing', () => {
+  const result = prepareYamlForWordSave('abandon', englishWithAliasLikePieRoot);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, true);
+  const etymology = asRecord(result.data?.etymology);
+  const historicalOrigins = asRecord(etymology.historical_origins);
+  assert.equal(historicalOrigins.pie_root, '*bha-');
+  assert(result.repairs.some(repair => repair.type === 'syntax'));
+  assert.match(result.yaml || '', /pie_root: ['"]\*bha-['"]/);
+});
+
+void test('validateYaml runs Basic Format Fix and returns repaired YAML details', async () => {
+  const result = await wordService.validateYaml(
+    {},
+    englishWithCreativeSectionsNestedUnderEtymology
+  );
+
+  assert.equal(result.valid, true);
+  assert.equal(result.changed, true);
+  assert(result.yaml);
+  assert.equal(result.diagnostics?.length, 0);
+  assert.deepEqual(
+    result.repairs?.map(repair => repair.type),
+    ['promote-section', 'promote-section', 'promote-section']
+  );
+});
+
+void test('validateYaml returns partially repaired YAML when Basic Format Fix cannot make it saveable', async () => {
+  const result = await wordService.validateYaml({}, englishWithPartialSectionPromotion);
+
+  assert.equal(result.valid, false);
+  assert.equal(result.changed, true);
+  assert(result.yaml);
+  assert(result.yaml.includes('cognate_family:'));
+  assert(result.repairs?.some(repair => repair.type === 'promote-section'));
+  assert(result.diagnostics?.some(diagnostic => diagnostic.code === 'section.missing'));
+});
+
+void test('validateYaml returns editable YAML when indentation errors prevent parsing', async () => {
+  const result = await wordService.validateYaml({}, yamlWithBadIndentation);
+
+  assert.equal(result.valid, false);
+  assert.equal(result.changed, false);
+  assert(result.yaml);
+  assert(result.yaml.includes('logic: "bad indentation"'));
+  assert(result.diagnostics?.some(diagnostic => diagnostic.code === 'yaml.parse_error'));
+});

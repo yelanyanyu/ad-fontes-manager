@@ -112,21 +112,14 @@ export const useWordStore = defineStore('word', {
       const appStore = useAppStore();
 
       let lemma = 'unknown';
-      let parsedYaml: Record<string, any> | null = null;
       try {
-        parsedYaml = yaml.load(yamlContent) as Record<string, any> | null;
+        const parsedYaml = yaml.load(yamlContent) as Record<string, any> | null;
         lemma = parsedYaml?.yield?.lemma || 'unknown';
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Invalid YAML';
-        wordLogger.error('YAML parse error in saveWord', { error: message });
-        appStore.addToast(`Invalid YAML: ${message}`, 'error');
-        return false;
-      }
-
-      if (!parsedYaml?.yield?.lemma) {
-        wordLogger.error('YAML missing yield.lemma');
-        appStore.addToast('YAML missing yield.lemma', 'error');
-        return false;
+        wordLogger.warn('Client YAML parse failed before save; server Format Fix will validate', {
+          error: message,
+        });
       }
 
       wordLogger.debug('Saving word...', {
@@ -144,14 +137,26 @@ export const useWordStore = defineStore('word', {
 
         if (res && res.error) {
           wordLogger.error('Save failed', { lemma, error: res.error });
+          if (typeof res.yaml === 'string' && res.changed) {
+            this.setEditorYaml(res.yaml);
+            appStore.addToast('Format repaired, but save still has validation errors.', 'warning');
+          }
           appStore.addToast(`Save failed: ${res.error}`, 'error');
           return false;
         }
         if (res && res.status === 'conflict') {
+          if (typeof res.yaml === 'string' && res.changed) {
+            this.setEditorYaml(res.yaml);
+            appStore.addToast('Format repaired before conflict review.', 'info');
+          }
           wordLogger.warn('Save conflict detected', { lemma: res.lemma, diff: res.diff });
           return { ...(res as object) } as SaveConflictResult;
         }
         if (res && res.success) {
+          if (typeof res.yaml === 'string' && res.changed) {
+            this.setEditorYaml(res.yaml);
+            appStore.addToast('Format repaired before save.', 'info');
+          }
           wordLogger.success(`Word "${res.lemma}" saved`, {
             id: res.id,
             lemma: res.lemma,

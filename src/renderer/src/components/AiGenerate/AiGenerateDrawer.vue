@@ -8,7 +8,7 @@ import AiGenerateStagePanel from './AiGenerateStagePanel.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { parseBatchJson, parseBatchText } from '@/services/batchGenerateParser';
 import { buildDisplaySteps } from './stageDisplay';
-import { prepareGeneratedYamlForSave } from '@/utils/generatedYaml';
+import request from '@/utils/request';
 
 defineProps<{
   open: boolean;
@@ -40,6 +40,13 @@ const {
 
 type EntryMode = 'single' | 'batch';
 type BatchSource = 'text' | 'json';
+interface FormatValidationResponse {
+  valid: boolean;
+  errors: string[];
+  yaml?: string;
+  changed?: boolean;
+  diagnostics?: Array<{ message: string; path?: string }>;
+}
 
 const entryMode = ref<EntryMode>('single');
 const batchSource = ref<BatchSource>('text');
@@ -203,7 +210,29 @@ async function handleResume(fromStage?: ResumeStage): Promise<void> {
   }
 }
 
-function fillEditor(): void {
+function formatDiagnosticSummary(res: FormatValidationResponse): string {
+  const diagnostics = res.diagnostics || [];
+  if (diagnostics.length > 0) {
+    const first = diagnostics[0];
+    return `${first.path ? `${first.path}: ` : ''}${first.message}`;
+  }
+  return res.errors?.[0] || 'YAML format check failed';
+}
+
+async function confirmFillPartialRepair(result: FormatValidationResponse): Promise<boolean> {
+  const summary = formatDiagnosticSummary(result);
+  const repairState = result.changed
+    ? 'Basic Format Fix made partial repairs, but the YAML is not saveable yet.'
+    : 'Basic Format Fix could not safely repair this YAML automatically.';
+  return requestSaveConfirm({
+    title: 'Format still needs manual repair',
+    message: `${repairState}\n\n${summary}\n\nFill the YAML into the Editor so you can finish the fix manually?`,
+    confirmLabel: 'Fill Editor',
+    cancelLabel: 'Keep Reviewing',
+  });
+}
+
+async function fillEditor(): Promise<void> {
   const job = currentJob.value;
   if (!job) {
     errorMessage.value = 'No active job';
@@ -211,7 +240,32 @@ function fillEditor(): void {
   }
   const yaml = job.yaml;
   if (yaml) {
-    emit('yaml-ready', yaml);
+    try {
+      const result = await request.post<FormatValidationResponse>('/v2/words/validate', { yaml });
+      if (result.yaml && result.valid) {
+        emit('yaml-ready', result.yaml);
+        if (result.changed) {
+          appStore.addToast('Format repaired before filling editor.', 'success');
+        }
+        return;
+      }
+
+      if (result.yaml) {
+        errorMessage.value = formatDiagnosticSummary(result);
+        const shouldFill = await confirmFillPartialRepair(result);
+        if (shouldFill) {
+          emit('yaml-ready', result.yaml);
+          appStore.addToast('YAML filled into editor for manual repair.', 'warning');
+        }
+        return;
+      }
+
+      errorMessage.value = formatDiagnosticSummary(result);
+      appStore.addToast(errorMessage.value, 'error', 5000);
+    } catch (error) {
+      errorMessage.value = error instanceof Error ? error.message : 'Failed to prepare YAML';
+      appStore.addToast(errorMessage.value, 'error', 5000);
+    }
   } else {
     errorMessage.value = 'No YAML to fill. The generation may have failed — check stage outputs.';
   }
@@ -225,17 +279,10 @@ async function saveGeneratedYaml(): Promise<void> {
     return;
   }
 
-  const prepared = prepareGeneratedYamlForSave(job.yaml);
-  if (!prepared.ok || !prepared.yaml) {
-    errorMessage.value = `YAML format check failed: ${prepared.error}. Use Fill Editor to repair manually or regenerate.`;
-    appStore.addToast(errorMessage.value, 'error', 5000);
-    return;
-  }
-
   saving.value = true;
   errorMessage.value = '';
   try {
-    const result = await wordStore.saveWord(prepared.yaml, false);
+    const result = await wordStore.saveWord(job.yaml, false);
     if (result === true) return;
 
     if (result && typeof result === 'object' && result.status === 'conflict') {
@@ -250,7 +297,7 @@ async function saveGeneratedYaml(): Promise<void> {
         appStore.addToast('Save cancelled. Existing word was not changed.', 'info');
         return;
       }
-      const overwriteResult = await wordStore.saveWord(prepared.yaml, true);
+      const overwriteResult = await wordStore.saveWord(job.yaml, true);
       if (overwriteResult !== true) {
         errorMessage.value = 'Overwrite failed. Use Fill Editor to repair manually or regenerate.';
       }

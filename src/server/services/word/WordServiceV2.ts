@@ -11,17 +11,25 @@ const conflictService = require('../conflictService') as {
     newData: unknown
   ) => { hasConflict: boolean; diff: unknown[] | undefined };
 };
-const validator = require('./WordValidator') as {
-  validate: (
-    data: unknown,
-    wordLower: string,
-    language?: string
-  ) => { valid: boolean; errors: string[] };
-};
 const repositoryV2 = require('./WordRepositoryV2') as WordRepositoryV2Like;
 const assemblerV2 = require('./WordAssemblerV2') as WordAssemblerV2Like;
 const { createContextLogger } = require('../../utils/logger') as {
   createContextLogger: (context: Record<string, unknown>) => LoggerLike;
+};
+const { prepareYamlForWordSave } = require('./formatFix') as {
+  prepareYamlForWordSave: (
+    wordText: string,
+    yamlText: string
+  ) => {
+    ok: boolean;
+    yaml?: string;
+    data?: Record<string, any>;
+    language?: string;
+    changed: boolean;
+    canSave: boolean;
+    repairs: unknown[];
+    diagnostics: unknown[];
+  };
 };
 
 interface LoggerLike {
@@ -116,23 +124,26 @@ class WordServiceV2 {
 
     logger.debug({ word: wordText, wordLower }, 'Adding new word (v2)');
 
-    let data: Record<string, any>;
-    try {
-      data = yaml.load(String(yamlStr || '')) as Record<string, any>;
-    } catch (error) {
-      const err = error as { message?: string };
-      logger.error({ error: err.message, yaml: yamlStr?.substring(0, 200) }, 'YAML parse error');
-      return { status: 'invalid', errors: ['yaml parse error'] };
+    const prepared = prepareYamlForWordSave(wordText, yamlStr);
+    if (!prepared.ok || !prepared.data) {
+      logger.warn({ diagnostics: prepared.diagnostics }, 'Add word failed: invalid YAML');
+      return {
+        status: 'invalid',
+        errors: prepared.diagnostics.map(diagnostic =>
+          typeof diagnostic === 'object' && diagnostic && 'message' in diagnostic
+            ? String((diagnostic as { message?: unknown }).message)
+            : String(diagnostic)
+        ),
+        diagnostics: prepared.diagnostics,
+        repairs: prepared.repairs,
+        yaml: prepared.yaml,
+        changed: prepared.changed,
+      };
     }
 
-    const language = this.detectLanguage(data);
+    const data = prepared.data;
+    const language = prepared.language || this.detectLanguage(data);
     logger.debug({ language }, 'Detected language');
-
-    const validation = validator.validate(data, wordLower, language);
-    if (!validation.valid) {
-      logger.warn({ errors: validation.errors }, 'Validation failed');
-      return { status: 'invalid', errors: validation.errors };
-    }
 
     const wordData = assemblerV2.extractWordData(data, language);
     logger.debug({ lemma: wordData.lemma, language }, 'Extracted word data');
@@ -215,38 +226,42 @@ class WordServiceV2 {
   async validateYaml(
     req: RequestLike,
     yamlStr: string
-  ): Promise<{ valid: boolean; errors: string[]; language?: string }> {
+  ): Promise<{
+    valid: boolean;
+    errors: string[];
+    language?: string;
+    yaml?: string;
+    changed?: boolean;
+    canSave?: boolean;
+    repairs?: unknown[];
+    diagnostics?: unknown[];
+  }> {
     if (!yamlStr) {
       return { valid: false, errors: ['YAML content is required'] };
     }
 
-    let data: Record<string, any>;
-    try {
-      data = yaml.load(yamlStr) as Record<string, any>;
-    } catch (error) {
-      const err = error as { message?: string };
-      return { valid: false, errors: [`YAML parse error: ${err.message}`] };
-    }
-
-    if (!data || typeof data !== 'object' || Array.isArray(data)) {
-      return { valid: false, errors: ['YAML must be an object'] };
-    }
-
-    const language = this.detectLanguage(data);
-    const lemma = data?.yield?.lemma;
-    const wordLower = String(lemma || '')
-      .trim()
-      .toLowerCase();
-
-    if (!wordLower) {
-      return { valid: false, errors: ['yield.lemma is required'] };
-    }
-
-    const validation = validator.validate(data, wordLower, language);
+    const rawData = (() => {
+      try {
+        return yaml.load(yamlStr) as Record<string, any>;
+      } catch {
+        return null;
+      }
+    })();
+    const lemma = rawData?.yield?.lemma || '';
+    const result = prepareYamlForWordSave(String(lemma || ''), yamlStr);
     return {
-      valid: validation.valid,
-      errors: validation.errors,
-      language,
+      valid: result.ok,
+      errors: result.diagnostics.map(diagnostic =>
+        typeof diagnostic === 'object' && diagnostic && 'message' in diagnostic
+          ? String((diagnostic as { message?: unknown }).message)
+          : String(diagnostic)
+      ),
+      language: result.language,
+      yaml: result.yaml,
+      changed: result.changed,
+      canSave: result.canSave,
+      repairs: result.repairs,
+      diagnostics: result.diagnostics,
     };
   }
 
@@ -304,33 +319,39 @@ class WordServiceV2 {
       return { success: false, error: 'No YAML content' };
     }
 
-    let data: Record<string, any>;
-    try {
-      data = yaml.load(yamlStr) as Record<string, any>;
-    } catch (error) {
-      const err = error as { message?: string; name?: string };
-      logger.error(
-        { error: err.message, errorType: err.name, yamlPreview: yamlStr?.substring(0, 500) },
-        'YAML parse error'
-      );
-      return { success: false, error: `Invalid YAML format: ${err.message}` };
+    const prepared = prepareYamlForWordSave('', yamlStr);
+    if (!prepared.ok || !prepared.data) {
+      logger.warn({ diagnostics: prepared.diagnostics }, 'Validation failed in saveWord');
+      return {
+        success: false,
+        error: 'Invalid YAML',
+        errors: prepared.diagnostics.map(diagnostic =>
+          typeof diagnostic === 'object' && diagnostic && 'message' in diagnostic
+            ? String((diagnostic as { message?: unknown }).message)
+            : String(diagnostic)
+        ),
+        diagnostics: prepared.diagnostics,
+        repairs: prepared.repairs,
+        yaml: prepared.yaml,
+        changed: prepared.changed,
+        canSave: prepared.canSave,
+      };
     }
 
-    const language = this.detectLanguage(data);
-    const lemma = data?.yield?.lemma?.toLowerCase();
+    const data = prepared.data;
+    const language = prepared.language || this.detectLanguage(data);
+    const lemma = String(
+      (data.yield as Record<string, any> | undefined)?.lemma || ''
+    ).toLowerCase();
     if (!lemma) {
       logger.error('Save word failed: YAML missing yield.lemma');
       return { success: false, error: 'YAML missing yield.lemma' };
     }
 
-    const wordLower = lemma;
-    const validation = validator.validate(data, wordLower, language);
-    if (!validation.valid) {
-      logger.warn({ errors: validation.errors }, 'Validation failed in saveWord');
-      return { success: false, error: 'Invalid YAML', errors: validation.errors };
-    }
-
-    logger.debug({ lemma, language, contentLength: yamlStr.length }, 'Saving word (v2)');
+    logger.debug(
+      { lemma, language, contentLength: prepared.yaml?.length || yamlStr.length },
+      'Saving word (v2)'
+    );
 
     try {
       const db = getDb();
@@ -347,6 +368,9 @@ class WordServiceV2 {
             diff: analysisRes.diff,
             oldData: existing.content,
             newData: data,
+            yaml: prepared.yaml,
+            changed: prepared.changed,
+            repairs: prepared.repairs,
           };
         }
 
@@ -376,7 +400,16 @@ class WordServiceV2 {
 
         logger.info({ id: wordId, lemma, language, status }, 'Word saved successfully (v2)');
 
-        return { success: true, id: wordId, lemma, language, status };
+        return {
+          success: true,
+          id: wordId,
+          lemma,
+          language,
+          status,
+          yaml: prepared.yaml,
+          changed: prepared.changed,
+          repairs: prepared.repairs,
+        };
       });
     } catch (error) {
       const err = error as { message?: string; code?: string; stack?: string };

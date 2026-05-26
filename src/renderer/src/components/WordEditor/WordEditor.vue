@@ -21,6 +21,16 @@ interface AppStoreLike {
   addToast: (message: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
 }
 
+interface FormatValidationResponse {
+  valid: boolean;
+  errors: string[];
+  language?: string;
+  yaml?: string;
+  changed?: boolean;
+  repairs?: Array<{ type: string; message?: string }>;
+  diagnostics?: Array<{ code: string; message: string; path?: string; suggestion?: string }>;
+}
+
 const wordStore = useWordStore() as unknown as WordStoreLike;
 const appStore = useAppStore() as unknown as AppStoreLike;
 
@@ -38,6 +48,7 @@ const conflictData = ref<ConflictData | null>(null);
 const schemaErrors = ref<string[]>([]);
 const validating = ref(false);
 const saving = ref(false);
+const repairing = ref(false);
 let validateTimer: ReturnType<typeof setTimeout> | null = null;
 let clientParseTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -119,6 +130,20 @@ const isEmpty = computed(() => !input.value || input.value.trim().length === 0);
 
 const saveLabel = 'Save';
 
+function formatValidationMessages(res: FormatValidationResponse): string[] {
+  if (res.changed && Array.isArray(res.repairs) && res.repairs.length > 0) {
+    return res.repairs.map(repair => repair.message || 'Format repair is available.');
+  }
+
+  if (Array.isArray(res.diagnostics) && res.diagnostics.length > 0) {
+    return res.diagnostics.map(diagnostic => {
+      const path = diagnostic.path ? `${diagnostic.path}: ` : '';
+      return `${path}${diagnostic.message}`;
+    });
+  }
+  return res.errors || [];
+}
+
 const handleInput = () => {
   if (!input.value || input.value.trim().length === 0) {
     status.value = '';
@@ -151,17 +176,15 @@ const handleInput = () => {
   validateTimer = setTimeout(async () => {
     validating.value = true;
     try {
-      const res = await request.post<{
-        valid: boolean;
-        errors: string[];
-        language?: string;
-      }>('/v2/words/validate', { yaml: input.value });
+      const res = await request.post<FormatValidationResponse>('/v2/words/validate', {
+        yaml: input.value,
+      });
 
-      if (res.valid) {
+      if (res.valid && !res.changed) {
         schemaErrors.value = [];
         status.value = 'Valid YAML';
       } else {
-        schemaErrors.value = res.errors || [];
+        schemaErrors.value = formatValidationMessages(res);
         status.value = 'Invalid YAML';
       }
     } catch {
@@ -203,10 +226,6 @@ const clear = () => {
 
 const save = async () => {
   if (!input.value || saving.value) return;
-  if (status.value === 'Invalid YAML') {
-    appStore.addToast('Cannot save: Invalid YAML format', 'error');
-    return;
-  }
   saving.value = true;
   try {
     const res = await wordStore.saveWord(input.value);
@@ -215,6 +234,35 @@ const save = async () => {
     }
   } finally {
     saving.value = false;
+  }
+};
+
+const repairFormat = async () => {
+  if (!input.value || repairing.value) return;
+  repairing.value = true;
+  try {
+    const res = await request.post<FormatValidationResponse>('/v2/words/validate', {
+      yaml: input.value,
+    });
+    schemaErrors.value = formatValidationMessages(res);
+    status.value = res.valid ? 'Valid YAML' : 'Invalid YAML';
+
+    if (res.changed && typeof res.yaml === 'string') {
+      input.value = res.yaml;
+      appStore.addToast(
+        res.valid ? 'Format repaired.' : 'Format partly repaired; remaining errors need review.',
+        res.valid ? 'success' : 'warning'
+      );
+      handleInput();
+      return;
+    }
+
+    appStore.addToast(
+      res.valid ? 'No format repairs needed.' : 'No safe automatic repair was available.',
+      res.valid ? 'info' : 'warning'
+    );
+  } finally {
+    repairing.value = false;
   }
 };
 
@@ -310,6 +358,19 @@ defineExpose({ applyGeneratedYaml });
             <path d="m16 3 5 5-10 10H6l-3-3L13 5z" />
             <path d="M6 18h12" />
           </svg>
+        </button>
+        <button
+          class="btn head-repair"
+          type="button"
+          :disabled="isEmpty || saving || repairing"
+          title="Repair YAML format"
+          @click="repairFormat"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4" />
+            <path d="m15 5 4 4" />
+          </svg>
+          {{ repairing ? 'Repairing...' : 'Repair' }}
         </button>
         <button
           :class="['btn', 'head-save', isEmpty ? 'btn-disabled' : 'btn-primary']"
@@ -523,6 +584,21 @@ defineExpose({ applyGeneratedYaml });
   min-width: 92px;
   height: 30px;
   padding: 0 11px;
+}
+
+.head-repair {
+  height: 30px;
+  padding: 0 10px;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.head-repair:hover:not(:disabled),
+.head-repair:focus-visible {
+  border-color: rgba(44, 96, 143, 0.35);
+  color: var(--blue);
+  background: rgba(44, 96, 143, 0.08);
 }
 
 [data-theme="dark"] .head-icon-button {

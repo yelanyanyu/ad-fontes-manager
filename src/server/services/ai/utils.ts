@@ -120,7 +120,7 @@ export function repairCommonYamlScalarSlips(text: string): string {
   });
 }
 
-function repairLlmYamlQuirks(text: string): string {
+export function repairLlmYamlQuirks(text: string): string {
   return repairYamlLinesSafely(text, line => {
     // Fix 1: Double-quoted YAML scalar containing unescaped ASCII quotes inside.
     //        LLMs often emit Chinese quotemarks as ASCII " which breaks the
@@ -188,6 +188,7 @@ module.exports = {
   deepMerge,
   stripMarkdownFences,
   repairCommonYamlScalarSlips,
+  repairLlmYamlQuirks,
   loadYamlObjectWithRepairs,
   mergeYamlTexts,
 };

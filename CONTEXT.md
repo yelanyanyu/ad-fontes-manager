@@ -172,17 +172,33 @@ _Avoid_: Workflow, chain, process
 One step in a Pipeline. Each Stage has a model assignment (`fast`/`balanced`/`expert`), an optional system prompt, optional tools, and an output parser. Stages run sequentially; each receives the previous Stage's output.
 _Avoid_: Step, phase, node
 
-**Creative Stage Structured Output** (创意阶段结构化输出):
-The `pondering` Stage's intermediate JSON object containing creative fields such as visual imagery, meaning evolution, cognates, examples, and nuance. It is streamed as raw JSON for inspection, parsed and validated by the server, then merged with structural research data before the program serializes the final Word YAML. The LLM should not author creative YAML directly.
-_Avoid_: Creative YAML, final YAML, raw prose
-
 **Job** (任务):
 A unit of work in the Queue. Three types: **Generate Job** (runs a full Pipeline for one Word), **Fix Job** (runs a single fix Stage against a completed Generate Job's output), **Audit-Fix Job** (audits and fixes a Word already saved to the database). Every Job has a lifecycle (`queued` → `running` → `complete` / `partial` / `error`) and a **Priority** (`normal` or `high`).
 _Avoid_: Task, execution, run
 
 **Format Fix** (格式修复):
-A synchronous (non-Queue) structural repair of a `complete` Job's YAML. Triggered manually by the user when YAML fails to parse. Runs in-place on the original Job, reusing its SSE step panel. Two tiers: **Basic** (code-driven: strip fences, remove unknown fields) and **Enhanced** (LLM-driven via `format-fixer.md` prompt). Basic runs first; Enhanced is only invoked if Basic fails. `partial` and `error` Jobs are rejected — they must regenerate.
+A synchronous (non-Queue) repair and diagnostic pass for a Word's YAML. It handles syntax slips such as markdown fences, quote mistakes, alias-like root values, and scalar formatting problems, then performs schema-aware structure checks such as detecting top-level sections that were incorrectly nested under another section. Safe structural fixes may be applied automatically only when the intended section is unambiguous and its shape matches the language-specific YAML schema; otherwise Format Fix returns precise diagnostics instead of guessing. Basic Format Fix is deterministic and may run automatically before filling the Editor from a Job Result, before saving a Word, and before saving a Workset item. The Word Editor also provides an explicit Basic Format Fix action for YAML already in the editor. When Basic Format Fix changes YAML, the visible Editor or preview text should be updated to the repaired YAML and the user should receive a lightweight notice; diagnostics without repair must not mutate visible YAML. If safe repairs were applied but the full Word still fails schema validation, the repaired YAML should still be returned and shown, while saving remains blocked until the remaining diagnostics are resolved. From Fill Editor, invalid YAML should still be fillable into the Word Editor when Format Fix can return editable YAML text, including parse-error cases where no safe automatic repair was possible; a dialog must first tell the user Basic Format Fix did not finish the repair and ask them to continue manually. Enhanced Format Fix may use an LLM and must be explicitly triggered by the user. When triggered from a Job Result, it runs in-place on the original Job, reusing its SSE step panel. `partial` and `error` Jobs are rejected — they must regenerate.
 _Avoid_: YAML repair, schema fix
+
+**Format Diagnostic** (格式诊断):
+A structured explanation returned by Format Fix when YAML cannot be safely repaired or when the user should be told what changed. The first version is path-based rather than line-based: it identifies the YAML path, the expected shape or location, the actual shape or location, a stable diagnostic code, and a suggested action. Line and column ranges are optional future detail, not required for the first diagnostic UI.
+_Avoid_: Raw error string, stack trace
+
+**Format Fix Result** (格式修复结果):
+The structured result returned by Format Fix. `ok` means the final YAML is parseable, schema-valid, and can be saved; it does not merely mean the repair process completed. A result may contain repaired YAML even when `ok` is false, allowing the UI to show partial safe repairs while blocking save. The result returns the YAML text the UI should display, the parsed Content object the server should validate or save, and the detected Language when available. It also records whether YAML changed, whether saving is allowed, which repairs were applied, and which Format Diagnostics remain.
+_Avoid_: Boolean success flag
+
+Live Word Editor validation must treat a Format Fix Result with `changed: true` as repairable but not cleanly valid for the current editor text. The Editor should surface the available repair and let the user apply Basic Format Fix, while save paths may still apply Basic Format Fix automatically before persisting.
+
+**Section Promotion** (区块提升):
+A Basic Format Fix operation that moves a misplaced top-level YAML section from a nested path back to the root of the Word YAML. The first version applies to language-specific expected root sections, and only promotes same-name sections when the root is missing that section, exactly one nested candidate exists, and the candidate matches that section's language-specific shape. It does not merge duplicate sections, infer misspelled section names, move differently named sections, reorder arrays, fill missing content, or infer field ownership from prose.
+_Avoid_: Section merge, content inference, schema guessing
+
+Section Promotion follows a deterministic candidate rule: if the root is missing an expected section and no nested candidate exists, Format Fix reports a missing section; if exactly one valid nested candidate exists, it promotes that candidate; if exactly one invalid nested candidate exists, it reports an invalid candidate; if multiple nested candidates exist, it reports ambiguity and does not choose between them; if the root already has the section and a nested candidate also exists, it reports a Duplicate Section.
+
+**Duplicate Section** (重复区块):
+A Format Diagnostic for a top-level YAML section that also appears at a nested path. Basic Format Fix must not merge the two sections or overwrite the root section. Duplicate Section is treated as a blocking error for saving because silently ignoring the nested section could discard user-visible content.
+_Avoid_: Shadow section, extra copy
 
 **Content Fix** (内容修复):
 A Queue-based creative-field rewrite against a `complete` Job whose `overall_score < 6`. Uses the existing `fixing` Pipeline Stage (with `content-fixer.md` prompt and existing revision notes), then re-runs `auditing` to produce a new score. Can be triggered per-word or as a Workset batch operation (one Fix Job per word, grouped by `batchId`). Requires `complete` status and valid revision notes from a prior auditing stage.
@@ -309,15 +325,14 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - A **Word** is identified by a **Lemma** + **Language** pair
 - A **Word**'s full data lives in its **Content** (the JSON column holding the **YAML**)
 - A **Pipeline** contains 3 **Stages**: searching → pondering → auditing
-- The `pondering` Stage produces **Creative Stage Structured Output** as JSON; final **YAML** is produced by program serialization after merging with structural research output
 - A **Job** is one run of a **Pipeline** for one **Word**
 - A **Batch** contains N **Jobs**, executed by the **Queue** with configurable concurrency
 - The **Active Queue** is for controlling live Jobs; **Job History** is for revisiting completed, partial, or failed Jobs
 - Clicking a **Job History** item opens a status-specific detail: `complete` Jobs open a **Job Result Preview**, while `partial` and `error` Jobs reuse the AI drawer so the user can inspect stages and retry or recover
 - The Queue panel presents **Active Queue** and **Job History** as two modes in the same UI surface; execution controls belong only to Active Queue, while review and filtering controls belong to Job History
-- Saving or overwriting a **Word** remains an Editor responsibility; **Job History** may fill the Editor from a complete Job, but does not write directly to `words_v2`
+- Saving or overwriting a **Word** remains an Editor responsibility; **Job History** may fill the Editor from a complete Job after Basic **Format Fix** has run, but does not write directly to `words_v2`
 - A **Workset** is derived from **Job History** rows but is not itself History: it answers "what latest YAML results should I save now?" and can batch-save through the Word save path, reporting per-Word save outcomes such as saved, conflict, invalid, missing, or error
-- A **Format Fix** applies only to `complete` Jobs whose YAML fails `yaml.load`; `partial` and `error` Jobs are rejected. It runs synchronously in-place on the original Job, reusing the same SSE step panel. Basic (code-driven) runs first; Enhanced (LLM-driven) runs only if Basic fails.
+- Basic **Format Fix** can run automatically before Fill Editor, Word save, and Workset save, and it can be triggered manually from the Word Editor. It can repair common YAML syntax slips, safely promote misplaced top-level sections when schema evidence is unambiguous, and return structured diagnostics when automatic repair is unsafe. Enhanced **Format Fix** is user-triggered. `partial` and `error` Jobs are rejected.
 - A **Content Fix** applies to `complete` Jobs whose `overall_score < 6`. It creates a new Queue-based Fix Job (priority `high`) that runs `fixing` then re-runs `auditing`. Can be triggered per-word or as a Workset batch.
 - **Workset Improve** applies Content Fix only to eligible low-score Jobs in the current visible **Workset**, never to older deduplicated **Job History** rows. A user can remove Jobs from the **Pending Improve Selection** before creating Fix Jobs.
 - **Effective Review Score** is the score used for Workset ordering and Workset Improve eligibility: User Review Score overrides AI Review Score without deleting the original AI judgment.
