@@ -64,6 +64,13 @@ interface DuplicateKeyInfo {
   duplicateLine: number;
 }
 
+interface UnclosedQuoteInfo {
+  key: string;
+  path: string;
+  line: number;
+  closingQuote: string;
+}
+
 const EXPECTED_ROOT_SECTIONS: Record<WordLanguage, string[]> = {
   en: ['yield', 'etymology', 'cognate_family', 'application', 'nuance'],
   de: [
@@ -296,6 +303,69 @@ function findDuplicateMappingKey(text: string): DuplicateKeyInfo | null {
   return null;
 }
 
+function hasUnescapedDoubleQuote(text: string): boolean {
+  let backslashCount = 0;
+  for (const char of text) {
+    if (char === '"') return backslashCount % 2 === 0;
+    backslashCount = char === '\\' ? backslashCount + 1 : 0;
+  }
+  return false;
+}
+
+function findSmartClosedDoubleQuotedScalar(text: string): UnclosedQuoteInfo | null {
+  const stack: Array<{ indent: number; key: string }> = [];
+  let blockScalarIndent: number | null = null;
+  const lines = text.split(/\r?\n/);
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const indent = line.length - line.trimStart().length;
+    if (blockScalarIndent !== null) {
+      if (indent > blockScalarIndent || trimmed === '') continue;
+      blockScalarIndent = null;
+    }
+
+    const keyMatch = line.match(/^(\s*)(?:-\s*)?(['"]?)([^:'"#][^:#]*?)\2\s*:\s*(.*)$/);
+    if (!keyMatch) continue;
+
+    const key = keyMatch[3].trim();
+    const value = keyMatch[4].trim();
+    if (!key) continue;
+
+    while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+
+    const path = [...stack.map(item => item.key), key].join('.');
+    if (value.startsWith('"') && !hasUnescapedDoubleQuote(value.slice(1)) && /[”」]$/.test(value)) {
+      return {
+        key,
+        path,
+        line: index + 1,
+        closingQuote: value.at(-1) || '”',
+      };
+    }
+
+    if (
+      value === '' ||
+      value === '|' ||
+      value === '>' ||
+      value.startsWith('|') ||
+      value.startsWith('>')
+    ) {
+      stack.push({ indent, key });
+      if (value.startsWith('|') || value.startsWith('>')) {
+        blockScalarIndent = indent;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function buildYamlParseDiagnostic(
   error: { message?: string; code?: string; actual?: string },
   text: string
@@ -310,6 +380,19 @@ export function buildYamlParseDiagnostic(
       actual: `First at line ${duplicate.firstLine}, duplicated at line ${duplicate.duplicateLine}`,
       message: `Duplicate YAML key "${duplicate.key}": first seen at line ${duplicate.firstLine}, duplicated at line ${duplicate.duplicateLine}.`,
       suggestion: `Merge the two ${duplicate.key} sections or keep only one canonical section.`,
+    };
+  }
+
+  const unclosedQuote = findSmartClosedDoubleQuotedScalar(text);
+  if (unclosedQuote) {
+    return {
+      severity: 'error',
+      code: 'yaml.unclosed_quote',
+      path: unclosedQuote.path || unclosedQuote.key,
+      expected: 'A double-quoted scalar closed with an ASCII " character',
+      actual: `Closed with smart quote ${unclosedQuote.closingQuote}`,
+      message: `Line ${unclosedQuote.line} has a double-quoted value closed with a smart quote at ${unclosedQuote.path || unclosedQuote.key}. Replace the final ${unclosedQuote.closingQuote} with ".`,
+      suggestion: `Change the closing quote on line ${unclosedQuote.line} to an ASCII double quote, or remove both wrapping quotes.`,
     };
   }
 
@@ -375,7 +458,10 @@ export function prepareYamlForWordSave(wordText: string, yamlText: string): Form
   repairs.push(...promotionResult.repairs);
   const diagnostics = promotionResult.diagnostics;
   const changed = parseableYaml !== String(yamlText || '').trim() || repairs.length > 0;
-  const repairedYaml = changed ? yaml.dump(data, { lineWidth: -1, noRefs: true }) : strippedYaml;
+  const repairedYaml =
+    promotionResult.repairs.length > 0
+      ? yaml.dump(data, { lineWidth: -1, noRefs: true })
+      : parseableYaml;
   const wordLower = String(wordText || getLemma(data))
     .trim()
     .toLowerCase();

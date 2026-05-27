@@ -122,6 +122,14 @@ export function repairCommonYamlScalarSlips(text: string): string {
 
 export function repairLlmYamlQuirks(text: string): string {
   return repairYamlLinesSafely(text, line => {
+    // Fix 0: ASCII YAML double quote opened, but the closing delimiter was
+    // emitted as a Chinese smart quote.
+    const smartClosingQuoteFix = line.match(/^(\s*[^:#\n][^:\n]*:\s*)"(.*)[”」](\s*(?:#.*)?)$/);
+    if (smartClosingQuoteFix) {
+      const [, prefix, inner, comment = ''] = smartClosingQuoteFix;
+      return `${prefix}"${escapeUnescapedDoubleQuotes(inner)}"${comment}`;
+    }
+
     // Fix 1: Double-quoted YAML scalar containing unescaped ASCII quotes inside.
     //        LLMs often emit Chinese quotemarks as ASCII " which breaks the
     //        YAML string, e.g. logic: "根词"sever(严格)"的身体感知"

@@ -147,6 +147,50 @@ nuance:
       meaning_zh: 遗弃
 `;
 
+const englishWithSmartClosingQuoteInDoubleQuotedScalar = `
+yield:
+  user_word: after
+  lemma: after
+  syllabification: af-ter
+  user_context_sentence: We went to the park after lunch.
+  part_of_speech: preposition
+  contextual_meaning:
+    en: following in time or order
+    zh: 在...之后
+  other_common_meanings:
+    - later than
+etymology:
+  root_and_affixes:
+    prefix: a-
+    root: N/A
+    suffix: -ter
+    structure_analysis: more off, further away
+  historical_origins:
+    history_myth: N/A
+    source_word: Old English æfter
+    pie_root: '*ap-'
+  visual_imagery_zh: 追逐的影子
+  meaning_evolution_zh: 从空间落后到时间之后
+cognate_family:
+  cognates:
+    - word: off
+      logic: 从原点离开
+    - word: aft
+      logic: "a- + -ter 去掉比较级后还剩 aft，专指船尾。”
+    - word: ter
+      logic: "*-ter-”
+application:
+  selected_examples:
+    - type: Literal / Root Image
+      sentence: He ran after the bus.
+      translation_zh: 他追赶公共汽车。
+nuance:
+  synonyms:
+    - word: behind
+      meaning_zh: 在后面
+  image_differentiation_zh: after 是追，behind 是静止位置
+`;
+
 const englishWithPartialSectionPromotion = `
 yield:
   user_word: abandon
@@ -297,6 +341,20 @@ void test('Basic Format Fix repairs alias-like root values before parsing', () =
   assert.match(result.yaml || '', /pie_root: ['"]\*bha-['"]/);
 });
 
+void test('Basic Format Fix repairs smart closing quote in double-quoted YAML scalar', () => {
+  const result = prepareYamlForWordSave('after', englishWithSmartClosingQuoteInDoubleQuotedScalar);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.changed, true);
+  assert(result.repairs.some(repair => repair.type === 'syntax'));
+  const cognateFamily = asRecord(result.data?.cognate_family);
+  const cognates = cognateFamily.cognates as Array<Record<string, unknown>>;
+  assert.equal(cognates[1].logic, 'a- + -ter 去掉比较级后还剩 aft，专指船尾。');
+  assert.equal(cognates[2].logic, '*-ter-');
+  assert.match(result.yaml || '', /logic: "a- \+ -ter 去掉比较级后还剩 aft，专指船尾。"/);
+  assert.match(result.yaml || '', /logic: "\*-ter-"/);
+});
+
 void test('validateYaml runs Basic Format Fix and returns repaired YAML details', async () => {
   const result = await wordService.validateYaml(
     {},
@@ -369,4 +427,21 @@ void test('strict validate reports duplicate YAML key with first and duplicate l
   assert(result.errors.some(error => error.includes('"etymology"')));
   assert(result.errors.some(error => error.includes('line 4')));
   assert(result.errors.some(error => error.includes('line 7')));
+});
+
+void test('strict validate points unclosed double quote diagnostics at the scalar line', async () => {
+  const result = await wordService.validateYaml(
+    {},
+    englishWithSmartClosingQuoteInDoubleQuotedScalar,
+    { repair: false }
+  );
+
+  assert.equal(result.valid, false);
+  assert(result.diagnostics?.some(diagnostic => diagnostic.code === 'yaml.unclosed_quote'));
+  assert(
+    result.errors.some(error =>
+      error.includes('Line 30 has a double-quoted value closed with a smart quote')
+    )
+  );
+  assert(result.errors.some(error => error.includes('logic')));
 });
