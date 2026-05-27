@@ -191,6 +191,46 @@ nuance:
   image_differentiation_zh: after 是追，behind 是静止位置
 `;
 
+const englishWithSmartClosingQuoteAndNestedNuance = `
+yield:
+  user_word: after
+  lemma: after
+  syllabification: af-ter
+  user_context_sentence: We went to the park after lunch.
+  part_of_speech: preposition
+  contextual_meaning:
+    en: following in time or order
+    zh: 在...之后
+  other_common_meanings:
+    - later than
+etymology:
+  root_and_affixes:
+    prefix: a-
+    root: N/A
+    suffix: -ter
+    structure_analysis: more off, further away
+  historical_origins:
+    history_myth: N/A
+    source_word: Old English æfter
+    pie_root: '*ap-'
+  visual_imagery_zh: 追逐的影子
+  meaning_evolution_zh: 从空间落后到时间之后
+cognate_family:
+  cognates:
+    - word: aft
+      logic: "a- + -ter 去掉比较级后还剩 aft，专指船尾。”
+application:
+  selected_examples:
+    - type: Literal / Root Image
+      sentence: He ran after the bus.
+      translation_zh: 他追赶公共汽车。
+  nuance:
+    synonyms:
+      - word: behind
+        meaning_zh: 在后面
+    image_differentiation_zh: after 是追，behind 是静止位置
+`;
+
 const englishWithPartialSectionPromotion = `
 yield:
   user_word: abandon
@@ -219,6 +259,46 @@ etymology:
     cognates:
       - word: abandonner
         logic: French source form
+nuance:
+  image_differentiation_zh: abandon 强调主动离开
+  synonyms:
+    - word: desert
+      meaning_zh: 遗弃
+`;
+
+const englishWithAliasLikePieRootAndNestedApplication = `
+yield:
+  user_word: abandon
+  lemma: abandon
+  syllabification: a-ban-don
+  user_context_sentence: He decided to abandon the plan.
+  part_of_speech: verb
+  contextual_meaning:
+    en: to leave behind
+    zh: 放弃
+  other_common_meanings:
+    - to give up
+etymology:
+  root_and_affixes:
+    prefix: a-
+    root: band
+    suffix: -on
+    structure_analysis: a structure note
+  historical_origins:
+    history_myth: a history note
+    source_word: abandonner
+    pie_root: *bha-
+  visual_imagery_zh: 一个人离开旧计划
+  meaning_evolution_zh: 从交付到放弃
+  application:
+    selected_examples:
+      - type: daily
+        sentence: He decided to abandon the plan.
+        translation_zh: 他决定放弃这个计划。
+cognate_family:
+  cognates:
+    - word: abandonner
+      logic: French source form
 nuance:
   image_differentiation_zh: abandon 强调主动离开
   synonyms:
@@ -353,6 +433,29 @@ void test('Basic Format Fix repairs smart closing quote in double-quoted YAML sc
   assert.equal(cognates[2].logic, '*-ter-');
   assert.match(result.yaml || '', /logic: "a- \+ -ter 去掉比较级后还剩 aft，专指船尾。"/);
   assert.match(result.yaml || '', /logic: "\*-ter-"/);
+});
+
+void test('Basic Format Fix preserves smart quote repairs when structural repairs also run', () => {
+  const result = prepareYamlForWordSave('after', englishWithSmartClosingQuoteAndNestedNuance);
+
+  assert.equal(result.ok, true);
+  assert(result.repairs.some(repair => repair.type === 'syntax'));
+  assert(result.repairs.some(repair => repair.type === 'promote-section'));
+  assert.match(result.yaml || '', /^nuance:/m);
+  assert.match(result.yaml || '', /logic: "a- \+ -ter 去掉比较级后还剩 aft，专指船尾。"/);
+});
+
+void test('Basic Format Fix preserves alias-like scalar repairs when structural repairs also run', () => {
+  const result = prepareYamlForWordSave('abandon', englishWithAliasLikePieRootAndNestedApplication);
+
+  assert.equal(result.ok, true);
+  assert(result.repairs.some(repair => repair.type === 'syntax'));
+  assert(result.repairs.some(repair => repair.type === 'promote-section'));
+  const etymology = asRecord(result.data?.etymology);
+  const historicalOrigins = asRecord(etymology.historical_origins);
+  assert.equal(historicalOrigins.pie_root, '*bha-');
+  assert.match(result.yaml || '', /pie_root: "\*bha-"/);
+  assert.match(result.yaml || '', /^application:/m);
 });
 
 void test('validateYaml runs Basic Format Fix and returns repaired YAML details', async () => {

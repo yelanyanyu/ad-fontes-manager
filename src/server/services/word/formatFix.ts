@@ -71,6 +71,11 @@ interface UnclosedQuoteInfo {
   closingQuote: string;
 }
 
+interface DoubleQuotedScalarPreference {
+  key: string;
+  value: string;
+}
+
 const EXPECTED_ROOT_SECTIONS: Record<WordLanguage, string[]> = {
   en: ['yield', 'etymology', 'cognate_family', 'application', 'nuance'],
   de: [
@@ -312,6 +317,124 @@ function hasUnescapedDoubleQuote(text: string): boolean {
   return false;
 }
 
+function escapeYamlDoubleQuoted(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function parseYamlScalarValue(rawValue: string): unknown {
+  const parsed = yaml.load(`value: ${rawValue}`);
+  return isRecord(parsed) ? parsed.value : undefined;
+}
+
+function collectDoubleQuotedScalarPreferences(text: string): DoubleQuotedScalarPreference[] {
+  const preferences: DoubleQuotedScalarPreference[] = [];
+  let blockScalarIndent: number | null = null;
+  const lines = text.split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const indent = line.length - line.trimStart().length;
+    if (blockScalarIndent !== null) {
+      if (indent > blockScalarIndent || trimmed === '') continue;
+      blockScalarIndent = null;
+    }
+
+    const keyMatch = line.match(/^(\s*)(?:-\s*)?(['"]?)([^:'"#][^:#]*?)\2\s*:\s*(.*)$/);
+    if (!keyMatch) continue;
+
+    const key = keyMatch[3].trim();
+    const value = keyMatch[4].trim();
+    if (
+      value === '' ||
+      value === '|' ||
+      value === '>' ||
+      value.startsWith('|') ||
+      value.startsWith('>')
+    ) {
+      if (value.startsWith('|') || value.startsWith('>')) {
+        blockScalarIndent = indent;
+      }
+      continue;
+    }
+
+    if (!value.startsWith('"')) continue;
+
+    try {
+      const parsedValue = parseYamlScalarValue(value);
+      if (typeof parsedValue === 'string') {
+        preferences.push({ key, value: parsedValue });
+      }
+    } catch {
+      // Ignore invalid scalar text; syntax repair diagnostics handle it elsewhere.
+    }
+  }
+
+  return preferences;
+}
+
+function applyDoubleQuotedScalarPreferences(
+  text: string,
+  preferences: DoubleQuotedScalarPreference[]
+): string {
+  if (preferences.length === 0) return text;
+
+  let blockScalarIndent: number | null = null;
+  const remaining = [...preferences];
+  const lines = text.split(/\r?\n/);
+
+  return lines
+    .map(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return line;
+
+      const indent = line.length - line.trimStart().length;
+      if (blockScalarIndent !== null) {
+        if (indent > blockScalarIndent || trimmed === '') return line;
+        blockScalarIndent = null;
+      }
+
+      const keyMatch = line.match(
+        /^(\s*(?:-\s*)?(['"]?)([^:'"#][^:#]*?)\2\s*:\s*)([^#\n]*?)(\s*(?:#.*)?)$/
+      );
+      if (!keyMatch) return line;
+
+      const [, prefix, , rawKey, rawValue, comment = ''] = keyMatch;
+      const key = rawKey.trim();
+      const value = rawValue.trim();
+
+      if (
+        value === '' ||
+        value === '|' ||
+        value === '>' ||
+        value.startsWith('|') ||
+        value.startsWith('>')
+      ) {
+        if (value.startsWith('|') || value.startsWith('>')) {
+          blockScalarIndent = indent;
+        }
+        return line;
+      }
+
+      let parsedValue: unknown;
+      try {
+        parsedValue = parseYamlScalarValue(value);
+      } catch {
+        return line;
+      }
+
+      const preferenceIndex = remaining.findIndex(
+        preference => preference.key === key && preference.value === parsedValue
+      );
+      if (preferenceIndex === -1) return line;
+
+      const [preference] = remaining.splice(preferenceIndex, 1);
+      return `${prefix}"${escapeYamlDoubleQuoted(preference.value)}"${comment}`;
+    })
+    .join('\n');
+}
+
 function findSmartClosedDoubleQuotedScalar(text: string): UnclosedQuoteInfo | null {
   const stack: Array<{ indent: number; key: string }> = [];
   let blockScalarIndent: number | null = null;
@@ -454,13 +577,17 @@ export function prepareYamlForWordSave(wordText: string, yamlText: string): Form
   }
 
   const language = detectLanguage(data);
+  const doubleQuotedScalarPreferences = collectDoubleQuotedScalarPreferences(parseableYaml);
   const promotionResult = applySectionPromotion(data, language);
   repairs.push(...promotionResult.repairs);
   const diagnostics = promotionResult.diagnostics;
   const changed = parseableYaml !== String(yamlText || '').trim() || repairs.length > 0;
   const repairedYaml =
     promotionResult.repairs.length > 0
-      ? yaml.dump(data, { lineWidth: -1, noRefs: true })
+      ? applyDoubleQuotedScalarPreferences(
+          yaml.dump(data, { lineWidth: -1, noRefs: true }),
+          doubleQuotedScalarPreferences
+        )
       : parseableYaml;
   const wordLower = String(wordText || getLemma(data))
     .trim()
