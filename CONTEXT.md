@@ -172,6 +172,10 @@ _Avoid_: Workflow, chain, process
 One step in a Pipeline. Each Stage has a model assignment (`fast`/`balanced`/`expert`), an optional system prompt, optional tools, and an output parser. Stages run sequentially; each receives the previous Stage's output.
 _Avoid_: Step, phase, node
 
+**Stage Details** (阶段详情):
+A read-only detail panel for one Stage key (`searching`, `pondering`, `auditing`, or `fixing`) on the currently selected Job. Stage Details is keyed by Stage, not by a stale Stage object from a previous Job selection. When the user selects a different Job while Stage Details is open, the panel follows the same Stage key on the newly selected Job if that Stage key exists; if the Stage key does not exist, the panel closes. Empty or pending Stage content is rendered by Stage Details itself rather than being treated as a reason to close. This lets users compare the same Stage across Jobs without accidentally viewing details from the previous Job.
+_Avoid_: Stale step details, detached details
+
 **Job** (任务):
 A unit of work in the Queue. Three types: **Generate Job** (runs a full Pipeline for one Word), **Fix Job** (runs a single fix Stage against a completed Generate Job's output), **Audit-Fix Job** (audits and fixes a Word already saved to the database). Every Job has a lifecycle (`queued` → `running` → `complete` / `partial` / `error`) and a **Priority** (`normal` or `high`).
 _Avoid_: Task, execution, run

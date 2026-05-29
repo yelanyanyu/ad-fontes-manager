@@ -7,7 +7,7 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import AiGenerateStagePanel from './AiGenerateStagePanel.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import { parseBatchJson, parseBatchText } from '@/services/batchGenerateParser';
-import { buildDisplaySteps } from './stageDisplay';
+import { buildDisplaySteps, resolveStageDetailsStep } from './stageDisplay';
 import request from '@/utils/request';
 
 defineProps<{
@@ -67,12 +67,27 @@ watch(batchText, (val) => {
 });
 const batchSubmitting = ref(false);
 const errorMessage = ref('');
-const selectedStage = ref<StepState | null>(null);
+const selectedStageKey = ref<string | null>(null);
 const stagePanelOpen = ref(false);
 const language = computed<LanguageCode>(() => appStore.currentLanguage);
 
+const hasRevisionNotes = computed(() => {
+  const notes = currentJob.value?.scores?.revision_notes as string | undefined;
+  return typeof notes === 'string' && notes.length > 0 && notes !== '无需修改。';
+});
+
 const displaySteps = computed(() => {
   return buildDisplaySteps(currentJob.value?.steps || [], hasRevisionNotes.value);
+});
+
+const selectedStage = computed(() => {
+  return resolveStageDetailsStep(displaySteps.value, selectedStageKey.value);
+});
+
+watch(selectedStage, step => {
+  if (stagePanelOpen.value && selectedStageKey.value && !step) {
+    stagePanelOpen.value = false;
+  }
 });
 
 const progressPercent = computed(() => {
@@ -109,11 +124,6 @@ const missingContextCount = computed(
   () => batchItems.value.filter(item => !item.context?.trim()).length
 );
 const missingNotesCount = computed(() => batchItems.value.filter(item => !item.notes?.trim()).length);
-
-const hasRevisionNotes = computed(() => {
-  const notes = currentJob.value?.scores?.revision_notes as string | undefined;
-  return typeof notes === 'string' && notes.length > 0 && notes !== '无需修改。';
-});
 
 const isRevisionNotesMode = computed(() => isComplete.value || hasRevisionNotes.value);
 const notesLabel = computed(() => (isRevisionNotesMode.value ? 'Revision notes' : 'Generation notes'));
@@ -331,7 +341,7 @@ function handleStageClick(step: StepState): void {
     handleFix();
     return;
   }
-  selectedStage.value = step;
+  selectedStageKey.value = step.step;
   stagePanelOpen.value = true;
 }
 

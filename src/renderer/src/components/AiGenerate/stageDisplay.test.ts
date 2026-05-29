@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDisplaySteps } from './stageDisplay';
+import { buildDisplaySteps, resolveStageDetailsStep } from './stageDisplay';
 import type { StepState } from '@/composables/useAiGenerate';
 
 describe('stageDisplay', () => {
@@ -32,5 +32,29 @@ describe('stageDisplay', () => {
       { step: 'auditing' },
       { step: 'fixing', status: 'pending' },
     ]);
+  });
+
+  it('resolves Stage Details by Stage key on the currently selected Job', () => {
+    const afterSteps: StepState[] = [
+      { step: 'searching', status: 'complete', rawText: 'after search' },
+      { step: 'pondering', status: 'complete', rawText: 'after ponder' },
+    ];
+    const beforeSteps: StepState[] = [
+      { step: 'searching', status: 'complete', rawText: 'before search' },
+      { step: 'pondering', status: 'pending' },
+    ];
+
+    expect(resolveStageDetailsStep(afterSteps, 'pondering')?.rawText).toBe('after ponder');
+    expect(resolveStageDetailsStep(beforeSteps, 'pondering')).toEqual({
+      step: 'pondering',
+      status: 'pending',
+    });
+  });
+
+  it('closes Stage Details when the selected Stage key is absent on the current Job', () => {
+    const steps: StepState[] = [{ step: 'searching', status: 'complete', rawText: 'search' }];
+
+    expect(resolveStageDetailsStep(steps, 'auditing')).toBeNull();
+    expect(resolveStageDetailsStep(steps, null)).toBeNull();
   });
 });

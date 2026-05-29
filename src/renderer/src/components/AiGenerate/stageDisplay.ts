@@ -17,3 +17,11 @@ export function buildDisplaySteps(steps: StepState[], includePendingFix: boolean
     return leftIndex - rightIndex;
   });
 }
+
+export function resolveStageDetailsStep(
+  steps: StepState[],
+  selectedStageKey: string | null
+): StepState | null {
+  if (!selectedStageKey) return null;
+  return steps.find(step => step.step === selectedStageKey) || null;
+}
