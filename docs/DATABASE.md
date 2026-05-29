@@ -46,7 +46,7 @@ The `content` column stores the complete YAML document as a JSON string. It is t
 }
 ```
 
-German entries use `morphological_analysis` instead of `root_and_affixes`, plus additional fields like `historical_phonology`, `historical_semantics`, `dialectal_notes`, `observations`, `genus`, `kasus`.
+German entries use `morphological_analysis` instead of `root_and_affixes`, German-specific `historical_origins` fields, and extra `yield` fields such as `genus` and `kasus`. The current German prompt schema is defined in `docs/prompts/schemas/de-schema.md`; legacy German sections such as `dialectal_notes` and `observations` are not part of the current save-time validation schema.
 
 ## Schema Management
 

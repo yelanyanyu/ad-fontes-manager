@@ -654,10 +654,7 @@ void test('German validation accepts the current prompt schema without legacy to
   assert.equal(result.canSave, true);
   assert.equal(result.language, 'de');
   assert.equal(result.diagnostics.length, 0);
-  assert.equal(
-    Object.prototype.hasOwnProperty.call(result.data || {}, 'dialectal_notes'),
-    false
-  );
+  assert.equal(Object.prototype.hasOwnProperty.call(result.data || {}, 'dialectal_notes'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(result.data || {}, 'observations'), false);
 });
 
