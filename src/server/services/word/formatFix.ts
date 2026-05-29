@@ -78,15 +78,7 @@ interface DoubleQuotedScalarPreference {
 
 const EXPECTED_ROOT_SECTIONS: Record<WordLanguage, string[]> = {
   en: ['yield', 'etymology', 'cognate_family', 'application', 'nuance'],
-  de: [
-    'yield',
-    'etymology',
-    'cognate_family',
-    'application',
-    'nuance',
-    'dialectal_notes',
-    'observations',
-  ],
+  de: ['yield', 'etymology', 'cognate_family', 'application', 'nuance'],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -367,6 +367,104 @@ nuance:
   image_differentiation_zh: compelling 带有驱赶感
 `;
 
+const germanMatchingPromptSchema = `
+yield:
+  user_word: Haus
+  lemma: haus
+  genus: das
+  syllabification: Haus
+  kasus: Nominativ
+  user_context_sentence: Das Haus steht am Fluss.
+  part_of_speech: Nomen
+  contextual_meaning:
+    de: Gebäude zum Wohnen
+    zh: 房子
+  other_common_meanings:
+    - Haushalt
+  language: de
+etymology:
+  morphological_analysis:
+    word_formation: Simplex
+    components:
+      - element: Haus
+        type: Wortstamm
+        de_meaning: Wohngebäude
+    structure_analysis: Haus ist ein einfacher germanischer Stamm.
+  historical_origins:
+    earliest_attestation: Althochdeutsch hus
+    source_form: Proto-Germanic *husan
+    pgmc_root: '*husan'
+    pie_root: N/A
+    sound_changes: N/A
+  visual_imagery_zh: 一座屋子挡住风雨
+  meaning_evolution_zh: 从遮蔽处到家庭空间
+cognate_family:
+  cognates:
+    - word: house
+      german_equivalent: Haus
+      logic: 英语 house 和德语 Haus 同源，都指遮蔽居住的空间。
+application:
+  selected_examples:
+    - type: Literal / Root Image
+      sentence: Das Haus steht am Fluss.
+      translation_zh: 那座房子在河边。
+nuance:
+  synonyms:
+    - word: Gebäude
+      meaning_zh: 建筑物
+      connotation_difference: Gebäude 更中性，Haus 更有居住感。
+  image_differentiation_zh: Haus 有家的遮蔽感，Gebäude 只是建筑轮廓。
+`;
+
+const germanWithApplicationNestedUnderEtymology = `
+yield:
+  user_word: Haus
+  lemma: haus
+  genus: das
+  syllabification: Haus
+  kasus: Nominativ
+  user_context_sentence: Das Haus steht am Fluss.
+  part_of_speech: Nomen
+  contextual_meaning:
+    de: Gebäude zum Wohnen
+    zh: 房子
+  other_common_meanings:
+    - Haushalt
+  language: de
+etymology:
+  morphological_analysis:
+    word_formation: Simplex
+    components:
+      - element: Haus
+        type: Wortstamm
+        de_meaning: Wohngebäude
+    structure_analysis: Haus ist ein einfacher germanischer Stamm.
+  historical_origins:
+    earliest_attestation: Althochdeutsch hus
+    source_form: Proto-Germanic *husan
+    pgmc_root: '*husan'
+    pie_root: N/A
+    sound_changes: N/A
+  visual_imagery_zh: 一座屋子挡住风雨
+  meaning_evolution_zh: 从遮蔽处到家庭空间
+  application:
+    selected_examples:
+      - type: Literal / Root Image
+        sentence: Das Haus steht am Fluss.
+        translation_zh: 那座房子在河边。
+cognate_family:
+  cognates:
+    - word: house
+      german_equivalent: Haus
+      logic: 英语 house 和德语 Haus 同源，都指遮蔽居住的空间。
+nuance:
+  synonyms:
+    - word: Gebäude
+      meaning_zh: 建筑物
+      connotation_difference: Gebäude 更中性，Haus 更有居住感。
+  image_differentiation_zh: Haus 有家的遮蔽感，Gebäude 只是建筑轮廓。
+`;
+
 void test('Basic Format Fix promotes misplaced English root sections and returns saveable YAML', () => {
   const result = prepareYamlForWordSave('abandon', englishWithCreativeSectionsNestedUnderEtymology);
 
@@ -547,4 +645,29 @@ void test('strict validate points unclosed double quote diagnostics at the scala
     )
   );
   assert(result.errors.some(error => error.includes('logic')));
+});
+
+void test('German validation accepts the current prompt schema without legacy top-level sections', () => {
+  const result = prepareYamlForWordSave('haus', germanMatchingPromptSchema);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.canSave, true);
+  assert.equal(result.language, 'de');
+  assert.equal(result.diagnostics.length, 0);
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(result.data || {}, 'dialectal_notes'),
+    false
+  );
+  assert.equal(Object.prototype.hasOwnProperty.call(result.data || {}, 'observations'), false);
+});
+
+void test('Basic Format Fix promotes misplaced German root sections without legacy section diagnostics', () => {
+  const result = prepareYamlForWordSave('haus', germanWithApplicationNestedUnderEtymology);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.canSave, true);
+  assert.equal(result.language, 'de');
+  assert(result.repairs.some(repair => repair.type === 'promote-section'));
+  assert.equal(result.diagnostics.length, 0);
+  assert.match(result.yaml || '', /^application:/m);
 });
