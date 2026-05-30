@@ -226,13 +226,9 @@ function renderGermanEtymologyCard(etymData: Dict): string {
 function renderCognateCard(data: Dict): string {
   const de = isGerman(data);
   const cognates = getByPath(data, 'cognate_family.cognates', []) as CognateItem[];
-  const instruction = trimText(getByPath(data, 'cognate_family.instruction'));
 
   let html = `<div style="${s.section.replace('background: white;', '')} background: #fffdfa;">
     <h2 style="${s.h2}">${de ? 'Kognatenfamilie' : 'Link: Cognate Family'}</h2>`;
-  if (instruction) {
-    html += `<p style="font-size:13px; color: ${c.textSub}; margin-bottom: 10px;">${instruction}</p>`;
-  }
   html += `<div style="${s.grid}">`;
   for (const cog of cognates) {
     const label =
