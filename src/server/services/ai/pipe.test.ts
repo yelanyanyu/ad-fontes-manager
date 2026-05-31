@@ -319,6 +319,131 @@ void describe('SequentialRunner', () => {
     assert.equal(calls[1].stopWhen, undefined);
   });
 
+  void it('synthesizes searching output from successful tool evidence when the tool loop ends without text', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-fast', name: 'model-fast' }],
+            },
+          ],
+          stages: {
+            fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
+          },
+          search: {
+            provider: 'brave',
+            apiKey: 'search-test-key',
+            autoDomains: false,
+            domains: { common: [], en: [], de: [] },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const calls: Array<Record<string, unknown>> = [];
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      streamText: (options: Record<string, unknown>) => {
+        calls.push(options);
+        return {
+          fullStream:
+            calls.length === 1
+              ? (async function* () {
+                  yield {
+                    type: 'tool-result',
+                    toolCallId: 'fetch-1',
+                    toolName: 'fetch_page',
+                    output: {
+                      success: true,
+                      data: {
+                        url: 'https://www.etymonline.com/word/swept',
+                        title: 'swept | Etymology',
+                        content:
+                          'swept: past tense and past participle of sweep; Old English swapan.',
+                      },
+                    },
+                  };
+                  yield {
+                    type: 'tool-result',
+                    toolCallId: 'search-1',
+                    toolName: 'search_etymology',
+                    output: {
+                      success: true,
+                      data: {
+                        results: [
+                          {
+                            title: 'sweep | Etymology',
+                            url: 'https://www.etymonline.com/word/sweep',
+                            snippet: 'sweep is from Old English swapan.',
+                          },
+                        ],
+                      },
+                    },
+                  };
+                  yield { type: 'finish', finishReason: 'tool-calls' };
+                })()
+              : (async function* () {
+                  yield {
+                    type: 'text-delta',
+                    text: 'yield:\n  user_word: Swept\n  lemma: sweep\n  language: en\netymology:\n  historical_origins:\n    source_word: Old English swapan\n',
+                  };
+                })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    try {
+      const result = await new SequentialRunner().run({
+        definition: {
+          id: 'tool-search',
+          language: 'en',
+          stages: [
+            {
+              id: 'searching',
+              description: 'Searching',
+              type: 'llm',
+              modelKey: 'fast',
+              systemPromptFile: 'english-structural.md',
+              toolNames: ['search_etymology', 'fetch_page'],
+              outputParser: (text: string) => ({ researchYaml: text }),
+            },
+          ],
+        },
+        input: { word: 'Swept', language: 'en' },
+        onProgress: () => undefined,
+      });
+
+      assert.match(result.yaml, /Old English swapan/);
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+
+    assert.equal(calls.length, 2);
+    assert.ok(calls[0].tools);
+    assert.equal(calls[1].tools, undefined);
+    assert.match(String(calls[1].system), /swept: past tense and past participle of sweep/);
+    assert.match(String(calls[1].system), /sweep is from Old English swapan/);
+  });
+
   void it('stores accumulated reasoning and raw text on completed stages', async () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),

@@ -230,6 +230,17 @@ interface StageTextDiagnostics {
   maxOutputTokens?: number;
 }
 
+interface ToolEvidence {
+  toolName: string;
+  output?: unknown;
+}
+
+interface StageTextResult {
+  text: string;
+  diagnostics: StageTextDiagnostics;
+  toolEvidence: ToolEvidence[];
+}
+
 function classifyLLMError(err: unknown): { code: string; willRetry: boolean } {
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
   if (msg.includes('429') || (msg.includes('rate') && msg.includes('limit'))) {
@@ -246,6 +257,63 @@ function classifyLLMError(err: unknown): { code: string; willRetry: boolean } {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function compactText(value: unknown, maxLength = 1200): string {
+  const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+  return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text;
+}
+
+function summarizeToolEvidence(evidence: ToolEvidence[]): string {
+  const lines: string[] = [];
+
+  for (const item of evidence) {
+    const output = asRecord(item.output);
+    if (!output || output.success === false) continue;
+
+    const data = asRecord(output.data);
+    if (!data) continue;
+
+    if (item.toolName === 'fetch_page') {
+      const title = compactText(data.title, 160);
+      const url = compactText(data.url, 240);
+      const content = compactText(data.content);
+      if (!title && !url && !content) continue;
+
+      lines.push(`Fetched page: ${title || url || 'untitled'}`);
+      if (url) lines.push(`URL: ${url}`);
+      if (content) lines.push(`Content: ${content}`);
+      continue;
+    }
+
+    if (item.toolName === 'search_etymology') {
+      const results = Array.isArray(data.results) ? data.results.slice(0, 5) : [];
+      const resultLines = results
+        .map(result => {
+          const record = asRecord(result);
+          if (!record) return '';
+          const title = compactText(record.title, 160);
+          const url = compactText(record.url, 240);
+          const snippet = compactText(record.snippet, 600);
+          if (!title && !url && !snippet) return '';
+          return `- ${title || url || 'untitled'}${url ? ` (${url})` : ''}${snippet ? `: ${snippet}` : ''}`;
+        })
+        .filter(Boolean);
+
+      if (resultLines.length > 0) {
+        lines.push('Search results:');
+        lines.push(...resultLines);
+      }
+    }
+  }
+
+  return lines.join('\n').trim();
 }
 
 interface RunStageTextOptions {
@@ -275,9 +343,7 @@ interface RunStageTextOptions {
   };
 }
 
-async function runStageText(
-  options: RunStageTextOptions
-): Promise<{ text: string; diagnostics: StageTextDiagnostics }> {
+async function runStageText(options: RunStageTextOptions): Promise<StageTextResult> {
   const {
     stage,
     prompt,
@@ -305,14 +371,22 @@ async function runStageText(
     };
     if (stage.id === 'auditing') {
       const text = buildMockReview();
-      return { text, diagnostics: { ...mockDiagnostics, textChars: text.length } };
+      return {
+        text,
+        diagnostics: { ...mockDiagnostics, textChars: text.length },
+        toolEvidence: [],
+      };
     }
     if (stage.id === 'searching') {
       const text = buildStructuralMock(ctx.word, ctx.language, ctx.context);
-      return { text, diagnostics: { ...mockDiagnostics, textChars: text.length } };
+      return {
+        text,
+        diagnostics: { ...mockDiagnostics, textChars: text.length },
+        toolEvidence: [],
+      };
     }
     const text = buildCreativeMock(ctx.word, ctx.language, ctx.context);
-    return { text, diagnostics: { ...mockDiagnostics, textChars: text.length } };
+    return { text, diagnostics: { ...mockDiagnostics, textChars: text.length }, toolEvidence: [] };
   }
 
   const maxRetries = 1;
@@ -355,6 +429,7 @@ async function runStageText(
       let chunkCount = 0;
       let reasoningChunkCount = 0;
       let lastPartType: string | undefined;
+      const toolEvidence: ToolEvidence[] = [];
       for await (const part of result.fullStream as AsyncIterable<Record<string, unknown>>) {
         lastPartType = String(part.type || '');
         if (part.type === 'text-delta') {
@@ -404,6 +479,9 @@ async function runStageText(
             output && typeof output === 'object' && !Array.isArray(output)
               ? (output as Record<string, unknown>)
               : {};
+          if (resultObject.success !== false) {
+            toolEvidence.push({ toolName, output });
+          }
           onToolResult?.({
             toolCallId,
             toolName,
@@ -435,6 +513,7 @@ async function runStageText(
             );
             return {
               text: '',
+              toolEvidence,
               diagnostics: {
                 stageId: stage.id,
                 provider: model.provider,
@@ -490,7 +569,7 @@ async function runStageText(
           'LLM call succeeded after retry'
         );
       }
-      return { text: fullText, diagnostics };
+      return { text: fullText, diagnostics, toolEvidence };
     } catch (error) {
       lastError = error;
       const { code, willRetry } = classifyLLMError(error);
@@ -674,6 +753,8 @@ export class SequentialRunner implements PipelineRunner {
         });
         let text = stageRun.text;
         let streamDiagnostics = stageRun.diagnostics;
+        const searchEvidenceSummary =
+          stage.id === 'searching' ? summarizeToolEvidence(stageRun.toolEvidence) : '';
         onProgress({
           type: 'step:diagnostic',
           step: stage.id,
@@ -701,17 +782,31 @@ export class SequentialRunner implements PipelineRunner {
 
           if (stage.id === 'searching' && stage.toolNames?.length) {
             runLogger.info(
-              { step: stage.id, reason: stopResult.reason },
-              'Retrying searching stage without tools'
+              {
+                step: stage.id,
+                reason: stopResult.reason,
+                hasToolEvidence: Boolean(searchEvidenceSummary),
+              },
+              searchEvidenceSummary
+                ? 'Synthesizing searching stage from collected tool evidence'
+                : 'Retrying searching stage without tools'
             );
 
             const fallbackStage: PipelineStage = { ...stage, toolNames: [] };
+            const fallbackCtx: PipelineContext = searchEvidenceSummary
+              ? {
+                  ...ctx,
+                  searchSummary: [ctx.searchSummary, searchEvidenceSummary]
+                    .filter(Boolean)
+                    .join('\n\n'),
+                }
+              : ctx;
             try {
               reasoningText = '';
               const fallbackRun = await runStageText({
                 stage: fallbackStage,
-                prompt: assemblePrompt(fallbackStage, ctx),
-                ctx,
+                prompt: assemblePrompt(fallbackStage, fallbackCtx),
+                ctx: fallbackCtx,
                 onChunk: chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
                 onReasoning: chunk => {
                   reasoningText += chunk;
