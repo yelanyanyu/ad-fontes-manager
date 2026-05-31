@@ -444,6 +444,8 @@ const {
   progressLabel: batchAnkiProgressLabel,
   stageLabel: batchAnkiStageLabel,
   statusSummary: batchAnkiStatusSummary,
+  duplicateImportDecisionOpen: batchAnkiDuplicateDecisionOpen,
+  duplicateImportDecisionSummary: batchAnkiDuplicateDecisionSummary,
   hasActiveTask: batchAnkiHasActiveTask,
   canEditConfig: batchAnkiCanEditConfig,
   canCancel: batchAnkiCanCancel,
@@ -468,9 +470,10 @@ const {
   updateFieldMapping: updateBatchFieldMapping,
   cancelBatchOperation,
   checkDuplicates: checkBatchDuplicates,
-  setDuplicatesResolutionAll,
   exportApkg: exportBatchApkg,
-  importReadyItems: importBatchReadyItems,
+  importToAnki: importBatchToAnki,
+  confirmDuplicateImportDecision,
+  cancelDuplicateImportDecision,
   resumeBatchOperation,
   restartBatchOperation,
 } = useBatchAnkiExport();
@@ -508,14 +511,6 @@ const setBatchTagsInput = (value: string): void => {
   batchAnkiTagsInput.value = value;
 };
 
-const ignoreAllBatchDuplicates = (): void => {
-  setDuplicatesResolutionAll('skip');
-};
-
-const overwriteAllBatchDuplicates = (): void => {
-  setDuplicatesResolutionAll('overwrite');
-};
-
 const handleBatchExportApkg = async (): Promise<void> => {
   try {
     await exportBatchApkg();
@@ -523,6 +518,50 @@ const handleBatchExportApkg = async (): Promise<void> => {
   } catch (error) {
     const err = error as { message?: string };
     appStore.addToast(err.message || 'Failed to export batch .apkg', 'error');
+  }
+};
+
+const showBatchImportOutcomeToast = (result: Awaited<ReturnType<typeof importBatchToAnki>>): void => {
+  if (result.status === 'completed') {
+    appStore.addToast('Batch import completed', 'success');
+    return;
+  }
+  if (result.status === 'failed') {
+    appStore.addToast(result.message || 'Failed to import batch to Anki', 'error');
+    return;
+  }
+  if (result.status === 'cancelled') {
+    appStore.addToast(result.message || 'Batch import cancelled', 'warning');
+  }
+};
+
+const handleBatchImportToAnki = async (): Promise<void> => {
+  try {
+    const result = await importBatchToAnki();
+    showBatchImportOutcomeToast(result);
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to import batch to Anki', 'error');
+  }
+};
+
+const overwriteBatchDuplicatesAndImportAll = async (): Promise<void> => {
+  try {
+    const result = await confirmDuplicateImportDecision('overwrite');
+    showBatchImportOutcomeToast(result);
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to import batch to Anki', 'error');
+  }
+};
+
+const importOnlyNewBatchCards = async (): Promise<void> => {
+  try {
+    const result = await confirmDuplicateImportDecision('skip');
+    showBatchImportOutcomeToast(result);
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to import batch to Anki', 'error');
   }
 };
 
@@ -880,6 +919,8 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :can-cancel="batchAnkiCanCancel"
       :can-resume="batchAnkiCanResume"
       :last-stopped-phase="batchAnkiLastStoppedPhase"
+      :duplicate-decision-open="batchAnkiDuplicateDecisionOpen"
+      :duplicate-decision-summary="batchAnkiDuplicateDecisionSummary"
       @close="closeBatchAnkiExportModal"
       @return="closeBatchAnkiExportModal"
       @connect-anki="connectBatchAnki(true)"
@@ -889,10 +930,11 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @update:tags-input="setBatchTagsInput"
       @update:field-mapping="updateBatchFieldMapping"
       @check-duplicates="checkBatchDuplicates"
-      @ignore-all-duplicates="ignoreAllBatchDuplicates"
-      @overwrite-all-duplicates="overwriteAllBatchDuplicates"
       @export-apkg="handleBatchExportApkg"
-      @import-ready-items="importBatchReadyItems"
+      @import-to-anki="handleBatchImportToAnki"
+      @overwrite-duplicates-and-import-all="overwriteBatchDuplicatesAndImportAll"
+      @import-only-new-cards="importOnlyNewBatchCards"
+      @cancel-duplicate-decision="cancelDuplicateImportDecision"
       @cancel-operation="handleCancelBatchOperation"
       @resume-operation="resumeBatchOperation"
       @restart-operation="restartBatchOperation"

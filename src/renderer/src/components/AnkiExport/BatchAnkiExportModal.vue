@@ -29,6 +29,12 @@ const props = defineProps<{
   canCancel: boolean;
   canResume: boolean;
   lastStoppedPhase: 'check' | 'import' | null;
+  duplicateDecisionOpen: boolean;
+  duplicateDecisionSummary: {
+    duplicateCount: number;
+    readyCount: number;
+    totalCount: number;
+  };
 }>();
 
 const emit = defineEmits<{
@@ -41,9 +47,10 @@ const emit = defineEmits<{
   (e: 'update:fieldMapping', value: FieldMappingConfig): void;
   (e: 'connect-anki'): void;
   (e: 'check-duplicates'): void;
-  (e: 'ignore-all-duplicates'): void;
-  (e: 'overwrite-all-duplicates'): void;
-  (e: 'import-ready-items'): void;
+  (e: 'import-to-anki'): void;
+  (e: 'overwrite-duplicates-and-import-all'): void;
+  (e: 'import-only-new-cards'): void;
+  (e: 'cancel-duplicate-decision'): void;
   (e: 'export-apkg'): void;
   (e: 'cancel-operation'): void;
   (e: 'resume-operation'): void;
@@ -65,16 +72,10 @@ const statusClassMap: Record<string, string> = {
   failed: 'bg-[var(--red-soft)] text-[var(--red)] border-[var(--red-border)]',
 };
 
-const hasResolvedDuplicates = computed(() =>
-  props.items.some(item => item.status === 'duplicate' && item.conflict)
-);
-
-const duplicateResolutionLabel = (item: BatchAnkiExportItem): string => {
-  if (item.status !== 'duplicate' || !item.conflict) return '';
-  if (item.resolution === 'overwrite') return 'Overwrite selected';
-  if (item.resolution === 'skip') return 'Skip selected';
-  return 'Needs action';
-};
+const duplicateDecisionMessage = computed(() => {
+  const { duplicateCount, readyCount, totalCount } = props.duplicateDecisionSummary;
+  return `${duplicateCount} of ${totalCount} selected cards already exist in Anki. Choose whether to overwrite those duplicates or import only the ${readyCount} new cards.`;
+});
 </script>
 
 <template>
@@ -202,20 +203,6 @@ const duplicateResolutionLabel = (item: BatchAnkiExportItem): string => {
             Check Duplicates
           </button>
           <button
-            class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] text-sm hover:bg-[var(--surface-soft)]"
-            :disabled="busy || !hasResolvedDuplicates"
-            @click="emit('ignore-all-duplicates')"
-          >
-            Mark Duplicates to Skip
-          </button>
-          <button
-            class="px-3 py-1.5 rounded-lg border border-[var(--amber-border)] bg-[var(--surface)] text-[var(--amber)] text-sm hover:bg-[var(--amber-soft)]"
-            :disabled="busy || !hasResolvedDuplicates"
-            @click="emit('overwrite-all-duplicates')"
-          >
-            Mark Duplicates to Overwrite
-          </button>
-          <button
             class="px-3 py-1.5 rounded-lg bg-[var(--blue)] text-white text-sm hover:opacity-85 disabled:opacity-50"
             :disabled="busy || !items.length"
             @click="emit('export-apkg')"
@@ -225,9 +212,9 @@ const duplicateResolutionLabel = (item: BatchAnkiExportItem): string => {
           <button
             class="px-3 py-1.5 rounded-lg bg-[var(--green)] text-white text-sm hover:bg-[var(--green-hover)] disabled:opacity-50"
             :disabled="busy || !items.length"
-            @click="emit('import-ready-items')"
+            @click="emit('import-to-anki')"
           >
-            Apply Import Plan
+            Import to Anki
           </button>
           <button
             v-if="canCancel"
@@ -331,20 +318,11 @@ const duplicateResolutionLabel = (item: BatchAnkiExportItem): string => {
                 </span>
               </td>
               <td class="px-4 py-3 text-xs text-[var(--muted)]">
-                <span v-if="item.conflict">
+                <span v-if="item.status === 'skipped' && item.conflict">
+                  Skipped duplicate noteId: {{ item.conflict.noteId }}
+                </span>
+                <span v-else-if="item.conflict">
                   Duplicate noteId: {{ item.conflict.noteId }}
-                  <span
-                    class="ml-2 inline-flex items-center rounded border px-1.5 py-0.5 font-semibold"
-                    :class="
-                      item.resolution === 'overwrite'
-                        ? 'border-[var(--amber-border)] bg-[var(--amber-soft)] text-[var(--amber)]'
-                        : item.resolution === 'skip'
-                          ? 'border-[var(--border)] bg-[var(--surface-soft)] text-[var(--muted)]'
-                          : 'border-[var(--red-border)] bg-[var(--red-soft)] text-[var(--red)]'
-                    "
-                  >
-                    {{ duplicateResolutionLabel(item) }}
-                  </span>
                 </span>
                 <span v-else-if="item.noteId">NoteId: {{ item.noteId }}</span>
                 <span v-else-if="item.error" class="text-[var(--red)]">{{ item.error }}</span>
@@ -362,6 +340,43 @@ const duplicateResolutionLabel = (item: BatchAnkiExportItem): string => {
           </tbody>
         </table>
       </div>
+      </div>
+    </div>
+  </div>
+  <div
+    v-if="open && duplicateDecisionOpen"
+    class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+  >
+    <div
+      role="dialog"
+      aria-modal="true"
+      class="w-full max-w-lg rounded-xl border border-[var(--border)] bg-[var(--surface-panel)] shadow-xl"
+    >
+      <div class="px-5 py-4 border-b border-[var(--line)]">
+        <h3 class="text-base font-bold text-[var(--text)]">Duplicate Anki cards found</h3>
+      </div>
+      <div class="px-5 py-4 text-sm text-[var(--text-soft)]">
+        {{ duplicateDecisionMessage }}
+      </div>
+      <div class="px-5 py-4 border-t border-[var(--line)] flex flex-wrap justify-end gap-2">
+        <button
+          class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] text-sm hover:bg-[var(--surface-soft)]"
+          @click="emit('cancel-duplicate-decision')"
+        >
+          Cancel
+        </button>
+        <button
+          class="px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] text-sm hover:bg-[var(--surface-soft)]"
+          @click="emit('import-only-new-cards')"
+        >
+          Import only new cards
+        </button>
+        <button
+          class="px-3 py-1.5 rounded-lg border border-[var(--amber-border)] bg-[var(--amber-soft)] text-[var(--amber)] text-sm font-semibold hover:opacity-85"
+          @click="emit('overwrite-duplicates-and-import-all')"
+        >
+          Overwrite duplicates and import all
+        </button>
       </div>
     </div>
   </div>

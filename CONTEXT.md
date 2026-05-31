@@ -76,6 +76,14 @@ _Avoid_: Field key, extractor key
 **Card Template**:
 The HTML/CSS structure defining how a single Anki card type renders. Templates are currently hardcoded in the server-side field extractor.
 
+**Batch Anki Import** (批量 Anki 导入):
+A user action that imports selected Word cards into Anki. The primary path is a single Import action: the app checks for duplicate Anki notes as part of the import flow, imports directly when no duplicates exist, and asks for a Duplicate Import Decision only when duplicates are found. The UI should not ask users to pre-plan duplicate handling before they know whether duplicates exist.
+_Avoid_: Batch overwrite, import plan
+
+**Duplicate Import Decision** (重复导入决策):
+The blocking choice shown during Batch Anki Import when duplicate Anki notes are found. Users choose between overwriting duplicates and importing the whole batch, or importing only new cards. Choosing to import only new cards completes the batch and marks duplicate items as skipped, with details explaining the skipped duplicate note ID. Internal resolution states such as `overwrite` or `skip` may still exist in code, but the product UI should describe the final outcome rather than exposing a "mark duplicates" step.
+_Avoid_: Mark duplicates, duplicate resolution plan
+
 ### Software update
 
 **Software Update** (软件更新):

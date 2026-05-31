@@ -53,6 +53,13 @@ const ankiSessionCache: {
 
 const BACKEND_BY_IDS_EXPORT_THRESHOLD = 100;
 
+type BatchAnkiImportOutcome =
+  | { status: 'completed'; message?: string }
+  | { status: 'needsDuplicateDecision'; message?: string }
+  | { status: 'failed'; message: string }
+  | { status: 'cancelled'; message?: string }
+  | { status: 'idle'; message?: string };
+
 export const useBatchAnkiExport = () => {
   const batchStore = useBatchAnkiStore();
   const {
@@ -88,12 +95,24 @@ export const useBatchAnkiExport = () => {
 
   const statusSummary = computed(() => summarizeBatchStatuses(items.value));
   const modelCss = ref<string | null>(null);
+  const duplicateImportDecisionOpen = ref(false);
   const hasActiveTask = computed(() => items.value.length > 0);
   const isRunning = computed(
     () => progress.value.phase === 'check' || progress.value.phase === 'import'
   );
   const canEditConfig = computed(() => !configLocked.value && !isRunning.value && !busy.value);
   const canCancel = computed(() => isRunning.value && busy.value);
+  const duplicateImportDecisionSummary = computed(() => {
+    const duplicateCount = items.value.filter(
+      item => item.status === 'duplicate' && item.conflict
+    ).length;
+    const readyCount = items.value.filter(item => item.status === 'ready').length;
+    return {
+      duplicateCount,
+      readyCount,
+      totalCount: items.value.length,
+    };
+  });
 
   const setItem = (key: string, patch: Partial<BatchAnkiExportItem>): void => {
     items.value = items.value.map(item => (item.key === key ? { ...item, ...patch } : item));
@@ -210,6 +229,7 @@ export const useBatchAnkiExport = () => {
     isOpen.value = true;
     error.value = '';
     summaryVisible.value = false;
+    duplicateImportDecisionOpen.value = false;
     taskStarted.value = false;
     configLocked.value = false;
     cancelRequested.value = false;
@@ -252,6 +272,7 @@ export const useBatchAnkiExport = () => {
 
   const close = (): void => {
     isOpen.value = false;
+    duplicateImportDecisionOpen.value = false;
   };
 
   const dismissSummary = (): void => {
@@ -299,11 +320,14 @@ export const useBatchAnkiExport = () => {
     });
   };
 
-  const checkDuplicates = async (): Promise<void> => {
+  const checkDuplicates = async (options: { includeReady?: boolean } = {}): Promise<boolean> => {
     const checkTargets = items.value.filter(
-      item => item.status === 'pending' || item.status === 'cancelled'
+      item =>
+        item.status === 'pending' ||
+        item.status === 'cancelled' ||
+        (options.includeReady === true && item.status === 'ready')
     );
-    if (!checkTargets.length) return;
+    if (!checkTargets.length) return true;
     busy.value = true;
     error.value = '';
     summaryVisible.value = true;
@@ -379,16 +403,18 @@ export const useBatchAnkiExport = () => {
       if (!canResume.value) {
         lastStoppedPhase.value = null;
       }
+      return !canResume.value && !items.value.some(item => item.status === 'failed');
     } catch (err) {
       const e = err as { message?: string };
       error.value = e.message || 'Batch duplicate check failed';
+      return false;
     } finally {
       busy.value = false;
       progress.value = { ...progress.value, phase: 'idle' };
     }
   };
 
-  const setDuplicatesResolutionAll = (action: AnkiConflictAction): void => {
+  const applyDuplicateImportDecisionToAll = (action: AnkiConflictAction): void => {
     items.value = updateBatchItemsResolution(items.value, action);
   };
 
@@ -531,9 +557,9 @@ export const useBatchAnkiExport = () => {
     }
   };
 
-  const importReadyItems = async (): Promise<void> => {
+  const importReadyItems = async (): Promise<BatchAnkiImportOutcome> => {
     const importable = getImportableBatchItems(items.value);
-    if (!importable.length) return;
+    if (!importable.length) return { status: 'idle' };
 
     busy.value = true;
     error.value = '';
@@ -586,13 +612,66 @@ export const useBatchAnkiExport = () => {
       if (!canResume.value) {
         lastStoppedPhase.value = null;
       }
+      if (canResume.value) {
+        return { status: 'cancelled', message: error.value || 'Batch import cancelled by user' };
+      }
+      if (hasUnresolvedDuplicates()) {
+        duplicateImportDecisionOpen.value = true;
+        return { status: 'needsDuplicateDecision' };
+      }
+      if (items.value.some(item => item.status === 'failed')) {
+        return { status: 'failed', message: error.value || 'Some cards failed to import' };
+      }
+      return { status: 'completed' };
     } catch (err) {
       const e = err as { message?: string };
       error.value = e.message || 'Batch import failed';
+      return { status: 'failed', message: error.value };
     } finally {
       busy.value = false;
       progress.value = { ...progress.value, phase: 'idle' };
     }
+  };
+
+  const hasUnresolvedDuplicates = (): boolean =>
+    items.value.some(
+      item => item.status === 'duplicate' && item.conflict && item.resolution === 'undecided'
+    );
+
+  const importToAnki = async (): Promise<BatchAnkiImportOutcome> => {
+    duplicateImportDecisionOpen.value = false;
+
+    const needsCheck = items.value.some(
+      item => item.status === 'pending' || item.status === 'cancelled' || item.status === 'ready'
+    );
+    if (needsCheck) {
+      const checked = await checkDuplicates({ includeReady: true });
+      if (canResume.value) {
+        return { status: 'cancelled', message: error.value || 'Batch check cancelled by user' };
+      }
+      if (!checked) {
+        return { status: 'failed', message: error.value || 'Batch duplicate check failed' };
+      }
+    }
+
+    if (hasUnresolvedDuplicates()) {
+      duplicateImportDecisionOpen.value = true;
+      return { status: 'needsDuplicateDecision' };
+    }
+
+    return importReadyItems();
+  };
+
+  const confirmDuplicateImportDecision = async (
+    action: AnkiConflictAction
+  ): Promise<BatchAnkiImportOutcome> => {
+    duplicateImportDecisionOpen.value = false;
+    applyDuplicateImportDecisionToAll(action);
+    return importReadyItems();
+  };
+
+  const cancelDuplicateImportDecision = (): void => {
+    duplicateImportDecisionOpen.value = false;
   };
 
   const updateFieldMapping = (mapping: FieldMappingConfig): void => {
@@ -700,6 +779,8 @@ export const useBatchAnkiExport = () => {
     progressLabel,
     stageLabel,
     statusSummary,
+    duplicateImportDecisionOpen,
+    duplicateImportDecisionSummary,
     hasActiveTask,
     canEditConfig,
     canCancel,
@@ -715,9 +796,11 @@ export const useBatchAnkiExport = () => {
     updateFieldMapping,
     cancelBatchOperation,
     checkDuplicates,
-    setDuplicatesResolutionAll,
     exportApkg,
+    importToAnki,
     importReadyItems,
+    confirmDuplicateImportDecision,
+    cancelDuplicateImportDecision,
     resumeBatchOperation,
     restartBatchOperation,
   };
