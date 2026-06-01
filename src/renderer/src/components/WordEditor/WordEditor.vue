@@ -7,9 +7,11 @@ import { useAppStore } from '@/stores/appStore';
 import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
-import type { ConflictData, EditorStatus } from '@/types/word-editor';
+import type { ConflictData } from '@/types/word-editor';
 import request from '@/utils/request';
 import { useYamlHierarchy } from '@/composables/useYamlHierarchy';
+import { createWordEditorValidationController } from '@/modules/wordEditor/validationController';
+import { createFormatFixCommand } from '@/modules/wordEditor/formatFixCommand';
 
 interface WordStoreLike {
   editorYaml: string;
@@ -19,16 +21,6 @@ interface WordStoreLike {
 
 interface AppStoreLike {
   addToast: (message: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
-}
-
-interface FormatValidationResponse {
-  valid: boolean;
-  errors: string[];
-  language?: string;
-  yaml?: string;
-  changed?: boolean;
-  repairs?: Array<{ type: string; message?: string }>;
-  diagnostics?: Array<{ code: string; message: string; path?: string; suggestion?: string }>;
 }
 
 const wordStore = useWordStore() as unknown as WordStoreLike;
@@ -45,19 +37,25 @@ const lineNumberRef = ref<HTMLElement | null>(null);
 const lineMeasureRef = ref<HTMLElement | null>(null);
 const lineHeights = ref<number[]>([]);
 const cursorPos = ref(0);
-const status = ref<EditorStatus>('');
 const conflictData = ref<ConflictData | null>(null);
-const schemaErrors = ref<string[]>([]);
-const validating = ref(false);
 const saving = ref(false);
-const repairing = ref(false);
-let validateTimer: ReturnType<typeof setTimeout> | null = null;
-let clientParseTimer: ReturnType<typeof setTimeout> | null = null;
-let validationRequestId = 0;
 let lineMeasureFrame: number | null = null;
 let editorResizeObserver: ResizeObserver | null = null;
 
 const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
+const validationController = createWordEditorValidationController({
+  validateYaml: payload => request.post('/v2/words/validate', payload),
+});
+const validationState = validationController.state;
+const formatFixCommand = createFormatFixCommand({
+  state: validationState,
+  repairYaml: payload => request.post('/v2/words/validate', payload),
+  replaceYaml: yamlContent => {
+    input.value = yamlContent;
+  },
+  addToast: (message, type) => appStore.addToast(message, type),
+});
+const formatFixState = formatFixCommand.state;
 
 const syncScroll = () => {
   if (textareaRef.value && lineNumberRef.value) {
@@ -104,22 +102,6 @@ function scheduleLineMeasure(): void {
 
 function updateCursorPos(): void {
   cursorPos.value = textareaRef.value?.selectionStart ?? 0;
-}
-
-function scheduleValidation(delay = 150): void {
-  if (clientParseTimer) clearTimeout(clientParseTimer);
-  clientParseTimer = setTimeout(() => handleInput(), delay);
-}
-
-function markPendingValidation(): void {
-  validationRequestId += 1;
-  if (!input.value || input.value.trim().length === 0) {
-    status.value = '';
-    schemaErrors.value = [];
-    if (validateTimer) clearTimeout(validateTimer);
-    return;
-  }
-  status.value = 'Checking YAML';
 }
 
 function handleKeydown(e: KeyboardEvent): void {
@@ -191,87 +173,8 @@ const isEmpty = computed(() => !input.value || input.value.trim().length === 0);
 
 const saveLabel = 'Save';
 
-function formatValidationMessages(res: FormatValidationResponse): string[] {
-  if (res.changed && Array.isArray(res.repairs) && res.repairs.length > 0) {
-    return res.repairs.map(repair => repair.message || 'Format repair is available.');
-  }
-
-  if (Array.isArray(res.diagnostics) && res.diagnostics.length > 0) {
-    return res.diagnostics.map(diagnostic => {
-      const path = diagnostic.path ? `${diagnostic.path}: ` : '';
-      return `${path}${diagnostic.message}`;
-    });
-  }
-  return res.errors || [];
-}
-
-const handleInput = () => {
-  validationRequestId += 1;
-  const requestId = validationRequestId;
-
-  if (!input.value || input.value.trim().length === 0) {
-    status.value = '';
-    schemaErrors.value = [];
-    if (clientParseTimer) clearTimeout(clientParseTimer);
-    if (validateTimer) clearTimeout(validateTimer);
-    return;
-  }
-
-  const yamlToValidate = input.value;
-  try {
-    const result = yaml.load(yamlToValidate) as Record<string, unknown> | null;
-    if (
-      result &&
-      typeof result === 'object' &&
-      !Array.isArray(result) &&
-      result.yield !== undefined
-    ) {
-      status.value = 'Checking YAML';
-      schemaErrors.value = [];
-    } else {
-      status.value = 'Invalid YAML';
-      schemaErrors.value = [];
-      if (validateTimer) clearTimeout(validateTimer);
-      return;
-    }
-  } catch {
-    status.value = 'Invalid YAML';
-    schemaErrors.value = [];
-    if (validateTimer) clearTimeout(validateTimer);
-    return;
-  }
-
-  if (validateTimer) clearTimeout(validateTimer);
-  validateTimer = setTimeout(async () => {
-    validating.value = true;
-    try {
-      const res = await request.post<FormatValidationResponse>('/v2/words/validate', {
-        yaml: yamlToValidate,
-        repair: false,
-      });
-      if (requestId !== validationRequestId || input.value !== yamlToValidate) return;
-
-      if (res.valid) {
-        schemaErrors.value = [];
-        status.value = 'Valid YAML';
-      } else {
-        schemaErrors.value = formatValidationMessages(res);
-        status.value = 'Invalid YAML';
-      }
-    } catch {
-      if (requestId !== validationRequestId || input.value !== yamlToValidate) return;
-      schemaErrors.value = [];
-    } finally {
-      if (requestId === validationRequestId) {
-        validating.value = false;
-      }
-    }
-  }, 300);
-};
-
 onUnmounted(() => {
-  if (validateTimer) clearTimeout(validateTimer);
-  if (clientParseTimer) clearTimeout(clientParseTimer);
+  validationController.dispose();
   if (lineMeasureFrame !== null) window.cancelAnimationFrame(lineMeasureFrame);
   editorResizeObserver?.disconnect();
 });
@@ -280,8 +183,7 @@ watch(
   input,
   () => {
     void nextTick(scheduleLineMeasure);
-    markPendingValidation();
-    scheduleValidation(500);
+    validationController.handleTextChanged(input.value);
   },
   { flush: 'post' }
 );
@@ -309,8 +211,7 @@ onMounted(() => {
 const clear = () => {
   if (saving.value) return;
   input.value = '';
-  status.value = '';
-  schemaErrors.value = [];
+  validationController.reset();
 };
 
 const save = async () => {
@@ -327,31 +228,7 @@ const save = async () => {
 };
 
 const repairFormat = async () => {
-  if (!input.value || repairing.value) return;
-  repairing.value = true;
-  try {
-    const res = await request.post<FormatValidationResponse>('/v2/words/validate', {
-      yaml: input.value,
-    });
-    schemaErrors.value = formatValidationMessages(res);
-    status.value = res.valid ? 'Valid YAML' : 'Invalid YAML';
-
-    if (res.changed && typeof res.yaml === 'string') {
-      input.value = res.yaml;
-      appStore.addToast(
-        res.valid ? 'Format repaired.' : 'Format partly repaired; remaining errors need review.',
-        res.valid ? 'success' : 'warning'
-      );
-      return;
-    }
-
-    appStore.addToast(
-      res.valid ? 'No format repairs needed.' : 'No safe automatic repair was available.',
-      res.valid ? 'info' : 'warning'
-    );
-  } finally {
-    repairing.value = false;
-  }
+  await formatFixCommand.run(input.value);
 };
 
 const closeConflict = () => {
@@ -423,13 +300,13 @@ defineExpose({ applyGeneratedYaml });
           <span
             class="status-dot"
             :class="{
-              'dot-valid': status === 'Valid YAML',
-              'dot-invalid': status === 'Invalid YAML',
-              'dot-checking': status === 'Checking YAML',
-              'dot-ready': status === '',
+              'dot-valid': validationState.status === 'Valid YAML',
+              'dot-invalid': validationState.status === 'Invalid YAML',
+              'dot-checking': validationState.status === 'Checking YAML',
+              'dot-ready': validationState.status === '',
             }"
           />
-          {{ status || 'Ready' }}
+          {{ validationState.status || 'Ready' }}
         </span>
       </div>
       <div class="head-actions">
@@ -449,7 +326,7 @@ defineExpose({ applyGeneratedYaml });
         <button
           class="btn head-repair"
           type="button"
-          :disabled="isEmpty || saving || repairing"
+          :disabled="isEmpty || saving || formatFixState.repairing"
           title="Repair YAML format"
           @click="repairFormat"
         >
@@ -457,7 +334,7 @@ defineExpose({ applyGeneratedYaml });
             <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4" />
             <path d="m15 5 4 4" />
           </svg>
-          {{ repairing ? 'Repairing...' : 'Repair' }}
+          {{ formatFixState.repairing ? 'Repairing...' : 'Repair' }}
         </button>
         <button
           :class="['btn', 'head-save', isEmpty ? 'btn-disabled' : 'btn-primary']"
@@ -527,9 +404,9 @@ defineExpose({ applyGeneratedYaml });
       </div>
     </div>
 
-    <div v-if="schemaErrors.length > 0" class="schema-errors">
+    <div v-if="validationState.schemaErrors.length > 0" class="schema-errors">
       <ul>
-        <li v-for="(err, i) in schemaErrors" :key="i">{{ err }}</li>
+        <li v-for="(err, i) in validationState.schemaErrors" :key="i">{{ err }}</li>
       </ul>
     </div>
   </div>
