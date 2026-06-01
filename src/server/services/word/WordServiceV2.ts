@@ -205,7 +205,7 @@ class WordServiceV2 {
       page: parseInt(String(query.page || '1'), 10) || 1,
       limit: parseInt(String(query.limit || '20'), 10) || 20,
       search: String(query.search || '').trim(),
-      sort: String(query.sort || 'newest').trim(),
+      sort: String(query.sort || 'updated-newest').trim(),
       language: String(query.language || 'en').toLowerCase(),
     };
     return repositoryV2.listPaged(options);

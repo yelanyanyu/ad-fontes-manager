@@ -52,7 +52,7 @@ const clearSearch = () => {
 
 const onSortChange = (event: Event) => {
   const target = event.target as HTMLSelectElement | null;
-  emit('sort-change', target?.value ?? 'newest');
+  emit('sort-change', target?.value ?? 'updated-newest');
 };
 
 const onPageSizeChange = (event: Event) => {
@@ -159,10 +159,10 @@ const onPageSizeChange = (event: Event) => {
           <select :value="sort" class="ctl-select" @change="onSortChange">
             <option value="az">A-Z</option>
             <option value="za">Z-A</option>
-            <option value="newest">Newest</option>
-            <option value="oldest">Oldest</option>
-            <option value="updated-newest">Modified Newest</option>
-            <option value="updated-oldest">Modified Oldest</option>
+            <option value="updated-newest">Recently Modified</option>
+            <option value="updated-oldest">Oldest Modified</option>
+            <option value="newest">Recently Added</option>
+            <option value="oldest">Oldest Added</option>
           </select>
         </div>
 

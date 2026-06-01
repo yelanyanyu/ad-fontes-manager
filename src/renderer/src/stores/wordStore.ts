@@ -39,7 +39,7 @@ const defaultDbListMeta = (): DbListMeta => ({
   total: 0,
   totalPages: 1,
   search: '',
-  sort: 'newest',
+  sort: 'updated-newest',
 });
 
 export const useWordStore = defineStore('word', {

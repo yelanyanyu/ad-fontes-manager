@@ -135,7 +135,7 @@ class WordRepositoryV2 {
 
   listPaged(options: ListPagedOptionsV2): PagedWordsResult {
     const db = getDb();
-    const { page = 1, limit = 20, search = '', sort = 'newest', language = 'en' } = options;
+    const { page = 1, limit = 20, search = '', sort = 'updated-newest', language = 'en' } = options;
 
     const validatedPage = Math.max(1, page);
     const validatedLimit = Math.min(200, Math.max(1, limit));

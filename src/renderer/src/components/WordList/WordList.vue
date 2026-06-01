@@ -11,7 +11,7 @@
  * @features
  * - 列表展示：支持本地和数据库词条的统一展示
  * - 搜索功能：支持部分匹配和精确匹配两种搜索模式
- * - 排序功能：支持按字母顺序(A-Z/Z-A)和时间顺序(最新/最旧)排序
+ * - 排序功能：支持按字母顺序(A-Z/Z-A)、创建时间和修改时间排序
  * - 分页功能：支持自定义每页显示数量和页码跳转
  * - 同步功能：支持单个词条同步和批量同步，包含冲突检测和解决机制
  *
@@ -110,15 +110,17 @@ const search = ref<string>('');
 
 /**
  * @description 排序方式
- * @type {Ref<'az' | 'za' | 'newest' | 'oldest'>}
- * @default 'newest'
+ * @type {Ref<SortMode>}
+ * @default 'updated-newest'
  * @remarks 控制词条列表的排序方式：
  * - 'az': 按词条字母升序排列
  * - 'za': 按词条字母降序排列
- * - 'newest': 按创建时间降序排列（最新的在前）
- * - 'oldest': 按创建时间升序排列（最旧的在前）
+ * - 'updated-newest': 按修改时间降序排列（最近修改的在前）
+ * - 'updated-oldest': 按修改时间升序排列（最久未修改的在前）
+ * - 'newest': 按创建时间降序排列（最近添加的在前）
+ * - 'oldest': 按创建时间升序排列（最早添加的在前）
  */
-const sort = ref<SortMode>('newest');
+const sort = ref<SortMode>('updated-newest');
 
 /**
  * @description 每页显示数量

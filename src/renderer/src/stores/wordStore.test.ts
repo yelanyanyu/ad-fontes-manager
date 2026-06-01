@@ -60,6 +60,27 @@ describe('wordStore.saveWord', () => {
 });
 
 describe('wordStore.fetchDbRecords', () => {
+  it('defaults the word list to recently modified first', async () => {
+    requestGetMock.mockResolvedValueOnce({
+      items: [],
+      page: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 1,
+    });
+
+    const store = useWordStore();
+    await store.fetchDbRecords();
+
+    expect(requestGetMock).toHaveBeenCalledWith(
+      '/v2/words',
+      expect.objectContaining({
+        params: expect.objectContaining({ sort: 'updated-newest' }),
+      })
+    );
+    expect(store.dbListMeta.sort).toBe('updated-newest');
+  });
+
   it('sets loading for user-visible fetches', async () => {
     let resolveRequest: (value: unknown) => void = () => {};
     requestGetMock.mockReturnValueOnce(
