@@ -273,7 +273,7 @@ defineExpose({ applyGeneratedYaml });
 </script>
 
 <template>
-  <div class="panel editor-panel">
+  <div class="ui-panel editor-panel">
     <ConflictModal
       :open="!!conflictData"
       title="Conflict Detected"
@@ -293,8 +293,8 @@ defineExpose({ applyGeneratedYaml });
       @primary="overwrite"
     />
 
-    <div class="panel-head">
-      <div class="panel-title">
+    <div class="ui-panel__head">
+      <div class="ui-panel__title">
         <strong>YAML Editor</strong>
         <span>
           <span
@@ -311,7 +311,7 @@ defineExpose({ applyGeneratedYaml });
       </div>
       <div class="head-actions">
         <button
-          class="head-icon-button"
+          class="ui-icon-button"
           type="button"
           :disabled="saving || isEmpty"
           title="Clear editor"
@@ -324,7 +324,7 @@ defineExpose({ applyGeneratedYaml });
           </svg>
         </button>
         <button
-          class="btn head-repair"
+          class="ui-button ui-button--quiet head-repair"
           type="button"
           :disabled="isEmpty || saving || formatFixState.repairing"
           title="Repair YAML format"
@@ -337,7 +337,11 @@ defineExpose({ applyGeneratedYaml });
           {{ formatFixState.repairing ? 'Repairing...' : 'Repair' }}
         </button>
         <button
-          :class="['btn', 'head-save', isEmpty ? 'btn-disabled' : 'btn-primary']"
+          :class="[
+            'ui-button',
+            'head-save',
+            isEmpty ? 'ui-button--disabled' : 'ui-button--primary',
+          ]"
           :disabled="isEmpty || saving"
           @click="save"
         >
@@ -413,63 +417,10 @@ defineExpose({ applyGeneratedYaml });
 </template>
 
 <style scoped>
-.panel {
-  min-height: 0;
-  overflow: hidden;
-  background: var(--surface-panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm);
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
 .editor-panel {
   display: grid;
   grid-template-rows: 48px auto minmax(0, 1fr) auto;
-}
-
-.panel-head {
-  height: 48px;
-  padding: 0 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, #fffefa, #fbf8f2);
-  flex: none;
-}
-
-[data-theme="dark"] .panel-head {
-  background: linear-gradient(180deg, #2a261f, #221f1a);
-}
-
-.panel-title {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.panel-title strong {
-  font-size: 14px;
-  font-weight: 740;
-  letter-spacing: 0.055em;
-  color: #2f2b26;
-  text-transform: uppercase;
-}
-
-[data-theme="dark"] .panel-title strong {
-  color: #eee8de;
-}
-
-.panel-title span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
+  flex: 1;
 }
 
 .status-dot {
@@ -521,39 +472,6 @@ defineExpose({ applyGeneratedYaml });
   gap: 8px;
 }
 
-.head-icon-button {
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: #8f877e;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.head-icon-button svg {
-  width: 15px;
-  height: 15px;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.head-icon-button:hover:not(:disabled),
-.head-icon-button:focus-visible {
-  border-color: rgba(36, 114, 83, 0.35);
-  color: var(--green);
-  background: var(--green-soft);
-}
-
-.head-icon-button:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-
 .head-save {
   min-width: 92px;
   height: 30px;
@@ -563,9 +481,6 @@ defineExpose({ applyGeneratedYaml });
 .head-repair {
   height: 30px;
   padding: 0 10px;
-  border-color: var(--line);
-  background: var(--surface);
-  color: var(--muted);
 }
 
 .head-repair:hover:not(:disabled),
@@ -573,11 +488,6 @@ defineExpose({ applyGeneratedYaml });
   border-color: rgba(44, 96, 143, 0.35);
   color: var(--blue);
   background: rgba(44, 96, 143, 0.08);
-}
-
-[data-theme="dark"] .head-icon-button {
-  background: #211e19;
-  color: #8d857b;
 }
 
 .editor-area {
@@ -770,48 +680,4 @@ defineExpose({ applyGeneratedYaml });
   line-height: 1.6;
 }
 
-/* Button system (shared) */
-.btn {
-  height: 34px;
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  padding: 0 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 560;
-  white-space: nowrap;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
-}
-
-.btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-.btn-primary {
-  background: var(--green);
-  color: #fff;
-  box-shadow: 0 6px 14px rgba(36, 114, 83, 0.16);
-}
-
-.btn-primary:hover {
-  background: var(--green-hover);
-}
-
-[data-theme="dark"] .btn-primary {
-  color: #08100c;
-  box-shadow: 0 6px 18px rgba(67, 179, 127, 0.18);
-}
-
-.btn-disabled {
-  opacity: 0.48;
-  box-shadow: none;
-  pointer-events: none;
-  background: var(--surface);
-  border-color: var(--border-strong);
-  color: var(--muted);
-}
 </style>

@@ -4,6 +4,7 @@ import App from './App.vue';
 import router from './router/index.ts';
 import { bootstrapRequestRateLimit } from '@/utils/request';
 import './assets/theme.css';
+import './assets/ui.css';
 import './style.css';
 import './assets/main.css';
 import 'github-markdown-css/github-markdown.css';

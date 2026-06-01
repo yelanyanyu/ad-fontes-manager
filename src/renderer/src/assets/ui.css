@@ -1,0 +1,247 @@
+/* Ad Fontes Manager — shared UI style template
+ *
+ * Keep this file for stable, reusable application primitives. Component scoped
+ * styles should describe local layout and domain-specific details only.
+ */
+
+.ui-panel {
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.ui-panel__head {
+  height: 48px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, #fffefa, #fbf8f2);
+  flex: none;
+}
+
+[data-theme="dark"] .ui-panel__head {
+  background: linear-gradient(180deg, #2a261f, #221f1a);
+}
+
+.ui-panel__title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.ui-panel__title strong {
+  font-size: 14px;
+  font-weight: 740;
+  letter-spacing: 0.055em;
+  color: #2f2b26;
+  text-transform: uppercase;
+}
+
+[data-theme="dark"] .ui-panel__title strong {
+  color: #eee8de;
+}
+
+.ui-panel__title span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ui-button {
+  height: 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 560;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+.ui-button svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.ui-button:disabled,
+.ui-button--disabled {
+  opacity: 0.48;
+  box-shadow: none;
+  cursor: not-allowed;
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--muted);
+}
+
+.ui-button--primary {
+  background: var(--green);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(36, 114, 83, 0.16);
+}
+
+.ui-button--primary:hover:not(:disabled) {
+  background: var(--green-hover);
+}
+
+[data-theme="dark"] .ui-button--primary {
+  color: #08100c;
+  box-shadow: 0 6px 18px rgba(67, 179, 127, 0.18);
+}
+
+.ui-button--quiet {
+  background: var(--surface);
+  border-color: var(--border);
+  color: #6e6860;
+}
+
+.ui-button--quiet:hover:not(:disabled),
+.ui-button--quiet:focus-visible {
+  background: var(--surface-soft);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+[data-theme="dark"] .ui-button--quiet {
+  background: rgba(255, 255, 255, 0.05);
+  color: #b6aca1;
+}
+
+.ui-button--soft-green {
+  background: var(--green-soft);
+  border-color: var(--green-border);
+  color: #1f6a4a;
+  font-weight: 620;
+}
+
+[data-theme="dark"] .ui-button--soft-green {
+  color: #93e6bb;
+}
+
+.ui-button--soft-blue {
+  background: var(--blue-soft);
+  border-color: var(--blue-border);
+  color: #2452bb;
+  font-weight: 620;
+}
+
+[data-theme="dark"] .ui-button--soft-blue {
+  color: #adc4ff;
+}
+
+.ui-icon-button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: #8f877e;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.ui-icon-button svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ui-icon-button:hover:not(:disabled),
+.ui-icon-button:focus-visible {
+  border-color: rgba(36, 114, 83, 0.35);
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.ui-icon-button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+[data-theme="dark"] .ui-icon-button {
+  background: #211e19;
+  color: #8d857b;
+}
+
+.ui-icon-button--danger:hover:not(:disabled),
+.ui-icon-button--danger:focus-visible {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #d14d4d;
+}
+
+[data-theme="dark"] .ui-icon-button--danger:hover:not(:disabled),
+[data-theme="dark"] .ui-icon-button--danger:focus-visible {
+  color: #ff8f8f;
+}
+
+.ui-control {
+  height: 28px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  color: #625c54;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 1px 1px rgba(22, 16, 10, 0.018);
+  cursor: pointer;
+}
+
+[data-theme="dark"] .ui-control {
+  background: rgba(255, 255, 255, 0.05);
+  color: #c3b9ad;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.14);
+}
+
+.ui-control:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ui-control strong {
+  font-weight: 700;
+  color: #34302b;
+}
+
+[data-theme="dark"] .ui-control strong {
+  color: #f0e8dd;
+}
+
+.ui-select {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  outline: 0;
+  cursor: pointer;
+}

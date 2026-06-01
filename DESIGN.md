@@ -11,10 +11,18 @@ Ad Fontes Manager is a desktop-first study and production tool. Its UI should fe
 ## Visual System
 
 - Use the tokens in `src/renderer/src/assets/theme.css` for color, radius, shadow, typography, and surfaces.
+- Use the shared UI primitives in `src/renderer/src/assets/ui.css` before adding component-local CSS. Local scoped styles should describe layout and domain-specific details, not reimplement panels, buttons, controls, dialogs, chips, or empty states.
 - Primary actions use `--green`; dangerous actions use `--red`; warnings use `--amber`; secondary text uses `--muted` or `--text-soft`.
 - Use `var(--sans)` for application UI, `var(--serif)` for lemma/title-like word display, and `var(--mono)` for YAML, JSON, logs, and technical output.
 - Prefer compact radii: `--radius-sm` for controls, `--radius-md` for panels, `--radius-lg` for modal cards.
 - Avoid decorative gradients, floating ornament, and oversized hero-like sections inside the app.
+
+## CSS Template
+
+- Treat `theme.css` as the token layer and `ui.css` as the reusable UI grammar. Do not add one-off `.btn`, `.panel`, `.ctl`, `.modal-*`, or `.chip-*` systems inside a component when a shared primitive already exists.
+- Prefer semantic shared classes such as `.ui-panel`, `.ui-panel__head`, `.ui-panel__title`, `.ui-button`, `.ui-button--primary`, `.ui-button--quiet`, `.ui-icon-button`, `.ui-control`, and `.ui-select`.
+- Component scoped CSS may tune dimensions, grid placement, and domain-specific state, but should not copy the base visual treatment of common controls.
+- Add new shared primitives only after the same visual pattern appears in at least two places or is required by this guide.
 
 ## Layout
 

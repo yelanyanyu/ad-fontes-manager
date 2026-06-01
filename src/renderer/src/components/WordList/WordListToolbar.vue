@@ -155,8 +155,8 @@ const onPageSizeChange = (event: Event) => {
 
     <div class="toolbar-row split">
       <div class="toolbar-left">
-        <div class="ctl">
-          <select :value="sort" class="ctl-select" @change="onSortChange">
+        <div class="ui-control">
+          <select :value="sort" class="ui-select" @change="onSortChange">
             <option value="az">A-Z</option>
             <option value="za">Z-A</option>
             <option value="updated-newest">Recently Modified</option>
@@ -166,7 +166,7 @@ const onPageSizeChange = (event: Event) => {
           </select>
         </div>
 
-        <div class="ctl">
+        <div class="ui-control">
           SIZE
           <input
             :value="pageSize"
@@ -180,7 +180,7 @@ const onPageSizeChange = (event: Event) => {
 
         <button
           v-if="isBackendConnected"
-          class="ctl"
+          class="ui-control"
           title="Select all records matching current search"
           :disabled="!!selectingAllMatching"
           @click="emit('select-all-matching')"
@@ -194,7 +194,7 @@ const onPageSizeChange = (event: Event) => {
         <button
           v-if="isBackendConnected && localSyncCount"
           :disabled="syncAllLoading"
-          class="ctl"
+          class="ui-control"
           @click="emit('open-sync-all')"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -208,8 +208,7 @@ const onPageSizeChange = (event: Event) => {
       <div class="toolbar-right">
         <button
           v-if="hasSelection"
-          class="btn btn-soft-green"
-          style="height: 28px; padding: 0 10px"
+          class="ui-button ui-button--soft-green toolbar-action-button"
           data-test="batch-export-anki-button"
           @click="emit('open-batch-anki-export')"
         >
@@ -222,8 +221,7 @@ const onPageSizeChange = (event: Event) => {
         </button>
         <button
           v-if="hasSelection"
-          class="btn btn-soft-blue"
-          style="height: 28px; padding: 0 10px"
+          class="ui-button ui-button--soft-blue toolbar-action-button"
           data-test="print-selected-button"
           @click="emit('print-selected')"
         >
@@ -236,7 +234,7 @@ const onPageSizeChange = (event: Event) => {
         </button>
         <button
           v-if="hasSelection"
-          class="icon-tool-button"
+          class="ui-icon-button ui-icon-button--danger toolbar-icon-button"
           type="button"
           title="Clear selection"
           aria-label="Clear selection"
@@ -454,41 +452,6 @@ const onPageSizeChange = (event: Event) => {
   font-weight: 600;
 }
 
-.ctl {
-  height: 28px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  padding: 0 10px;
-  color: #625c54;
-  font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow: 0 1px 1px rgba(22, 16, 10, 0.018);
-  cursor: pointer;
-}
-
-[data-theme="dark"] .ctl {
-  background: rgba(255, 255, 255, 0.05);
-  color: #c3b9ad;
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.14);
-}
-
-.ctl:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.ctl strong {
-  font-weight: 700;
-  color: #34302b;
-}
-
-[data-theme="dark"] .ctl strong {
-  color: #f0e8dd;
-}
-
 .page-size-input {
   width: 40px;
   background: transparent;
@@ -502,15 +465,6 @@ const onPageSizeChange = (event: Event) => {
 
 [data-theme="dark"] .page-size-input {
   color: #f0e8dd;
-}
-
-.ctl-select {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font-size: 12px;
-  outline: 0;
-  cursor: pointer;
 }
 
 .count {
@@ -550,97 +504,20 @@ const onPageSizeChange = (event: Event) => {
   color: #fff;
 }
 
-.icon-tool-button {
+.toolbar-icon-button {
   width: 28px;
   height: 28px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: #7b746b;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
 
-.icon-tool-button:hover,
-.icon-tool-button:focus-visible {
-  background: rgba(248, 113, 113, 0.12);
-  border-color: rgba(248, 113, 113, 0.3);
-  color: #d14d4d;
-}
-
-.icon-tool-button svg {
+.toolbar-icon-button svg {
   width: 14px;
   height: 14px;
   stroke-width: 2.2;
-  stroke-linecap: round;
 }
 
-[data-theme="dark"] .icon-tool-button {
-  background: rgba(255, 255, 255, 0.05);
-  color: #b6aca1;
-}
-
-[data-theme="dark"] .icon-tool-button:hover,
-[data-theme="dark"] .icon-tool-button:focus-visible {
-  color: #ff8f8f;
-}
-
-/* Button variants */
-.btn {
-  height: 34px;
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  padding: 0 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 560;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease, box-shadow 0.14s ease;
-}
-
-.btn svg {
-  width: 14px;
-  height: 14px;
-}
-
-.btn-soft-green {
-  background: var(--green-soft);
-  border-color: var(--green-border);
-  color: #1f6a4a;
-  font-weight: 620;
-}
-
-[data-theme="dark"] .btn-soft-green {
-  color: #93e6bb;
-}
-
-.btn-soft-blue {
-  background: var(--blue-soft);
-  border-color: var(--blue-border);
-  color: #2452bb;
-  font-weight: 620;
-}
-
-[data-theme="dark"] .btn-soft-blue {
-  color: #adc4ff;
-}
-
-.btn-quiet {
-  background: var(--surface);
-  border-color: var(--border);
-  color: #6e6860;
-}
-
-[data-theme="dark"] .btn-quiet {
-  background: rgba(255, 255, 255, 0.05);
-  color: #b6aca1;
+.toolbar-action-button {
+  height: 28px;
+  padding: 0 10px;
 }
 
 @keyframes spin {
