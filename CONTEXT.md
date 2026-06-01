@@ -173,12 +173,44 @@ A user action that packages User Configuration for backup or transfer to another
 _Avoid_: Dump config, copy config file
 
 **Pipeline** (流水线):
-A multi-stage AI workflow that generates a Word's YAML from a lemma and context. Currently a 3-stage linear sequence: searching → pondering → auditing.
+A multi-stage AI workflow that produces or transforms a Word's YAML from a Lemma, Context, and optional Notes. The current default English Generate Pipeline is a 3-Stage linear sequence: searching → pondering → auditing, but Pipeline does not imply those exact Stage names or that exact length. Future Pipeline Types may use different Stage definitions or combine responsibilities, such as a token-saving Generate Pipeline that combines searching and pondering.
 _Avoid_: Workflow, chain, process
 
+**Pipeline Type** (流水线类型):
+The product-level purpose of a Pipeline, such as Generate, Content Fix, Audit-Fix, or a future token-saving Generate variant. Pipeline Type explains why a Job exists; it is not the executable Stage list itself.
+_Avoid_: Runner type, workflow mode
+
+**Pipeline Definition** (流水线定义):
+The executable definition for a Pipeline: Stage order, Prompt assignment, Tool assignment, model assignment, output parser, and Stage Policy. Multiple Pipeline Definitions may share one Pipeline Type when they represent different execution strategies for the same product purpose.
+_Avoid_: Pipeline config, workflow file
+
 **Stage** (阶段):
-One step in a Pipeline. Each Stage has a model assignment (`fast`/`balanced`/`expert`), an optional system prompt, optional tools, and an output parser. Stages run sequentially; each receives the previous Stage's output.
+One step in a Pipeline Definition. Each Stage has a model assignment (`fast`/`balanced`/`expert`), an optional Prompt, optional Tools, and an output parser. Stages run sequentially; each receives the previous Stage's output through Pipeline Context. Stage names are defined by the Pipeline Definition and are not globally limited to searching, pondering, auditing, or fixing.
 _Avoid_: Step, phase, node
+
+**Stage Policy** (阶段策略):
+The declared behaviour attached to a Stage beyond ordinary LLM execution, such as Stop-loss rules, Tool fallback, evidence synthesis, YAML assembly, token budget choices, or recovery behaviour. Stage Policy belongs with the Pipeline Definition so a Runner can execute generic sequencing without hardcoding product-specific Stage names. Stage Policy should be declarative by default: Pipeline Definitions name policy capabilities, while the implementation lives in shared policy modules. Custom executable hooks are a future escape hatch, not the first design. Stage Policy should separate execution, output, and assembly concerns: Execution Policy decides whether the Stage runs as a single LLM call or an Agent Loop; Output Policy decides which Pipeline Context slot the Stage writes, such as research YAML, creative YAML, full YAML, or Review Score metadata; Assembly Policy decides whether and how Stage outputs are combined after a Stage completes.
+_Avoid_: Runner special case, stage hack
+
+**Execution Policy** (执行策略):
+The part of Stage Policy that controls how a Stage calls the model: single LLM call, Agent Loop, Tool set, tool-round limit, timeout, token budget, retry, and empty-output Stop-loss behaviour. Execution Policy must not imply which YAML slot the Stage writes.
+_Avoid_: Stage type
+
+**Output Policy** (输出策略):
+The part of Stage Policy that maps visible Stage output into Pipeline Context, such as research YAML, creative YAML, full YAML, or Review Score metadata. Output Policy is independent from whether the Stage used an Agent Loop or a single LLM call.
+_Avoid_: Parser side effect
+
+**Assembly Policy** (组装策略):
+The part of Stage Policy that combines Pipeline Context values after a Stage, such as merging research YAML and creative YAML into full YAML. Assembly Policy is explicit; Stage names such as `pondering` must not implicitly trigger YAML assembly.
+_Avoid_: Hidden merge
+
+**Stop-loss Policy** (止损策略):
+The part of Stage Policy that decides when a Pipeline should stop early and preserve a partial result. Stop-loss Policy is based on declared output requirements, not Stage names. For example, a Stage that writes required research YAML, creative YAML, or full YAML may stop the Pipeline when that output is empty after parsing; an auditing Stage with malformed Review Score metadata should produce Audit Incomplete rather than being treated as generic YAML Stop-loss.
+_Avoid_: Stage-name fallback
+
+**Agent Loop** (Agent 循环):
+A Stage execution mode where the model may call Tools, receive Tool results, and continue producing visible Stage output. An Agent Loop is not itself a Stage name. The current English `searching` Stage is an Agent Loop that can use web Tools, but future Pipeline Definitions may use an Agent Loop under a different Stage name or combine it with other responsibilities. Pipeline Definitions should declare Agent Loop execution separately from the Stage id, so a Runner does not infer Tool behaviour from names such as `searching`. Agent Loop's primary contract is a real query loop: the model emits Tool calls, Tools execute, Tool results are appended as model-readable messages, and the model is called again until visible Stage output is produced or the configured tool-round limit is reached. Evidence synthesis and no-tool retry are Stop-loss behaviours after the query loop fails to produce visible output, not the normal Tool path.
+_Avoid_: Search stage, tool step
 
 **Stage Details** (阶段详情):
 A read-only detail panel for one Stage key (`searching`, `pondering`, `auditing`, or `fixing`) on the currently selected Job. Stage Details is keyed by Stage, not by a stale Stage object from a previous Job selection. When the user selects a different Job while Stage Details is open, the panel follows the same Stage key on the newly selected Job if that Stage key exists; if the Stage key does not exist, the panel closes. Empty or pending Stage content is rendered by Stage Details itself rather than being treated as a reason to close. This lets users compare the same Stage across Jobs without accidentally viewing details from the previous Job.
@@ -322,8 +354,12 @@ _Avoid_: Fallback, safety net, guard
 An LLM API service (e.g., DeepSeek, OpenRouter) identified by a base URL, API format (`openai` or `anthropic`), and a list of available models.
 
 **Tool**:
-A function callable by the LLM during a Pipeline Stage — currently `searchEtymology` (Brave Search API) and `fetchPage` (web page scraping). Defined via Vercel AI SDK's `tool()` and registered per Stage.
+A function callable by the LLM during an Agent Loop — currently `searchEtymology` (Brave Search API) and `fetchPage` (web page scraping). Tools are capabilities available to the model inside a Stage; they are not Stages themselves.
 _Avoid_: Plugin, capability, skill
+
+**Tool Result** (工具结果):
+The result produced by a Tool during an Agent Loop. Tool Result has two channels: a UI Result for Stage Details, logs, and user inspection, and a Model Result for the next model turn. The UI Result may preserve fuller raw details, while the Model Result should be compressed, cleaned, and length-limited so Agent Loop query rounds do not explode token usage. Evidence synthesis should consume Model Results, not raw UI Results.
+_Avoid_: Raw tool output, search result
 
 **Prompt** (提示词):
 A Markdown file under `docs/prompts/` containing the system prompt template for a Stage. Supports `{{variable}}` placeholder injection at load time.
