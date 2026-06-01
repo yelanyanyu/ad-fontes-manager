@@ -21,6 +21,7 @@ Ad Fontes Manager is a desktop-first study and production tool. Its UI should fe
 
 - Treat `theme.css` as the token layer and `ui.css` as the reusable UI grammar. Do not add one-off `.btn`, `.panel`, `.ctl`, `.modal-*`, or `.chip-*` systems inside a component when a shared primitive already exists.
 - Prefer semantic shared classes such as `.ui-panel`, `.ui-panel__head`, `.ui-panel__title`, `.ui-button`, `.ui-button--primary`, `.ui-button--quiet`, `.ui-icon-button`, `.ui-control`, and `.ui-select`.
+- Use `.ui-dialog-*` for modal shells, `.ui-notice-*` for inline feedback, `.ui-chip-*` for compact status labels, `.ui-field-*` with `.ui-input` / `.ui-textarea` for forms, and `.ui-empty-state-*` for empty work surfaces.
 - Component scoped CSS may tune dimensions, grid placement, and domain-specific state, but should not copy the base visual treatment of common controls.
 - Add new shared primitives only after the same visual pattern appears in at least two places or is required by this guide.
 
