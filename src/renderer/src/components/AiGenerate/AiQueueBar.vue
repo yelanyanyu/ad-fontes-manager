@@ -450,11 +450,19 @@ async function handleClearHistory(): Promise<void> {
       <span class="bar-label">Queue</span>
       <span v-if="total === 0" class="bar-empty">empty</span>
       <template v-else>
-        <span v-if="counts.running" class="bar-count running">{{ counts.running }}r</span>
-        <span v-if="counts.queued" class="bar-count queued">{{ counts.queued }}q</span>
-        <span v-if="counts.paused" class="bar-count paused">{{ counts.paused }}p</span>
-        <span v-if="counts.error" class="bar-count error">{{ counts.error }}e</span>
-        <span v-if="counts.done || !total" class="bar-count done">{{ counts.done }}d</span>
+        <span v-if="counts.running" class="ui-chip ui-chip--info bar-count">
+          {{ counts.running }}r
+        </span>
+        <span v-if="counts.queued" class="ui-chip ui-chip--neutral bar-count">
+          {{ counts.queued }}q
+        </span>
+        <span v-if="counts.paused" class="ui-chip ui-chip--warning bar-count">
+          {{ counts.paused }}p
+        </span>
+        <span v-if="counts.error" class="ui-chip ui-chip--danger bar-count">{{ counts.error }}e</span>
+        <span v-if="counts.done || !total" class="ui-chip ui-chip--neutral bar-count">
+          {{ counts.done }}d
+        </span>
       </template>
       <span class="bar-chevron">{{ queueOpen ? '▼' : '▲' }}</span>
     </div>
@@ -487,9 +495,15 @@ async function handleClearHistory(): Promise<void> {
       </div>
 
       <div v-if="mode === 'active'" class="bar-actions">
-        <button type="button" class="qbtn" @click="handlePauseAll">Pause</button>
-        <button type="button" class="qbtn" @click="handleResumeAll">Resume</button>
-        <button type="button" class="qbtn danger" @click="handleCancelAll">Clear</button>
+        <button type="button" class="ui-button ui-button--quiet queue-button" @click="handlePauseAll">
+          Pause
+        </button>
+        <button type="button" class="ui-button ui-button--quiet queue-button" @click="handleResumeAll">
+          Resume
+        </button>
+        <button type="button" class="ui-button ui-button--danger queue-button" @click="handleCancelAll">
+          Clear
+        </button>
       </div>
 
       <QueueTable
@@ -504,16 +518,25 @@ async function handleClearHistory(): Promise<void> {
       />
 
       <div v-else-if="mode === 'history'" class="history-panel">
-        <p class="history-dependency-note">
+        <p class="ui-notice ui-notice--warning history-dependency-note">
           Today is built from History. Clear History can remove Today items.
         </p>
 
         <div class="history-tools">
           <form class="history-search" @submit.prevent="applyHistorySearch">
-            <input v-model="historySearch" type="search" placeholder="Search lemma" />
-            <button type="submit" class="qbtn">Search</button>
+            <input
+              v-model="historySearch"
+              class="ui-input history-search-input"
+              type="search"
+              placeholder="Search lemma"
+            />
+            <button type="submit" class="ui-button ui-button--quiet queue-button">Search</button>
           </form>
-          <button type="button" class="qbtn danger" @click="handleClearHistory">
+          <button
+            type="button"
+            class="ui-button ui-button--danger queue-button"
+            @click="handleClearHistory"
+          >
             Clear History
           </button>
         </div>
@@ -564,7 +587,7 @@ async function handleClearHistory(): Promise<void> {
           <div>
             <button
               type="button"
-              class="qbtn"
+              class="ui-button ui-button--quiet queue-button"
               :disabled="queueHistoryPage <= 1"
               @click="gotoHistoryPage(queueHistoryPage - 1)"
             >
@@ -573,7 +596,7 @@ async function handleClearHistory(): Promise<void> {
             <span>{{ queueHistoryPage }} / {{ historyPages }}</span>
             <button
               type="button"
-              class="qbtn"
+              class="ui-button ui-button--quiet queue-button"
               :disabled="queueHistoryPage >= historyPages"
               @click="gotoHistoryPage(queueHistoryPage + 1)"
             >
@@ -591,7 +614,7 @@ async function handleClearHistory(): Promise<void> {
           </div>
           <button
             type="button"
-            class="qbtn"
+            class="ui-button ui-button--quiet queue-button"
             :disabled="todayWorkset.length === 0 || savingWorkset"
             @click="fetchTodayWorkset"
           >
@@ -599,7 +622,7 @@ async function handleClearHistory(): Promise<void> {
           </button>
           <button
             type="button"
-            class="qbtn primary"
+            class="ui-button ui-button--primary queue-button"
             :disabled="todayWorkset.length === 0 || savingWorkset"
             @click="handleSaveWorkset"
           >
@@ -607,7 +630,7 @@ async function handleClearHistory(): Promise<void> {
           </button>
           <button
             type="button"
-            class="qbtn primary"
+            class="ui-button ui-button--primary queue-button"
             :disabled="eligibleWorksetJobs.length === 0 || improvingWorkset"
             @click="openImproveSelection"
           >
@@ -616,7 +639,7 @@ async function handleClearHistory(): Promise<void> {
           <button
             v-if="conflictJobIds.length > 0"
             type="button"
-            class="qbtn danger"
+            class="ui-button ui-button--danger queue-button"
             :disabled="savingWorkset"
             @click="handleOverwriteConflicts"
           >
@@ -625,17 +648,19 @@ async function handleClearHistory(): Promise<void> {
         </div>
 
         <div v-if="worksetSaveResults.size > 0" class="workset-result-summary">
-          <span v-if="worksetSaveSummary.saved">Saved {{ worksetSaveSummary.saved }}</span>
-          <span v-if="worksetSaveSummary.conflict" class="is-warning">
+          <span v-if="worksetSaveSummary.saved" class="ui-chip ui-chip--success">
+            Saved {{ worksetSaveSummary.saved }}
+          </span>
+          <span v-if="worksetSaveSummary.conflict" class="ui-chip ui-chip--warning">
             Conflict {{ worksetSaveSummary.conflict }}
           </span>
-          <span v-if="worksetSaveSummary.invalid" class="is-danger">
+          <span v-if="worksetSaveSummary.invalid" class="ui-chip ui-chip--danger">
             Invalid {{ worksetSaveSummary.invalid }}
           </span>
-          <span v-if="worksetSaveSummary.error" class="is-danger">
+          <span v-if="worksetSaveSummary.error" class="ui-chip ui-chip--danger">
             Error {{ worksetSaveSummary.error }}
           </span>
-          <span v-if="worksetSaveSummary.missing" class="is-muted">
+          <span v-if="worksetSaveSummary.missing" class="ui-chip ui-chip--neutral">
             Missing {{ worksetSaveSummary.missing }}
           </span>
         </div>
@@ -654,36 +679,36 @@ async function handleClearHistory(): Promise<void> {
   <Teleport to="body">
     <div
       v-if="improveSelectionOpen"
-      class="pending-improve-overlay"
+      class="ui-dialog-overlay pending-improve-overlay"
       role="presentation"
       @click.self="closeImproveSelection"
     >
       <section
-        class="pending-improve-panel"
+        class="ui-dialog-card ui-dialog-card--wide pending-improve-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="pending-improve-title"
       >
-        <div class="pending-improve-head">
+        <div class="ui-dialog-head pending-improve-head">
           <div>
             <strong id="pending-improve-title">Pending Improve Selection</strong>
             <p>Review low-score words before creating Improve jobs.</p>
           </div>
           <span>{{ pendingImproveJobs.length }} selected</span>
         </div>
-        <div class="pending-improve-list">
+        <div class="ui-dialog-body pending-improve-list">
           <div v-for="job in pendingImproveJobs" :key="job.jobId" class="pending-improve-row">
             <span class="q-word">{{ job.word }}</span>
             <span
-              class="score-chip"
+              class="ui-chip score-chip"
               :class="finalScoreClass(job.effectiveReviewScore)"
             >
               {{ formatFinalScore(job.effectiveReviewScore) }}
             </span>
-            <span class="improve-count-chip">#{{ job.improveCount }}</span>
+            <span class="ui-chip ui-chip--neutral improve-count-chip">#{{ job.improveCount }}</span>
             <button
               type="button"
-              class="qbtn"
+              class="ui-button ui-button--quiet queue-button"
               :disabled="improvingWorkset"
               @click="removePendingImproveJob(job.jobId)"
             >
@@ -694,10 +719,10 @@ async function handleClearHistory(): Promise<void> {
             No selected jobs
           </div>
         </div>
-        <div class="pending-improve-actions">
+        <div class="ui-dialog-actions pending-improve-actions">
           <button
             type="button"
-            class="qbtn"
+            class="ui-button ui-button--quiet queue-button"
             :disabled="improvingWorkset"
             @click="closeImproveSelection"
           >
@@ -705,7 +730,7 @@ async function handleClearHistory(): Promise<void> {
           </button>
           <button
             type="button"
-            class="qbtn primary"
+            class="ui-button ui-button--primary queue-button"
             :disabled="pendingImproveJobs.length === 0 || improvingWorkset"
             @click="submitWorksetImprove"
           >
@@ -757,16 +782,9 @@ async function handleClearHistory(): Promise<void> {
 
 .bar-count {
   padding: 0 6px;
-  border-radius: 3px;
-  font-weight: 650;
   font-size: 11px;
+  line-height: 18px;
 }
-
-.bar-count.running { background: var(--blue-soft, #e3f2fd); color: var(--blue, #1976d2); }
-.bar-count.queued  { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
-.bar-count.paused  { background: var(--amber-soft, #fff8e1); color: var(--amber); }
-.bar-count.error   { background: var(--red-soft); color: var(--red); }
-.bar-count.done    { color: var(--muted); }
 
 .bar-chevron {
   margin-left: auto;
@@ -824,30 +842,11 @@ async function handleClearHistory(): Promise<void> {
   color: var(--green);
 }
 
-.qbtn {
-  padding: 2px 10px;
-  border: 1px solid var(--line);
+.queue-button {
+  height: 24px;
+  padding: 0 10px;
   border-radius: 3px;
-  background: var(--surface);
-  cursor: pointer;
   font-size: 11px;
-  color: var(--text);
-}
-
-.qbtn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.qbtn.danger {
-  border-color: var(--red-border);
-  color: var(--red);
-}
-
-.qbtn.primary {
-  border-color: var(--green-border);
-  background: var(--green);
-  color: #fff;
 }
 
 .bar-empty-list {
@@ -898,39 +897,13 @@ async function handleClearHistory(): Promise<void> {
   align-items: center;
   gap: 6px;
   padding: 0 14px 6px;
-  color: var(--green);
   font-size: 11px;
   min-height: 20px;
   flex-wrap: wrap;
 }
 
-.workset-result-summary span {
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 1px 6px;
-  background: var(--surface);
-}
-
-.workset-result-summary .is-warning {
-  color: var(--amber);
-  border-color: var(--amber-border, var(--line));
-}
-
-.workset-result-summary .is-danger {
-  color: var(--red);
-  border-color: var(--red-border);
-}
-
-.workset-result-summary .is-muted {
-  color: var(--muted);
-}
-
 .pending-improve-overlay {
-  position: fixed;
-  inset: 0;
   z-index: 2400;
-  display: grid;
-  place-items: center;
   padding: 24px;
   background: rgb(17 24 39 / 0.28);
 }
@@ -938,13 +911,8 @@ async function handleClearHistory(): Promise<void> {
 .pending-improve-panel {
   width: min(560px, calc(100vw - 32px));
   max-height: min(620px, calc(100vh - 48px));
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--surface);
   box-shadow: 0 24px 70px rgb(15 23 42 / 0.22);
-  overflow: hidden;
 }
 
 .pending-improve-head,
@@ -955,10 +923,6 @@ async function handleClearHistory(): Promise<void> {
   gap: 12px;
   padding: 14px 16px;
   font-size: 12px;
-}
-
-.pending-improve-head {
-  border-bottom: 1px solid var(--line);
 }
 
 .pending-improve-head strong {
@@ -979,11 +943,9 @@ async function handleClearHistory(): Promise<void> {
 }
 
 .pending-improve-list {
-  display: flex;
-  flex-direction: column;
   min-height: 96px;
   max-height: min(380px, calc(100vh - 220px));
-  overflow: auto;
+  padding: 0;
 }
 
 .pending-improve-row {
@@ -999,25 +961,12 @@ async function handleClearHistory(): Promise<void> {
   border-bottom: 0;
 }
 
-.pending-improve-actions {
-  border-top: 1px solid var(--line);
-  justify-content: flex-end;
-}
-
-.workset-list {
-  padding-bottom: 8px;
-}
-
 .score-chip {
-  border: 1px solid var(--line);
   border-radius: 3px;
   padding: 1px 5px;
   font-size: 10px;
   line-height: 16px;
   font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  background: var(--surface);
-  white-space: nowrap;
 }
 
 .score-strong {
@@ -1038,68 +987,14 @@ async function handleClearHistory(): Promise<void> {
   background: var(--red-soft);
 }
 
-.improve-count-chip,
-.blocked-chip {
-  border: 1px solid var(--line);
+.improve-count-chip {
   border-radius: 3px;
   padding: 1px 4px;
   font-size: 10px;
   line-height: 16px;
-  color: var(--muted);
-  background: var(--surface);
-  white-space: nowrap;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.blocked-chip {
-  color: var(--amber);
-  border-color: var(--amber-border, var(--line));
-  background: var(--amber-soft, var(--surface));
-}
-
-.blocked-chip.empty,
-.save-chip.empty {
-  visibility: hidden;
-}
-
-.save-chip {
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 1px 5px;
-  font-size: 10px;
-  line-height: 16px;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: var(--surface);
-  max-width: 76px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.save-saved {
-  border-color: var(--green-border);
-  color: var(--green);
-  background: var(--green-soft);
-}
-
-.save-conflict {
-  color: var(--amber);
-  border-color: var(--amber-border, var(--line));
-  background: var(--amber-soft, var(--surface));
-}
-
-.save-invalid,
-.save-error {
-  color: var(--red);
-  border-color: var(--red-border);
-  background: var(--red-soft);
-}
-
-.save-missing {
-  color: var(--muted);
 }
 
 .history-tools {
@@ -1111,8 +1006,9 @@ async function handleClearHistory(): Promise<void> {
 
 .history-dependency-note {
   margin: 0;
-  padding: 6px 14px 0;
-  color: var(--amber);
+  border-width: 0 0 1px;
+  border-radius: 0;
+  padding: 6px 14px;
   font-size: 11px;
   line-height: 1.35;
 }
@@ -1123,22 +1019,13 @@ async function handleClearHistory(): Promise<void> {
   min-width: 0;
 }
 
-.history-search input {
+.history-search-input {
   min-width: 0;
   flex: 1;
   height: 24px;
-  border: 1px solid var(--line);
   border-radius: 3px;
-  background: var(--surface);
-  color: var(--text);
   padding: 0 8px;
   font-size: 11px;
-  outline: 0;
-}
-
-.history-search input:focus {
-  border-color: var(--green-border);
-  box-shadow: 0 0 0 2px var(--green-soft);
 }
 
 .status-tabs {
@@ -1151,15 +1038,6 @@ async function handleClearHistory(): Promise<void> {
 .status-tabs button {
   border: 1px solid var(--line);
   border-radius: 3px;
-}
-
-.history-list {
-  padding-bottom: 4px;
-}
-
-.history-list.loading {
-  opacity: 0.72;
-  transition: opacity 0.12s ease;
 }
 
 .history-pager {
