@@ -7,6 +7,8 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import AiGenerateStagePanel from './AiGenerateStagePanel.vue';
 import BatchGeneratePanel from './BatchGeneratePanel.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import GenerateProgressPanel from './GenerateProgressPanel.vue';
+import SingleGenerateForm from './SingleGenerateForm.vue';
 import type { BatchGenerateDraftItem } from '@/services/batchGenerateParser';
 import { buildDisplaySteps, resolveStageDetailsStep } from './stageDisplay';
 import request from '@/utils/request';
@@ -49,10 +51,8 @@ interface FormatValidationResponse {
 }
 
 const entryMode = ref<EntryMode>('single');
-const word = ref('');
 const fixing = ref(false);
 const saving = ref(false);
-const context = ref('');
 const notes = ref('');
 const batchSubmitting = ref(false);
 const errorMessage = ref('');
@@ -79,35 +79,13 @@ watch(selectedStage, step => {
   }
 });
 
-const progressPercent = computed(() => {
-  const job = currentJob.value;
-  if (!job) return 0;
-  const steps = displaySteps.value;
-  const complete = steps.filter(step => step.status === 'complete').length;
-  const total = steps.length || 3;
-  return Math.min(100, Math.round((complete / total) * 100));
-});
-
 const reviewScore = computed(() => {
   const userScore = currentJob.value?.scores?.user_review_score;
   if (typeof userScore === 'number') return userScore;
   const aiScore = currentJob.value?.scores?.overall_score;
   return typeof aiScore === 'number' ? aiScore : null;
 });
-const canStart = computed(() => word.value.trim().length > 0);
 const isRevisionNotesMode = computed(() => isComplete.value || hasRevisionNotes.value);
-const notesLabel = computed(() => (isRevisionNotesMode.value ? 'Revision notes' : 'Generation notes'));
-const notesBadge = computed(() => (isRevisionNotesMode.value ? 'Regenerate / Improve Text' : 'Generate'));
-const notesPlaceholder = computed(() =>
-  isRevisionNotesMode.value
-    ? 'Add extra feedback for the next revision...'
-    : 'Optional hints, constraints, or examples...'
-);
-const notesHelp = computed(() =>
-  isRevisionNotesMode.value
-    ? 'Applied to stage regeneration and text quality improvement for the selected job.'
-    : 'Applied when starting a new single generation.'
-);
 
 async function handleFix(): Promise<void> {
   const jobId = currentJob.value?.jobId;
@@ -122,19 +100,18 @@ async function handleFix(): Promise<void> {
   }
 }
 
-async function handleStart(): Promise<void> {
+async function handleStart(payload: { word: string; context?: string; notes?: string }): Promise<void> {
   errorMessage.value = '';
-  const normalized = word.value.trim();
-  if (!normalized) {
+  if (!payload.word.trim()) {
     errorMessage.value = '请输入单词';
     return;
   }
   try {
     await startGeneration({
-      word: normalized,
-      context: context.value.trim() || undefined,
+      word: payload.word.trim(),
+      context: payload.context,
       language: language.value,
-      notes: notes.value.trim() || undefined,
+      notes: payload.notes,
     });
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '生成请求失败';
@@ -351,52 +328,16 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
         </button>
       </section>
 
-      <template v-if="entryMode === 'single'">
-        <section class="input-grid">
-          <label>
-            <span>Word</span>
-            <input
-              v-model="word"
-              type="text"
-              placeholder="Enter the word to analyze"
-              @keyup.enter="handleStart"
-            />
-          </label>
-          <label>
-            <span>Context</span>
-            <input
-              v-model="context"
-              type="text"
-              placeholder="Add the word's sentence or context"
-            />
-          </label>
-          <label class="notes-field" :class="{ 'is-revision': isRevisionNotesMode }">
-            <span class="field-label-row">
-              <span>{{ notesLabel }}</span>
-              <span class="field-badge">{{ notesBadge }}</span>
-            </span>
-            <textarea
-              v-model="notes"
-              class="notes-input"
-              rows="2"
-              :placeholder="notesPlaceholder"
-            />
-            <small class="field-help">{{ notesHelp }}</small>
-          </label>
-        </section>
-
-        <div class="action-row" data-tour="ai-generate-submit">
-          <button type="button" class="primary-button" :disabled="!canStart" @click="handleStart">
-            Generate
-          </button>
-          <button v-if="isRunning" type="button" class="danger-button" @click="handleCancel">
-            Cancel selected
-          </button>
-          <span v-if="currentJob?.status === 'queued'" class="queue-pill">
-            Queued {{ currentJob.queuePosition || 1 }}
-          </span>
-        </div>
-      </template>
+      <SingleGenerateForm
+        v-if="entryMode === 'single'"
+        :running="isRunning"
+        :queued-position="currentJob?.status === 'queued' ? currentJob.queuePosition || 1 : undefined"
+        :revision-mode="isRevisionNotesMode"
+        :notes="notes"
+        @submit="handleStart"
+        @cancel="handleCancel"
+        @update-notes="notes = $event"
+      />
 
       <BatchGeneratePanel
         v-else
@@ -410,51 +351,14 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
         {{ errorMessage || currentJob?.error }}
       </p>
 
-      <section v-if="currentJob" class="progress-section" data-tour="ai-generate-progress">
-        <div class="progress-head">
-          <div class="job-title">
-            <strong>{{ currentJob.word }}</strong>
-            <span>{{ currentJob.language === 'de' ? 'German' : 'English' }}</span>
-          </div>
-          <span :class="`status-chip chip-${currentJob.status}`">{{ currentJob.status }}</span>
-          <strong>{{ progressPercent }}%</strong>
-        </div>
-        <div class="progress-track">
-          <div class="progress-fill" :style="{ width: `${progressPercent}%` }" />
-        </div>
-
-        <div class="stage-list">
-          <div
-            v-for="step in displaySteps"
-            :key="step.step"
-            class="stage-row"
-            :class="`stage-${step.status}`"
-          >
-            <span class="stage-name">{{ step.step }}</span>
-            <span class="stage-meta">
-              {{ step.duration ? `${Math.round(step.duration / 100) / 10}s` : step.status }}
-            </span>
-            <div class="stage-actions">
-              <button
-                v-if="step.status === 'complete' || step.status === 'error'"
-                type="button"
-                class="stage-action-btn regenerate"
-                :disabled="isRunning"
-                @click="handleStageRegenerate(step)"
-              >
-                Regenerate from
-              </button>
-              <button
-                type="button"
-                class="stage-action-btn"
-                @click="handleStageClick(step)"
-              >
-                Details
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+      <GenerateProgressPanel
+        v-if="currentJob"
+        :job="currentJob"
+        :steps="displaySteps"
+        :running="isRunning"
+        @details="handleStageClick"
+        @regenerate="handleStageRegenerate"
+      />
 
       <section v-if="isComplete" class="result-section">
         <div class="score-line" data-tour="ai-generate-score">
@@ -526,9 +430,7 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
 }
 
 .drawer-head span,
-.input-grid span,
 .resume-section > span,
-.progress-head,
 .score-line span {
   color: var(--muted);
   font-size: 12px;
@@ -591,108 +493,16 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   color: var(--green);
 }
 
-.input-grid {
-  display: grid;
-  gap: 10px;
-}
-
-.input-grid label {
-  display: grid;
-  gap: 5px;
-}
-
-.field-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.field-badge {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  background: var(--surface);
-  color: var(--muted);
-  padding: 2px 7px;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-
-.notes-field.is-revision .field-badge {
-  border-color: var(--green-border);
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.input-grid input,
-.input-grid textarea {
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--editor-field);
-  color: var(--text);
-  padding: 0 10px;
-  font-size: 13px;
-  outline: 0;
-}
-
-.input-grid textarea {
-  min-height: 58px;
-  height: auto;
-  resize: vertical;
-  line-height: 1.45;
-  padding-top: 8px;
-  padding-bottom: 8px;
-}
-
-.input-grid input:focus,
-.input-grid textarea:focus {
-  border-color: var(--green-border);
-  box-shadow: 0 0 0 2px var(--green-soft);
-}
-
-.field-help {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.action-row,
 .result-actions,
 .resume-buttons,
-.progress-head,
 .score-line {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.progress-head,
 .score-line {
   justify-content: space-between;
-}
-
-.job-title {
-  min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex: 1;
-}
-
-.job-title strong {
-  color: var(--text);
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.job-title span {
-  color: var(--muted);
-  font-size: 11px;
 }
 
 .score-input {
@@ -713,9 +523,8 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   box-shadow: 0 0 0 2px var(--green-soft);
 }
 
-.primary-button,
 .secondary-button,
-.danger-button {
+.primary-button {
   height: 32px;
   border-radius: var(--radius-sm);
   padding: 0 12px;
@@ -741,23 +550,9 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   color: var(--text-soft);
 }
 
-.danger-button {
-  background: var(--red-soft);
-  border-color: var(--red-border);
-  color: var(--red);
-}
-
 .secondary-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.queue-pill {
-  border: 1px solid var(--amber);
-  border-radius: var(--radius-full);
-  padding: 4px 8px;
-  color: var(--amber);
-  font-size: 12px;
 }
 
 .error-text {
@@ -766,153 +561,14 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   font-size: 12px;
 }
 
-.progress-section,
 .result-section,
 .resume-section {
   display: grid;
   gap: 10px;
 }
 
-.progress-track {
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--faint);
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--green);
-  transition: width 0.18s ease;
-}
-
-.stage-list {
-  display: grid;
-  gap: 6px;
-}
-
-.stage-row {
-  width: 100%;
-  min-height: 42px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--text);
-  padding: 8px 10px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.stage-name {
-  font-size: 13px;
-  font-weight: 650;
-  text-transform: capitalize;
-  flex: 1;
-  min-width: 0;
-}
-
-.stage-meta {
-  color: var(--muted);
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.stage-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.stage-action-btn {
-  height: 26px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-panel);
-  color: var(--text-soft);
-  padding: 0 9px;
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.stage-action-btn:hover {
-  border-color: var(--green-border);
-  color: var(--green);
-}
-
-.stage-action-btn.regenerate {
-  color: var(--green);
-}
-
-.stage-action-btn.regenerate:hover {
-  border-color: var(--green-border);
-  background: var(--green-soft);
-}
-
-.stage-action-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.stage-complete {
-  border-color: var(--green-border);
-}
-
-.stage-error {
-  border-color: var(--red-border);
-}
-
-.stage-running {
-  border-color: var(--amber);
-}
-
-.stage-pending {
-  border-color: var(--line);
-  opacity: 0.55;
-}
-
 .resume-buttons {
   flex-wrap: wrap;
-}
-
-.status-chip {
-  border-radius: var(--radius-full);
-  padding: 2px 10px;
-  font-size: 11px;
-  font-weight: 650;
-  text-transform: capitalize;
-}
-
-.chip-complete {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
-.chip-partial {
-  background: var(--amber-soft, #fff8e1);
-  color: var(--amber);
-}
-
-.chip-running {
-  background: var(--blue-soft, #e3f2fd);
-  color: var(--blue, #1976d2);
-}
-
-.chip-paused {
-  background: var(--amber-soft, #fff8e1);
-  color: var(--amber);
-}
-
-.chip-error {
-  background: var(--red-soft);
-  color: var(--red);
-}
-
-.chip-queued {
-  background: var(--surface);
-  color: var(--muted);
 }
 
 </style>
