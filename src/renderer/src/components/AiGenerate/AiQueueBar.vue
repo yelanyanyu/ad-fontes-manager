@@ -15,12 +15,11 @@ import {
   type WorksetSaveDetail,
 } from '@/services/worksetSaveResult';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import PendingImproveDialog from './PendingImproveDialog.vue';
 import QueueTable from './QueueTable.vue';
 import {
   activeQueueColumns,
   historyQueueColumns,
-  formatReviewScore,
-  reviewScoreClass,
   worksetQueueColumns,
   type QueueTableRow,
 } from './queueTable';
@@ -124,8 +123,6 @@ const eligibleWorksetJobs = computed(() => todayWorkset.value.filter(job => job.
 const pendingImproveJobs = computed(() =>
   todayWorkset.value.filter(job => pendingImproveJobIds.value.has(job.jobId))
 );
-const formatFinalScore = formatReviewScore;
-const finalScoreClass = reviewScoreClass;
 
 function formatBlockedReason(reason: WorksetJob['improveBlockedReason']): string {
   switch (reason) {
@@ -676,70 +673,14 @@ async function handleClearHistory(): Promise<void> {
     </div>
   </div>
 
-  <Teleport to="body">
-    <div
-      v-if="improveSelectionOpen"
-      class="ui-dialog-overlay pending-improve-overlay"
-      role="presentation"
-      @click.self="closeImproveSelection"
-    >
-      <section
-        class="ui-dialog-card ui-dialog-card--wide pending-improve-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="pending-improve-title"
-      >
-        <div class="ui-dialog-head pending-improve-head">
-          <div>
-            <strong id="pending-improve-title">Pending Improve Selection</strong>
-            <p>Review low-score words before creating Improve jobs.</p>
-          </div>
-          <span>{{ pendingImproveJobs.length }} selected</span>
-        </div>
-        <div class="ui-dialog-body pending-improve-list">
-          <div v-for="job in pendingImproveJobs" :key="job.jobId" class="pending-improve-row">
-            <span class="q-word">{{ job.word }}</span>
-            <span
-              class="ui-chip score-chip"
-              :class="finalScoreClass(job.effectiveReviewScore)"
-            >
-              {{ formatFinalScore(job.effectiveReviewScore) }}
-            </span>
-            <span class="ui-chip ui-chip--neutral improve-count-chip">#{{ job.improveCount }}</span>
-            <button
-              type="button"
-              class="ui-button ui-button--quiet queue-button"
-              :disabled="improvingWorkset"
-              @click="removePendingImproveJob(job.jobId)"
-            >
-              Remove
-            </button>
-          </div>
-          <div v-if="pendingImproveJobs.length === 0" class="bar-empty-list">
-            No selected jobs
-          </div>
-        </div>
-        <div class="ui-dialog-actions pending-improve-actions">
-          <button
-            type="button"
-            class="ui-button ui-button--quiet queue-button"
-            :disabled="improvingWorkset"
-            @click="closeImproveSelection"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            class="ui-button ui-button--primary queue-button"
-            :disabled="pendingImproveJobs.length === 0 || improvingWorkset"
-            @click="submitWorksetImprove"
-          >
-            Create Improve Jobs
-          </button>
-        </div>
-      </section>
-    </div>
-  </Teleport>
+  <PendingImproveDialog
+    :open="improveSelectionOpen"
+    :jobs="pendingImproveJobs"
+    :improving="improvingWorkset"
+    @close="closeImproveSelection"
+    @remove="removePendingImproveJob"
+    @submit="submitWorksetImprove"
+  />
 </template>
 
 <style scoped>
@@ -849,13 +790,6 @@ async function handleClearHistory(): Promise<void> {
   font-size: 11px;
 }
 
-.bar-empty-list {
-  text-align: center;
-  color: var(--muted);
-  font-size: 12px;
-  padding: 16px;
-}
-
 .history-panel {
   flex: 1;
   min-height: 0;
@@ -900,101 +834,6 @@ async function handleClearHistory(): Promise<void> {
   font-size: 11px;
   min-height: 20px;
   flex-wrap: wrap;
-}
-
-.pending-improve-overlay {
-  z-index: 2400;
-  padding: 24px;
-  background: rgb(17 24 39 / 0.28);
-}
-
-.pending-improve-panel {
-  width: min(560px, calc(100vw - 32px));
-  max-height: min(620px, calc(100vh - 48px));
-  border-radius: 8px;
-  box-shadow: 0 24px 70px rgb(15 23 42 / 0.22);
-}
-
-.pending-improve-head,
-.pending-improve-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  font-size: 12px;
-}
-
-.pending-improve-head strong {
-  display: block;
-  font-size: 14px;
-  color: var(--text);
-}
-
-.pending-improve-head p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.pending-improve-head span {
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.pending-improve-list {
-  min-height: 96px;
-  max-height: min(380px, calc(100vh - 220px));
-  padding: 0;
-}
-
-.pending-improve-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
-}
-
-.pending-improve-row:last-child {
-  border-bottom: 0;
-}
-
-.score-chip {
-  border-radius: 3px;
-  padding: 1px 5px;
-  font-size: 10px;
-  line-height: 16px;
-  font-variant-numeric: tabular-nums;
-}
-
-.score-strong {
-  color: var(--green);
-  border-color: var(--green-border);
-  background: var(--green-soft);
-}
-
-.score-ok {
-  color: var(--amber);
-  border-color: var(--amber-border, var(--line));
-  background: var(--amber-soft, var(--surface));
-}
-
-.score-low {
-  color: var(--red);
-  border-color: var(--red-border);
-  background: var(--red-soft);
-}
-
-.improve-count-chip {
-  border-radius: 3px;
-  padding: 1px 4px;
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .history-tools {
