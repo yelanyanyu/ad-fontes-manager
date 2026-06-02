@@ -37,23 +37,20 @@ import DeleteConfirmModal from '@/components/WordList/DeleteConfirmModal.vue';
 import BatchSyncModal from '@/components/WordList/BatchSyncModal.vue';
 import AnkiExportModal from '@/components/AnkiExport/AnkiExportModal.vue';
 import BatchAnkiExportModal from '@/components/AnkiExport/BatchAnkiExportModal.vue';
+import BatchAnkiSummaryBar from '@/components/WordList/BatchAnkiSummaryBar.vue';
+import WordListTable from '@/components/WordList/WordListTable.vue';
 import WordListToolbar from '@/components/WordList/WordListToolbar.vue';
 import WordListPagination from '@/components/WordList/WordListPagination.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import request from '@/utils/request';
 import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search';
 import { isSortMode } from '@/utils/sortMode';
-import {
-  addVisibleSelections,
-  getSelectedLemmas,
-  isWordSelected,
-  makeWordSelectionKey,
-  removeVisibleSelections,
-} from '@/utils/wordSelection';
 import { useWordEditorLoader } from '@/composables/useWordEditorLoader';
 import { useAnkiExport } from '@/composables/useAnkiExport';
 import { useBatchAnkiExport } from '@/composables/useBatchAnkiExport';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
+import { useWordListColumns } from '@/composables/useWordListColumns';
+import { useWordListSelection } from '@/composables/useWordListSelection';
 import {
   buildSelectAllMatchingDecision,
   collectAllDbMatchingRecords,
@@ -165,8 +162,6 @@ const displayedRecords = computed<WordRecord[]>(() => {
   return filterRecordsBySearch(dbRecords.value || [], search.value, searchMode.value);
 });
 
-const selectedKeys = ref<Set<string>>(new Set());
-const selectedItemsByKey = ref<Map<string, WordRecord>>(new Map());
 const selectingAllMatching = ref(false);
 const {
   dialog: selectAllMatchingConfirmDialog,
@@ -179,65 +174,28 @@ const {
   settleConfirm: settleBatchCancelConfirm,
 } = useConfirmDialog();
 
-// ----- Column visibility -----
-type ColumnKey = 'language' | 'partOfSpeech' | 'revisionCount' | 'createdAt' | 'updatedAt';
-const columnLabels: Record<ColumnKey, string> = {
-  language: 'Lang',
-  partOfSpeech: 'PoS',
-  revisionCount: 'Rev',
-  createdAt: 'Created',
-  updatedAt: 'Updated',
-};
-const visibleColumns = ref<Record<ColumnKey, boolean>>({
-  language: false,
-  partOfSpeech: false,
-  revisionCount: false,
-  createdAt: false,
-  updatedAt: false,
-});
-const columnMenuOpen = ref(false);
-const allColumnKeys: ColumnKey[] = [
-  'language',
-  'partOfSpeech',
-  'revisionCount',
-  'createdAt',
-  'updatedAt',
-];
-const shownColumns = computed<ColumnKey[]>(() =>
-  allColumnKeys.filter(k => visibleColumns.value[k])
-);
-const toggleColumn = (key: ColumnKey) => {
-  visibleColumns.value[key] = !visibleColumns.value[key];
-};
-const formatColValue = (item: WordRecord, key: ColumnKey): string => {
-  switch (key) {
-    case 'language':
-      return (item as any).language || '';
-    case 'partOfSpeech':
-      return (item as any).part_of_speech || '';
-    case 'revisionCount':
-      return String((item as any).revision_count ?? '');
-    case 'createdAt':
-      return (item as any).created_at?.substring(0, 10) || '';
-    case 'updatedAt':
-      return (item as any).updated_at?.substring(0, 10) || '';
-  }
-};
-const selectedCount = computed<number>(() => selectedKeys.value.size);
-const hasSelection = computed<boolean>(() => selectedCount.value > 0);
-const selectedExportRecords = computed<WordRecord[]>(() => [...selectedItemsByKey.value.values()]);
-const visibleSelectedCount = computed<number>(() => {
-  return displayedRecords.value.filter(item => isWordSelected(selectedKeys.value, item)).length;
-});
-const selectedLemmas = computed<string[]>(() => {
-  return getSelectedLemmas([...selectedItemsByKey.value.values()]);
-});
-const isAllVisibleSelected = computed<boolean>(() => {
-  return (
-    displayedRecords.value.length > 0 &&
-    visibleSelectedCount.value === displayedRecords.value.length
-  );
-});
+const {
+  allColumnKeys,
+  columnLabels,
+  columnMenuOpen,
+  visibleColumns,
+  shownColumns,
+  toggleColumn,
+  formatColValue,
+} = useWordListColumns();
+const {
+  selectedItemsByKey,
+  selectedCount,
+  hasSelection,
+  selectedExportRecords,
+  selectedLemmas,
+  isAllVisibleSelected,
+  clearSelection,
+  isSelected,
+  toggleSelection,
+  toggleSelectAllVisible,
+  replaceSelectionMap,
+} = useWordListSelection(displayedRecords);
 const showBatchSummaryBar = computed<boolean>(() => {
   return (
     batchAnkiHasActiveTask.value &&
@@ -246,50 +204,6 @@ const showBatchSummaryBar = computed<boolean>(() => {
       batchAnkiBusy.value)
   );
 });
-
-const clearSelection = (): void => {
-  if (selectedKeys.value.size > 0) {
-    selectedKeys.value = new Set();
-    selectedItemsByKey.value = new Map();
-  }
-};
-
-const isSelected = (item: WordRecord): boolean => {
-  return isWordSelected(selectedKeys.value, item);
-};
-
-const toggleSelection = (item: WordRecord): void => {
-  const key = makeWordSelectionKey(item);
-  const nextKeys = new Set(selectedKeys.value);
-  const nextItems = new Map(selectedItemsByKey.value);
-  if (nextKeys.has(key)) {
-    nextKeys.delete(key);
-    nextItems.delete(key);
-  } else {
-    nextKeys.add(key);
-    nextItems.set(key, { ...item });
-  }
-  selectedKeys.value = nextKeys;
-  selectedItemsByKey.value = nextItems;
-};
-
-const toggleSelectAllVisible = (): void => {
-  if (!displayedRecords.value.length) return;
-  const nextItems = new Map(selectedItemsByKey.value);
-  if (isAllVisibleSelected.value) {
-    selectedKeys.value = removeVisibleSelections(selectedKeys.value, displayedRecords.value);
-    displayedRecords.value.forEach(item => {
-      nextItems.delete(makeWordSelectionKey(item));
-    });
-    selectedItemsByKey.value = nextItems;
-    return;
-  }
-  selectedKeys.value = addVisibleSelections(selectedKeys.value, displayedRecords.value);
-  displayedRecords.value.forEach(item => {
-    nextItems.set(makeWordSelectionKey(item), { ...item });
-  });
-  selectedItemsByKey.value = nextItems;
-};
 
 const printSelectedLemmas = (): void => {
   if (!selectedLemmas.value.length) return;
@@ -647,8 +561,7 @@ const selectAllMatching = async (): Promise<void> => {
     const dbMatched =
       dbTotal > 0 ? await collectAllDbMatchingRecords(fetchDbPageForSelection, 200) : [];
     const mergedMap = mergeRecordsIntoSelectionMap(selectedItemsByKey.value, [...dbMatched]);
-    selectedItemsByKey.value = mergedMap;
-    selectedKeys.value = new Set(mergedMap.keys());
+    replaceSelectionMap(mergedMap);
     appStore.addToast(`Selected ${decision.total} matching words`, 'success');
   } catch (error) {
     const err = error as { message?: string };
@@ -1011,179 +924,40 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @select-all-matching="void selectAllMatching()"
       @open-batch-anki-export="void openBatchAnkiExport()"
     />
-    <div
+    <BatchAnkiSummaryBar
       v-if="showBatchSummaryBar"
-      class="batch-summary-bar px-4 py-2 border-b border-[var(--line)] bg-[var(--surface-soft)]"
-    >
-      <div class="flex items-center justify-between gap-3">
-        <div class="flex items-center gap-3 min-w-0">
-          <span class="text-xs font-semibold text-[var(--blue)] whitespace-nowrap">
-            {{ batchAnkiStageLabel }}
-          </span>
-          <span class="text-xs text-[var(--text-soft)] whitespace-nowrap">
-            {{ batchAnkiProgress.processed }}/{{ batchAnkiProgress.total }}
-          </span>
-          <div class="w-44 h-2 rounded-full bg-[var(--surface)] overflow-hidden">
-            <div
-              class="h-full bg-[var(--blue)] transition-all duration-300"
-              :style="{ width: `${batchAnkiProgress.percent}%` }"
-            />
-          </div>
-          <span class="text-xs text-[var(--muted)]">
-            imported {{ batchAnkiStatusSummary.imported + batchAnkiStatusSummary.overwritten }},
-            duplicate {{ batchAnkiStatusSummary.duplicate }}, failed
-            {{ batchAnkiStatusSummary.failed }}, cancelled {{ batchAnkiStatusSummary.cancelled }}
-          </span>
-          <span
-            v-if="batchAnkiCanResume && batchAnkiLastStoppedPhase"
-            class="text-xs text-[var(--amber)] whitespace-nowrap"
-          >
-            Cancelled during {{ batchAnkiLastStoppedPhase }}
-          </span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button
-            class="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)]"
-            @click="openBatchPanelFromSummary"
-          >
-            Open Batch Panel
-          </button>
-          <button
-            v-if="batchAnkiCanCancel"
-            class="text-xs px-2 py-1 rounded border border-[var(--red-border)] bg-[var(--surface)] text-[var(--red)] hover:bg-[var(--red-soft)]"
-            @click="cancelBatchFromSummary"
-          >
-            Cancel
-          </button>
-          <button
-            v-if="batchAnkiCanResume"
-            class="text-xs px-2 py-1 rounded border border-[var(--blue-border)] bg-[var(--surface)] text-[var(--blue)] hover:bg-[var(--blue-soft)]"
-            @click="void resumeBatchFromSummary()"
-          >
-            Resume
-          </button>
-          <button
-            class="text-xs px-2 py-1 rounded border border-[var(--border)] bg-[var(--surface)] text-[var(--text-soft)] hover:bg-[var(--surface-soft)] disabled:opacity-60 disabled:cursor-not-allowed"
-            :disabled="batchAnkiBusy || batchAnkiProgress.phase !== 'idle'"
-            @click="closeBatchSummary"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
+      :stage-label="batchAnkiStageLabel"
+      :progress="batchAnkiProgress"
+      :status-summary="batchAnkiStatusSummary"
+      :busy="batchAnkiBusy"
+      :can-cancel="batchAnkiCanCancel"
+      :can-resume="batchAnkiCanResume"
+      :last-stopped-phase="batchAnkiLastStoppedPhase"
+      @open="openBatchPanelFromSummary"
+      @cancel="cancelBatchFromSummary"
+      @resume="void resumeBatchFromSummary()"
+      @close="closeBatchSummary"
+    />
 
-    <div class="table-wrap">
-      <div
-        v-if="loading && !displayedRecords.length"
-        class="table-empty"
-      >
-        <svg class="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="31.4 31.4" />
-        </svg>
-        <span>Loading records...</span>
-      </div>
-
-      <div v-else class="table-wrap">
-        <div class="table-shell">
-          <div class="thead" :style="{ gridTemplateColumns: `34px 1fr ${shownColumns.map(() => 'auto').join(' ')} 122px` }">
-            <div
-              :class="['check', { selected: isAllVisibleSelected }]"
-              role="checkbox"
-              :aria-checked="isAllVisibleSelected"
-              :aria-label="'Select all visible words'"
-              @click="toggleSelectAllVisible"
-            >
-              <span v-if="isAllVisibleSelected">&#10003;</span>
-            </div>
-            <div>LEMMA</div>
-            <div
-              v-for="col in shownColumns"
-              :key="col"
-              class="thead-col"
-            >
-              {{ columnLabels[col] }}
-            </div>
-            <div class="right">
-              <div class="ctl" style="height: 26px" @click.stop="columnMenuOpen = !columnMenuOpen">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <rect x="3" y="4" width="18" height="16" rx="2" />
-                  <path d="M9 4v16" />
-                  <path d="M15 4v16" />
-                  <path d="M3 10h18" />
-                </svg>
-                Columns
-              </div>
-              <div
-                v-if="columnMenuOpen"
-                class="column-menu"
-                @click.stop
-              >
-                <label
-                  v-for="col in allColumnKeys"
-                  :key="col"
-                  class="column-menu-item"
-                >
-                  <input
-                    type="checkbox"
-                    :checked="visibleColumns[col]"
-                    @change="toggleColumn(col)"
-                  />
-                  {{ columnLabels[col] }}
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div
-            v-for="item in displayedRecords"
-            :key="makeWordSelectionKey(item)"
-            class="trow" :style="{ gridTemplateColumns: `34px 1fr ${shownColumns.map(() => 'auto').join(' ')} 122px` }"
-          >
-            <div
-              :class="['check', { selected: isSelected(item) }]"
-              role="checkbox"
-              :aria-checked="isSelected(item)"
-              :aria-label="`Select ${item.lemma || item.yield?.lemma || item.id}`"
-              @click="toggleSelection(item)"
-            >
-              <span v-if="isSelected(item)">&#10003;</span>
-            </div>
-            <div class="lemma-cell">
-              {{ item.lemma || item.yield?.lemma }}
-            </div>
-            <div
-              v-for="col in shownColumns"
-              :key="col"
-              class="data-cell"
-            >
-              {{ formatColValue(item, col) }}
-            </div>
-            <div class="row-actions">
-              <button class="action-btn" title="View" @click="handlePreview(item.id)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              </button>
-              <button class="action-btn" title="Edit" @click="handleEdit(item.id)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-                </svg>
-              </button>
-              <button class="action-btn" title="More" @click="toggleMenu(item.id)">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                  <circle cx="5" cy="12" r="1" />
-                  <circle cx="12" cy="12" r="1" />
-                  <circle cx="19" cy="12" r="1" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <WordListTable
+      :loading="loading"
+      :records="displayedRecords"
+      :shown-columns="shownColumns"
+      :all-column-keys="allColumnKeys"
+      :column-labels="columnLabels"
+      :visible-columns="visibleColumns"
+      :column-menu-open="columnMenuOpen"
+      :all-visible-selected="isAllVisibleSelected"
+      :is-selected="isSelected"
+      :format-col-value="formatColValue"
+      @toggle-select-all="toggleSelectAllVisible"
+      @toggle-selection="toggleSelection"
+      @toggle-column="toggleColumn"
+      @toggle-column-menu="columnMenuOpen = !columnMenuOpen"
+      @preview="handlePreview"
+      @edit="handleEdit"
+      @menu="toggleMenu"
+    />
     <WordListPagination
       :page="dbListMeta.page"
       :total-pages="dbListMeta.totalPages"
@@ -1219,256 +993,4 @@ const paginationRange = computed<Array<number | '...'>>(() => {
   grid-template-rows: auto auto minmax(0, 1fr) 48px;
 }
 
-.batch-summary-bar {
-  min-height: 0;
-}
-
-/* Table wrapper — min-height:0 is critical for grid children to scroll */
-.table-wrap {
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: auto;
-  background: var(--surface);
-  padding: 12px;
-}
-
-.table-panel > .table-wrap {
-  min-height: 0;
-}
-
-.table-shell {
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--table-field);
-}
-
-/* Table header row */
-.thead {
-  display: grid;
-  align-items: center;
-  padding: 0 14px;
-  min-height: 42px;
-  background: #f4f1eb;
-  color: #756d63;
-  font-size: 12px;
-  font-weight: 740;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border-bottom: 1px solid var(--line);
-}
-
-[data-theme="dark"] .thead {
-  background: var(--table-head);
-  color: #aaa197;
-}
-
-.thead .right {
-  justify-self: end;
-  position: relative;
-}
-
-.thead-col {
-  padding: 0 8px;
-  white-space: nowrap;
-}
-
-
-/* Table row */
-.trow {
-  display: grid;
-  align-items: center;
-  padding: 0 14px;
-  min-height: 51px;
-  border-bottom: 1px solid var(--line);
-  transition: background 0.12s ease;
-}
-
-.trow:last-child {
-  border-bottom: 0;
-}
-
-.trow:hover {
-  background: #f6f3ed;
-}
-
-[data-theme="dark"] .trow:hover {
-  background: #2a251f;
-}
-
-/* Checkbox */
-.check {
-  width: 15px;
-  height: 15px;
-  border-radius: 4px;
-  border: 1px solid #b7aea3;
-  background: #fff;
-  color: #fff;
-  font-size: 10px;
-  line-height: 1;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  cursor: pointer;
-  user-select: none;
-}
-
-[data-theme="dark"] .check {
-  border-color: #575047;
-  background: #201d18;
-  color: #06100b;
-}
-
-.check.selected {
-  background: var(--green);
-  border-color: var(--green);
-}
-
-/* Lemma cell */
-.lemma-cell {
-  font-family: var(--serif);
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.025em;
-  color: #27231f;
-  padding: 0 8px;
-}
-
-[data-theme="dark"] .lemma-cell {
-  color: #eee8de;
-}
-
-.data-cell {
-  padding: 0 8px;
-  font-size: 13px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-/* Row actions — fade in on hover */
-.row-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  opacity: 0.56;
-  transition: opacity 0.12s ease;
-}
-
-.trow:hover .row-actions {
-  opacity: 1;
-}
-
-.action-btn {
-  width: 31px;
-  height: 31px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: #fdfbf7;
-  color: #5c564f;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
-}
-
-.action-btn svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 1.75;
-}
-
-.action-btn:hover {
-  background: #faf8f5;
-  border-color: var(--border-strong);
-}
-
-[data-theme="dark"] .action-btn {
-  background: rgba(255, 255, 255, 0.045);
-  color: #bdb3a7;
-}
-
-[data-theme="dark"] .action-btn:hover {
-  background: rgba(255, 255, 255, 0.065);
-  color: #fff;
-}
-
-/* Empty state */
-.table-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 40px 0;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-/* Column menu — positioned relative to .right */
-.column-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  z-index: 50;
-  padding: 4px;
-  min-width: 140px;
-}
-
-.column-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--text);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.column-menu-item:hover {
-  background: var(--surface-soft);
-}
-
-.column-menu-item input {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  border-color: var(--border-strong);
-  accent-color: var(--green);
-}
-
-/* ctl (reused in header column button) */
-.ctl {
-  height: 28px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  border-radius: var(--radius-sm);
-  padding: 0 10px;
-  color: #625c54;
-  font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  box-shadow: 0 1px 1px rgba(22, 16, 10, 0.018);
-  cursor: pointer;
-}
-
-[data-theme="dark"] .ctl {
-  background: rgba(255, 255, 255, 0.05);
-  color: #c3b9ad;
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.14);
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
 </style>
