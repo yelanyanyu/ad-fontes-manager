@@ -35,6 +35,14 @@ export interface DefaultAIConfig {
   review: {
     threshold: number;
     thresholdByLanguage: Record<string, number>;
+    aiFlavorMarkers: Array<{
+      id: string;
+      label: string;
+      pattern: string;
+      description?: string;
+      fields?: string[];
+      enabled: boolean;
+    }>;
   };
 }
 
@@ -130,6 +138,43 @@ const defaultAIConfig: DefaultAIConfig = {
       en: 6,
       de: 6,
     },
+    aiFlavorMarkers: [
+      {
+        id: 'not-x-but-y',
+        label: '不是……而是……',
+        pattern: '不是[^。！？\\n]{0,80}而是',
+        description: '公式化转折，把文本推向解释腔。',
+        enabled: true,
+      },
+      {
+        id: 'not-x-is-y',
+        label: '不是……是……',
+        pattern: '不是(?![^。！？\\n]{0,80}而是)[^。！？\\n]{0,80}是',
+        description: '“不是 X，是 Y”式模板转折。',
+        enabled: true,
+      },
+      {
+        id: 'not-only-more',
+        label: '不仅/不只是……更/而且……',
+        pattern: '不(?:仅|只是|止是)[^。！？\\n]{0,80}(?:更|而且)',
+        description: '常见递进套话。',
+        enabled: true,
+      },
+      {
+        id: 'rather-than',
+        label: '与其说……不如说……',
+        pattern: '与其说[^。！？\\n]{0,80}不如说',
+        description: '公式化辨析句式。',
+        enabled: true,
+      },
+      {
+        id: 'abstract-seal',
+        label: '抽象封号词',
+        pattern: '体现|彰显|象征|标志着|承载|证明了',
+        description: '把场景过早封成抽象意义的词。',
+        enabled: true,
+      },
+    ],
   },
 };
 

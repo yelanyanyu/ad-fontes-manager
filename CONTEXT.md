@@ -284,6 +284,10 @@ _Avoid_: Notes, comments
 The final quality score produced by a Job's auditing Stage. It is used to decide whether Content Fix is available and to help users prioritize Workset review before saving.
 _Avoid_: Rating, database score
 
+**AI Flavor Marker** (AI 味标识):
+A configurable deterministic pattern used before the auditing Stage to flag formulaic Chinese writing signals in creative YAML fields, such as contrast templates or abstract seal words. AI Flavor Markers produce an evidence report for the reviewer LLM; they are not themselves a Review Score and do not automatically fail a Job without contextual judgment.
+_Avoid_: Review rule, score rule, prompt-only checklist
+
 **AI Review Score** (AI 审核分数):
 The original Review Score produced by the auditing Stage and stored with the Job Result. It should remain available even when the user later overrides the score.
 _Avoid_: Original score, model score
@@ -389,6 +393,7 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - **Workset Improve** applies Content Fix only to eligible low-score Jobs in the current visible **Workset**, never to older deduplicated **Job History** rows. A user can remove Jobs from the **Pending Improve Selection** before creating Fix Jobs.
 - **Effective Review Score** is the score used for Workset ordering and Workset Improve eligibility: User Review Score overrides AI Review Score without deleting the original AI judgment.
 - **Improve Count** follows the Job Result chain: a Workset Improve Fix Job receives source Improve Count + 1, while a fresh Generate Job starts again at 0.
+- **AI Flavor Markers** scan the merged creative YAML before the auditing Stage and pass a deterministic evidence report into the reviewer Prompt alongside the YAML.
 - Each **Stage** may use one **Provider** + model and zero or more **Tools**
 - A **Field Mapping** connects a **Data Source** (from a Word's YAML) to an Anki **Field**
 - **AnkiConnect** and **APKG** are two export paths; both use the same **Field Mapping** and **Card Template**

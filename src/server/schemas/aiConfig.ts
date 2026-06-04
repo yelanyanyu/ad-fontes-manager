@@ -57,8 +57,20 @@ const AIReviewConfigSchema = z
   .object({
     threshold: z.number().int().min(1).max(10).default(6),
     thresholdByLanguage: z.record(z.string(), z.number().int().min(1).max(10)).default({}),
+    aiFlavorMarkers: z
+      .array(
+        z.object({
+          id: z.string().trim().min(1),
+          label: z.string().trim().min(1),
+          pattern: z.string().trim().min(1),
+          description: z.string().trim().optional(),
+          fields: z.array(z.string().trim().min(1)).optional(),
+          enabled: z.boolean().default(true),
+        })
+      )
+      .default([]),
   })
-  .default({ threshold: 6, thresholdByLanguage: {} });
+  .default({ threshold: 6, thresholdByLanguage: {}, aiFlavorMarkers: [] });
 
 const AIConfigSchema = z.object({
   providers: z.array(AIProviderSchema).default([]),
@@ -83,6 +95,18 @@ const AIConfigUpdateSchema = z.object({
     .object({
       threshold: z.number().int().min(1).max(10).optional(),
       thresholdByLanguage: z.record(z.string(), z.number().int().min(1).max(10)).optional(),
+      aiFlavorMarkers: z
+        .array(
+          z.object({
+            id: z.string().trim().min(1),
+            label: z.string().trim().min(1),
+            pattern: z.string().trim().min(1),
+            description: z.string().trim().optional(),
+            fields: z.array(z.string().trim().min(1)).optional(),
+            enabled: z.boolean().default(true),
+          })
+        )
+        .optional(),
     })
     .optional(),
 });

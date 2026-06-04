@@ -75,11 +75,36 @@ void describe('prompt assembler', () => {
 
     const prompt = assemblePrompt(stage, ctx);
 
-    assert.match(prompt.system, /# Role: YAML Content Reviewer/);
+    assert.match(prompt.system, /# 扣分细则/);
     assert.doesNotMatch(prompt.system, /lemma: dignity/);
     assert.doesNotMatch(prompt.system, /make it less ornate/);
     assert.match(prompt.user, /lemma: dignity/);
     assert.match(prompt.user, /make it less ornate/);
     assert.match(prompt.user, /用户评分：5/);
+  });
+
+  void it('adds mechanical AI flavor marker hits to content review user input', () => {
+    const { assemblePrompt } = require('./assembler') as typeof import('./assembler');
+    const stage: PipelineStage = {
+      id: 'auditing',
+      description: 'Audit',
+      type: 'llm',
+      systemPromptFile: 'content-reviewer.md',
+    };
+    const ctx: PipelineContext = {
+      word: 'dignity',
+      context: '',
+      language: 'en',
+      notes: '',
+      fullYaml:
+        'yield:\n  lemma: dignity\netymology:\n  visual_imagery_zh: 这不是一只碗，而是某种象征。\n  meaning_evolution_zh: 手心一沉。\nnuance:\n  image_differentiation_zh: 另一个词像放轻的脚步。\n',
+    };
+
+    const prompt = assemblePrompt(stage, ctx);
+
+    assert.match(prompt.user, /机械 AI 味检测报告/);
+    assert.match(prompt.user, /不是……而是……/);
+    assert.match(prompt.user, /抽象封号词/);
+    assert.match(prompt.user, /visual_imagery_zh/);
   });
 });

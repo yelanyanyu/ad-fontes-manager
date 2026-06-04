@@ -52,6 +52,15 @@ interface AIStageConfig {
   reasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'auto';
 }
 
+interface AIFlavorMarkerConfig {
+  id: string;
+  label: string;
+  pattern: string;
+  description?: string;
+  fields?: string[];
+  enabled?: boolean;
+}
+
 interface AIConfig {
   providers: AIProvider[];
   queue_concurrency: number;
@@ -64,6 +73,7 @@ interface AIConfig {
   review: {
     threshold: number;
     thresholdByLanguage: Record<string, number>;
+    aiFlavorMarkers: AIFlavorMarkerConfig[];
   };
 }
 

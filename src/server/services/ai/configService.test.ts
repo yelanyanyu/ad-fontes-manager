@@ -329,6 +329,39 @@ void describe('configService', () => {
     assert.equal(saved.ai?.queue_concurrency, 3);
   });
 
+  void it('updateAIConfig persists configurable AI flavor markers', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const { updateAIConfig } = loadService();
+
+    const result = updateAIConfig({
+      providers: [],
+      review: {
+        aiFlavorMarkers: [
+          {
+            id: 'custom-marker',
+            label: '自定义硬标识',
+            pattern: '不是[^。！？\\n]{0,20}而是',
+            enabled: true,
+          },
+        ],
+      },
+    });
+
+    const saved = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+      ai?: { review?: { aiFlavorMarkers?: Array<{ id: string; pattern: string }> } };
+    };
+
+    assert.equal(result.review.aiFlavorMarkers[0]?.id, 'custom-marker');
+    assert.equal(saved.ai?.review?.aiFlavorMarkers?.[0]?.pattern, '不是[^。！？\\n]{0,20}而是');
+  });
+
   void it('returns safe Default App Configuration for a new user without AI settings', () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),

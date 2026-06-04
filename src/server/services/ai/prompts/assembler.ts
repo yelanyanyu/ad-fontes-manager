@@ -5,6 +5,9 @@ const { injectVariables, loadPromptTemplate, loadSchema } = require('./loader') 
   loadPromptTemplate: (filename: string) => string;
   loadSchema: (filename: string) => string;
 };
+const { buildAiFlavorMarkerReport } = require('../aiFlavorMarkers') as {
+  buildAiFlavorMarkerReport: (ctx: PipelineContext) => string;
+};
 
 export interface AssembledPrompt {
   system: string;
@@ -26,6 +29,7 @@ function buildPromptVariables(stage: PipelineStage, ctx: PipelineContext): Recor
     researchYaml: ctx.researchYaml || '',
     searchSummary: ctx.searchSummary || '',
     userScore: ctx.userScore !== undefined ? String(ctx.userScore) : '',
+    mechanicalAiFlavorReport: buildAiFlavorMarkerReport(ctx),
   };
 
   if (stage.schemaFile) {
