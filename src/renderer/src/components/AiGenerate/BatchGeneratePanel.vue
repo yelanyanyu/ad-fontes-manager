@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import {
   parseBatchJson,
   parseBatchText,
@@ -22,6 +22,7 @@ const batchSource = ref<BatchSource>('text');
 const batchText = ref('');
 const debouncedBatchText = ref('');
 const batchFileName = ref('');
+const batchTextarea = ref<HTMLTextAreaElement | null>(null);
 let batchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(batchText, val => {
@@ -64,6 +65,21 @@ async function handleBatchFileChange(event: Event): Promise<void> {
   target.value = '';
 }
 
+async function appendBatchDraftBlock(): Promise<void> {
+  batchSource.value = 'text';
+  batchFileName.value = '';
+
+  const baseText = batchText.value.trimEnd();
+  const separator = baseText ? '\n\n' : '';
+  const cursorPosition = baseText.length + separator.length;
+  batchText.value = `${baseText}${separator}\ncontext:\nnotes:`;
+  debouncedBatchText.value = batchText.value;
+
+  await nextTick();
+  batchTextarea.value?.focus();
+  batchTextarea.value?.setSelectionRange(cursorPosition, cursorPosition);
+}
+
 function handleSubmit(): void {
   if (!canStartBatch.value) return;
   emit('submit', batchItems.value);
@@ -91,6 +107,12 @@ function handleSubmit(): void {
   </section>
 
   <section class="batch-panel">
+    <div v-if="batchSource === 'text'" class="batch-toolbar">
+      <button type="button" class="file-button" @click="appendBatchDraftBlock">
+        Add Word
+      </button>
+    </div>
+
     <div v-if="batchSource === 'json'" class="batch-toolbar">
       <span>Import the browser-extension JSON contract.</span>
       <label class="file-button">
@@ -100,6 +122,7 @@ function handleSubmit(): void {
     </div>
 
     <textarea
+      ref="batchTextarea"
       v-model="batchText"
       class="batch-textarea"
       :placeholder="batchPlaceholder"

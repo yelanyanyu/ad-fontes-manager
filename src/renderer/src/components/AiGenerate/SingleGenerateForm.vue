@@ -39,6 +39,9 @@ function handleSubmit(): void {
     context: context.value.trim() || undefined,
     notes: props.notes.trim() || undefined,
   });
+  word.value = '';
+  context.value = '';
+  emit('update-notes', '');
 }
 </script>
 

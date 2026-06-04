@@ -93,6 +93,7 @@ async function handleFix(): Promise<void> {
   fixing.value = true;
   try {
     await fixGeneration(jobId, notes.value.trim() || undefined);
+    notes.value = '';
   } catch (err) {
     errorMessage.value = err instanceof Error ? err.message : 'Fix failed';
   } finally {
