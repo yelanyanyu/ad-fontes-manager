@@ -6,6 +6,7 @@ export interface PipelineStage {
   systemPromptFile?: string;
   schemaFile?: string;
   toolNames?: string[];
+  promptInputAugmenters?: Array<'aiFlavorMarkerReport'>;
   outputParser?: (text: string) => Partial<PipelineContext>;
   schemaName?: string;
   retry?: { maxAttempts: number; fixerStageId?: string };

@@ -345,9 +345,9 @@ void describe('configService', () => {
       review: {
         aiFlavorMarkers: [
           {
-            id: 'custom-marker',
-            label: '自定义硬标识',
-            pattern: '不是[^。！？\\n]{0,20}而是',
+            id: 'custom-not-phrase-prefix',
+            label: '自定义否定短标识',
+            pattern: '不(?:是|只是|仅是|止是)',
             enabled: true,
           },
         ],
@@ -358,8 +358,8 @@ void describe('configService', () => {
       ai?: { review?: { aiFlavorMarkers?: Array<{ id: string; pattern: string }> } };
     };
 
-    assert.equal(result.review.aiFlavorMarkers[0]?.id, 'custom-marker');
-    assert.equal(saved.ai?.review?.aiFlavorMarkers?.[0]?.pattern, '不是[^。！？\\n]{0,20}而是');
+    assert.equal(result.review.aiFlavorMarkers[0]?.id, 'custom-not-phrase-prefix');
+    assert.equal(saved.ai?.review?.aiFlavorMarkers?.[0]?.pattern, '不(?:是|只是|仅是|止是)');
   });
 
   void it('returns safe Default App Configuration for a new user without AI settings', () => {

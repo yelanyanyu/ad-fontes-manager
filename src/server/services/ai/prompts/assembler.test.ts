@@ -63,6 +63,7 @@ void describe('prompt assembler', () => {
       description: 'Audit',
       type: 'llm',
       systemPromptFile: 'content-reviewer.md',
+      promptInputAugmenters: ['aiFlavorMarkerReport'],
     };
     const ctx: PipelineContext = {
       word: 'dignity',
@@ -83,7 +84,31 @@ void describe('prompt assembler', () => {
     assert.match(prompt.user, /用户评分：5/);
   });
 
-  void it('adds mechanical AI flavor marker hits to content review user input', () => {
+  void it('adds mechanical AI flavor report to content review user input', () => {
+    const { assemblePrompt } = require('./assembler') as typeof import('./assembler');
+    const stage: PipelineStage = {
+      id: 'auditing',
+      description: 'Audit',
+      type: 'llm',
+      systemPromptFile: 'content-reviewer.md',
+      promptInputAugmenters: ['aiFlavorMarkerReport'],
+    };
+    const ctx: PipelineContext = {
+      word: 'dignity',
+      context: '',
+      language: 'en',
+      notes: '',
+      fullYaml:
+        'yield:\n  lemma: dignity\netymology:\n  visual_imagery_zh: 测试字段包含不只是这个硬标识。\n  meaning_evolution_zh: 测试字段没有命中。\nnuance:\n  image_differentiation_zh: 另一个测试字段。\n',
+    };
+
+    const prompt = assemblePrompt(stage, ctx);
+
+    assert.match(prompt.user, /机械 AI 味检测报告/);
+    assert.match(prompt.user, /机械检测/);
+  });
+
+  void it('leaves mechanical AI flavor report empty when the stage does not declare the augmenter', () => {
     const { assemblePrompt } = require('./assembler') as typeof import('./assembler');
     const stage: PipelineStage = {
       id: 'auditing',
@@ -97,14 +122,13 @@ void describe('prompt assembler', () => {
       language: 'en',
       notes: '',
       fullYaml:
-        'yield:\n  lemma: dignity\netymology:\n  visual_imagery_zh: 这不是一只碗，而是某种象征。\n  meaning_evolution_zh: 手心一沉。\nnuance:\n  image_differentiation_zh: 另一个词像放轻的脚步。\n',
+        'yield:\n  lemma: dignity\netymology:\n  visual_imagery_zh: 测试字段包含不只是这个硬标识。\n',
     };
 
     const prompt = assemblePrompt(stage, ctx);
 
     assert.match(prompt.user, /机械 AI 味检测报告/);
-    assert.match(prompt.user, /不是……而是……/);
-    assert.match(prompt.user, /抽象封号词/);
-    assert.match(prompt.user, /visual_imagery_zh/);
+    assert.doesNotMatch(prompt.user, /不是\/不只是\/不仅是\/不止是/);
+    assert.doesNotMatch(prompt.user, /不只是这个硬标识；上下文/);
   });
 });

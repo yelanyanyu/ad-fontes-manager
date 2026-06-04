@@ -37,6 +37,7 @@ export const germanPipeline: PipelineDefinition = {
       type: 'llm',
       modelKey: 'expert',
       systemPromptFile: 'content-reviewer.md',
+      promptInputAugmenters: ['aiFlavorMarkerReport'],
       outputParser: parseReviewOutput,
     },
   ],

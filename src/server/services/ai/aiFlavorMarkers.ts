@@ -26,6 +26,11 @@ export interface AIFlavorMarkerHit {
   excerpt: string;
 }
 
+export interface AIFlavorMarkerEvidence {
+  hits: AIFlavorMarkerHit[];
+  summaryText: string;
+}
+
 const REVIEW_FIELDS = [
   'etymology.visual_imagery_zh',
   'etymology.meaning_evolution_zh',
@@ -64,7 +69,10 @@ function parseYamlDocument(yamlText: string): unknown {
   }
 }
 
-function findMarkerHits(yamlText: string, markers: AIFlavorMarkerConfig[]): AIFlavorMarkerHit[] {
+export function findMarkerHits(
+  yamlText: string,
+  markers: AIFlavorMarkerConfig[]
+): AIFlavorMarkerHit[] {
   const document = parseYamlDocument(yamlText);
   if (!document) return [];
 
@@ -102,15 +110,8 @@ function findMarkerHits(yamlText: string, markers: AIFlavorMarkerConfig[]): AIFl
   return hits;
 }
 
-export function buildAiFlavorMarkerReport(ctx: PipelineContext): string {
-  const yamlText = ctx.fullYaml || ctx.researchYaml || '';
-  if (!yamlText.trim()) return '未检测：没有可审核 YAML。';
-
-  const markers = getAIConfig().review?.aiFlavorMarkers || [];
-  if (!markers.length) return '未配置机械 AI 味标识。';
-
-  const hits = findMarkerHits(yamlText, markers);
-  if (!hits.length) return '机械检测未发现已配置的 AI 味硬标识。';
+function summarizeEvidence(hits: AIFlavorMarkerHit[], statusText?: string): string {
+  if (!hits.length) return statusText || '机械检测未发现已配置的 AI 味硬标识。';
 
   const lines = [
     `机械检测发现 ${hits.length} 处已配置的 AI 味硬标识。LLM 审核时必须结合下列命中与 YAML 原文判断是否扣分或触发强失败：`,
@@ -123,4 +124,22 @@ export function buildAiFlavorMarkerReport(ctx: PipelineContext): string {
   return lines.join('\n');
 }
 
-module.exports = { buildAiFlavorMarkerReport, findMarkerHits };
+export function buildAiFlavorMarkerEvidence(
+  ctx: PipelineContext,
+  markerOverride?: AIFlavorMarkerConfig[]
+): AIFlavorMarkerEvidence {
+  const yamlText = ctx.fullYaml || ctx.researchYaml || '';
+  if (!yamlText.trim()) {
+    return { hits: [], summaryText: summarizeEvidence([], '未检测：没有可审核 YAML。') };
+  }
+
+  const markers = markerOverride || getAIConfig().review?.aiFlavorMarkers || [];
+  if (!markers.length) {
+    return { hits: [], summaryText: summarizeEvidence([], '未配置机械 AI 味标识。') };
+  }
+
+  const hits = findMarkerHits(yamlText, markers);
+  return { hits, summaryText: summarizeEvidence(hits) };
+}
+
+module.exports = { buildAiFlavorMarkerEvidence, findMarkerHits };
