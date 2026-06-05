@@ -118,6 +118,53 @@ void describe('QueueStore', () => {
     assert.equal(history.total, 3);
   });
 
+  void it('exposes job-level run metrics in history and today workset rows', () => {
+    const progressEvents = JSON.stringify([
+      { type: 'step:complete', step: 'searching', duration: 12000, summary: 'searched' },
+      { type: 'step:complete', step: 'pondering', duration: 34000, summary: 'pondered' },
+      {
+        type: 'pipeline:complete',
+        yaml: 'yaml',
+        scores: { overall_score: 8 },
+        totalDuration: 46000,
+      },
+    ]);
+
+    db.run(
+      `INSERT INTO job_queue (
+         id, job_type, priority, status, word, language, result_yaml, result_scores,
+         progress_events, completed_at, created_at
+       )
+       VALUES (
+         'metric-job',
+         'generate',
+         'normal',
+         'complete',
+         'metric',
+         'en',
+         'yaml',
+         '{"overall_score":8}',
+         ?,
+         datetime('now'),
+         datetime('now')
+       )`,
+      progressEvents
+    );
+
+    const [historyJob] = store.getQueueHistory({ page: 1, pageSize: 20 }).jobs;
+    const [worksetJob] = store.getTodayWorkset().jobs;
+
+    assert.deepEqual(historyJob.runMetrics, {
+      totalDurationMs: 46000,
+      totalTokens: null,
+      stages: [
+        { stage: 'searching', durationMs: 12000, totalTokens: null },
+        { stage: 'pondering', durationMs: 34000, totalTokens: null },
+      ],
+    });
+    assert.deepEqual(worksetJob.runMetrics, historyJob.runMetrics);
+  });
+
   void it('refuses to delete active jobs but deletes history jobs', () => {
     db.run(
       `INSERT INTO job_queue (id, job_type, priority, status, word, language)

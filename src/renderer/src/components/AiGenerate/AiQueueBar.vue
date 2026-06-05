@@ -19,8 +19,15 @@ import PendingImproveDialog from './PendingImproveDialog.vue';
 import QueueTable from './QueueTable.vue';
 import {
   activeQueueColumns,
+  formatRunMetricsSummary,
+  hasExpandedRunMetricsRows,
   historyQueueColumns,
+  isRunMetricsRowExpanded,
+  toggleRunMetricsModeExpansion,
+  toggleRunMetricsRowExpansion,
   worksetQueueColumns,
+  type QueueRunMetricsDisclosureState,
+  type QueueSurfaceMode,
   type QueueTableRow,
 } from './queueTable';
 
@@ -77,7 +84,16 @@ const {
 
 const appStore = useAppStore();
 const wordStore = useWordStore();
-const mode = ref<'active' | 'history' | 'workset'>('active');
+const mode = ref<QueueSurfaceMode>('active');
+const runMetricsDisclosure = ref<QueueRunMetricsDisclosureState>({
+  expandedByMode: {
+    active: false,
+    history: false,
+    workset: false,
+  },
+  expandedRows: new Set(),
+  collapsedRows: new Set(),
+});
 const historySearch = ref('');
 const savingWorkset = ref(false);
 const improvingWorkset = ref(false);
@@ -143,6 +159,30 @@ function shouldShowBlockedReason(reason: WorksetJob['improveBlockedReason']): bo
   return Boolean(reason && reason !== 'score-not-low');
 }
 
+function isRunMetricsExpanded(jobId: string): boolean {
+  return isRunMetricsRowExpanded(runMetricsDisclosure.value, mode.value, jobId);
+}
+
+function toggleRunMetricsRow(row: QueueTableRow): void {
+  if (!formatRunMetricsSummary(row.runMetrics)) return;
+  runMetricsDisclosure.value = toggleRunMetricsRowExpansion(
+    runMetricsDisclosure.value,
+    mode.value,
+    row.id
+  );
+}
+
+function toggleRunMetricsForCurrentMode(): void {
+  const visibleRowIds = currentQueueRows.value
+    .filter(row => Boolean(formatRunMetricsSummary(row.runMetrics)))
+    .map(row => row.id);
+  runMetricsDisclosure.value = toggleRunMetricsModeExpansion(
+    runMetricsDisclosure.value,
+    mode.value,
+    visibleRowIds
+  );
+}
+
 const activeQueueRows = computed<QueueTableRow[]>(() =>
   queueOverview.value.map(job => ({
     id: job.jobId,
@@ -150,6 +190,8 @@ const activeQueueRows = computed<QueueTableRow[]>(() =>
     jobType: job.jobType,
     word: job.word,
     language: job.language,
+    runMetrics: job.runMetrics,
+    runMetricsExpanded: isRunMetricsExpanded(job.jobId),
     action:
       job.status === 'running' || job.status === 'queued'
         ? { kind: 'pause', title: 'Pause job' }
@@ -167,6 +209,8 @@ const historyQueueRows = computed<QueueTableRow[]>(() =>
     jobType: job.jobType,
     word: job.word,
     language: job.language,
+    runMetrics: job.runMetrics,
+    runMetricsExpanded: isRunMetricsExpanded(job.jobId),
     raw: job,
   }))
 );
@@ -182,6 +226,8 @@ const worksetQueueRows = computed<QueueTableRow[]>(() =>
       language: job.language,
       score: job.effectiveReviewScore,
       improveCount: job.improveCount,
+      runMetrics: job.runMetrics,
+      runMetricsExpanded: isRunMetricsExpanded(job.jobId),
       note: saveResult
         ? {
             label: saveResult.label,
@@ -205,6 +251,22 @@ const worksetQueueRows = computed<QueueTableRow[]>(() =>
       raw: job,
     };
   })
+);
+
+const currentQueueRows = computed<QueueTableRow[]>(() => {
+  if (mode.value === 'active') return activeQueueRows.value;
+  if (mode.value === 'history') return historyQueueRows.value;
+  return worksetQueueRows.value;
+});
+
+const currentRunMetricsHeaderExpanded = computed(() =>
+  hasExpandedRunMetricsRows(
+    runMetricsDisclosure.value,
+    mode.value,
+    currentQueueRows.value
+      .filter(row => Boolean(formatRunMetricsSummary(row.runMetrics)))
+      .map(row => row.id)
+  )
 );
 
 function recordWorksetSave(response: WorksetSaveResponse): void {
@@ -232,7 +294,7 @@ function toggleExpand(): void {
   }
 }
 
-async function setMode(nextMode: 'active' | 'history' | 'workset'): Promise<void> {
+async function setMode(nextMode: QueueSurfaceMode): Promise<void> {
   mode.value = nextMode;
   if (nextMode === 'active') {
     await fetchQueueOverview();
@@ -508,10 +570,13 @@ async function handleClearHistory(): Promise<void> {
         :columns="activeQueueColumns"
         :rows="activeQueueRows"
         :selected-row-id="selectedJobId"
+        :run-metrics-expanded="currentRunMetricsHeaderExpanded"
         empty-text="No active jobs"
         @row-select="row => handleSelect(row.id)"
         @row-action="handleActiveRowAction"
         @row-remove="row => cancelGeneration(row.id)"
+        @row-run-metrics-toggle="toggleRunMetricsRow"
+        @run-metrics-toggle-all="toggleRunMetricsForCurrentMode"
       />
 
       <div v-else-if="mode === 'history'" class="history-panel">
@@ -574,9 +639,12 @@ async function handleClearHistory(): Promise<void> {
           :rows="historyQueueRows"
           :selected-row-id="selectedJobId"
           :loading="queueHistoryLoading"
+          :run-metrics-expanded="currentRunMetricsHeaderExpanded"
           empty-text="No history jobs"
           @row-select="handleHistoryRowSelect"
           @row-remove="row => handleDeleteHistoryJob(row.id)"
+          @row-run-metrics-toggle="toggleRunMetricsRow"
+          @run-metrics-toggle-all="toggleRunMetricsForCurrentMode"
         />
 
         <div class="history-pager">
@@ -666,8 +734,11 @@ async function handleClearHistory(): Promise<void> {
           :columns="worksetQueueColumns"
           :rows="worksetQueueRows"
           :selected-row-id="selectedJobId"
+          :run-metrics-expanded="currentRunMetricsHeaderExpanded"
           empty-text="No latest results today"
           @row-select="handleWorksetRowSelect"
+          @row-run-metrics-toggle="toggleRunMetricsRow"
+          @run-metrics-toggle-all="toggleRunMetricsForCurrentMode"
         />
       </div>
     </div>

@@ -90,12 +90,25 @@ export interface WorksetJob {
   effectiveReviewScore: number | null;
   auditState: 'complete' | 'incomplete' | 'missing';
   improveCount: number;
+  runMetrics: RunMetrics;
   improveEligible: boolean;
   improveBlockedReason?:
     | 'score-not-low'
     | 'partial-result'
     | 'audit-incomplete'
     | 'missing-revision-notes';
+}
+
+export interface RunMetricsStage {
+  stage: string;
+  durationMs: number | null;
+  totalTokens: number | null;
+}
+
+export interface RunMetrics {
+  totalDurationMs: number | null;
+  totalTokens: number | null;
+  stages: RunMetricsStage[];
 }
 
 export interface WorksetImproveSubmission {
@@ -117,6 +130,93 @@ interface ParsedWorksetScores {
 }
 
 const DEFAULT_WORKSET_IMPROVE_THRESHOLD = 6;
+
+const EMPTY_RUN_METRICS: RunMetrics = {
+  totalDurationMs: null,
+  totalTokens: null,
+  stages: [],
+};
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readNumber(record: Record<string, unknown> | undefined, key: string): number | null {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function extractUsageTotalTokens(value: unknown): number | null {
+  const usage = asRecord(value);
+  if (!usage) return null;
+
+  const directTotal =
+    readNumber(usage, 'totalTokens') ??
+    readNumber(usage, 'total_tokens') ??
+    readNumber(usage, 'totalUsageTokens');
+  if (directTotal !== null) return directTotal;
+
+  const inputTokens =
+    readNumber(usage, 'inputTokens') ??
+    readNumber(usage, 'promptTokens') ??
+    readNumber(usage, 'input_tokens') ??
+    readNumber(usage, 'prompt_tokens');
+  const outputTokens =
+    readNumber(usage, 'outputTokens') ??
+    readNumber(usage, 'completionTokens') ??
+    readNumber(usage, 'output_tokens') ??
+    readNumber(usage, 'completion_tokens');
+
+  if (inputTokens !== null || outputTokens !== null) {
+    return (inputTokens || 0) + (outputTokens || 0);
+  }
+
+  return null;
+}
+
+function extractEventTotalTokens(event: Extract<PipelineProgressEvent, { type: 'step:complete' }>) {
+  const diagnostics = asRecord(event.diagnostics);
+  return extractUsageTotalTokens(diagnostics?.usage);
+}
+
+function buildRunMetrics(events: PipelineProgressEvent[]): RunMetrics {
+  if (!events.length) return EMPTY_RUN_METRICS;
+
+  const stages = events
+    .filter(
+      (event): event is Extract<PipelineProgressEvent, { type: 'step:complete' }> =>
+        event.type === 'step:complete'
+    )
+    .map(event => ({
+      stage: event.step,
+      durationMs: event.duration,
+      totalTokens: extractEventTotalTokens(event),
+    }));
+
+  const completed = [...events]
+    .reverse()
+    .find(
+      (event): event is Extract<PipelineProgressEvent, { type: 'pipeline:complete' }> =>
+        event.type === 'pipeline:complete'
+    );
+  const totalDurationMs =
+    completed?.totalDuration ??
+    (stages.length ? stages.reduce((sum, stage) => sum + (stage.durationMs || 0), 0) : null);
+  const tokenValues = stages
+    .map(stage => stage.totalTokens)
+    .filter((value): value is number => value !== null);
+  const totalTokens = tokenValues.length
+    ? tokenValues.reduce((sum, value) => sum + value, 0)
+    : null;
+
+  return {
+    totalDurationMs,
+    totalTokens,
+    stages,
+  };
+}
 
 function parseNumericScore(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -540,10 +640,11 @@ export class QueueStore {
     language: string;
     priority: string;
     createdAt: string;
+    runMetrics: RunMetrics;
     error?: string;
   }> {
     const rows = this.getDb().all(
-      `SELECT id, job_type, status, word, language, priority, created_at, error
+      `SELECT id, job_type, status, word, language, priority, created_at, error, progress_events
        FROM job_queue
        WHERE status IN ('queued', 'running', 'paused')
        ORDER BY CASE priority WHEN 'high' THEN 1 ELSE 0 END DESC, created_at ASC, rowid ASC`
@@ -556,6 +657,7 @@ export class QueueStore {
       language: row.language as string,
       priority: row.priority as string,
       createdAt: row.created_at as string,
+      runMetrics: buildRunMetrics(this.getPersistedEvents(row)),
       error: row.error as string | undefined,
     }));
   }
@@ -572,6 +674,7 @@ export class QueueStore {
       completedAt?: string;
       error?: string;
       hasResult: boolean;
+      runMetrics: RunMetrics;
     }>;
     total: number;
     page: number;
@@ -598,6 +701,7 @@ export class QueueStore {
     );
     const rows = this.getDb().all(
       `SELECT id, job_type, status, word, language, priority, created_at, completed_at, error,
+              progress_events,
               CASE WHEN result_yaml IS NULL OR result_yaml = '' THEN 0 ELSE 1 END as has_result
        FROM job_queue
        WHERE ${whereSql}
@@ -622,6 +726,7 @@ export class QueueStore {
         completedAt: row.completed_at as string | undefined,
         error: row.error as string | undefined,
         hasResult: Boolean(row.has_result),
+        runMetrics: buildRunMetrics(this.getPersistedEvents(row)),
       })),
       total: (totalRow?.total as number) || 0,
       page,
@@ -643,6 +748,7 @@ export class QueueStore {
            created_at,
            completed_at,
            result_scores,
+           progress_events,
            CASE WHEN result_yaml IS NULL OR result_yaml = '' THEN 0 ELSE 1 END AS has_result,
            ROW_NUMBER() OVER (
              PARTITION BY lower(word), language
@@ -654,7 +760,7 @@ export class QueueStore {
            AND result_yaml <> ''
            AND date(COALESCE(completed_at, created_at), 'localtime') = date('now', 'localtime')
        )
-       SELECT id, job_type, status, word, language, priority, batch_id, created_at, completed_at, result_scores, has_result
+       SELECT id, job_type, status, word, language, priority, batch_id, created_at, completed_at, result_scores, progress_events, has_result
        FROM ranked_jobs
        WHERE workset_rank = 1
        ORDER BY COALESCE(completed_at, created_at) DESC`
@@ -680,6 +786,7 @@ export class QueueStore {
         effectiveReviewScore: scores.effectiveReviewScore,
         auditState: scores.auditState,
         improveCount: scores.improveCount,
+        runMetrics: buildRunMetrics(this.getPersistedEvents(row)),
         ...eligibility,
       };
     });

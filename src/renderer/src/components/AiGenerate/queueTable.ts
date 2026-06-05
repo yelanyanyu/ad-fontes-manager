@@ -1,3 +1,5 @@
+import type { RunMetrics } from '@/composables/useAiGenerate';
+
 export type QueueTableColumnKey =
   | 'type'
   | 'word'
@@ -38,7 +40,17 @@ export interface QueueTableRow {
   improveCount?: number;
   note?: QueueTableNote;
   action?: QueueTableAction;
+  runMetrics?: RunMetrics;
+  runMetricsExpanded?: boolean;
   raw?: unknown;
+}
+
+export type QueueSurfaceMode = 'active' | 'history' | 'workset';
+
+export interface QueueRunMetricsDisclosureState {
+  expandedByMode: Record<QueueSurfaceMode, boolean>;
+  expandedRows: Set<string>;
+  collapsedRows: Set<string>;
 }
 
 export const activeQueueColumns: QueueTableColumn[] = [
@@ -102,4 +114,89 @@ export function reviewScoreClass(score: number | null | undefined): string {
 
 export function formatJobType(jobType: string): string {
   return jobType === 'fix' ? 'fix' : 'gen';
+}
+
+export function formatDurationMs(durationMs: number | null | undefined): string {
+  if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs < 0) return '';
+
+  const totalSeconds = Math.round(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0) return `${minutes}m${seconds.toString().padStart(2, '0')}s`;
+  return `${seconds}s`;
+}
+
+export function formatTokenCount(tokens: number | null | undefined): string {
+  if (typeof tokens !== 'number' || !Number.isFinite(tokens) || tokens < 0) return '';
+  if (tokens >= 1000) {
+    const compact = (tokens / 1000).toFixed(tokens >= 10000 ? 1 : 1).replace(/\.0$/, '');
+    return `${compact}k tok`;
+  }
+  return `${Math.round(tokens)} tok`;
+}
+
+export function formatRunMetricsSummary(runMetrics: RunMetrics | undefined): string {
+  const duration = formatDurationMs(runMetrics?.totalDurationMs);
+  const tokens = formatTokenCount(runMetrics?.totalTokens);
+  if (!duration && !tokens) return '';
+  if (!duration) return `Total ${tokens}`;
+  return ['Total', duration, tokens ? `· ${tokens}` : ''].filter(Boolean).join(' ');
+}
+
+export function isRunMetricsRowExpanded(
+  state: QueueRunMetricsDisclosureState,
+  mode: QueueSurfaceMode,
+  rowId: string
+): boolean {
+  return state.expandedByMode[mode]
+    ? !state.collapsedRows.has(rowId)
+    : state.expandedRows.has(rowId);
+}
+
+export function hasExpandedRunMetricsRows(
+  state: QueueRunMetricsDisclosureState,
+  mode: QueueSurfaceMode,
+  rowIds: string[]
+): boolean {
+  return rowIds.some(rowId => isRunMetricsRowExpanded(state, mode, rowId));
+}
+
+export function toggleRunMetricsRowExpansion(
+  state: QueueRunMetricsDisclosureState,
+  mode: QueueSurfaceMode,
+  rowId: string
+): QueueRunMetricsDisclosureState {
+  const expandedRows = new Set(state.expandedRows);
+  const collapsedRows = new Set(state.collapsedRows);
+
+  if (state.expandedByMode[mode]) {
+    if (collapsedRows.has(rowId)) collapsedRows.delete(rowId);
+    else collapsedRows.add(rowId);
+  } else if (expandedRows.has(rowId)) {
+    expandedRows.delete(rowId);
+  } else {
+    expandedRows.add(rowId);
+  }
+
+  return {
+    expandedByMode: { ...state.expandedByMode },
+    expandedRows,
+    collapsedRows,
+  };
+}
+
+export function toggleRunMetricsModeExpansion(
+  state: QueueRunMetricsDisclosureState,
+  mode: QueueSurfaceMode,
+  visibleRowIds: string[]
+): QueueRunMetricsDisclosureState {
+  const hasExpandedRows = hasExpandedRunMetricsRows(state, mode, visibleRowIds);
+  return {
+    expandedByMode: {
+      ...state.expandedByMode,
+      [mode]: !hasExpandedRows,
+    },
+    expandedRows: new Set(),
+    collapsedRows: new Set(),
+  };
 }

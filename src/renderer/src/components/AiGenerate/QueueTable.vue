@@ -5,6 +5,7 @@ import {
   formatCompactStatus,
   formatJobType,
   formatQueueLanguage,
+  formatRunMetricsSummary,
   formatReviewScore,
   reviewScoreClass,
   type QueueTableColumn,
@@ -17,15 +18,21 @@ const props = defineProps<{
   selectedRowId?: string | null;
   emptyText: string;
   loading?: boolean;
+  runMetricsExpanded?: boolean;
 }>();
 
 const emit = defineEmits<{
   'row-select': [row: QueueTableRow];
   'row-action': [row: QueueTableRow];
   'row-remove': [row: QueueTableRow];
+  'row-run-metrics-toggle': [row: QueueTableRow];
+  'run-metrics-toggle-all': [];
 }>();
 
 const gridTemplateColumns = computed(() => buildQueueTableTemplate(props.columns));
+const hasRunMetricsRows = computed(() =>
+  props.rows.some(row => Boolean(formatRunMetricsSummary(row.runMetrics)))
+);
 
 function rowClass(row: QueueTableRow): Record<string, boolean> {
   return {
@@ -52,13 +59,30 @@ function rowClass(row: QueueTableRow): Record<string, boolean> {
         class="queue-cell"
         :class="`cell-${column.key}`"
       >
-        {{ column.label || '' }}
+        <button
+          v-if="column.key === 'word' && hasRunMetricsRows"
+          type="button"
+          class="word-header-toggle"
+          :title="props.runMetricsExpanded ? 'Collapse Run Metrics' : 'Expand Run Metrics'"
+          :aria-label="props.runMetricsExpanded ? 'Collapse Run Metrics' : 'Expand Run Metrics'"
+          @click.stop="emit('run-metrics-toggle-all')"
+        >
+          <span>{{ column.label || '' }}</span>
+          <span class="disclosure-icon" aria-hidden="true">
+            {{ props.runMetricsExpanded ? '▾' : '▸' }}
+          </span>
+        </button>
+        <template v-else>
+          {{ column.label || '' }}
+        </template>
       </span>
     </div>
 
-    <div
+    <template
       v-for="row in rows"
       :key="row.id"
+    >
+      <div
       class="queue-table-row"
       :class="rowClass(row)"
       :style="{ gridTemplateColumns }"
@@ -85,7 +109,19 @@ function rowClass(row: QueueTableRow): Record<string, boolean> {
         </template>
 
         <span v-else-if="column.key === 'word'" class="q-word">
-          {{ row.word }}
+          <button
+            v-if="formatRunMetricsSummary(row.runMetrics)"
+            type="button"
+            class="row-disclosure-btn"
+            :title="row.runMetricsExpanded ? 'Collapse Run Metrics' : 'Expand Run Metrics'"
+            :aria-label="`${row.runMetricsExpanded ? 'Collapse' : 'Expand'} Run Metrics for ${row.word}`"
+            @click.stop="emit('row-run-metrics-toggle', row)"
+          >
+            <span class="disclosure-icon" aria-hidden="true">
+              {{ row.runMetricsExpanded ? '▾' : '▸' }}
+            </span>
+          </button>
+          <span class="q-word-text">{{ row.word }}</span>
         </span>
 
         <span v-else-if="column.key === 'language'" class="q-lang">
@@ -153,7 +189,15 @@ function rowClass(row: QueueTableRow): Record<string, boolean> {
           ×
         </button>
       </span>
-    </div>
+      </div>
+
+      <div
+        v-if="row.runMetricsExpanded && formatRunMetricsSummary(row.runMetrics)"
+        class="queue-metrics-row"
+      >
+        {{ formatRunMetricsSummary(row.runMetrics) }}
+      </div>
+    </template>
 
     <div v-if="rows.length === 0" class="queue-table-empty">
       {{ emptyText }}
@@ -272,11 +316,69 @@ function rowClass(row: QueueTableRow): Record<string, boolean> {
 }
 
 .q-word {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   font-weight: 650;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
+}
+
+.q-word-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.word-header-toggle,
+.row-disclosure-btn {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.word-header-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: inherit;
+  font-weight: inherit;
+  text-transform: inherit;
+}
+
+.row-disclosure-btn {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  color: var(--muted);
+}
+
+.row-disclosure-btn:hover,
+.word-header-toggle:hover {
+  color: var(--green);
+}
+
+.disclosure-icon {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.queue-metrics-row {
+  margin: -1px 7px 2px 7px;
+  padding: 3px 7px 5px;
+  border-radius: 0 0 3px 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 

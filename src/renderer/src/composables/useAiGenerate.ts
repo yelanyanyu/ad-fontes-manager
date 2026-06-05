@@ -47,6 +47,18 @@ export interface JobState {
   scores?: Record<string, unknown>;
 }
 
+export interface RunMetricsStage {
+  stage: string;
+  durationMs: number | null;
+  totalTokens: number | null;
+}
+
+export interface RunMetrics {
+  totalDurationMs: number | null;
+  totalTokens: number | null;
+  stages: RunMetricsStage[];
+}
+
 export interface GenerateParams {
   word: string;
   context?: string;
@@ -87,6 +99,7 @@ export interface QueueJobOverview {
   language: string;
   priority: string;
   createdAt: string;
+  runMetrics?: RunMetrics;
   error?: string;
 }
 

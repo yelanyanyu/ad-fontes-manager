@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { JobState, StepState } from '@/composables/useAiGenerate';
+import { formatDurationMs } from './queueTable';
 
 const props = defineProps<{
   job: JobState;
@@ -18,6 +19,11 @@ const progressPercent = computed(() => {
   const total = props.steps.length || 3;
   return Math.min(100, Math.round((complete / total) * 100));
 });
+
+function formatStageMeta(step: StepState): string {
+  const duration = formatDurationMs(step.duration);
+  return duration ? `${duration} · ${step.status}` : step.status;
+}
 </script>
 
 <template>
@@ -43,7 +49,7 @@ const progressPercent = computed(() => {
       >
         <span class="stage-name">{{ step.step }}</span>
         <span class="stage-meta">
-          {{ step.duration ? `${Math.round(step.duration / 100) / 10}s` : step.status }}
+          {{ formatStageMeta(step) }}
         </span>
         <div class="stage-actions">
           <button
