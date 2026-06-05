@@ -23,6 +23,9 @@ const batchText = ref('');
 const debouncedBatchText = ref('');
 const batchFileName = ref('');
 const batchTextarea = ref<HTMLTextAreaElement | null>(null);
+const batchInfoBtn = ref<HTMLButtonElement | null>(null);
+const showHelp = ref(false);
+const helpStyle = ref({ top: '0px', left: '0px' });
 let batchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(batchText, val => {
@@ -80,6 +83,16 @@ async function appendBatchDraftBlock(): Promise<void> {
   batchTextarea.value?.setSelectionRange(cursorPosition, cursorPosition);
 }
 
+function showBatchHelp(): void {
+  if (!batchInfoBtn.value) return;
+  const rect = batchInfoBtn.value.getBoundingClientRect();
+  helpStyle.value = {
+    top: `${rect.bottom + 6}px`,
+    left: `${Math.max(8, rect.right - 260)}px`,
+  };
+  showHelp.value = true;
+}
+
 function handleSubmit(): void {
   if (!canStartBatch.value) return;
   emit('submit', batchItems.value);
@@ -97,12 +110,17 @@ function handleSubmit(): void {
       <option value="text">Text</option>
       <option value="json">JSON file</option>
     </select>
-    <button type="button" class="batch-info-button" aria-label="Batch input help">
+    <button
+      ref="batchInfoBtn"
+      type="button"
+      class="batch-info-button"
+      aria-label="Batch input help"
+      @mouseenter="showBatchHelp"
+      @mouseleave="showHelp = false"
+      @focus="showBatchHelp"
+      @blur="showHelp = false"
+    >
       i
-      <span class="batch-help">
-        Text: one word per line, or blank-line blocks with word/context/notes. JSON:
-        items array with word, context, and notes fields. Only word is required.
-      </span>
     </button>
   </section>
 
@@ -162,20 +180,30 @@ function handleSubmit(): void {
       </button>
     </div>
   </section>
+
+  <Teleport to="body">
+    <span
+      v-if="showHelp"
+      class="batch-help"
+      :style="helpStyle"
+      @mouseenter="showHelp = true"
+      @mouseleave="showHelp = false"
+    >
+      Text: one word per line, or blank-line blocks with word/context/notes. JSON:
+      items array with word, context, and notes fields. Only word is required.
+    </span>
+  </Teleport>
 </template>
 
 <style scoped>
 .batch-source-row {
-  position: sticky;
-  top: 38px;
-  z-index: 11;
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin: -8px -2px 0;
-  padding: 2px 2px 8px;
-  background: var(--surface-panel);
+  margin: 0 0 10px;
+  padding: 0;
+  background: transparent;
   color: var(--muted);
   font-size: 12px;
 }
@@ -223,9 +251,8 @@ function handleSubmit(): void {
 }
 
 .batch-help {
-  position: absolute;
-  right: 0;
-  top: 28px;
+  --popover-z: 2000;
+  position: fixed;
   width: 260px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
@@ -236,19 +263,7 @@ function handleSubmit(): void {
   font-size: 11px;
   line-height: 1.5;
   text-align: left;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-4px);
-  transition:
-    opacity 0.14s ease,
-    transform 0.14s ease;
-  z-index: 30;
-}
-
-.batch-info-button:hover .batch-help,
-.batch-info-button:focus-visible .batch-help {
-  opacity: 1;
-  transform: translateY(0);
+  z-index: var(--popover-z);
 }
 
 .batch-panel {
