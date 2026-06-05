@@ -94,6 +94,7 @@ const emit = defineEmits<{
 
 <style scoped>
 .batch-summary-bar {
+  min-width: 0;
   min-height: 0;
   padding: 8px 16px;
   border-bottom: 1px solid var(--line);
@@ -101,17 +102,21 @@ const emit = defineEmits<{
 }
 
 .summary-main {
+  min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px 12px;
 }
 
 .summary-metrics {
+  flex: 1 1 320px;
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
 }
 
 .stage-label {
@@ -125,15 +130,18 @@ const emit = defineEmits<{
 .status-text {
   color: var(--text-soft);
   font-size: 12px;
-  white-space: nowrap;
 }
 
 .status-text {
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .progress-track {
-  width: 176px;
+  flex: 1 1 140px;
+  width: auto;
+  min-width: 96px;
+  max-width: 260px;
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
@@ -153,9 +161,14 @@ const emit = defineEmits<{
 }
 
 .summary-actions {
+  flex: 0 1 auto;
+  min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  margin-left: auto;
 }
 
 .summary-button {
@@ -181,7 +194,8 @@ const emit = defineEmits<{
   }
 
   .summary-actions {
-    flex-wrap: wrap;
+    justify-content: flex-start;
+    margin-left: 0;
   }
 }
 </style>
