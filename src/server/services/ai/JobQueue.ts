@@ -4,6 +4,7 @@ import { auditFixPipeline } from './definitions/audit-fix';
 import { englishPipeline } from './definitions/english';
 import { germanPipeline } from './definitions/german';
 import {
+  buildRunMetrics,
   QueueStore,
   type SqliteLike,
   type BatchStatus,
@@ -477,6 +478,7 @@ export class JobQueue {
       notes: row.notes as string | undefined,
       error: row.error as string | undefined,
       steps,
+      runMetrics: buildRunMetrics(events),
       result: resultYaml
         ? {
             yaml: resultYaml,

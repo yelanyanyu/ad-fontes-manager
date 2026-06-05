@@ -315,20 +315,20 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
       </button>
     </header>
 
-    <div class="drawer-body">
-      <section class="mode-tabs" aria-label="AI Generate mode" data-tour="ai-generate-mode">
-        <button
-          type="button"
-          :class="{ active: entryMode === 'single' }"
-          @click="entryMode = 'single'"
-        >
-          Single
-        </button>
-        <button type="button" :class="{ active: entryMode === 'batch' }" @click="entryMode = 'batch'">
-          Batch
-        </button>
-      </section>
+    <section class="mode-tabs" aria-label="AI Generate mode" data-tour="ai-generate-mode">
+      <button
+        type="button"
+        :class="{ active: entryMode === 'single' }"
+        @click="entryMode = 'single'"
+      >
+        Single
+      </button>
+      <button type="button" :class="{ active: entryMode === 'batch' }" @click="entryMode = 'batch'">
+        Batch
+      </button>
+    </section>
 
+    <div class="drawer-body">
       <SingleGenerateForm
         v-if="entryMode === 'single'"
         :running="isRunning"
@@ -465,17 +465,15 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
 }
 
 .mode-tabs {
-  position: sticky;
-  top: 0;
-  z-index: 12;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
+  margin: 10px 14px 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
   overflow: hidden;
-  box-shadow: 0 4px 8px color-mix(in srgb, var(--surface-panel) 72%, transparent);
+  flex: 0 0 auto;
 }
 
 .mode-tabs > button {

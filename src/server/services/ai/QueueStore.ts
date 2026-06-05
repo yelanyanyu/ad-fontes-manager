@@ -51,6 +51,7 @@ export interface JobState {
   error?: string;
   steps: StepResult[];
   result?: { yaml: string; scores: Record<string, unknown> };
+  runMetrics?: RunMetrics;
 }
 
 export interface BatchStatus {
@@ -181,7 +182,7 @@ function extractEventTotalTokens(event: Extract<PipelineProgressEvent, { type: '
   return extractUsageTotalTokens(diagnostics?.usage);
 }
 
-function buildRunMetrics(events: PipelineProgressEvent[]): RunMetrics {
+export function buildRunMetrics(events: PipelineProgressEvent[]): RunMetrics {
   if (!events.length) return EMPTY_RUN_METRICS;
 
   const stages = events

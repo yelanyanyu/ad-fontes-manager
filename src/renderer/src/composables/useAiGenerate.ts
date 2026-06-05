@@ -11,6 +11,7 @@ export interface StepState {
   status: 'pending' | 'running' | 'complete' | 'error';
   message?: string;
   duration?: number;
+  totalTokens?: number | null;
   summary?: string;
   tokens?: string;
   result?: unknown;
@@ -45,6 +46,7 @@ export interface JobState {
   error?: string;
   yaml?: string;
   scores?: Record<string, unknown>;
+  runMetrics?: RunMetrics;
 }
 
 export interface RunMetricsStage {
@@ -305,11 +307,13 @@ export function useAiGenerate() {
   ): JobState {
     const language = job.language === 'de' ? 'de' : 'en';
     const existing = jobs[job.jobId];
+    const serverSteps = job.steps?.length ? job.steps : existing?.steps || [];
+    const runMetrics = job.runMetrics || existing?.runMetrics;
     const next: JobState = {
       ...(existing || {
         steps: [],
       }),
-      steps: job.steps?.length ? job.steps : existing?.steps || [],
+      steps: mergeStepRunMetrics(serverSteps, runMetrics),
       jobId: job.jobId,
       word: job.word,
       language,
@@ -319,10 +323,33 @@ export function useAiGenerate() {
       error: job.error,
       yaml: job.yaml || job.result?.yaml,
       scores: job.scores || job.result?.scores,
+      runMetrics,
     };
     jobs[job.jobId] = next;
 
     return next;
+  }
+
+  function mergeStepRunMetrics(steps: StepState[], runMetrics?: RunMetrics): StepState[] {
+    const metricsByStage = new Map((runMetrics?.stages || []).map(stage => [stage.stage, stage]));
+    return steps.map(step => {
+      const serverDurationMs =
+        typeof (step as StepState & { durationMs?: unknown }).durationMs === 'number'
+          ? (step as StepState & { durationMs: number }).durationMs
+          : undefined;
+      const metrics = metricsByStage.get(step.step);
+      if (!metrics) {
+        return {
+          ...step,
+          duration: step.duration ?? serverDurationMs,
+        };
+      }
+      return {
+        ...step,
+        duration: step.duration ?? serverDurationMs ?? metrics.durationMs ?? undefined,
+        totalTokens: step.totalTokens ?? metrics.totalTokens,
+      };
+    });
   }
 
   function subscribeToJob(jobId: string): void {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { JobState, StepState } from '@/composables/useAiGenerate';
-import { formatDurationMs } from './queueTable';
+import { formatDurationMs, formatTokenCount } from './queueTable';
 
 const props = defineProps<{
   job: JobState;
@@ -21,8 +21,8 @@ const progressPercent = computed(() => {
 });
 
 function formatStageMeta(step: StepState): string {
-  const duration = formatDurationMs(step.duration);
-  return duration ? `${duration} · ${step.status}` : step.status;
+  const metrics = [formatDurationMs(step.duration), formatTokenCount(step.totalTokens)].filter(Boolean);
+  return [...metrics, step.status].join(' · ');
 }
 </script>
 

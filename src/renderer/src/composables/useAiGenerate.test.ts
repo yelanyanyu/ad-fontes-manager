@@ -125,6 +125,38 @@ describe('useAiGenerate', () => {
     ]);
   });
 
+  it('restores history job stage run metrics for the progress panel', async () => {
+    requestGetMock.mockResolvedValue({
+      job: {
+        jobId: 'job-history',
+        word: 'anthropologists',
+        language: 'en',
+        status: 'complete',
+        steps: [
+          { step: 'searching', status: 'complete' },
+          { step: 'pondering', status: 'complete' },
+        ],
+        runMetrics: {
+          totalDurationMs: 102000,
+          totalTokens: 18400,
+          stages: [
+            { stage: 'searching', durationMs: 22000, totalTokens: 1200 },
+            { stage: 'pondering', durationMs: 61000, totalTokens: 17200 },
+          ],
+        },
+      },
+    });
+    const ai = useAiGenerate();
+
+    await ai.loadHistoryJob('job-history');
+    ai.selectJob('job-history');
+
+    expect(ai.currentJob.value?.steps).toMatchObject([
+      { step: 'searching', duration: 22000, totalTokens: 1200 },
+      { step: 'pondering', duration: 61000, totalTokens: 17200 },
+    ]);
+  });
+
   it('posts the requested resume stage', async () => {
     requestPostMock.mockResolvedValueOnce({ jobId: 'job-1', queued: false });
     requestPostMock.mockResolvedValueOnce({ jobId: 'job-1' });
