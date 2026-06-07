@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { importWordExportFile, parseWordImportFile } from './wordImportService';
+import {
+  importWordExportFile,
+  parseWordImportFile,
+  resolveWordImportConflicts,
+} from './wordImportService';
 
 const { requestPostMock } = vi.hoisted(() => ({
   requestPostMock: vi.fn(),
@@ -70,8 +74,16 @@ describe('importWordExportFile', () => {
       total: 2,
       imported: 1,
       skippedConflicts: 1,
+      overwritten: 0,
       failed: 0,
       errors: [],
+      conflicts: [
+        expect.objectContaining({
+          action: 'skip',
+          key: 'en:pattern',
+          lemma: 'pattern',
+        }),
+      ],
     });
     expect(requestPostMock).toHaveBeenCalledWith(
       '/v2/words',
@@ -82,5 +94,44 @@ describe('importWordExportFile', () => {
       { skipErrorToast: true }
     );
     expect(requestPostMock.mock.calls[0][1].yaml).toContain('language: en');
+  });
+
+  it('overwrites only conflicts explicitly marked for overwrite', async () => {
+    requestPostMock.mockResolvedValueOnce({ success: true });
+
+    const result = await resolveWordImportConflicts([
+      {
+        key: 'en:spinal',
+        lemma: 'spinal',
+        language: 'en',
+        yaml: 'yield:\n  lemma: spinal\n',
+        oldData: { yield: { lemma: 'spinal', contextual_meaning: { en: 'old' } } },
+        newData: { yield: { lemma: 'spinal', contextual_meaning: { en: 'new' } } },
+        diff: [],
+        action: 'overwrite',
+      },
+      {
+        key: 'en:pattern',
+        lemma: 'pattern',
+        language: 'en',
+        yaml: 'yield:\n  lemma: pattern\n',
+        oldData: {},
+        newData: {},
+        diff: [],
+        action: 'skip',
+      },
+    ]);
+
+    expect(result).toEqual({
+      overwritten: 1,
+      skippedConflicts: 1,
+      failed: 0,
+      errors: [],
+    });
+    expect(requestPostMock).toHaveBeenCalledWith(
+      '/v2/words',
+      { yaml: 'yield:\n  lemma: spinal\n', forceUpdate: true },
+      { skipErrorToast: true }
+    );
   });
 });

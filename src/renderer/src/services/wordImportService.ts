@@ -11,8 +11,10 @@ export interface WordImportResult {
   total: number;
   imported: number;
   skippedConflicts: number;
+  overwritten: number;
   failed: number;
   errors: Array<{ lemma: string; message: string }>;
+  conflicts: WordImportConflict[];
 }
 
 interface SaveConflictResponse {
@@ -20,6 +22,22 @@ interface SaveConflictResponse {
   status?: string;
   lemma?: string;
   error?: string;
+  oldData?: Record<string, unknown>;
+  newData?: Record<string, unknown>;
+  diff?: unknown[];
+}
+
+export type WordImportConflictAction = 'skip' | 'overwrite';
+
+export interface WordImportConflict {
+  key: string;
+  lemma: string;
+  language: string;
+  yaml: string;
+  oldData: Record<string, unknown>;
+  newData: Record<string, unknown>;
+  diff: unknown[];
+  action: WordImportConflictAction;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -74,7 +92,7 @@ export const parseWordImportFile = (rawJson: string): WordExportFile => {
   };
 };
 
-const toYamlForSave = (item: WordExportItem): string => {
+export const toWordImportYaml = (item: WordExportItem): string => {
   const content = {
     ...item.content,
     yield: {
@@ -87,6 +105,24 @@ const toYamlForSave = (item: WordExportItem): string => {
   return yaml.dump(content, { lineWidth: -1, noRefs: true });
 };
 
+const conflictKey = (item: WordExportItem): string =>
+  `${item.language}:${item.lemma.toLowerCase()}`;
+
+const toImportConflict = (
+  item: WordExportItem,
+  itemYaml: string,
+  response: SaveConflictResponse
+): WordImportConflict => ({
+  key: conflictKey(item),
+  lemma: item.lemma,
+  language: item.language,
+  yaml: itemYaml,
+  oldData: response.oldData || {},
+  newData: response.newData || item.content,
+  diff: response.diff || [],
+  action: 'skip',
+});
+
 export const importWordExportFile = async (
   exportFile: WordExportFile
 ): Promise<WordImportResult> => {
@@ -94,19 +130,23 @@ export const importWordExportFile = async (
     total: exportFile.items.length,
     imported: 0,
     skippedConflicts: 0,
+    overwritten: 0,
     failed: 0,
     errors: [],
+    conflicts: [],
   };
 
   for (const item of exportFile.items) {
     try {
+      const itemYaml = toWordImportYaml(item);
       const response = await request.post<boolean | SaveConflictResponse>(
         '/v2/words',
-        { yaml: toYamlForSave(item), forceUpdate: false },
+        { yaml: itemYaml, forceUpdate: false },
         { skipErrorToast: true }
       );
       if (response && typeof response === 'object' && response.status === 'conflict') {
         result.skippedConflicts += 1;
+        result.conflicts.push(toImportConflict(item, itemYaml, response));
         continue;
       }
       if (response && typeof response === 'object' && response.success === false) {
@@ -123,6 +163,49 @@ export const importWordExportFile = async (
       result.errors.push({
         lemma: item.lemma,
         message: error instanceof Error ? error.message : 'Import failed',
+      });
+    }
+  }
+
+  return result;
+};
+
+export const resolveWordImportConflicts = async (
+  conflicts: WordImportConflict[]
+): Promise<Pick<WordImportResult, 'overwritten' | 'skippedConflicts' | 'failed' | 'errors'>> => {
+  const result = {
+    overwritten: 0,
+    skippedConflicts: 0,
+    failed: 0,
+    errors: [] as Array<{ lemma: string; message: string }>,
+  };
+
+  for (const conflict of conflicts) {
+    if (conflict.action === 'skip') {
+      result.skippedConflicts += 1;
+      continue;
+    }
+
+    try {
+      const response = await request.post<boolean | SaveConflictResponse>(
+        '/v2/words',
+        { yaml: conflict.yaml, forceUpdate: true },
+        { skipErrorToast: true }
+      );
+      if (response && typeof response === 'object' && response.success === false) {
+        result.failed += 1;
+        result.errors.push({
+          lemma: conflict.lemma,
+          message: response.error || 'Overwrite failed',
+        });
+        continue;
+      }
+      result.overwritten += 1;
+    } catch (error) {
+      result.failed += 1;
+      result.errors.push({
+        lemma: conflict.lemma,
+        message: error instanceof Error ? error.message : 'Overwrite failed',
       });
     }
   }

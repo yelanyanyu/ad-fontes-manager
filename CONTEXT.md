@@ -64,8 +64,12 @@ The JSON file produced by Word Export. It includes export metadata such as forma
 _Avoid_: CSV file, SQLite dump, YAML bundle
 
 **Word Import** (词条导入):
-A user action that reads a **Word Export File** and creates missing Words in the current App Database. Import identity is Lemma + Language, not exported id. If a Word with the same Lemma + Language already exists locally, the first implementation skips it and reports it as an existing Word rather than overwriting local Content.
+A user action that reads a **Word Export File** and creates missing Words in the current App Database. Import identity is Lemma + Language, not exported id. If a Word with the same Lemma + Language already exists locally, Word Import first imports the non-conflicting Words, then asks for a **Word Import Conflict Decision** before any local Content is overwritten.
 _Avoid_: Restore backup, force overwrite, database import
+
+**Word Import Conflict Decision** (词条导入冲突决策):
+The blocking review shown when Word Import finds existing local Words with the same Lemma + Language as imported Words. The safe default is importing only new Words and skipping conflicts. Users may explicitly overwrite all conflicts or choose Skip / Overwrite per Word after previewing the existing and imported Content with the shared YAML conflict preview.
+_Avoid_: Silent overwrite, import plan, duplicate import decision
 
 ### Anki export
 

@@ -41,6 +41,7 @@ import BatchAnkiSummaryBar from '@/components/WordList/BatchAnkiSummaryBar.vue';
 import WordListTable from '@/components/WordList/WordListTable.vue';
 import WordListToolbar from '@/components/WordList/WordListToolbar.vue';
 import WordListPagination from '@/components/WordList/WordListPagination.vue';
+import WordImportReviewModal from '@/components/WordList/WordImportReviewModal.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import request from '@/utils/request';
 import { normalizeSearchInput, isBlankSearch, filterRecordsBySearch } from '@/utils/search';
@@ -52,7 +53,13 @@ import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useWordListColumns } from '@/composables/useWordListColumns';
 import { useWordListSelection } from '@/composables/useWordListSelection';
 import { buildWordExportFile, downloadWordExportFile } from '@/services/wordExportService';
-import { importWordExportFile, parseWordImportFile } from '@/services/wordImportService';
+import {
+  importWordExportFile,
+  parseWordImportFile,
+  resolveWordImportConflicts,
+  type WordImportConflict,
+  type WordImportConflictAction,
+} from '@/services/wordImportService';
 import {
   buildSelectAllMatchingDecision,
   collectAllDbMatchingRecords,
@@ -168,6 +175,10 @@ const selectingAllMatching = ref(false);
 const exportingWords = ref(false);
 const importingWords = ref(false);
 const wordImportInput = ref<HTMLInputElement | null>(null);
+const wordImportReviewOpen = ref(false);
+const wordImportImportedCount = ref(0);
+const wordImportFailedCount = ref(0);
+const wordImportConflicts = ref<WordImportConflict[]>([]);
 const {
   dialog: selectAllMatchingConfirmDialog,
   requestConfirm: requestSelectAllMatchingConfirm,
@@ -443,7 +454,8 @@ const openWordImportPicker = (): void => {
 
 const summarizeWordImport = (result: Awaited<ReturnType<typeof importWordExportFile>>): string => {
   const parts = [`Imported ${result.imported}`];
-  if (result.skippedConflicts) parts.push(`skipped ${result.skippedConflicts} existing`);
+  if (result.overwritten) parts.push(`overwrote ${result.overwritten}`);
+  if (result.skippedConflicts) parts.push(`found ${result.skippedConflicts} conflicts`);
   if (result.failed) parts.push(`failed ${result.failed}`);
   return `${parts.join(', ')} of ${result.total} words`;
 };
@@ -459,10 +471,18 @@ const importWordsFromFile = async (event: Event): Promise<void> => {
     const exportFile = parseWordImportFile(rawJson);
     const result = await importWordExportFile(exportFile);
     await wordStore.fetchDbRecords({ page: 1, background: true });
-    appStore.addToast(
-      summarizeWordImport(result),
-      result.failed ? 'warning' : result.imported ? 'success' : 'info'
-    );
+    wordImportImportedCount.value = result.imported;
+    wordImportFailedCount.value = result.failed;
+    wordImportConflicts.value = result.conflicts;
+    if (result.conflicts.length) {
+      wordImportReviewOpen.value = true;
+      appStore.addToast(summarizeWordImport(result), result.failed ? 'warning' : 'info');
+    } else {
+      appStore.addToast(
+        summarizeWordImport(result),
+        result.failed ? 'warning' : result.imported ? 'success' : 'info'
+      );
+    }
   } catch (error) {
     const err = error as { message?: string };
     appStore.addToast(err.message || 'Failed to import Word JSON', 'error');
@@ -470,6 +490,45 @@ const importWordsFromFile = async (event: Event): Promise<void> => {
     importingWords.value = false;
     if (input) input.value = '';
   }
+};
+
+const setWordImportConflictAction = (
+  key: string,
+  action: WordImportConflictAction
+): void => {
+  wordImportConflicts.value = wordImportConflicts.value.map(conflict =>
+    conflict.key === key ? { ...conflict, action } : conflict
+  );
+};
+
+const resolveWordImportReview = async (): Promise<void> => {
+  if (importingWords.value) return;
+  importingWords.value = true;
+  try {
+    const result = await resolveWordImportConflicts(wordImportConflicts.value);
+    wordImportImportedCount.value += result.overwritten;
+    wordImportFailedCount.value += result.failed;
+    await wordStore.fetchDbRecords({ page: 1, background: true });
+    appStore.addToast(
+      `Imported ${wordImportImportedCount.value}, skipped ${result.skippedConflicts}, failed ${wordImportFailedCount.value}`,
+      result.failed ? 'warning' : 'success'
+    );
+    wordImportReviewOpen.value = false;
+    wordImportConflicts.value = [];
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to resolve Word Import conflicts', 'error');
+  } finally {
+    importingWords.value = false;
+  }
+};
+
+const resolveWordImportReviewMode = (action: WordImportConflictAction): void => {
+  wordImportConflicts.value = wordImportConflicts.value.map(conflict => ({
+    ...conflict,
+    action,
+  }));
+  void resolveWordImportReview();
 };
 
 const setBatchDeckName = (value: string): void => {
@@ -995,6 +1054,17 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       type="file"
       accept=".json,application/json"
       @change="importWordsFromFile"
+    />
+    <WordImportReviewModal
+      :open="wordImportReviewOpen"
+      :conflicts="wordImportConflicts"
+      :busy="importingWords"
+      :imported-count="wordImportImportedCount"
+      :failed-count="wordImportFailedCount"
+      @close="wordImportReviewOpen = false"
+      @set-action="setWordImportConflictAction"
+      @resolve="resolveWordImportReview"
+      @resolve-mode="resolveWordImportReviewMode"
     />
     <BatchAnkiSummaryBar
       v-if="showBatchSummaryBar"
