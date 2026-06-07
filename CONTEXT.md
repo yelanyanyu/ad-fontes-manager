@@ -158,6 +158,18 @@ _Avoid_: Update dialog, forced update prompt
 An Announcement entry derived from Software Update release information, especially Release Version and release notes. It should appear through the existing Announcement surface rather than a separate release-message system.
 _Avoid_: Separate release message, update-only bulletin
 
+**Announcement Source** (公告来源):
+The upstream location used to populate Release Announcements. The default source is the latest GitHub Release note; alternate sources may be configured as fallbacks without changing the Announcement surface.
+_Avoid_: Update Feed, installer source
+
+**Announcement Source Notice** (公告来源提示):
+A non-blocking warning shown in the Announcement surface when an Announcement Source cannot be reached. It explains that the app is showing local cached announcements or no announcements because the source is unavailable.
+_Avoid_: Update error, release failure dialog
+
+**Announcement Fallback Source** (公告降级来源):
+A secondary Announcement Source used only when the primary source is unreachable. Gitee may become a fallback source in the future, but it is not part of the current source order until explicitly configured.
+_Avoid_: Mirror update feed, automatic source switch
+
 **Skipped Release Version** (跳过版本):
 The Release Version the user chose not to be reminded about automatically. Automatic Software Update suppresses reminders while the latest Release Version matches the skipped version, but Manual Update Check still shows it.
 _Avoid_: Ignored update, hidden update

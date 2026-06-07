@@ -6,6 +6,7 @@ import { useAnnouncementStore } from './announcementStore';
 const storage = new Map<string, string>();
 
 beforeEach(() => {
+  vi.unstubAllGlobals();
   setActivePinia(createPinia());
   storage.clear();
   vi.stubGlobal('localStorage', {
@@ -51,5 +52,34 @@ describe('announcementStore', () => {
     expect(store.lastReadVersion).toBe(3);
     expect(storage.get('announcement_last_read_version')).toBe('3');
     expect(store.hasUnread).toBe(false);
+  });
+
+  it('stores announcement source notices returned by the API', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          announcements: [],
+          sourceNotice: {
+            source: 'github',
+            level: 'warning',
+            message: '无法连接 GitHub Release，当前显示本地缓存公告。',
+            detail: 'network unavailable',
+          },
+        }),
+      })
+    );
+    const store = useAnnouncementStore();
+
+    await store.fetchAnnouncements();
+
+    expect(store.sourceNotice).toEqual({
+      source: 'github',
+      level: 'warning',
+      message: '无法连接 GitHub Release，当前显示本地缓存公告。',
+      detail: 'network unavailable',
+    });
+    expect(store.error).toBe('');
   });
 });

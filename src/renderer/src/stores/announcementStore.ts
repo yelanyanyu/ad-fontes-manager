@@ -8,8 +8,16 @@ export interface Announcement {
   dismissible: boolean;
 }
 
+export interface AnnouncementSourceNotice {
+  source: string;
+  level: 'warning';
+  message: string;
+  detail?: string;
+}
+
 interface AnnouncementState {
   announcements: Announcement[];
+  sourceNotice: AnnouncementSourceNotice | null;
   lastReadVersion: number;
   loading: boolean;
   error: string;
@@ -38,6 +46,7 @@ function saveLastReadVersion(version: number): void {
 export const useAnnouncementStore = defineStore('announcement', {
   state: (): AnnouncementState => ({
     announcements: [],
+    sourceNotice: null,
     lastReadVersion: loadLastReadVersion(),
     loading: false,
     error: '',
@@ -61,11 +70,16 @@ export const useAnnouncementStore = defineStore('announcement', {
         if (!response.ok) {
           throw new Error(`Failed to fetch announcements: ${response.status}`);
         }
-        const payload = (await response.json()) as { announcements?: Announcement[] };
+        const payload = (await response.json()) as {
+          announcements?: Announcement[];
+          sourceNotice?: AnnouncementSourceNotice;
+        };
         this.announcements = Array.isArray(payload.announcements) ? payload.announcements : [];
+        this.sourceNotice = payload.sourceNotice ?? null;
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to fetch announcements';
         this.announcements = [];
+        this.sourceNotice = null;
       } finally {
         this.loading = false;
       }

@@ -41,11 +41,7 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
         <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
         <path d="M13.7 21a2 2 0 0 1-3.4 0" />
       </svg>
-      <span
-        v-if="announcementStore.hasUnread"
-        class="unread-dot"
-        aria-hidden="true"
-      />
+      <span v-if="announcementStore.hasUnread" class="unread-dot" aria-hidden="true" />
     </button>
 
     <Transition
@@ -59,6 +55,7 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
       <AnnouncementDropdown
         v-if="open"
         :announcements="announcementStore.announcements"
+        :source-notice="announcementStore.sourceNotice"
         :loading="announcementStore.loading"
         :error="announcementStore.error"
       />
@@ -79,7 +76,10 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
   place-items: center;
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
 }
 
 .icon-btn:hover {
@@ -87,12 +87,12 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
   border-color: var(--border-strong);
 }
 
-[data-theme="dark"] .icon-btn {
+[data-theme='dark'] .icon-btn {
   background: rgba(255, 255, 255, 0.05);
   color: #c7beb3;
 }
 
-[data-theme="dark"] .icon-btn:hover {
+[data-theme='dark'] .icon-btn:hover {
   background: rgba(255, 255, 255, 0.06);
   color: #fff;
 }
