@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref } from 'vue';
 import {
   parseBatchJson,
   parseBatchText,
@@ -8,7 +8,7 @@ import {
 
 type BatchSource = 'text' | 'json';
 
-defineProps<{
+const props = defineProps<{
   submitting: boolean;
   running: boolean;
 }>();
@@ -20,29 +20,21 @@ const emit = defineEmits<{
 
 const batchSource = ref<BatchSource>('text');
 const batchText = ref('');
-const debouncedBatchText = ref('');
 const batchFileName = ref('');
 const batchTextarea = ref<HTMLTextAreaElement | null>(null);
+const batchFileInput = ref<HTMLInputElement | null>(null);
 const batchInfoBtn = ref<HTMLButtonElement | null>(null);
+const batchActionBtn = ref<HTMLButtonElement | null>(null);
 const showHelp = ref(false);
 const helpStyle = ref({ top: '0px', left: '0px' });
-let batchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-watch(batchText, val => {
-  if (batchDebounceTimer) clearTimeout(batchDebounceTimer);
-  batchDebounceTimer = setTimeout(() => {
-    debouncedBatchText.value = val;
-  }, 150);
-});
-
-onUnmounted(() => {
-  if (batchDebounceTimer) clearTimeout(batchDebounceTimer);
-});
+const showActionTip = ref(false);
+const actionTipStyle = ref({ top: '0px', left: '0px' });
+let actionTipTimer: ReturnType<typeof setTimeout> | null = null;
 
 const batchParseResult = computed(() =>
   batchSource.value === 'json'
-    ? parseBatchJson(debouncedBatchText.value)
-    : parseBatchText(debouncedBatchText.value)
+    ? parseBatchJson(batchText.value)
+    : parseBatchText(batchText.value)
 );
 const batchItems = computed(() => batchParseResult.value.items);
 const canStartBatch = computed(
@@ -57,6 +49,50 @@ const missingContextCount = computed(
   () => batchItems.value.filter(item => !item.context?.trim()).length
 );
 const missingNotesCount = computed(() => batchItems.value.filter(item => !item.notes?.trim()).length);
+const batchStatsText = computed(() => {
+  const invalid = batchParseResult.value.invalid.length;
+  const parts = [
+    `${batchItems.value.length} words`,
+    `${missingContextCount.value} without context`,
+    `${missingNotesCount.value} without notes`,
+  ];
+  if (invalid) parts.push(`${invalid} invalid`);
+  if (batchFileName.value) parts.push(batchFileName.value);
+  return parts.join(' · ');
+});
+const createBatchDisabledReason = computed(() => {
+  if (props.submitting) return 'Creating batch...';
+  if (!batchText.value.trim()) return 'Enter at least one word before creating a batch.';
+  if (batchParseResult.value.invalid.length > 0) return batchParseResult.value.invalid[0];
+  if (batchItems.value.length === 0) return 'No valid words found in the batch input.';
+  return '';
+});
+const batchActionTipText = computed(() =>
+  batchSource.value === 'json' ? 'Import JSON file' : 'Insert a word/context/notes block'
+);
+
+onUnmounted(() => {
+  if (actionTipTimer) clearTimeout(actionTipTimer);
+});
+
+function getFloatingStyle(anchor: HTMLElement, width: number): { top: string; left: string } {
+  const rect = anchor.getBoundingClientRect();
+  const viewportPadding = 8;
+  return {
+    top: `${rect.bottom + 6}px`,
+    left: `${Math.min(
+      Math.max(viewportPadding, rect.left),
+      window.innerWidth - width - viewportPadding
+    )}px`,
+  };
+}
+
+function setBatchSource(source: BatchSource): void {
+  batchSource.value = source;
+  if (source === 'text') {
+    batchFileName.value = '';
+  }
+}
 
 async function handleBatchFileChange(event: Event): Promise<void> {
   const target = event.target as HTMLInputElement;
@@ -68,6 +104,10 @@ async function handleBatchFileChange(event: Event): Promise<void> {
   target.value = '';
 }
 
+function openBatchFilePicker(): void {
+  batchFileInput.value?.click();
+}
+
 async function appendBatchDraftBlock(): Promise<void> {
   batchSource.value = 'text';
   batchFileName.value = '';
@@ -76,7 +116,6 @@ async function appendBatchDraftBlock(): Promise<void> {
   const separator = baseText ? '\n\n' : '';
   const cursorPosition = baseText.length + separator.length;
   batchText.value = `${baseText}${separator}\ncontext:\nnotes:`;
-  debouncedBatchText.value = batchText.value;
 
   await nextTick();
   batchTextarea.value?.focus();
@@ -85,12 +124,25 @@ async function appendBatchDraftBlock(): Promise<void> {
 
 function showBatchHelp(): void {
   if (!batchInfoBtn.value) return;
-  const rect = batchInfoBtn.value.getBoundingClientRect();
-  helpStyle.value = {
-    top: `${rect.bottom + 6}px`,
-    left: `${Math.max(8, rect.right - 260)}px`,
-  };
+  helpStyle.value = getFloatingStyle(batchInfoBtn.value, 260);
   showHelp.value = true;
+}
+
+function showBatchActionTip(): void {
+  if (!batchActionBtn.value) return;
+  actionTipStyle.value = getFloatingStyle(batchActionBtn.value, 220);
+  showActionTip.value = true;
+}
+
+function scheduleBatchActionTip(): void {
+  if (actionTipTimer) clearTimeout(actionTipTimer);
+  actionTipTimer = setTimeout(showBatchActionTip, 450);
+}
+
+function hideBatchActionTip(): void {
+  if (actionTipTimer) clearTimeout(actionTipTimer);
+  actionTipTimer = null;
+  showActionTip.value = false;
 }
 
 function handleSubmit(): void {
@@ -100,72 +152,114 @@ function handleSubmit(): void {
 </script>
 
 <template>
-  <section class="batch-source-row" aria-label="Batch options">
-    <span>Input</span>
-    <select
-      v-model="batchSource"
-      class="batch-source-select"
-      aria-label="Batch source"
-    >
-      <option value="text">Text</option>
-      <option value="json">JSON file</option>
-    </select>
-    <button
-      ref="batchInfoBtn"
-      type="button"
-      class="batch-info-button"
-      aria-label="Batch input help"
-      @mouseenter="showBatchHelp"
-      @mouseleave="showHelp = false"
-      @focus="showBatchHelp"
-      @blur="showHelp = false"
-    >
-      i
-    </button>
-  </section>
-
-  <section class="batch-panel">
-    <div v-if="batchSource === 'text'" class="batch-toolbar">
-      <button type="button" class="file-button" @click="appendBatchDraftBlock">
-        Add Word
+  <section class="batch-panel" aria-label="Batch input">
+    <div class="batch-toolbar">
+      <div class="batch-toolbar-main">
+        <div class="batch-source-segmented" role="radiogroup" aria-label="Batch source">
+          <button
+            type="button"
+            :class="{ active: batchSource === 'text' }"
+            role="radio"
+            :aria-checked="batchSource === 'text'"
+            @click="setBatchSource('text')"
+          >
+            Text
+          </button>
+          <button
+            type="button"
+            :class="{ active: batchSource === 'json' }"
+            role="radio"
+            :aria-checked="batchSource === 'json'"
+            @click="setBatchSource('json')"
+          >
+            JSON
+          </button>
+        </div>
+        <button
+          ref="batchInfoBtn"
+          type="button"
+          class="batch-info-button"
+          aria-label="Batch input help"
+          @mouseenter="showBatchHelp"
+          @mouseleave="showHelp = false"
+          @focus="showBatchHelp"
+          @blur="showHelp = false"
+        >
+          ?
+        </button>
+      </div>
+      <button
+        v-if="batchSource === 'text'"
+        ref="batchActionBtn"
+        type="button"
+        class="ui-icon-button batch-toolbar-action"
+        aria-label="Add word block"
+        @mouseenter="scheduleBatchActionTip"
+        @mouseleave="hideBatchActionTip"
+        @focus="showBatchActionTip"
+        @blur="hideBatchActionTip"
+        @click="appendBatchDraftBlock"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5v14" />
+          <path d="M5 12h14" />
+        </svg>
       </button>
+      <button
+        v-else
+        ref="batchActionBtn"
+        type="button"
+        class="ui-icon-button batch-toolbar-action"
+        aria-label="Import JSON file"
+        @mouseenter="scheduleBatchActionTip"
+        @mouseleave="hideBatchActionTip"
+        @focus="showBatchActionTip"
+        @blur="hideBatchActionTip"
+        @click="openBatchFilePicker"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3v12" />
+          <path d="m7 8 5-5 5 5" />
+          <path d="M5 21h14" />
+          <path d="M5 17v4" />
+          <path d="M19 17v4" />
+        </svg>
+      </button>
+      <input
+        ref="batchFileInput"
+        class="batch-file-input"
+        type="file"
+        accept="application/json,.json"
+        @change="handleBatchFileChange"
+      />
     </div>
-
-    <div v-if="batchSource === 'json'" class="batch-toolbar">
-      <span>Import the browser-extension JSON contract.</span>
-      <label class="file-button">
-        Import JSON
-        <input type="file" accept="application/json,.json" @change="handleBatchFileChange" />
-      </label>
-    </div>
-
     <textarea
       ref="batchTextarea"
       v-model="batchText"
-      class="batch-textarea"
+      class="ui-textarea batch-textarea"
       :placeholder="batchPlaceholder"
     />
-
-    <div class="batch-summary">
-      <span>{{ batchItems.length }} words</span>
-      <span>{{ missingContextCount }} without context</span>
-      <span>{{ missingNotesCount }} without notes</span>
-      <span v-if="batchFileName">{{ batchFileName }}</span>
-    </div>
-    <p v-if="batchParseResult.invalid.length" class="ui-error-text batch-error">
-      {{ batchParseResult.invalid[0] }}
-    </p>
     <div v-if="batchItems.length" class="batch-preview">
       <div v-for="item in batchItems.slice(0, 5)" :key="item.word" class="batch-preview-row">
         <strong>{{ item.word }}</strong>
         <span>{{ item.context || 'No context' }}</span>
       </div>
     </div>
-    <div class="action-row">
+    <div class="batch-action-bar">
+      <div class="batch-status" aria-live="polite">
+        <span>{{ batchStatsText }}</span>
+        <span
+          v-if="createBatchDisabledReason"
+          class="batch-disabled-reason"
+        >
+          {{ createBatchDisabledReason }}
+        </span>
+      </div>
       <button
         type="button"
         class="ui-button ui-button--primary drawer-button"
         :disabled="!canStartBatch || submitting"
+        :title="createBatchDisabledReason || 'Create a batch from the parsed words'"
         @click="handleSubmit"
       >
         {{ submitting ? 'Creating...' : 'Create Batch' }}
@@ -184,7 +278,7 @@ function handleSubmit(): void {
   <Teleport to="body">
     <span
       v-if="showHelp"
-      class="batch-help"
+      class="batch-floating-popover batch-help"
       :style="helpStyle"
       @mouseenter="showHelp = true"
       @mouseleave="showHelp = false"
@@ -192,152 +286,147 @@ function handleSubmit(): void {
       Text: one word per line, or blank-line blocks with word/context/notes. JSON:
       items array with word, context, and notes fields. Only word is required.
     </span>
+    <span
+      v-if="showActionTip"
+      class="batch-floating-popover batch-action-tooltip"
+      :style="actionTipStyle"
+      role="tooltip"
+    >
+      {{ batchActionTipText }}
+    </span>
   </Teleport>
 </template>
 
 <style scoped>
-.batch-source-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  margin: 0 0 10px;
-  padding: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.batch-source-row span {
-  flex: 0 0 auto;
-  color: var(--muted);
-}
-
-.batch-source-row .batch-info-button {
-  flex: 0 0 auto;
-}
-
-.batch-source-select {
-  height: 24px;
-  width: auto;
-  min-width: 112px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-panel);
-  color: var(--text-soft);
-  padding: 0 22px 0 8px;
-  font-size: 11px;
-  font-weight: 650;
-  outline: 0;
-}
-
-.batch-source-select:focus {
-  border-color: var(--green-border);
-  color: var(--green);
-}
-
-.batch-info-button {
-  position: relative;
-  width: 22px;
-  height: 22px;
-  margin-right: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  background: var(--surface-panel);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-  cursor: help;
-}
-
-.batch-help {
-  --popover-z: 2000;
-  position: fixed;
-  width: 260px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-panel);
-  color: var(--text-soft);
-  box-shadow: var(--shadow-md);
-  padding: 10px;
-  font-size: 11px;
-  line-height: 1.5;
-  text-align: left;
-  z-index: var(--popover-z);
-}
-
 .batch-panel {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .batch-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 11px;
+  gap: 10px;
+  min-width: 0;
 }
 
-.file-button {
-  height: 34px;
+.batch-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.batch-source-segmented {
+  height: 28px;
+  min-width: 128px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
-  color: var(--text-soft);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  font-size: 12px;
+  padding: 2px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.batch-source-segmented button {
+  min-width: 0;
+  height: 22px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
   font-weight: 650;
   cursor: pointer;
 }
 
-.file-button input {
+.batch-source-segmented button.active {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.batch-source-segmented button:focus-visible {
+  outline: 2px solid var(--green-border);
+  outline-offset: 1px;
+}
+
+.batch-info-button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+}
+
+.batch-floating-popover {
+  position: fixed;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-soft);
+  box-shadow: var(--shadow-md);
+  font-size: 11px;
+  text-align: left;
+  z-index: 90;
+}
+
+.batch-help {
+  width: 260px;
+  padding: 10px;
+  line-height: 1.5;
+}
+
+.batch-action-tooltip {
+  max-width: 220px;
+  padding: 7px 9px;
+  line-height: 1.35;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.batch-toolbar-action {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.batch-toolbar-action svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.batch-file-input {
   display: none;
 }
 
 .batch-textarea {
-  min-height: 168px;
-  max-height: 260px;
+  min-height: 156px;
+  max-height: 240px;
   resize: vertical;
-  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--editor-field);
-  color: var(--text);
-  padding: 10px;
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.55;
-  outline: 0;
-}
-
-.batch-textarea:focus {
-  border-color: var(--green-border);
-  box-shadow: 0 0 0 2px var(--green-soft);
-}
-
-.batch-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.batch-summary span {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-full);
-  background: var(--surface);
-  color: var(--muted);
-  padding: 4px 8px;
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.batch-error {
-  margin: 0;
-  font-size: 12px;
 }
 
 .batch-preview {
@@ -375,10 +464,33 @@ function handleSubmit(): void {
   white-space: nowrap;
 }
 
-.action-row {
+.batch-action-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.batch-status {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.batch-status span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-disabled-reason {
+  color: var(--amber);
 }
 
 .drawer-button {

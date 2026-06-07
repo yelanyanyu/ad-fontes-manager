@@ -55,6 +55,7 @@ Ad Fontes Manager is a desktop-first study and production tool. Its UI should fe
 - Use toasts for non-blocking outcomes: saved, skipped, queued, failed, or completed.
 - Use modal dialogs for decisions that block progress or mutate data.
 - Use inline warnings for persistent context the user should see before choosing an action.
+- Use custom floating tips for icon-only controls and compact help triggers. They should share one visual treatment within a surface, teleport to `body` when they might escape a clipped panel, use `--radius-sm`, and stay within the viewport. Do not rely on browser-native `title` tooltips for product UI that needs consistent styling.
 - Error messages should distinguish parsing failures, schema validation failures, missing data, and blocked workflow states when the system can tell them apart.
 
 ## Accessibility And Responsiveness

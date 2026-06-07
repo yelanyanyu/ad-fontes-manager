@@ -22,13 +22,12 @@ Ad Fontes Manager is a Vue 3 + Express + Electron app for generating, reviewing,
 Run commands from the repository root.
 
 ```bash
-npm run dev:web
+
 npm run dev:desktop
 npm run type-check
 npm run lint
 npm run test
 npm run test-api
-npm run build:web
 npm run build:desktop:win
 ```
 
