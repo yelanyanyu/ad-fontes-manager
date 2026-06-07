@@ -53,6 +53,20 @@ _Avoid_: Word history, derivation
 **Cognate Family** (同源词族):
 A set of words across languages that share a common etymological origin.
 
+### Word exchange
+
+**Word Export** (词条导出):
+A user action that exports selected Words for lossless exchange with future Ad Fontes versions or other applications. The primary exchange format is a versioned JSON envelope whose per-Word source of truth is **Content**; a YAML rendering may be included as a readable companion, but CSV is not the lossless contract and SQLite database export is treated as backup/migration rather than Word exchange.
+_Avoid_: CSV export, database backup, Anki export
+
+**Word Export File** (词条导出文件):
+The JSON file produced by Word Export. It includes export metadata such as format name, version, and exported time, plus an `items` array of Words containing Lemma, Language, Part of Speech, and Content. Optional fields such as YAML, id, timestamps, revision count, or content hash may support readability, provenance, and integrity checks without replacing Content as the canonical exported data. Exported ids are provenance metadata, not import identity: future import flows should detect conflicts by Lemma + Language and should not overwrite or force local ids from the export file by default.
+_Avoid_: CSV file, SQLite dump, YAML bundle
+
+**Word Import** (词条导入):
+A user action that reads a **Word Export File** and creates missing Words in the current App Database. Import identity is Lemma + Language, not exported id. If a Word with the same Lemma + Language already exists locally, the first implementation skips it and reports it as an existing Word rather than overwriting local Content.
+_Avoid_: Restore backup, force overwrite, database import
+
 ### Anki export
 
 **AnkiConnect**:
@@ -83,6 +97,16 @@ _Avoid_: Batch overwrite, import plan
 **Duplicate Import Decision** (重复导入决策):
 The blocking choice shown during Batch Anki Import when duplicate Anki notes are found. Users choose between overwriting duplicates and importing the whole batch, or importing only new cards. Choosing to import only new cards completes the batch and marks duplicate items as skipped, with details explaining the skipped duplicate note ID. Internal resolution states such as `overwrite` or `skip` may still exist in code, but the product UI should describe the final outcome rather than exposing a "mark duplicates" step.
 _Avoid_: Mark duplicates, duplicate resolution plan
+
+### Desktop data
+
+**Data Directory** (数据目录):
+The desktop app directory that contains the active **App Database** file. Changing the Data Directory is a workspace switch for future app sessions, not a database migration: if the selected directory does not contain the database file, the app creates a new empty App Database there and tells the user. It must not silently copy the previous database because that makes an empty workspace look like the old one.
+_Avoid_: Database path, data migration, backup folder
+
+**App Database** (应用数据库):
+The SQLite database file named `ad_fontes.db` inside the desktop Data Directory. It stores Words, Queue state, and other local app data. A missing App Database in a selected Data Directory means the user is starting a fresh local database for that directory.
+_Avoid_: Config file, export file, cache
 
 ### Software update
 

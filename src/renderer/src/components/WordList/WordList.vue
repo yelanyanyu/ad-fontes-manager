@@ -51,6 +51,8 @@ import { useBatchAnkiExport } from '@/composables/useBatchAnkiExport';
 import { useConfirmDialog } from '@/composables/useConfirmDialog';
 import { useWordListColumns } from '@/composables/useWordListColumns';
 import { useWordListSelection } from '@/composables/useWordListSelection';
+import { buildWordExportFile, downloadWordExportFile } from '@/services/wordExportService';
+import { importWordExportFile, parseWordImportFile } from '@/services/wordImportService';
 import {
   buildSelectAllMatchingDecision,
   collectAllDbMatchingRecords,
@@ -163,6 +165,9 @@ const displayedRecords = computed<WordRecord[]>(() => {
 });
 
 const selectingAllMatching = ref(false);
+const exportingWords = ref(false);
+const importingWords = ref(false);
+const wordImportInput = ref<HTMLInputElement | null>(null);
 const {
   dialog: selectAllMatchingConfirmDialog,
   requestConfirm: requestSelectAllMatchingConfirm,
@@ -409,6 +414,62 @@ const openBatchAnkiExport = async (): Promise<void> => {
     return;
   }
   await openBatchAnkiExportModal(selectedExportRecords.value);
+};
+
+const exportSelectedWords = (): void => {
+  if (exportingWords.value) return;
+  if (!selectedExportRecords.value.length) {
+    appStore.addToast('Select words to export', 'warning');
+    return;
+  }
+
+  exportingWords.value = true;
+  try {
+    const exportFile = buildWordExportFile(selectedExportRecords.value);
+    const fileName = downloadWordExportFile(exportFile);
+    appStore.addToast(`Exported ${exportFile.items.length} words to ${fileName}`, 'success');
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to export selected words', 'error');
+  } finally {
+    exportingWords.value = false;
+  }
+};
+
+const openWordImportPicker = (): void => {
+  if (importingWords.value) return;
+  wordImportInput.value?.click();
+};
+
+const summarizeWordImport = (result: Awaited<ReturnType<typeof importWordExportFile>>): string => {
+  const parts = [`Imported ${result.imported}`];
+  if (result.skippedConflicts) parts.push(`skipped ${result.skippedConflicts} existing`);
+  if (result.failed) parts.push(`failed ${result.failed}`);
+  return `${parts.join(', ')} of ${result.total} words`;
+};
+
+const importWordsFromFile = async (event: Event): Promise<void> => {
+  const input = event.target as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (!file || importingWords.value) return;
+
+  importingWords.value = true;
+  try {
+    const rawJson = await file.text();
+    const exportFile = parseWordImportFile(rawJson);
+    const result = await importWordExportFile(exportFile);
+    await wordStore.fetchDbRecords({ page: 1, background: true });
+    appStore.addToast(
+      summarizeWordImport(result),
+      result.failed ? 'warning' : result.imported ? 'success' : 'info'
+    );
+  } catch (error) {
+    const err = error as { message?: string };
+    appStore.addToast(err.message || 'Failed to import Word JSON', 'error');
+  } finally {
+    importingWords.value = false;
+    if (input) input.value = '';
+  }
 };
 
 const setBatchDeckName = (value: string): void => {
@@ -908,6 +969,8 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :selected-count="selectedCount"
       :has-selection="hasSelection"
       :selecting-all-matching="selectingAllMatching"
+      :exporting-words="exportingWords"
+      :importing-words="importingWords"
       @update-search="updateSearch"
       @clear-search="clearSearch"
       @search="handleSearch"
@@ -922,7 +985,16 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @print-selected="printSelectedLemmas"
       @clear-selection="clearSelection"
       @select-all-matching="void selectAllMatching()"
+      @export-selected-words="exportSelectedWords"
+      @import-words="openWordImportPicker"
       @open-batch-anki-export="void openBatchAnkiExport()"
+    />
+    <input
+      ref="wordImportInput"
+      class="word-import-input"
+      type="file"
+      accept=".json,application/json"
+      @change="importWordsFromFile"
     />
     <BatchAnkiSummaryBar
       v-if="showBatchSummaryBar"
@@ -991,6 +1063,10 @@ const paginationRange = computed<Array<number | '...'>>(() => {
 
 .table-panel.has-batch-summary {
   grid-template-rows: auto auto minmax(0, 1fr) 48px;
+}
+
+.word-import-input {
+  display: none;
 }
 
 </style>

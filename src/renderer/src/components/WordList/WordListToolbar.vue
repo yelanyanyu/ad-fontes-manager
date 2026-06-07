@@ -1,24 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onUnmounted, ref } from 'vue';
 import type { SearchMode, SortMode } from '@/types/word-list';
-
-defineProps<{
-  search: string;
-  loading: boolean;
-  canSearch: boolean;
-  searchMode: SearchMode;
-  searchModeOpen: boolean;
-  searchModeLabel: string;
-  sort: SortMode;
-  pageSize: number;
-  isBackendConnected: boolean;
-  localSyncCount: number;
-  totalCount: number;
-  syncAllLoading: boolean;
-  selectedCount: number;
-  hasSelection: boolean;
-  selectingAllMatching?: boolean;
-}>();
 
 const emit = defineEmits<{
   (e: 'update-search', value: string): void;
@@ -35,10 +17,79 @@ const emit = defineEmits<{
   (e: 'print-selected'): void;
   (e: 'clear-selection'): void;
   (e: 'open-batch-anki-export'): void;
+  (e: 'export-selected-words'): void;
+  (e: 'import-words'): void;
   (e: 'select-all-matching'): void;
 }>();
 
 const searchInput = ref<HTMLInputElement | null>(null);
+const exportButton = ref<HTMLButtonElement | null>(null);
+const importButton = ref<HTMLButtonElement | null>(null);
+const toolTipOpen = ref(false);
+const toolTipText = ref('');
+const toolTipStyle = ref({ top: '0px', left: '0px' });
+let toolTipTimer: ReturnType<typeof setTimeout> | null = null;
+
+const props = defineProps<{
+  search: string;
+  loading: boolean;
+  canSearch: boolean;
+  searchMode: SearchMode;
+  searchModeOpen: boolean;
+  searchModeLabel: string;
+  sort: SortMode;
+  pageSize: number;
+  isBackendConnected: boolean;
+  localSyncCount: number;
+  totalCount: number;
+  syncAllLoading: boolean;
+  selectedCount: number;
+  hasSelection: boolean;
+  selectingAllMatching?: boolean;
+  exportingWords?: boolean;
+  importingWords?: boolean;
+}>();
+
+const exportTipText = computed(() =>
+  props.hasSelection
+    ? `Export ${props.selectedCount} selected word${props.selectedCount === 1 ? '' : 's'}`
+    : 'Select words to export'
+);
+const importTipText = computed(() =>
+  props.importingWords ? 'Importing Word Export JSON' : 'Import words from JSON'
+);
+
+onUnmounted(() => {
+  if (toolTipTimer) clearTimeout(toolTipTimer);
+});
+
+const positionToolTip = (button: HTMLButtonElement | null): void => {
+  if (!button) return;
+  const rect = button.getBoundingClientRect();
+  const width = 190;
+  const padding = 8;
+  toolTipStyle.value = {
+    top: `${rect.bottom + 6}px`,
+    left: `${Math.min(Math.max(padding, rect.left), window.innerWidth - width - padding)}px`,
+  };
+};
+
+const showToolTip = (button: HTMLButtonElement | null, text: string): void => {
+  positionToolTip(button);
+  toolTipText.value = text;
+  toolTipOpen.value = true;
+};
+
+const scheduleToolTip = (button: HTMLButtonElement | null, text: string): void => {
+  if (toolTipTimer) clearTimeout(toolTipTimer);
+  toolTipTimer = setTimeout(() => showToolTip(button, text), 450);
+};
+
+const hideToolTip = (): void => {
+  if (toolTipTimer) clearTimeout(toolTipTimer);
+  toolTipTimer = null;
+  toolTipOpen.value = false;
+};
 
 const onSearchInput = (event: Event) => {
   const target = event.target as HTMLInputElement | null;
@@ -63,6 +114,16 @@ const onPageSizeChange = (event: Event) => {
 
 <template>
   <div v-if="searchModeOpen" class="search-backdrop" @click="emit('close-search-mode')" />
+  <Teleport to="body">
+    <span
+      v-if="toolTipOpen"
+      class="toolbar-floating-tip"
+      :style="toolTipStyle"
+      role="tooltip"
+    >
+      {{ toolTipText }}
+    </span>
+  </Teleport>
 
   <div class="toolbar">
     <div class="toolbar-row">
@@ -189,6 +250,52 @@ const onPageSizeChange = (event: Event) => {
             <path d="M20 6 9 17l-5-5" />
           </svg>
           {{ selectingAllMatching ? 'Selecting...' : 'Select All Matching' }}
+        </button>
+
+        <button
+          v-if="isBackendConnected"
+          ref="exportButton"
+          class="ui-icon-button toolbar-icon-button toolbar-export-button"
+          type="button"
+          :disabled="!hasSelection || !!exportingWords"
+          aria-label="Export selected words"
+          data-test="word-export-button"
+          @mouseenter="scheduleToolTip(exportButton, exportTipText)"
+          @mouseleave="hideToolTip"
+          @focus="showToolTip(exportButton, exportTipText)"
+          @blur="hideToolTip"
+          @click="emit('export-selected-words')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M12 15V3" />
+            <path d="m7 8 5-5 5 5" />
+            <path d="M5 21h14" />
+            <path d="M5 17v4" />
+            <path d="M19 17v4" />
+          </svg>
+        </button>
+
+        <button
+          v-if="isBackendConnected"
+          ref="importButton"
+          class="ui-icon-button toolbar-icon-button toolbar-import-button"
+          type="button"
+          :disabled="!!importingWords"
+          aria-label="Import words from JSON"
+          data-test="word-import-button"
+          @mouseenter="scheduleToolTip(importButton, importTipText)"
+          @mouseleave="hideToolTip"
+          @focus="showToolTip(importButton, importTipText)"
+          @blur="hideToolTip"
+          @click="emit('import-words')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M12 3v12" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M5 21h14" />
+            <path d="M5 17v4" />
+            <path d="M19 17v4" />
+          </svg>
         </button>
 
         <button
@@ -513,6 +620,22 @@ const onPageSizeChange = (event: Event) => {
   width: 14px;
   height: 14px;
   stroke-width: 2.2;
+}
+
+.toolbar-floating-tip {
+  position: fixed;
+  max-width: 190px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-soft);
+  box-shadow: var(--shadow-md);
+  padding: 7px 9px;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: nowrap;
+  z-index: 90;
 }
 
 .toolbar-action-button {

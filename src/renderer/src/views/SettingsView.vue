@@ -626,9 +626,12 @@ const selectAndSetDataDir = async (): Promise<void> => {
 
   try {
     const result = await window.electronAPI.setDataDir(chosenPath);
-    dataDir.value = chosenPath;
+    dataDir.value = result.dataDir;
     dataDirStatus.value = result.message;
-    appStore.addToast('数据目录已更新', 'success');
+    appStore.addToast(
+      result.createdDatabase ? '当前目录没有数据库文件，已新建空数据库' : '数据目录已更新',
+      result.createdDatabase ? 'warning' : 'success'
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     dataDirStatus.value = message;

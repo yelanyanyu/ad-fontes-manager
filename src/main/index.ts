@@ -15,6 +15,7 @@ import {
   type DesktopUpdateConfig,
   type DesktopUpdateService,
 } from './updateService';
+import { DESKTOP_DATABASE_FILE_NAME, setDataDirectory } from './dataDirService';
 import { getDefaultAppConfig } from '../server/utils/defaultAppConfig';
 
 let mainWindow: BrowserWindow | null = null;
@@ -195,27 +196,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle('get-data-dir', () => readDataDir());
 
   ipcMain.handle('set-data-dir', async (_event, newPath: string) => {
-    if (typeof newPath !== 'string' || newPath.trim().length === 0) {
-      throw new Error('Directory path is required.');
-    }
-
-    const resolvedPath = path.resolve(newPath);
-    if (!fs.existsSync(resolvedPath) || !fs.statSync(resolvedPath).isDirectory()) {
-      throw new Error('Directory does not exist.');
-    }
-
-    const currentDir = readDataDir();
-    const oldDb = path.join(currentDir, 'ad_fontes.db');
-    const newDb = path.join(resolvedPath, 'ad_fontes.db');
-    if (fs.existsSync(oldDb) && !fs.existsSync(newDb)) {
-      fs.copyFileSync(oldDb, newDb);
-    }
-
-    writeDesktopConfig(resolvedPath);
-    return {
-      success: true,
-      message: 'Data directory updated. Restart the application to use the new path.',
-    };
+    return setDataDirectory(newPath, writeDesktopConfig);
   });
 
   ipcMain.handle('select-directory', async () => {
@@ -281,7 +262,7 @@ function registerIpcHandlers(): void {
 async function createWindow(): Promise<void> {
   const dataDir = readDataDir();
   ensureDirectory(dataDir);
-  const dbPath = path.join(dataDir, 'ad_fontes.db');
+  const dbPath = path.join(dataDir, DESKTOP_DATABASE_FILE_NAME);
 
   const serverApp = createApp({
     dbPath,

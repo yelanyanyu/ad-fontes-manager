@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setDataDir: (newPath: string) =>
     ipcRenderer.invoke('set-data-dir', newPath) as Promise<{
       success: boolean;
+      dataDir: string;
+      dbPath: string;
+      createdDatabase: boolean;
       message: string;
     }>,
   selectDirectory: () => ipcRenderer.invoke('select-directory') as Promise<string | null>,
