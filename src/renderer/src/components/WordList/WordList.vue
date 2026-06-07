@@ -204,7 +204,6 @@ const {
   selectedCount,
   hasSelection,
   selectedExportRecords,
-  selectedLemmas,
   isAllVisibleSelected,
   clearSelection,
   isSelected,
@@ -220,11 +219,6 @@ const showBatchSummaryBar = computed<boolean>(() => {
       batchAnkiBusy.value)
   );
 });
-
-const printSelectedLemmas = (): void => {
-  if (!selectedLemmas.value.length) return;
-  console.log('Selected lemmas:', selectedLemmas.value);
-};
 
 const emit = defineEmits<{
   (e: 'preview', id: string): void;
@@ -492,10 +486,7 @@ const importWordsFromFile = async (event: Event): Promise<void> => {
   }
 };
 
-const setWordImportConflictAction = (
-  key: string,
-  action: WordImportConflictAction
-): void => {
+const setWordImportConflictAction = (key: string, action: WordImportConflictAction): void => {
   wordImportConflicts.value = wordImportConflicts.value.map(conflict =>
     conflict.key === key ? { ...conflict, action } : conflict
   );
@@ -557,7 +548,9 @@ const handleBatchExportApkg = async (): Promise<void> => {
   }
 };
 
-const showBatchImportOutcomeToast = (result: Awaited<ReturnType<typeof importBatchToAnki>>): void => {
+const showBatchImportOutcomeToast = (
+  result: Awaited<ReturnType<typeof importBatchToAnki>>
+): void => {
   if (result.status === 'completed') {
     appStore.addToast('Batch import completed', 'success');
     return;
@@ -889,10 +882,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
 </script>
 
 <template>
-  <div
-    class="panel table-panel"
-    :class="{ 'has-batch-summary': showBatchSummaryBar }"
-  >
+  <div class="panel table-panel" :class="{ 'has-batch-summary': showBatchSummaryBar }">
     <ConfirmDialog
       v-bind="selectAllMatchingConfirmDialog"
       @cancel="settleSelectAllMatchingConfirm(false)"
@@ -1040,8 +1030,6 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @sort-change="updateSort"
       @page-size-change="updatePageSize"
       @open-sync-all="openSyncAll"
-      @refresh="refresh"
-      @print-selected="printSelectedLemmas"
       @clear-selection="clearSelection"
       @select-all-matching="void selectAllMatching()"
       @export-selected-words="exportSelectedWords"
@@ -1096,6 +1084,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @toggle-selection="toggleSelection"
       @toggle-column="toggleColumn"
       @toggle-column-menu="columnMenuOpen = !columnMenuOpen"
+      @refresh="refresh"
       @preview="handlePreview"
       @edit="handleEdit"
       @menu="toggleMenu"
@@ -1138,5 +1127,4 @@ const paginationRange = computed<Array<number | '...'>>(() => {
 .word-import-input {
   display: none;
 }
-
 </style>

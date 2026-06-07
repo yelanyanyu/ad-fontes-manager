@@ -13,8 +13,6 @@ const emit = defineEmits<{
   (e: 'sort-change', value: string): void;
   (e: 'page-size-change', value: string): void;
   (e: 'open-sync-all'): void;
-  (e: 'refresh'): void;
-  (e: 'print-selected'): void;
   (e: 'clear-selection'): void;
   (e: 'open-batch-anki-export'): void;
   (e: 'export-selected-words'): void;
@@ -115,12 +113,7 @@ const onPageSizeChange = (event: Event) => {
 <template>
   <div v-if="searchModeOpen" class="search-backdrop" @click="emit('close-search-mode')" />
   <Teleport to="body">
-    <span
-      v-if="toolTipOpen"
-      class="toolbar-floating-tip"
-      :style="toolTipStyle"
-      role="tooltip"
-    >
+    <span v-if="toolTipOpen" class="toolbar-floating-tip" :style="toolTipStyle" role="tooltip">
       {{ toolTipText }}
     </span>
   </Teleport>
@@ -157,11 +150,7 @@ const onPageSizeChange = (event: Event) => {
       </div>
 
       <div class="search-actions">
-        <button
-          :disabled="!canSearch"
-          class="search-btn"
-          @click="emit('search')"
-        >
+        <button :disabled="!canSearch" class="search-btn" @click="emit('search')">
           <svg
             v-if="loading"
             class="animate-spin"
@@ -175,11 +164,7 @@ const onPageSizeChange = (event: Event) => {
           </svg>
           <span>{{ loading ? 'Searching' : 'Search' }}</span>
         </button>
-        <button
-          class="search-btn"
-          :title="searchModeLabel"
-          @click="emit('toggle-search-mode')"
-        >
+        <button class="search-btn" :title="searchModeLabel" @click="emit('toggle-search-mode')">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path d="m6 9 6 6 6-6" />
           </svg>
@@ -195,10 +180,7 @@ const onPageSizeChange = (event: Event) => {
       leave-from-class="opacity-100 translate-y-0 scale-100"
       leave-to-class="opacity-0 -translate-y-1 scale-95"
     >
-      <div
-        v-if="searchModeOpen"
-        class="search-mode-menu"
-      >
+      <div v-if="searchModeOpen" class="search-mode-menu">
         <button
           :class="searchMode === 'partial' ? 'active' : ''"
           @click="emit('set-search-mode', 'partial')"
@@ -328,19 +310,6 @@ const onPageSizeChange = (event: Event) => {
         </button>
         <button
           v-if="hasSelection"
-          class="ui-button ui-button--soft-blue toolbar-action-button"
-          data-test="print-selected-button"
-          @click="emit('print-selected')"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M6 9V2h12v7" />
-            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-            <path d="M6 14h12v8H6z" />
-          </svg>
-          Print Selected ({{ selectedCount }})
-        </button>
-        <button
-          v-if="hasSelection"
           class="ui-icon-button ui-icon-button--danger toolbar-icon-button"
           type="button"
           title="Clear selection"
@@ -354,19 +323,6 @@ const onPageSizeChange = (event: Event) => {
           </svg>
         </button>
         <div class="count">{{ totalCount }} words</div>
-        <button class="refresh" title="Refresh" @click="emit('refresh')">
-          <svg
-            :class="{ 'animate-spin': loading }"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-          >
-            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-            <path d="M21 3v6h-6" />
-          </svg>
-        </button>
       </div>
     </div>
   </div>
@@ -381,7 +337,7 @@ const onPageSizeChange = (event: Event) => {
   gap: 10px;
 }
 
-[data-theme="dark"] .toolbar {
+[data-theme='dark'] .toolbar {
   background: #26231e;
 }
 
@@ -420,7 +376,7 @@ const onPageSizeChange = (event: Event) => {
   box-shadow: 0 1px 1px rgba(22, 16, 10, 0.018);
 }
 
-[data-theme="dark"] .search-wrap {
+[data-theme='dark'] .search-wrap {
   background: #201d18;
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
 }
@@ -430,7 +386,7 @@ const onPageSizeChange = (event: Event) => {
   box-shadow: 0 0 0 3px rgba(36, 114, 83, 0.1);
 }
 
-[data-theme="dark"] .search-wrap:focus-within {
+[data-theme='dark'] .search-wrap:focus-within {
   border-color: rgba(67, 179, 127, 0.52);
   box-shadow: 0 0 0 3px rgba(67, 179, 127, 0.1);
 }
@@ -509,12 +465,12 @@ const onPageSizeChange = (event: Event) => {
   opacity: 0.6;
 }
 
-[data-theme="dark"] .search-btn {
+[data-theme='dark'] .search-btn {
   color: #07110c;
   box-shadow: 0 6px 16px rgba(67, 179, 127, 0.16);
 }
 
-[data-theme="dark"] .search-btn:last-child {
+[data-theme='dark'] .search-btn:last-child {
   border-left: 1px solid rgba(0, 0, 0, 0.16);
 }
 
@@ -570,7 +526,7 @@ const onPageSizeChange = (event: Event) => {
   color: #34302b;
 }
 
-[data-theme="dark"] .page-size-input {
+[data-theme='dark'] .page-size-input {
   color: #f0e8dd;
 }
 
@@ -587,28 +543,9 @@ const onPageSizeChange = (event: Event) => {
   align-items: center;
 }
 
-[data-theme="dark"] .count {
+[data-theme='dark'] .count {
   background: #2b2721;
   color: #d2c8bc;
-}
-
-.refresh {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  background: transparent;
-  color: #7b746b;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-[data-theme="dark"] .refresh {
-  color: #aaa197;
-}
-
-[data-theme="dark"] .refresh:hover {
-  color: #fff;
 }
 
 .toolbar-icon-button {
@@ -644,8 +581,12 @@ const onPageSizeChange = (event: Event) => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin {

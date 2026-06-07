@@ -22,6 +22,7 @@ const emit = defineEmits<{
   'toggle-selection': [item: WordRecord];
   'toggle-column': [key: WordListColumnKey];
   'toggle-column-menu': [];
+  refresh: [];
   preview: [id: string];
   edit: [id: string];
   menu: [id: string];
@@ -35,11 +36,15 @@ const gridTemplateColumns = computed(() => {
 
 <template>
   <div class="table-wrap">
-    <div
-      v-if="loading && !records.length"
-      class="table-empty"
-    >
-      <svg class="animate-spin" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+    <div v-if="loading && !records.length" class="table-empty">
+      <svg
+        class="animate-spin"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+      >
         <circle cx="12" cy="12" r="10" stroke-width="3" stroke-dasharray="31.4 31.4" />
       </svg>
       <span>Loading records...</span>
@@ -57,33 +62,44 @@ const gridTemplateColumns = computed(() => {
           <span v-if="allVisibleSelected">&#10003;</span>
         </div>
         <div>LEMMA</div>
-        <div
-          v-for="col in shownColumns"
-          :key="col"
-          class="thead-col"
-        >
+        <div v-for="col in shownColumns" :key="col" class="thead-col">
           {{ columnLabels[col] }}
         </div>
         <div class="right">
-          <button class="ui-control column-control" type="button" @click.stop="emit('toggle-column-menu')">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <rect x="3" y="4" width="18" height="16" rx="2" />
-              <path d="M9 4v16" />
-              <path d="M15 4v16" />
-              <path d="M3 10h18" />
-            </svg>
-            Columns
-          </button>
-          <div
-            v-if="columnMenuOpen"
-            class="column-menu"
-            @click.stop
-          >
-            <label
-              v-for="col in allColumnKeys"
-              :key="col"
-              class="column-menu-item"
+          <div class="header-actions">
+            <button
+              class="ui-control column-control"
+              type="button"
+              @click.stop="emit('toggle-column-menu')"
             >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M9 4v16" />
+                <path d="M15 4v16" />
+                <path d="M3 10h18" />
+              </svg>
+              Columns
+            </button>
+            <button
+              class="ui-icon-button table-refresh-button"
+              type="button"
+              title="Refresh"
+              aria-label="Refresh word list"
+              @click="emit('refresh')"
+            >
+              <svg
+                :class="{ 'animate-spin': loading }"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+            </button>
+          </div>
+          <div v-if="columnMenuOpen" class="column-menu" @click.stop>
+            <label v-for="col in allColumnKeys" :key="col" class="column-menu-item">
               <input
                 type="checkbox"
                 :checked="visibleColumns[col]"
@@ -113,11 +129,7 @@ const gridTemplateColumns = computed(() => {
         <div class="lemma-cell">
           {{ item.lemma || item.yield?.lemma }}
         </div>
-        <div
-          v-for="col in shownColumns"
-          :key="col"
-          class="data-cell"
-        >
+        <div v-for="col in shownColumns" :key="col" class="data-cell">
           {{ formatColValue(item, col) }}
         </div>
         <div class="row-actions">
@@ -176,7 +188,7 @@ const gridTemplateColumns = computed(() => {
   border-bottom: 1px solid var(--line);
 }
 
-[data-theme="dark"] .thead {
+[data-theme='dark'] .thead {
   background: var(--table-head);
   color: #aaa197;
 }
@@ -184,6 +196,12 @@ const gridTemplateColumns = computed(() => {
 .thead .right {
   justify-self: end;
   position: relative;
+}
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .thead-col {
@@ -208,7 +226,7 @@ const gridTemplateColumns = computed(() => {
   background: #f6f3ed;
 }
 
-[data-theme="dark"] .trow:hover {
+[data-theme='dark'] .trow:hover {
   background: #2a251f;
 }
 
@@ -228,7 +246,7 @@ const gridTemplateColumns = computed(() => {
   user-select: none;
 }
 
-[data-theme="dark"] .check {
+[data-theme='dark'] .check {
   border-color: #575047;
   background: #201d18;
   color: #06100b;
@@ -248,7 +266,7 @@ const gridTemplateColumns = computed(() => {
   padding: 0 8px;
 }
 
-[data-theme="dark"] .lemma-cell {
+[data-theme='dark'] .lemma-cell {
   color: #eee8de;
 }
 
@@ -281,7 +299,9 @@ const gridTemplateColumns = computed(() => {
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
 }
 
 .action-btn svg {
@@ -295,12 +315,12 @@ const gridTemplateColumns = computed(() => {
   border-color: var(--border-strong);
 }
 
-[data-theme="dark"] .action-btn {
+[data-theme='dark'] .action-btn {
   background: rgba(255, 255, 255, 0.045);
   color: #bdb3a7;
 }
 
-[data-theme="dark"] .action-btn:hover {
+[data-theme='dark'] .action-btn:hover {
   background: rgba(255, 255, 255, 0.065);
   color: #fff;
 }
@@ -317,6 +337,17 @@ const gridTemplateColumns = computed(() => {
 
 .column-control {
   min-height: 26px;
+}
+
+.table-refresh-button {
+  width: 30px;
+  height: 30px;
+}
+
+.table-refresh-button svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2;
 }
 
 .column-menu {
@@ -357,8 +388,12 @@ const gridTemplateColumns = computed(() => {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin {
