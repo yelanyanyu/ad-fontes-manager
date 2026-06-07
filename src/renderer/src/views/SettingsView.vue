@@ -111,7 +111,7 @@ const selectedProvider = computed(() => {
 const apiSectionTitles: Record<ApiSection, string> = {
   providers: 'AI 提供商',
   stages: '阶段模型分配',
-  search: '搜索 API',
+  search: '网络搜索',
   review: '审核阈值',
   runtime: '运行参数',
 };
@@ -1042,7 +1042,10 @@ onMounted(() => {
             </section>
 
             <!-- Stages section -->
-            <div v-else-if="activeApiSection === 'stages'" class="api-config-stack">
+            <div
+              v-else-if="activeApiSection === 'stages'"
+              class="api-config-stack api-config-stack--single-title"
+            >
               <section class="ai-panel ai-panel-stages">
                 <header class="ai-panel-header">
                   <h2>阶段模型分配</h2>
@@ -1104,7 +1107,10 @@ onMounted(() => {
             </div>
 
             <!-- Search section -->
-            <div v-else-if="activeApiSection === 'search'" class="api-config-stack">
+            <div
+              v-else-if="activeApiSection === 'search'"
+              class="api-config-stack api-config-stack--single-title"
+            >
               <section v-if="aiConfig.search" class="ai-panel ai-panel-search">
                 <header class="ai-panel-header">
                   <h2>网络搜索</h2>
@@ -1240,7 +1246,10 @@ onMounted(() => {
             </div>
 
             <!-- Review section -->
-            <div v-else-if="activeApiSection === 'review'" class="api-config-stack">
+            <div
+              v-else-if="activeApiSection === 'review'"
+              class="api-config-stack api-config-stack--single-title"
+            >
               <section class="ai-panel ai-panel-review">
                 <header class="ai-panel-header">
                   <h2>审核阈值</h2>
@@ -2129,9 +2138,13 @@ onMounted(() => {
 
 .ai-panel {
   padding: 16px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--line);
+}
+
+.api-config-stack--single-title .ai-panel-header {
+  display: none;
 }
 
 .ai-panel-header {
