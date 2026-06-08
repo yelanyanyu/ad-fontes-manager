@@ -2,11 +2,11 @@
 
 ## 部署方式概览
 
-| 方式 | 适用平台 | 产物 |
-|------|----------|------|
-| Docker Compose | 服务器 (Linux) | Web 应用 |
-| 系统环境变量 | 服务器 (Linux) | Web 应用 |
-| electron-builder | Windows / Mac | 桌面安装包 |
+| 方式             | 适用平台       | 产物       |
+| ---------------- | -------------- | ---------- |
+| Docker Compose   | 服务器 (Linux) | Web 应用   |
+| 系统环境变量     | 服务器 (Linux) | Web 应用   |
+| electron-builder | Windows / Mac  | 桌面安装包 |
 
 ## 方式一：桌面程序构建
 
@@ -18,11 +18,13 @@ npm run build:desktop:win
 ```
 
 构建流程会自动：
+
 1. 将 `better-sqlite3` 切换到 Electron 39 ABI 140
 2. 执行 electron-vite build + electron-builder 打包
 3. 构建结束后恢复 Node ABI（无论成功失败）
 
 产物输出到 `release/`：
+
 - `Ad Fontes Manager Setup 2.0.x.exe` — NSIS 安装程序
 - `win-unpacked/` — 未打包的可执行目录
 
@@ -38,6 +40,7 @@ npm run build:desktop:mac
 ```
 
 产物输出到 `release/`：
+
 - `Ad Fontes Manager-2.0.x.dmg` — DMG 安装镜像
 - `mac/` — 未打包的 `.app` bundle
 
@@ -151,6 +154,8 @@ cp /path/to/ad_fontes.db /backup/ad_fontes_$(date +%Y%m%d).db
 ```
 
 可通过设置页面导出 `config.json`（可选是否包含 API Key）用于配置备份。
+
+如果只需要迁移部分或全部词条数据，可在词表中勾选词条后导出约定 JSON，再在目标数据库中通过词表导入按钮导入。该方式保留词条 JSON/YAML 的嵌套结构，并会在同 lemma / language 冲突时进入导入审阅流程。
 
 ## 配置检查清单
 

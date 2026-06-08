@@ -20,13 +20,13 @@ Ad Fontes Manager REST API
 GET /api/v2/words?page=1&limit=20&search=keyword&sort=newest&language=en
 ```
 
-| Param | Type | Required | Description |
-|-------|------|----------|-------------|
-| page | number | no | 页码，默认 1 |
-| limit | number | no | 每页条数，默认 20 |
-| search | string | no | 搜索关键词（部分匹配） |
-| sort | string | no | 排序：`newest`, `oldest`, `az`, `za` |
-| language | string | no | 语言：`en`, `de`。默认 `en` |
+| Param    | Type   | Required | Description                          |
+| -------- | ------ | -------- | ------------------------------------ |
+| page     | number | no       | 页码，默认 1                         |
+| limit    | number | no       | 每页条数，默认 20                    |
+| search   | string | no       | 搜索关键词（部分匹配）               |
+| sort     | string | no       | 排序：`newest`, `oldest`, `az`, `za` |
+| language | string | no       | 语言：`en`, `de`。默认 `en`          |
 
 Response:
 
@@ -263,8 +263,16 @@ Response:
   },
   "stages": {
     "fast": { "provider": "deepseek", "model": "deepseek-v4-flash[1m]", "reasoningEffort": "none" },
-    "balanced": { "provider": "deepseek", "model": "deepseek-v4-pro[1m]", "reasoningEffort": "low" },
-    "expert": { "provider": "deepseek", "model": "deepseek-v4-pro[1m]", "reasoningEffort": "medium" }
+    "balanced": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-pro[1m]",
+      "reasoningEffort": "low"
+    },
+    "expert": {
+      "provider": "deepseek",
+      "model": "deepseek-v4-pro[1m]",
+      "reasoningEffort": "medium"
+    }
   },
   "review": {
     "threshold": 6,
@@ -339,12 +347,12 @@ Content-Type: application/json
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| word | string | yes | 要生成的目标单词 |
-| language | string | yes | 语言：`en` 或 `de` |
-| context | string | no | 用户提供的上下文句子 |
-| notes | string | no | 额外的生成指示 |
+| Field    | Type   | Required | Description          |
+| -------- | ------ | -------- | -------------------- |
+| word     | string | yes      | 要生成的目标单词     |
+| language | string | yes      | 语言：`en` 或 `de`   |
+| context  | string | no       | 用户提供的上下文句子 |
+| notes    | string | no       | 额外的生成指示       |
 
 Response:
 
@@ -366,19 +374,19 @@ GET /api/v2/generate/:jobId/stream
 
 Server-Sent Events 端点，实时推送流水线进度。事件类型：
 
-| Event | Data | Description |
-|-------|------|-------------|
-| `job:queued` | `{ position: number }` | 任务排队中 |
-| `job:started` | `{}` | 任务开始执行 |
-| `step:start` | `{ step: string, message: string }` | 阶段开始（searching / pondering / auditing / fixing） |
-| `step:tokens` | `{ step: string, chunk: string }` | LLM 输出文本流 |
-| `step:reasoning` | `{ step: string, chunk: string }` | LLM 推理/思考过程流 |
-| `step:tool-call` | `{ step: string, toolCallId: string, toolName: string, input?: any, startTime: number }` | Tool call 开始 |
-| `step:tool-result` | `{ step: string, toolCallId: string, toolName: string, output?: any, error?: string, warning?: string, duration: number }` | Tool call 结果 |
-| `step:complete` | `{ step: string, duration: number, summary: string, result?: any, rawText?: string, reasoningText?: string }` | 阶段完成 |
-| `step:error` | `{ step: string, error: string, willRetry?: boolean }` | 阶段失败（非 fixing 阶段将终止流水线） |
-| `pipeline:complete` | `{ yaml: string, scores: object }` | 流水线完成，含完整 YAML 和评分 |
-| `pipeline:stopped` | `{ yaml: string, stoppedAtStage: string, reason: string }` | 流水线因止损机制提前终止（保留部分结果） |
+| Event               | Data                                                                                                                       | Description                                           |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `job:queued`        | `{ position: number }`                                                                                                     | 任务排队中                                            |
+| `job:started`       | `{}`                                                                                                                       | 任务开始执行                                          |
+| `step:start`        | `{ step: string, message: string }`                                                                                        | 阶段开始（searching / pondering / auditing / fixing） |
+| `step:tokens`       | `{ step: string, chunk: string }`                                                                                          | LLM 输出文本流                                        |
+| `step:reasoning`    | `{ step: string, chunk: string }`                                                                                          | LLM 推理/思考过程流                                   |
+| `step:tool-call`    | `{ step: string, toolCallId: string, toolName: string, input?: any, startTime: number }`                                   | Tool call 开始                                        |
+| `step:tool-result`  | `{ step: string, toolCallId: string, toolName: string, output?: any, error?: string, warning?: string, duration: number }` | Tool call 结果                                        |
+| `step:complete`     | `{ step: string, duration: number, summary: string, result?: any, rawText?: string, reasoningText?: string }`              | 阶段完成                                              |
+| `step:error`        | `{ step: string, error: string, willRetry?: boolean }`                                                                     | 阶段失败（非 fixing 阶段将终止流水线）                |
+| `pipeline:complete` | `{ yaml: string, scores: object }`                                                                                         | 流水线完成，含完整 YAML 和评分                        |
+| `pipeline:stopped`  | `{ yaml: string, stoppedAtStage: string, reason: string }`                                                                 | 流水线因止损机制提前终止（保留部分结果）              |
 
 ### Cancel Job
 
@@ -412,11 +420,11 @@ Content-Type: application/json
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| fromStage | string | no | 从哪个阶段重新开始：`searching` / `pondering` / `auditing` |
-| notes | string | no | 更新的生成指示 |
-| userScore | number | no | 用户评分（0-10），回传给审核阶段 |
+| Field     | Type   | Required | Description                                                |
+| --------- | ------ | -------- | ---------------------------------------------------------- |
+| fromStage | string | no       | 从哪个阶段重新开始：`searching` / `pondering` / `auditing` |
+| notes     | string | no       | 更新的生成指示                                             |
+| userScore | number | no       | 用户评分（0-10），回传给审核阶段                           |
 
 ### Resume Active Job
 
@@ -544,7 +552,27 @@ X-Admin-Token: <token>
 GET /api/announcements
 ```
 
-返回系统公告列表。
+返回系统公告列表。公告默认来自 GitHub latest release note；如果公告来源暂不可达，接口仍返回本地缓存公告，并通过 `sourceNotice` 提供非阻塞提示。
+
+```json
+{
+  "announcements": [
+    {
+      "version": 2000005,
+      "date": "2026-06-08",
+      "title": "2.0.5 更新公告",
+      "body_md": "## [2.0.5] - 2026-06-08\n...",
+      "dismissible": true
+    }
+  ],
+  "sourceNotice": {
+    "source": "github",
+    "level": "warning",
+    "message": "无法连接 GitHub Release，当前显示本地缓存公告。",
+    "detail": "network unavailable"
+  }
+}
+```
 
 ---
 
@@ -572,7 +600,7 @@ Response: `{ "connected": true }`
 GET /api/core/version
 ```
 
-Response: `{ "version": "2.0.2", "copyright": "Copyright © 2026 yelanyanyu(Github)" }`
+Response: `{ "version": "2.0.5", "copyright": "Copyright © 2026 yelanyanyu(Github)" }`
 
 ### Word Check
 
@@ -590,14 +618,14 @@ GET /api/core/check?word=test&language=en
 { "success": false, "code": 400, "message": "Error description" }
 ```
 
-| Status | Description |
-|--------|-------------|
-| 200 | Success |
-| 400 | Bad request |
-| 401 | Unauthorized（缺少 token） |
-| 403 | Forbidden（无效 token） |
-| 404 | Not found |
-| 409 | Conflict（重复词条） |
-| 422 | Unprocessable（YAML 无效） |
-| 429 | Rate limited |
-| 500 | Internal server error |
+| Status | Description                |
+| ------ | -------------------------- |
+| 200    | Success                    |
+| 400    | Bad request                |
+| 401    | Unauthorized（缺少 token） |
+| 403    | Forbidden（无效 token）    |
+| 404    | Not found                  |
+| 409    | Conflict（重复词条）       |
+| 422    | Unprocessable（YAML 无效） |
+| 429    | Rate limited               |
+| 500    | Internal server error      |

@@ -16,7 +16,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Web-blue?style=flat-square)](#)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/yelanyanyu/ad-fontes-manager)
 
-Ad Fontes 英语/德语词源词条管理工具。它把 AI 生成、YAML 修订、词条预览、SQLite 存储和 Anki 导出放在同一个桌面/Web 工作流里。
+Ad Fontes 英语/德语词源词条管理工具。它把 AI 生成、YAML 修订、词条预览、SQLite 存储、词条迁移和 Anki 导出放在同一个桌面/Web 工作流里。
 
 [下载](https://github.com/yelanyanyu/ad-fontes-manager/releases) · [零基础教程](./docs/TUTORIAL.md) · [开发指南](./docs/DEVELOPMENT.md) · [发布记录](./CHANGELOG.md)
 
@@ -30,8 +30,8 @@ Ad Fontes 英语/德语词源词条管理工具。它把 AI 生成、YAML 修订
 
 - **AI 生成词条**：多阶段流水线生成英语/德语词源 YAML，支持搜索、创意扩写、审核、修复和批量队列。
 - **YAML 编辑与修复**：编辑器提供实时校验、层级导航、智能缩进、Basic Format Fix 和重复键诊断。
-- **词条管理**：SQLite 本地数据库保存词条，支持搜索、排序、分页、多语言切换和冲突检测。
-- **预览与导出**：预览 Anki 卡片效果，支持 AnkiConnect 导入和 `.apkg` 文件导出。
+- **词条管理**：SQLite 本地数据库保存词条，支持搜索、排序、分页、多语言切换、JSON 无损导入导出和冲突检测。
+- **预览与导出**：预览 Anki 卡片效果，支持 AnkiConnect 导入、`.apkg` 文件导出和词条 JSON 迁移。
 - **桌面优先**：Windows/macOS Electron 应用支持自定义数据目录、自动更新和本地运行；同一代码库也支持 Web 模式。
 
 ## 快速开始
@@ -123,14 +123,14 @@ docs/
 
 核心技术栈：
 
-| 层级 | 技术 |
-| --- | --- |
-| 前端 | Vue 3, Pinia, Vite, Tailwind CSS |
-| 桌面 | Electron, electron-vite, electron-builder |
-| 后端 | Express, Zod, Pino |
-| AI | Vercel AI SDK, OpenAI/Anthropic/OpenAI-compatible providers |
-| 数据库 | SQLite, better-sqlite3, Drizzle ORM |
-| 导出 | AnkiConnect, anki-apkg-export |
+| 层级   | 技术                                                        |
+| ------ | ----------------------------------------------------------- |
+| 前端   | Vue 3, Pinia, Vite, Tailwind CSS                            |
+| 桌面   | Electron, electron-vite, electron-builder                   |
+| 后端   | Express, Zod, Pino                                          |
+| AI     | Vercel AI SDK, OpenAI/Anthropic/OpenAI-compatible providers |
+| 数据库 | SQLite, better-sqlite3, Drizzle ORM                         |
+| 导出   | AnkiConnect, anki-apkg-export                               |
 
 ## 文档地图
 
