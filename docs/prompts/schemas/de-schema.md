@@ -10,7 +10,7 @@ yield:
   genus: "(der/die/das for nouns, otherwise 'N/A')"
   syllabification: "(Syllable division respecting German phonology)"
   kasus: "(Case in context: Nominativ/Akkusativ/Dativ/Genitiv, if applicable)"
-  user_context_sentence: "(User context sentence)"
+  user_context_sentence: "(User context sentence; may be empty string if none)"
   part_of_speech: "(Wortart: Verb/Nomen/Adjektiv/Adverb/etc.)"
   contextual_meaning:
     de: "(Definition fitting the German context)"

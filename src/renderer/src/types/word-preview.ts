@@ -1,5 +1,3 @@
-export type PreviewMode = 'card' | 'markdown';
-
 export interface PreviewYamlData {
   yield?: {
     lemma?: string;

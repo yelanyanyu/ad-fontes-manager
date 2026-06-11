@@ -36,7 +36,7 @@ yield:
     - "(Inflected or common form 1)"
     - "(Inflected or common form 2)"
     - "(Inflected or common form 3)"
-  user_context_sentence: "(User context, or generated context if empty)"
+  user_context_sentence: "(User context sentence; may be empty string if none)"
   part_of_speech: "(noun/verb/adjective/etc.)"
   contextual_meaning:
     en: "(Definition fitting the context)"

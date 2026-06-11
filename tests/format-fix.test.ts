@@ -534,6 +534,17 @@ void test('Basic Format Fix rejects future Word Schema Version content', () => {
   );
 });
 
+void test('English validation accepts an empty user context sentence', () => {
+  const yamlWithEmptyContext = englishWithCreativeSectionsNestedUnderEtymology.replace(
+    /user_context_sentence: .+/,
+    'user_context_sentence: ""'
+  );
+  const result = prepareYamlForWordSave('abandon', yamlWithEmptyContext);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.canSave, true);
+});
+
 void test('Basic Format Fix reports duplicate sections instead of overwriting root content', () => {
   const result = prepareYamlForWordSave('abandon', englishWithDuplicateCognateFamily);
 

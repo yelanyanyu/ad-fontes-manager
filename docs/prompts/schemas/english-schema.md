@@ -9,7 +9,7 @@ yield:
   lemma: "(Lemma of the word)"
   syllabification: "(Lemma syllabification)"
   word_forms: ["(Inflected form 1)", "(Inflected form 2)", "(Inflected form 3)"]
-  user_context_sentence: "(User context sentence)"
+  user_context_sentence: "(User context sentence; may be empty string if none)"
   part_of_speech: "(Part of speech)"
   contextual_meaning:
     en: "(Definition fitting the context)"

@@ -36,7 +36,7 @@ yield:
   genus: "(der/die/das for nouns, otherwise N/A)"
   syllabification: "(German syllable division)"
   kasus: "(Nominativ/Akkusativ/Dativ/Genitiv if applicable)"
-  user_context_sentence: "(User context, or generated German sentence if empty)"
+  user_context_sentence: "(User context sentence; may be empty string if none)"
   part_of_speech: "(Wortart)"
   contextual_meaning:
     de: "(Definition fitting the German context)"

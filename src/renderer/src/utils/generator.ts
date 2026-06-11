@@ -6,6 +6,21 @@ interface CognateItem {
   logic?: string;
 }
 
+interface SourceWordV2 {
+  language?: string;
+  word?: string;
+  meaning?: string;
+  relation?: string;
+}
+
+interface DerivationItem {
+  language?: string;
+  word?: string;
+  part_of_speech?: string;
+  relation?: string;
+  logic?: string;
+}
+
 interface ExampleItem {
   type?: string;
   sentence?: string;
@@ -35,6 +50,25 @@ const getByPath = (obj: Dict, path: string, fallback: unknown = ''): unknown => 
 };
 
 const trimText = (value: unknown): string => (value ? String(value).trim() : '');
+
+const getStringList = (value: unknown): string[] =>
+  Array.isArray(value) ? value.map(trimText).filter(Boolean) : [];
+
+function formatSourceWord(value: unknown): string {
+  if (!value) return '';
+  if (typeof value === 'string') return trimText(value);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return trimText(value);
+
+  const source = value as SourceWordV2;
+  const word = trimText(source.word);
+  const language = trimText(source.language);
+  const relation = trimText(source.relation);
+  const meaning = trimText(source.meaning);
+  const meta = [language, relation].filter(Boolean).join(', ');
+  const head = word || [language, relation].filter(Boolean).join(' ');
+  const withMeta = meta && word ? `${head} (${meta})` : head;
+  return [withMeta, meaning].filter(Boolean).join(': ');
+}
 
 function isGerman(data: Dict): boolean {
   return !!(
@@ -82,6 +116,7 @@ function renderYieldCard(data: Dict): string {
   const meaningLang = de ? 'de' : 'en';
   const meaning = trimText(getByPath(data, `yield.contextual_meaning.${meaningLang}`));
   const meaningZh = trimText(getByPath(data, 'yield.contextual_meaning.zh'));
+  const wordForms = getStringList(getByPath(data, 'yield.word_forms', []));
 
   let extraInfo = `${trimText(getByPath(data, 'yield.syllabification'))} · ${trimText(getByPath(data, 'yield.part_of_speech'))}`;
   if (de && genus) extraInfo += ` · ${genus}`;
@@ -99,6 +134,13 @@ function renderYieldCard(data: Dict): string {
       </div>`;
   }
 
+  const wordFormsHtml =
+    wordForms.length > 0
+      ? `<div style="display:flex; flex-wrap:wrap; gap: 6px; margin-top: 12px;">
+          ${wordForms.map(form => `<span style="${s.tag}">${form}</span>`).join('')}
+        </div>`
+      : '';
+
   return `
     <div style="${s.section}">
       <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -112,6 +154,7 @@ function renderYieldCard(data: Dict): string {
         <div style="font-size: 18px; font-weight: 600; margin-bottom: 4px;">${meaning || meaningZh}</div>
         <div style="font-size: 16px; color: #4a5568;">${meaningZh}</div>
       </div>
+      ${wordFormsHtml}
       ${otherMeaningsHtml}
     </div>`;
 }
@@ -132,6 +175,7 @@ function renderEtymologyCard(data: Dict): string {
 function renderEnglishEtymologyCard(etymData: Dict): string {
   const roots = (etymData.root_and_affixes as Dict | undefined) || {};
   const origins = (etymData.historical_origins as Dict | undefined) || {};
+  const sourceWord = formatSourceWord(origins.source_word);
 
   return `<div style="${s.section.replace('background: white;', '')} border-bottom: 1px solid ${c.border};">
     <h2 style="${s.h2}">Etymology: Deep Analysis</h2>
@@ -141,7 +185,7 @@ function renderEnglishEtymologyCard(etymData: Dict): string {
       ${roots.suffix && roots.suffix !== 'N/A' ? `<span style="${s.tag}">SUF: ${String(roots.suffix)}</span>` : ''}
     </div>
     <p style="${s.p} font-size: 14px;"><strong>Structure:</strong> ${String(roots.structure_analysis ?? '')}</p>
-    <p style="${s.p} font-size: 14px;"><strong>Source:</strong> ${String(origins.source_word ?? '')} <span style="color:${c.accent}">(${String(origins.pie_root ?? '')})</span></p>
+    <p style="${s.p} font-size: 14px;"><strong>Source:</strong> ${sourceWord} <span style="color:${c.accent}">(${String(origins.pie_root ?? '')})</span></p>
     ${origins.history_myth && origins.history_myth !== 'N/A' ? `<div style="${s.mythBox}"><strong>History:</strong> ${String(origins.history_myth)}</div>` : ''}
     <div style="margin-top: 15px;"><div style="${s.h3}">Visual Imagery</div><div style="${s.textBlock}">${trimText(etymData.visual_imagery_zh)}</div></div>
     <div style="margin-top: 15px;"><div style="${s.h3}">Meaning Evolution</div><div style="${s.textBlock}">${trimText(etymData.meaning_evolution_zh)}</div></div>
@@ -218,6 +262,38 @@ function renderGermanEtymologyCard(etymData: Dict): string {
   html += `</div>`;
 
   return html;
+}
+
+// ==============================================================================
+// Word Formation Section (English v2)
+// ==============================================================================
+function renderWordFormationCard(data: Dict): string {
+  const derivations = getByPath(data, 'word_formation.derivations', []) as DerivationItem[];
+  if (!Array.isArray(derivations) || derivations.length === 0) return '';
+
+  const rows = derivations
+    .map(derivation => {
+      const word = trimText(derivation.word);
+      const language = trimText(derivation.language);
+      const partOfSpeech = trimText(derivation.part_of_speech);
+      const relation = trimText(derivation.relation);
+      const logic = trimText(derivation.logic);
+      const metadata = [language, partOfSpeech, relation].filter(Boolean).join(' · ');
+
+      return `<div style="background: white; border: 1px solid ${c.border}; padding: 10px; border-radius: 6px;">
+        <div style="display:flex; justify-content:space-between; gap: 10px; align-items:flex-start;">
+          <span style="font-weight: 700; color: ${c.sectionHeader}; font-size: 15px;">${word}</span>
+          ${metadata ? `<span style="font-size: 12px; color: ${c.textSub}; text-align:right;">${metadata}</span>` : ''}
+        </div>
+        ${logic ? `<div style="font-size: 13px; color: #4a5568; margin-top: 6px; border-top: 1px solid #f7fafc; padding-top: 6px;">${logic}</div>` : ''}
+      </div>`;
+    })
+    .join('');
+
+  return `<div style="${s.section.replace('background: white;', '')} background: #f8fbff;">
+    <h2 style="${s.h2}">Word Formation</h2>
+    <div style="${s.grid}">${rows}</div>
+  </div>`;
 }
 
 // ==============================================================================
@@ -336,195 +412,5 @@ function renderNuanceCard(data: Dict): string {
 // Public API
 // ==============================================================================
 export function generateCardHTML(data: Dict): string {
-  return `<div style="${s.card}">${renderYieldCard(data)}${renderEtymologyCard(data)}${renderCognateCard(data)}${renderApplicationCard(data)}${renderNuanceCard(data)}</div>`;
-}
-
-export function generateMarkdown(data: Dict): string {
-  const de = isGerman(data);
-  let md = '';
-
-  // Yield
-  md += `### Yield: 单词解析 (Context & Meaning)\n\n`;
-  md += `* **用户单词**：${trimText(getByPath(data, 'yield.user_word'))}\n`;
-  md += `* **音节划分**：${trimText(getByPath(data, 'yield.syllabification'))}\n`;
-  md += `* **词性**：${trimText(getByPath(data, 'yield.part_of_speech'))}\n`;
-  if (de) {
-    const genus = trimText(getByPath(data, 'yield.genus'));
-    const kasus = trimText(getByPath(data, 'yield.kasus'));
-    if (genus) md += `* **Genus**：${genus}\n`;
-    if (kasus) md += `* **Kasus**：${kasus}\n`;
-  }
-  md += `* **用户语境**："${trimText(getByPath(data, 'yield.user_context_sentence'))}"\n`;
-  md += `* **语境释义 (Contextual Meaning)**：\n`;
-  md += `    * ${de ? 'DE' : 'EN'}: ${trimText(getByPath(data, de ? 'yield.contextual_meaning.de' : 'yield.contextual_meaning.en'))}\n`;
-  md += `    * ZH: ${trimText(getByPath(data, 'yield.contextual_meaning.zh'))}\n`;
-
-  const otherMeanings = getByPath(data, 'yield.other_common_meanings', []) as unknown[];
-  if (Array.isArray(otherMeanings) && otherMeanings.length > 0) {
-    md += `* **其他常见意思**：\n`;
-    otherMeanings.forEach((item, index) => {
-      md += `    ${index + 1}. ${trimText(item)}\n`;
-    });
-  }
-  md += `\n---\n\n`;
-
-  // Etymology
-  md += `### Etymology: 深度分析 (Deep Analysis)\n\n`;
-  if (de) {
-    const etymData = (data.etymology as Dict | undefined) || {};
-    const morph = (etymData.morphological_analysis as Dict | undefined) || {};
-    const components = (morph.components as MorphologicalComponent[] | undefined) || [];
-    const origins = (etymData.historical_origins as Dict | undefined) || {};
-    const phonology = (etymData.historical_phonology as Dict | undefined) || {};
-    const semantics = (etymData.historical_semantics as Dict | undefined) || {};
-
-    md += `* **Morphologische Analyse**\n`;
-    md += `    * Wortbildung: ${trimText(morph.word_formation)}\n`;
-    md += `    * Strukturanalyse: ${trimText(morph.structure_analysis)}\n`;
-    if (components.length > 0) {
-      md += `    * Komponenten:\n`;
-      for (const comp of components) {
-        md += `        - ${trimText(comp.element)} (${trimText(comp.type)}): ${trimText(comp.de_meaning)}\n`;
-      }
-    }
-    md += `\n* **Historische Ursprünge**\n`;
-    md += `    * Früheste Bezeugung: ${trimText(origins.earliest_attestation)}\n`;
-    md += `    * Quellform: ${trimText(origins.source_form)}\n`;
-    md += `    * PGmc Wurzel: ${trimText(origins.pgmc_root)}\n`;
-    md += `    * PIE Wurzel: ${trimText(origins.pie_root)}\n`;
-    md += `    * Lautverschiebungen: ${trimText(origins.sound_changes)}\n`;
-
-    if (phonology.pie_root || phonology.proto_germanic) {
-      md += `\n* **Historische Phonologie**\n`;
-      md += `    * PIE → PGmc: ${trimText(phonology.pie_root)} → ${trimText(phonology.proto_germanic)}\n`;
-      if (trimText(phonology.grimm_step)) md += `    * Grimm: ${trimText(phonology.grimm_step)}\n`;
-      if (trimText(phonology.verner_law)) md += `    * Verner: ${trimText(phonology.verner_law)}\n`;
-      md += `    * OHG: ${trimText(phonology.old_high_german)} · MHG: ${trimText(phonology.middle_high_german)}\n`;
-      if (trimText(phonology.consonant_shift))
-        md += `    * Konsonantenverschiebung: ${trimText(phonology.consonant_shift)}\n`;
-    }
-
-    if (semantics.proto_meaning || semantics.semantic_shifts) {
-      md += `\n* **Historische Semantik**\n`;
-      if (trimText(semantics.proto_meaning))
-        md += `    * Urbedeutung: ${trimText(semantics.proto_meaning)}\n`;
-      if (trimText(semantics.semantic_shifts))
-        md += `    * Bedeutungsverschiebungen: ${trimText(semantics.semantic_shifts)}\n`;
-    }
-  } else {
-    const roots = getByPath(data, 'etymology.root_and_affixes', {}) as Dict;
-    md += `* **Root & Affixes**\n`;
-    md += `    * Prefix: ${trimText(roots.prefix) || 'N/A'}\n`;
-    md += `    * Root: **${trimText(roots.root)}**\n`;
-    md += `    * Suffix: ${trimText(roots.suffix) || 'N/A'}\n`;
-    md += `    * Structure Analysis: ${trimText(roots.structure_analysis)}\n\n`;
-
-    const history = getByPath(data, 'etymology.historical_origins', {}) as Dict;
-    md += `* **Historical Origins**\n`;
-    md += `    * History/Myth: ${trimText(history.history_myth) || 'N/A'}\n`;
-    md += `    * Source Word: ${trimText(history.source_word)}\n`;
-    md += `    * PIE Root: ${trimText(history.pie_root)}\n`;
-  }
-
-  const imagery = trimText(getByPath(data, 'etymology.visual_imagery_zh'));
-  md += `\n* **词源画面**\n`;
-  if (imagery) {
-    imagery.split('\n').forEach(line => {
-      if (line.trim()) md += `    ${line.trim()}\n`;
-    });
-  }
-
-  const evolution = trimText(getByPath(data, 'etymology.meaning_evolution_zh'));
-  md += `\n* **词义演变**\n`;
-  if (evolution) {
-    evolution.split('\n').forEach(line => {
-      if (line.trim()) md += `    * ${line.trim()}\n`;
-    });
-  }
-  md += `\n---\n\n`;
-
-  // Cognates
-  md += `### Link: 构词法家族 (Cognate Family)\n\n`;
-  const cogInstruction = trimText(getByPath(data, 'cognate_family.instruction'));
-  if (cogInstruction) md += `* **核心逻辑**：${cogInstruction}\n\n`;
-  const cognates = getByPath(data, 'cognate_family.cognates', []) as CognateItem[];
-  cognates.forEach((cog, index) => {
-    const label =
-      de && cog.german_equivalent
-        ? `${trimText(cog.word)} → ${trimText(cog.german_equivalent)}`
-        : trimText(cog.word);
-    md += `${index + 1}. **${label}**: ${trimText(cog.logic)}\n`;
-  });
-  md += `\n---\n\n`;
-
-  // Application
-  md += `### Application: 应用 (Practice)\n\n`;
-  const examples = getByPath(data, 'application.selected_examples', []) as ExampleItem[];
-  if (examples.length > 0) {
-    md += `* **精选例句**：\n`;
-    examples.forEach((ex, index) => {
-      md += `    ${index + 1}. (${trimText(ex.type)})：${trimText(ex.sentence)}\n`;
-      md += `        * (${trimText(ex.translation_zh)})\n`;
-    });
-  }
-  md += `\n---\n\n`;
-
-  // Nuance
-  md += `### Nuance: 近义词辨析 (Synonym Nuances)\n\n`;
-  const synonyms = getByPath(data, 'nuance.synonyms', []) as SynonymItem[];
-  if (synonyms.length > 0) {
-    md += `* **近义词**：\n`;
-    synonyms.forEach(syn => {
-      md += `    * **${trimText(syn.word)}**: ${trimText(syn.meaning_zh)}\n`;
-      if (de && syn.connotation_difference) {
-        md += `        - ${trimText(syn.connotation_difference)}\n`;
-      }
-    });
-  }
-  md += `\n`;
-
-  const diff = trimText(getByPath(data, 'nuance.image_differentiation_zh'));
-  if (diff) {
-    md += `* **画面辨析**:\n`;
-    diff.split('\n').forEach(line => {
-      if (line.trim()) md += `    * ${line.trim()}\n`;
-    });
-  }
-
-  // German-specific markdown sections
-  if (de) {
-    const germDiff = trimText(getByPath(data, 'nuance.germanic_differentiation_zh'));
-    if (germDiff) {
-      md += `\n* **日耳曼语支差异**:\n`;
-      germDiff.split('\n').forEach(line => {
-        if (line.trim()) md += `    * ${line.trim()}\n`;
-      });
-    }
-
-    if (data.dialectal_notes) {
-      const notes = data.dialectal_notes as Dict;
-      const entries = Object.entries(notes).filter(([, v]) => v);
-      if (entries.length > 0) {
-        md += `\n* **方言注释 (Dialektale Anmerkungen)**\n`;
-        for (const [dialect, note] of entries) {
-          const label = dialect.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-          md += `    * ${label}: ${trimText(note)}\n`;
-        }
-      }
-    }
-
-    if (data.observations) {
-      const obs = data.observations as Dict;
-      if (trimText(obs.register) || trimText(obs.false_friends) || trimText(obs.calque_status)) {
-        md += `\n* **语体观察 (Beobachtungen)**\n`;
-        if (trimText(obs.register)) md += `    * Register: ${trimText(obs.register)}\n`;
-        if (trimText(obs.false_friends))
-          md += `    * False Friends: ${trimText(obs.false_friends)}\n`;
-        if (trimText(obs.calque_status))
-          md += `    * Calque Status: ${trimText(obs.calque_status)}\n`;
-      }
-    }
-  }
-
-  return md;
+  return `<div style="${s.card}">${renderYieldCard(data)}${renderEtymologyCard(data)}${renderWordFormationCard(data)}${renderCognateCard(data)}${renderApplicationCard(data)}${renderNuanceCard(data)}</div>`;
 }

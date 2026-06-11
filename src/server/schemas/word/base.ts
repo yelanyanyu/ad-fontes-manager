@@ -1,4 +1,9 @@
-const { requiredString, requiredObject, nonEmptyArray } = require('./helpers');
+const {
+  requiredString,
+  requiredStringAllowEmpty,
+  requiredObject,
+  nonEmptyArray,
+} = require('./helpers');
 
 function createBaseWordSchema(config: { meaningLang: 'en' | 'de' }) {
   const yieldSchema = requiredObject(
@@ -6,7 +11,7 @@ function createBaseWordSchema(config: { meaningLang: 'en' | 'de' }) {
       user_word: requiredString('yield.user_word'),
       lemma: requiredString('yield.lemma'),
       syllabification: requiredString('yield.syllabification'),
-      user_context_sentence: requiredString('yield.user_context_sentence'),
+      user_context_sentence: requiredStringAllowEmpty('yield.user_context_sentence'),
       part_of_speech: requiredString('yield.part_of_speech'),
       contextual_meaning: requiredObject(
         {

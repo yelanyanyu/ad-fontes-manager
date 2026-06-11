@@ -12,6 +12,9 @@ const requiredString = (fieldPath: string) =>
     z.string().min(1, `${fieldPath} is required`)
   );
 
+const requiredStringAllowEmpty = (_fieldPath: string) =>
+  z.preprocess(value => (typeof value === 'string' ? value.trim() : value), z.string());
+
 const optionalString = (_fieldPath: string) =>
   z.preprocess(
     value => (value == null || value === '' ? undefined : String(value).trim()),
@@ -32,6 +35,7 @@ module.exports = {
   isRecord,
   isNonEmptyString,
   requiredString,
+  requiredStringAllowEmpty,
   optionalString,
   requiredObject,
   strictObject,

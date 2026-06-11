@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { marked } from 'marked';
+import { computed } from 'vue';
 import yaml from 'js-yaml';
-import { generateCardHTML, generateMarkdown } from '@/utils/generator';
+import { generateCardHTML } from '@/utils/generator';
 import type { JobState } from '@/composables/useAiGenerate';
-import type { PreviewMode, PreviewYamlData } from '@/types/word-preview';
+import type { PreviewYamlData } from '@/types/word-preview';
 
 const props = defineProps<{
   job: JobState;
@@ -14,8 +13,6 @@ const emit = defineEmits<{
   close: [];
   'yaml-ready': [yaml: string];
 }>();
-
-const mode = ref<PreviewMode>('card');
 
 const rawData = computed<PreviewYamlData | null>(() => {
   if (!props.job.yaml) return null;
@@ -29,9 +26,7 @@ const rawData = computed<PreviewYamlData | null>(() => {
 
 const content = computed(() => {
   if (!rawData.value) return '';
-  if (mode.value === 'card') return generateCardHTML(rawData.value);
-  const parsed = marked.parse(generateMarkdown(rawData.value));
-  return typeof parsed === 'string' ? parsed : '';
+  return generateCardHTML(rawData.value);
 });
 
 function fillEditor(): void {
@@ -48,18 +43,6 @@ function fillEditor(): void {
         <strong>{{ job.word }}</strong>
       </div>
       <div class="head-actions">
-        <div class="mode-control">
-          <button type="button" :class="{ active: mode === 'card' }" @click="mode = 'card'">
-            Card
-          </button>
-          <button
-            type="button"
-            :class="{ active: mode === 'markdown' }"
-            @click="mode = 'markdown'"
-          >
-            Markdown
-          </button>
-        </div>
         <button type="button" class="primary-button" :disabled="!job.yaml" @click="fillEditor">
           Fill Editor
         </button>
@@ -71,14 +54,9 @@ function fillEditor(): void {
         <strong>No YAML result</strong>
         <span>This Job finished without a previewable YAML payload.</span>
       </section>
-      <section v-else-if="mode === 'card'" class="card-stage">
+      <section v-else class="card-stage">
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div class="rendered-card" v-html="content" />
-      </section>
-      <section v-else class="markdown-stage">
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div class="markdown-body" v-html="content" />
-        <pre>{{ job.yaml }}</pre>
       </section>
     </main>
   </div>
@@ -111,8 +89,7 @@ function fillEditor(): void {
 }
 
 .back-button,
-.primary-button,
-.mode-control button {
+.primary-button {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface);
@@ -153,27 +130,6 @@ function fillEditor(): void {
   gap: 8px;
 }
 
-.mode-control {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-
-.mode-control button {
-  height: 30px;
-  min-width: 76px;
-  border: 0;
-  border-radius: 0;
-  color: var(--muted);
-}
-
-.mode-control button.active {
-  background: var(--green-soft);
-  color: var(--green);
-}
-
 .primary-button {
   height: 32px;
   padding: 0 12px;
@@ -203,33 +159,11 @@ function fillEditor(): void {
   width: 100%;
 }
 
-.markdown-stage {
-  max-width: 900px;
-  margin: 0 auto;
-  display: grid;
-  gap: 16px;
-}
-
-.markdown-body,
-.markdown-stage pre,
 .empty-state {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-}
-
-.markdown-body {
-  padding: 22px;
-}
-
-.markdown-stage pre {
-  margin: 0;
-  padding: 16px;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: 12px;
-  white-space: pre-wrap;
 }
 
 .empty-state {

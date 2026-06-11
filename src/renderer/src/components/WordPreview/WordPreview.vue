@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * @file WordPreview.vue
- * @description 词条预览组件，提供卡片预览、Markdown 预览、图片导出功能
+ * @description 词条预览组件，提供卡片预览、图片导出功能
  *
  * @component WordPreview
  * @example
@@ -9,32 +9,29 @@
  *
  * @features
  * - 卡片预览模式：以精美卡片形式展示词条信息
- * - Markdown 预览模式：以 Markdown 格式展示词条内容
  * - 图片导出功能：支持将卡片导出为 PNG 图片
  * - 剪贴板操作：支持复制 HTML 代码、图片到剪贴板
  *
  * @dependencies
  * - vue: Vue 3 Composition API
- * - marked: Markdown 解析器
  * - html-to-image: 将 HTML 元素转换为图片
  * - js-yaml: YAML 数据解析
  * - @/stores/wordStore: 词条数据状态管理
  * - @/stores/appStore: 应用状态管理（Toast 提示）
- * - @/utils/generator: 卡片 HTML 和 Markdown 生成器
+ * - @/utils/generator: 卡片 HTML 生成器
  * - @/utils/template: 模板渲染工具
  * - @/utils/request: HTTP 请求工具
  */
 
-import { ref, onMounted, watch, computed } from 'vue';
-import { marked } from 'marked';
+import { ref, onMounted, watch } from 'vue';
 import { toPng, toBlob } from 'html-to-image';
 import { useWordStore } from '@/stores/wordStore';
 import { useAppStore } from '@/stores/appStore';
-import { generateCardHTML, generateMarkdown } from '@/utils/generator';
+import { generateCardHTML } from '@/utils/generator';
 import { renderTemplate } from '@/utils/template';
 import request from '@/utils/request';
 import yaml from 'js-yaml';
-import type { PreviewMode, PreviewRecord, PreviewYamlData } from '@/types/word-preview';
+import type { PreviewRecord, PreviewYamlData } from '@/types/word-preview';
 
 /**
  * 组件 Props 定义
@@ -65,18 +62,9 @@ const wordStore = useWordStore() as unknown as WordStoreLike;
 const appStore = useAppStore() as unknown as AppStoreLike;
 
 /**
- * 预览模式
- * @type {import('vue').Ref<'card' | 'markdown'>}
- * @description 当前预览模式，可选值：
- * - 'card': 卡片预览模式，展示精美卡片
- * - 'markdown': Markdown 预览模式，展示 Markdown 格式内容
- */
-const mode = ref<PreviewMode>('card');
-
-/**
  * 渲染后的内容
  * @type {import('vue').Ref<string>}
- * @description 根据当前模式渲染的 HTML 或 Markdown 内容
+ * @description 渲染后的 HTML 内容
  */
 const content = ref<string>('');
 
@@ -93,8 +81,6 @@ const loading = ref<boolean>(false);
  * @description 从 YAML 解析后的原始词条数据对象
  */
 const rawData = ref<PreviewYamlData | null>(null);
-
-const markdownContent = computed(() => generateMarkdown(rawData.value || {}));
 
 /**
  * 规范化 YAML 数据
@@ -167,31 +153,22 @@ const loadWord = async (): Promise<void> => {
 /**
  * 渲染内容
  * @description
- * 根据当前预览模式（mode）渲染对应的内容：
- * - card 模式：使用自定义模板或默认模板生成卡片 HTML
- * - markdown 模式：生成 Markdown 并解析为 HTML
+ * 使用自定义模板或默认模板生成卡片 HTML。
  */
 const renderContent = (): void => {
   if (!rawData.value) return;
 
-  if (mode.value === 'card') {
-    const templateMode = localStorage.getItem('etymos.wordCardTemplateMode') || 'default';
-    const customTemplate = localStorage.getItem('etymos.wordCardTemplateHtml') || '';
+  const templateMode = localStorage.getItem('etymos.wordCardTemplateMode') || 'default';
+  const customTemplate = localStorage.getItem('etymos.wordCardTemplateHtml') || '';
 
-    if (templateMode === 'custom' && customTemplate.trim()) {
-      content.value = renderTemplate(customTemplate, rawData.value);
-    } else {
-      content.value = generateCardHTML(rawData.value);
-    }
+  if (templateMode === 'custom' && customTemplate.trim()) {
+    content.value = renderTemplate(customTemplate, rawData.value);
   } else {
-    const md = generateMarkdown(rawData.value);
-    const parsed = marked.parse(md);
-    content.value = typeof parsed === 'string' ? parsed : '';
+    content.value = generateCardHTML(rawData.value);
   }
 };
 
 watch(() => props.wordId, loadWord);
-watch(mode, renderContent);
 
 onMounted(() => {
   if (props.wordId) void loadWord();
@@ -294,15 +271,9 @@ const downloadCardImage = async (): Promise<void> => {
   }
 };
 
-const copyContent = async (type: 'html' | 'md'): Promise<void> => {
+const copyHtml = async (): Promise<void> => {
   if (!rawData.value) return;
-  let text = '';
-  if (type === 'html') {
-    // Re-generate to ensure it matches current view
-    text = mode.value === 'card' ? content.value : generateCardHTML(rawData.value);
-  } else if (type === 'md') {
-    text = generateMarkdown(rawData.value);
-  }
+  const text = content.value || generateCardHTML(rawData.value);
 
   try {
     await navigator.clipboard.writeText(text);
@@ -312,15 +283,6 @@ const copyContent = async (type: 'html' | 'md'): Promise<void> => {
   }
 };
 
-const copyRichText = (): void => {
-  if (!rawData.value) return;
-  const html = mode.value === 'markdown' ? content.value : generateCardHTML(rawData.value);
-  const item = new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) });
-  navigator.clipboard.write([item]).then(
-    () => appStore.addToast('Rich text copied', 'success'),
-    () => appStore.addToast('Copy failed', 'error')
-  );
-};
 </script>
 
 <template>
@@ -339,32 +301,6 @@ const copyRichText = (): void => {
         </div>
         <span>Back to List</span>
       </button>
-
-      <!-- View Toggle -->
-      <div class="flex bg-stone-100 p-1 rounded-lg">
-        <button
-          :class="[
-            mode === 'card'
-              ? 'bg-white text-slate-700 shadow-sm'
-              : 'text-slate-500 hover:bg-emerald-100/50',
-          ]"
-          class="px-4 py-1.5 text-xs rounded-md font-bold transition-colors"
-          @click="mode = 'card'"
-        >
-          Card
-        </button>
-        <button
-          :class="[
-            mode === 'markdown'
-              ? 'bg-white text-slate-700 shadow-sm'
-              : 'text-slate-500 hover:bg-emerald-100/50',
-          ]"
-          class="px-4 py-1.5 text-xs rounded-md font-medium transition-colors"
-          @click="mode = 'markdown'"
-        >
-          Markdown
-        </button>
-      </div>
     </div>
 
     <div class="p-8 w-full max-w-5xl mx-auto flex-1">
@@ -374,13 +310,13 @@ const copyRichText = (): void => {
         <span>Loading...</span>
       </div>
 
-      <div v-else-if="mode === 'card'" class="flex flex-col items-center gap-6">
+      <div v-else class="flex flex-col items-center gap-6">
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div ref="cardRef" v-html="content" class="w-full" />
         <div class="flex flex-wrap items-center justify-center gap-3">
           <button
             class="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2 rounded-full font-bold shadow-lg transition transform active:scale-95 flex items-center gap-2"
-            @click="copyContent('html')"
+            @click="copyHtml"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg> <span>Copy HTML Code (Anki)</span>
           </button>
@@ -400,37 +336,6 @@ const copyRichText = (): void => {
             <svg :class="{ 'animate-spin': generatingImage }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /><path d="M12 15V3" /></svg>
             <span>{{ generatingImage ? 'Generating...' : 'Download Image' }}</span>
           </button>
-        </div>
-      </div>
-
-      <div v-else class="flex flex-col gap-8 w-full max-w-4xl mx-auto">
-        <div class="preview-card">
-          <div class="preview-card-header">
-            <h3 class="font-bold text-sm text-gray-700 uppercase tracking-wide">
-              <svg class="inline mr-2" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>Preview
-            </h3>
-            <button
-              class="text-xs bg-white text-blue-600 border border-blue-200 px-3 py-1 rounded shadow-sm"
-              @click="copyRichText"
-            >
-              Copy Rich Text
-            </button>
-          </div>
-          <!-- eslint-disable-next-line vue/no-v-html -->
-          <div id="md-render-target" class="p-8 markdown-body" v-html="content" />
-        </div>
-        <div class="source-panel">
-          <div class="source-header">
-            <h3>
-              <svg class="inline mr-2" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m16 18 6-6-6-6" /><path d="m8 6-6 6 6 6" /></svg>Source
-            </h3>
-            <button class="btn btn-sm" @click="copyContent('md')">
-              Copy Source
-            </button>
-          </div>
-          <div class="source-body">
-            <pre>{{ markdownContent }}</pre>
-          </div>
         </div>
       </div>
     </div>
@@ -466,91 +371,4 @@ const copyRichText = (): void => {
   background: rgba(24, 22, 20, 0.76);
 }
 
-.preview-card {
-  background: var(--surface);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
-
-.preview-card-header {
-  background: var(--surface-soft);
-  border-bottom: 1px solid var(--line);
-  padding: 8px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.preview-card-header h3 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.source-panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
-
-[data-theme="dark"] .source-panel {
-  background: var(--nav-soft);
-  border-color: var(--border);
-}
-
-.source-header {
-  background: var(--surface-soft);
-  border-bottom: 1px solid var(--line);
-  padding: 8px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-[data-theme="dark"] .source-header {
-  background: var(--nav);
-}
-
-.source-header h3 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--green);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.source-body {
-  padding: 16px;
-  overflow-x: auto;
-}
-
-.source-body pre {
-  font-family: var(--mono);
-  font-size: 13px;
-  color: var(--text);
-  white-space: pre-wrap;
-  margin: 0;
-}
-
-.btn {
-  font-size: 12px;
-  padding: 6px 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-soft);
-  cursor: pointer;
-  font-weight: 560;
-  transition: background 0.12s ease;
-}
-
-.btn:hover {
-  background: var(--surface-soft);
-}
 </style>
