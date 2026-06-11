@@ -198,6 +198,28 @@ export const useWordStore = defineStore('word', {
       }
     },
 
+    async deleteWords(ids: Array<string | number>): Promise<void> {
+      const appStore = useAppStore();
+      const uniqueIds = [...new Set(ids.map(id => String(id)).filter(Boolean))];
+      if (!uniqueIds.length) return;
+
+      wordLogger.debug('Deleting words...', { count: uniqueIds.length, ids: uniqueIds });
+      try {
+        await Promise.all(
+          uniqueIds.map(id => request.delete(`/v2/words/${id}`, { skipErrorToast: true }))
+        );
+        wordLogger.success('Words deleted', { count: uniqueIds.length });
+        appStore.addToast(`Deleted ${uniqueIds.length} words`, 'success');
+        await this.fetchDbRecords();
+      } catch (e) {
+        wordLogger.error('Delete words failed', {
+          count: uniqueIds.length,
+          error: (e as HttpErrorLike)?.message,
+        });
+        appStore.addToast('Batch delete failed', 'error');
+      }
+    },
+
     setEditingContext({
       id = null,
       yaml: yamlContent = undefined,

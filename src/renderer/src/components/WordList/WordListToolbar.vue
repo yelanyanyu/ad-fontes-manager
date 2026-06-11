@@ -17,12 +17,14 @@ const emit = defineEmits<{
   (e: 'open-batch-anki-export'): void;
   (e: 'export-selected-words'): void;
   (e: 'import-words'): void;
+  (e: 'delete-selected-words'): void;
   (e: 'select-all-matching'): void;
 }>();
 
 const searchInput = ref<HTMLInputElement | null>(null);
 const exportButton = ref<HTMLButtonElement | null>(null);
 const importButton = ref<HTMLButtonElement | null>(null);
+const deleteButton = ref<HTMLButtonElement | null>(null);
 const toolTipOpen = ref(false);
 const toolTipText = ref('');
 const toolTipStyle = ref({ top: '0px', left: '0px' });
@@ -46,6 +48,7 @@ const props = defineProps<{
   selectingAllMatching?: boolean;
   exportingWords?: boolean;
   importingWords?: boolean;
+  deletingWords?: boolean;
 }>();
 
 const exportTipText = computed(() =>
@@ -55,6 +58,13 @@ const exportTipText = computed(() =>
 );
 const importTipText = computed(() =>
   props.importingWords ? 'Importing Word Export JSON' : 'Import words from JSON'
+);
+const deleteTipText = computed(() =>
+  props.deletingWords
+    ? 'Deleting selected words'
+    : props.hasSelection
+      ? `Delete ${props.selectedCount} selected word${props.selectedCount === 1 ? '' : 's'}`
+      : 'Select words to delete'
 );
 
 onUnmounted(() => {
@@ -277,6 +287,29 @@ const onPageSizeChange = (event: Event) => {
             <path d="M5 21h14" />
             <path d="M5 17v4" />
             <path d="M19 17v4" />
+          </svg>
+        </button>
+
+        <button
+          v-if="isBackendConnected"
+          ref="deleteButton"
+          class="ui-icon-button ui-icon-button--danger toolbar-icon-button toolbar-delete-button"
+          type="button"
+          :disabled="!hasSelection || !!deletingWords"
+          aria-label="Delete selected words"
+          data-test="word-bulk-delete-button"
+          @mouseenter="scheduleToolTip(deleteButton, deleteTipText)"
+          @mouseleave="hideToolTip"
+          @focus="showToolTip(deleteButton, deleteTipText)"
+          @blur="hideToolTip"
+          @click="emit('delete-selected-words')"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M3 6h18" />
+            <path d="M8 6V4h8v2" />
+            <path d="M6 6l1 15h10l1-15" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
           </svg>
         </button>
 

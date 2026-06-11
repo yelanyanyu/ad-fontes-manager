@@ -83,6 +83,7 @@ interface WordStoreLike {
   loading: boolean;
   fetchDbRecords: (params?: Partial<DbListMeta> & { background?: boolean }) => Promise<void>;
   deleteWord: (id: string) => Promise<void>;
+  deleteWords: (ids: string[]) => Promise<void>;
   setEditorYaml: (yaml: string) => void;
   setEditingContext: (context: { id: string | null }) => void;
 }
@@ -174,6 +175,7 @@ const displayedRecords = computed<WordRecord[]>(() => {
 const selectingAllMatching = ref(false);
 const exportingWords = ref(false);
 const importingWords = ref(false);
+const deletingWords = ref(false);
 const wordImportInput = ref<HTMLInputElement | null>(null);
 const wordImportReviewOpen = ref(false);
 const wordImportImportedCount = ref(0);
@@ -188,6 +190,11 @@ const {
   dialog: batchCancelConfirmDialog,
   requestConfirm: requestBatchCancelConfirm,
   settleConfirm: settleBatchCancelConfirm,
+} = useConfirmDialog();
+const {
+  dialog: bulkDeleteConfirmDialog,
+  requestConfirm: requestBulkDeleteConfirm,
+  settleConfirm: settleBulkDeleteConfirm,
 } = useConfirmDialog();
 
 const {
@@ -219,6 +226,9 @@ const showBatchSummaryBar = computed<boolean>(() => {
       batchAnkiBusy.value)
   );
 });
+const selectedDeleteRecords = computed<WordRecord[]>(() =>
+  selectedExportRecords.value.filter(record => !record.isLocal)
+);
 
 const emit = defineEmits<{
   (e: 'preview', id: string): void;
@@ -438,6 +448,32 @@ const exportSelectedWords = (): void => {
     appStore.addToast(err.message || 'Failed to export selected words', 'error');
   } finally {
     exportingWords.value = false;
+  }
+};
+
+const deleteSelectedWords = async (): Promise<void> => {
+  if (deletingWords.value) return;
+  const ids = selectedDeleteRecords.value.map(record => String(record.id)).filter(Boolean);
+  if (!ids.length) return;
+
+  const requiresTypedConfirm = ids.length > 20;
+  const confirmed = await requestBulkDeleteConfirm({
+    title: `Delete ${ids.length} selected words?`,
+    message: 'This permanently removes the selected words from the database.',
+    confirmLabel: 'Delete Words',
+    variant: 'danger',
+    requiredText: requiresTypedConfirm ? '确认删除' : '',
+    requiredTextLabel: requiresTypedConfirm ? '输入“确认删除”以继续。' : '',
+    requiredTextPlaceholder: requiresTypedConfirm ? '确认删除' : '',
+  });
+  if (!confirmed) return;
+
+  deletingWords.value = true;
+  try {
+    await wordStore.deleteWords(ids);
+    clearSelection();
+  } finally {
+    deletingWords.value = false;
   }
 };
 
@@ -893,6 +929,11 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @cancel="settleBatchCancelConfirm(false)"
       @confirm="settleBatchCancelConfirm(true)"
     />
+    <ConfirmDialog
+      v-bind="bulkDeleteConfirmDialog"
+      @cancel="settleBulkDeleteConfirm(false)"
+      @confirm="settleBulkDeleteConfirm(true)"
+    />
     <AnkiExportModal
       :open="ankiExportOpen"
       :busy="ankiExportBusy"
@@ -1020,6 +1061,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       :selecting-all-matching="selectingAllMatching"
       :exporting-words="exportingWords"
       :importing-words="importingWords"
+      :deleting-words="deletingWords"
       @update-search="updateSearch"
       @clear-search="clearSearch"
       @search="handleSearch"
@@ -1034,6 +1076,7 @@ const paginationRange = computed<Array<number | '...'>>(() => {
       @select-all-matching="void selectAllMatching()"
       @export-selected-words="exportSelectedWords"
       @import-words="openWordImportPicker"
+      @delete-selected-words="void deleteSelectedWords()"
       @open-batch-anki-export="void openBatchAnkiExport()"
     />
     <input

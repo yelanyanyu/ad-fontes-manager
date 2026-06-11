@@ -5,12 +5,13 @@ import { useWordStore } from './wordStore';
 
 const requestGetMock = vi.hoisted(() => vi.fn());
 const requestPostMock = vi.hoisted(() => vi.fn());
+const requestDeleteMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@/utils/request', () => ({
   default: {
     get: requestGetMock,
     post: requestPostMock,
-    delete: vi.fn(),
+    delete: requestDeleteMock,
   },
 }));
 
@@ -20,11 +21,37 @@ beforeEach(() => {
   setActivePinia(createPinia());
   requestGetMock.mockReset();
   requestPostMock.mockReset();
+  requestDeleteMock.mockReset();
   storage.clear();
   vi.stubGlobal('localStorage', {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
     removeItem: (key: string) => storage.delete(key),
+  });
+});
+
+describe('wordStore.deleteWords', () => {
+  it('deletes each selected word and refreshes the list once', async () => {
+    requestDeleteMock.mockResolvedValue({});
+    requestGetMock.mockResolvedValueOnce({
+      items: [],
+      page: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 1,
+    });
+
+    const store = useWordStore();
+    await store.deleteWords(['a', 'b', 'a']);
+
+    expect(requestDeleteMock).toHaveBeenCalledTimes(2);
+    expect(requestDeleteMock).toHaveBeenNthCalledWith(1, '/v2/words/a', {
+      skipErrorToast: true,
+    });
+    expect(requestDeleteMock).toHaveBeenNthCalledWith(2, '/v2/words/b', {
+      skipErrorToast: true,
+    });
+    expect(requestGetMock).toHaveBeenCalledTimes(1);
   });
 });
 
