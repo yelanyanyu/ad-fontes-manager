@@ -86,7 +86,7 @@ describe('importWordExportFile', () => {
       ],
     });
     expect(requestPostMock).toHaveBeenCalledWith(
-      '/v2/words',
+      '/v2/words?source=import',
       expect.objectContaining({
         forceUpdate: false,
         yaml: expect.stringContaining('spinal'),
@@ -129,7 +129,7 @@ describe('importWordExportFile', () => {
       errors: [],
     });
     expect(requestPostMock).toHaveBeenCalledWith(
-      '/v2/words',
+      '/v2/words?source=import',
       { yaml: 'yield:\n  lemma: spinal\n', forceUpdate: true },
       { skipErrorToast: true }
     );

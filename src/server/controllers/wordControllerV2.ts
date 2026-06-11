@@ -5,7 +5,12 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
   getWordDetails: (req: Request, word: string, language: string) => Promise<unknown>;
   getWordById: (req: Request, id: string) => Promise<unknown>;
   checkWord: (req: Request, userWord: string, language: string) => Promise<unknown>;
-  saveWord: (req: Request, yamlStr: string, forceUpdate?: boolean) => Promise<unknown>;
+  saveWord: (
+    req: Request,
+    yamlStr: string,
+    forceUpdate?: boolean,
+    options?: { source?: 'import' }
+  ) => Promise<unknown>;
   addWord: (req: Request, word: string, yamlStr: string) => Promise<Record<string, unknown>>;
   deleteWord: (req: Request, id: string) => Promise<unknown>;
   validateYaml: (
@@ -76,10 +81,16 @@ class WordControllerV2 {
       yaml?: string;
       forceUpdate?: boolean;
     };
+    const source = toStringValue((req.query as Record<string, unknown>).source);
 
-    logger.debug({ forceUpdate, yamlStr: String(yamlStr).substring(0, 50) }, 'saveV2 asyncHandler');
+    logger.debug(
+      { forceUpdate, source, yamlStr: String(yamlStr).substring(0, 50) },
+      'saveV2 asyncHandler'
+    );
 
-    const result = await wordServiceV2.saveWord(req, yamlStr as string, forceUpdate);
+    const result = await wordServiceV2.saveWord(req, yamlStr as string, forceUpdate, {
+      source: source === 'import' ? 'import' : undefined,
+    });
     res.json(result);
   });
 

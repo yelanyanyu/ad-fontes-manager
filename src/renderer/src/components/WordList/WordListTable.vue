@@ -33,11 +33,7 @@ const gridTemplateColumns = computed(() => {
   return `34px 1fr ${optionalColumns} 122px`;
 });
 
-const getOutdatedVersionLabel = (item: WordRecord): string => {
-  if ((item as any).is_latest_schema !== false) return '';
-  const version = Number((item as any).word_schema_version ?? 1);
-  return Number.isFinite(version) && version > 0 ? `v${version}` : 'v1';
-};
+const isOutdatedSchema = (item: WordRecord): boolean => (item as any).is_latest_schema === false;
 </script>
 
 <template>
@@ -133,8 +129,8 @@ const getOutdatedVersionLabel = (item: WordRecord): string => {
           <span v-if="isSelected(item)">&#10003;</span>
         </div>
         <div class="lemma-cell">
-          <span v-if="getOutdatedVersionLabel(item)" class="word-version-badge">
-            {{ getOutdatedVersionLabel(item) }}
+          <span v-if="isOutdatedSchema(item)" class="word-version-badge" aria-label="Old word content">
+            旧
           </span>
           <span class="lemma-text">{{ item.lemma || item.yield?.lemma }}</span>
         </div>

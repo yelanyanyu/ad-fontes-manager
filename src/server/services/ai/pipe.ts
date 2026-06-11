@@ -44,13 +44,16 @@ const { getAIConfig } = require('./configService') as {
     };
   };
 };
+const { CURRENT_WORD_SCHEMA_VERSION } = require('../../schemas/word/version') as {
+  CURRENT_WORD_SCHEMA_VERSION: number;
+};
 
 function buildStructuralMock(word: string, language: string, context: string): string {
   if (language === 'de') {
     return yaml.dump(
       {
         ad_fontes: {
-          word_schema_version: 2,
+          word_schema_version: CURRENT_WORD_SCHEMA_VERSION,
         },
         yield: {
           user_word: word,
@@ -95,7 +98,7 @@ function buildStructuralMock(word: string, language: string, context: string): s
   return yaml.dump(
     {
       ad_fontes: {
-        word_schema_version: 2,
+        word_schema_version: CURRENT_WORD_SCHEMA_VERSION,
       },
       yield: {
         user_word: word,

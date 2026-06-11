@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import yaml from 'js-yaml';
-import { generateCardHTML } from '@/utils/generator';
+import { buildPreviewContent } from '@/modules/previewContent';
 import type { JobState } from '@/composables/useAiGenerate';
-import type { PreviewYamlData } from '@/types/word-preview';
 
 const props = defineProps<{
   job: JobState;
@@ -14,19 +12,13 @@ const emit = defineEmits<{
   'yaml-ready': [yaml: string];
 }>();
 
-const rawData = computed<PreviewYamlData | null>(() => {
-  if (!props.job.yaml) return null;
-  try {
-    const parsed = yaml.load(props.job.yaml);
-    return parsed && typeof parsed === 'object' ? (parsed as PreviewYamlData) : null;
-  } catch {
-    return null;
-  }
-});
-
-const content = computed(() => {
-  if (!rawData.value) return '';
-  return generateCardHTML(rawData.value);
+const previewContent = computed(() => buildPreviewContent(props.job.yaml));
+const rawData = computed(() => previewContent.value.rawData);
+const content = computed(() => previewContent.value.html);
+const schemaNoticeText = computed(() => {
+  if (previewContent.value.schemaFreshness === 'old') return '旧 - 可预览，保存为新词条前需要重新生成';
+  if (previewContent.value.schemaFreshness === 'future') return '新版 - 当前应用可能无法完整显示';
+  return '';
 });
 
 function fillEditor(): void {
@@ -52,9 +44,10 @@ function fillEditor(): void {
     <main class="preview-body">
       <section v-if="!rawData" class="empty-state">
         <strong>No YAML result</strong>
-        <span>This Job finished without a previewable YAML payload.</span>
+        <span>{{ previewContent.error || 'This Job finished without a previewable YAML payload.' }}</span>
       </section>
       <section v-else class="card-stage">
+        <div v-if="schemaNoticeText" class="schema-notice">{{ schemaNoticeText }}</div>
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div class="rendered-card" v-html="content" />
       </section>
@@ -157,6 +150,17 @@ function fillEditor(): void {
 
 .rendered-card {
   width: 100%;
+}
+
+.schema-notice {
+  margin: 0 0 12px;
+  border: 1px solid rgba(176, 103, 25, 0.3);
+  border-radius: var(--radius-md);
+  background: rgba(176, 103, 25, 0.1);
+  color: #7c4713;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .empty-state {

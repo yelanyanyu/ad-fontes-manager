@@ -140,7 +140,7 @@ export const importWordExportFile = async (
     try {
       const itemYaml = toWordImportYaml(item);
       const response = await request.post<boolean | SaveConflictResponse>(
-        '/v2/words',
+        '/v2/words?source=import',
         { yaml: itemYaml, forceUpdate: false },
         { skipErrorToast: true }
       );
@@ -188,7 +188,7 @@ export const resolveWordImportConflicts = async (
 
     try {
       const response = await request.post<boolean | SaveConflictResponse>(
-        '/v2/words',
+        '/v2/words?source=import',
         { yaml: conflict.yaml, forceUpdate: true },
         { skipErrorToast: true }
       );

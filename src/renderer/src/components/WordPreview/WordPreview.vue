@@ -15,11 +15,9 @@
  * @dependencies
  * - vue: Vue 3 Composition API
  * - html-to-image: 将 HTML 元素转换为图片
- * - js-yaml: YAML 数据解析
  * - @/stores/wordStore: 词条数据状态管理
  * - @/stores/appStore: 应用状态管理（Toast 提示）
- * - @/utils/generator: 卡片 HTML 生成器
- * - @/utils/template: 模板渲染工具
+ * - @/modules/previewContent: 预览内容转换
  * - @/utils/request: HTTP 请求工具
  */
 
@@ -27,10 +25,8 @@ import { ref, onMounted, watch } from 'vue';
 import { toPng, toBlob } from 'html-to-image';
 import { useWordStore } from '@/stores/wordStore';
 import { useAppStore } from '@/stores/appStore';
-import { generateCardHTML } from '@/utils/generator';
-import { renderTemplate } from '@/utils/template';
+import { buildPreviewContent, type PreviewSchemaFreshness } from '@/modules/previewContent';
 import request from '@/utils/request';
-import yaml from 'js-yaml';
 import type { PreviewRecord, PreviewYamlData } from '@/types/word-preview';
 
 /**
@@ -81,6 +77,8 @@ const loading = ref<boolean>(false);
  * @description 从 YAML 解析后的原始词条数据对象
  */
 const rawData = ref<PreviewYamlData | null>(null);
+const schemaFreshness = ref<PreviewSchemaFreshness | null>(null);
+const previewError = ref<string>('');
 
 /**
  * 规范化 YAML 数据
@@ -88,20 +86,12 @@ const rawData = ref<PreviewYamlData | null>(null);
  * @returns {Object | null} 解析后的数据对象，解析失败返回 null
  * @description 将 YAML 字符串解析为 JavaScript 对象，或返回已解析的对象
  */
-const normalizeYamlData = (
-  maybeYaml: string | PreviewYamlData | null | undefined
-): PreviewYamlData | null => {
-  if (!maybeYaml) return null;
-  if (typeof maybeYaml === 'string') {
-    try {
-      const parsed = yaml.load(maybeYaml);
-      return parsed && typeof parsed === 'object' ? (parsed as PreviewYamlData) : null;
-    } catch {
-      return null;
-    }
-  }
-  if (typeof maybeYaml === 'object') return maybeYaml;
-  return null;
+const setPreviewContent = (data: string | PreviewYamlData | null | undefined): void => {
+  const preview = buildPreviewContent(data);
+  rawData.value = preview.rawData;
+  content.value = preview.html;
+  schemaFreshness.value = preview.schemaFreshness;
+  previewError.value = preview.error || '';
 };
 
 /**
@@ -141,30 +131,11 @@ const loadWord = async (): Promise<void> => {
       record.original_yaml = full.original_yaml;
     }
 
-    rawData.value = normalizeYamlData(data);
-    renderContent();
+    setPreviewContent(data);
   } catch {
     appStore.addToast('Failed to load word details', 'error');
   } finally {
     loading.value = false;
-  }
-};
-
-/**
- * 渲染内容
- * @description
- * 使用自定义模板或默认模板生成卡片 HTML。
- */
-const renderContent = (): void => {
-  if (!rawData.value) return;
-
-  const templateMode = localStorage.getItem('etymos.wordCardTemplateMode') || 'default';
-  const customTemplate = localStorage.getItem('etymos.wordCardTemplateHtml') || '';
-
-  if (templateMode === 'custom' && customTemplate.trim()) {
-    content.value = renderTemplate(customTemplate, rawData.value);
-  } else {
-    content.value = generateCardHTML(rawData.value);
   }
 };
 
@@ -273,7 +244,7 @@ const downloadCardImage = async (): Promise<void> => {
 
 const copyHtml = async (): Promise<void> => {
   if (!rawData.value) return;
-  const text = content.value || generateCardHTML(rawData.value);
+  const text = content.value;
 
   try {
     await navigator.clipboard.writeText(text);
@@ -281,6 +252,12 @@ const copyHtml = async (): Promise<void> => {
   } catch {
     appStore.addToast('Copy failed', 'error');
   }
+};
+
+const schemaNoticeText = (): string => {
+  if (schemaFreshness.value === 'old') return '旧 - 可预览，建议重新生成';
+  if (schemaFreshness.value === 'future') return '新版 - 当前应用可能无法完整显示';
+  return '';
 };
 
 </script>
@@ -311,6 +288,12 @@ const copyHtml = async (): Promise<void> => {
       </div>
 
       <div v-else class="flex flex-col items-center gap-6">
+        <div v-if="schemaNoticeText()" class="schema-notice">
+          {{ schemaNoticeText() }}
+        </div>
+        <div v-if="previewError" class="schema-notice schema-notice--error">
+          {{ previewError }}
+        </div>
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div ref="cardRef" v-html="content" class="w-full" />
         <div class="flex flex-wrap items-center justify-center gap-3">
@@ -369,6 +352,25 @@ const copyHtml = async (): Promise<void> => {
 
 [data-theme="dark"] .preview-header {
   background: rgba(24, 22, 20, 0.76);
+}
+
+.schema-notice {
+  align-self: stretch;
+  max-width: 980px;
+  margin: 0 auto;
+  border: 1px solid rgba(176, 103, 25, 0.3);
+  border-radius: var(--radius-md);
+  background: rgba(176, 103, 25, 0.1);
+  color: #7c4713;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.schema-notice--error {
+  border-color: rgba(188, 72, 72, 0.34);
+  background: rgba(188, 72, 72, 0.1);
+  color: #9f2f2f;
 }
 
 </style>

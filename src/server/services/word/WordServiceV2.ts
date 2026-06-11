@@ -42,9 +42,12 @@ const { prepareYamlForWordSave, buildYamlParseDiagnostic } = require('./formatFi
     text: string
   ) => { severity: string; code: string; path: string; message: string };
 };
-const { ensureCurrentWordSchemaMetadata } = require('../../schemas/word/version') as {
-  ensureCurrentWordSchemaMetadata: (content: Record<string, unknown>) => Record<string, unknown>;
-};
+const { CURRENT_WORD_SCHEMA_VERSION, ensureCurrentWordSchemaMetadata, readWordSchemaVersion } =
+  require('../../schemas/word/version') as {
+    CURRENT_WORD_SCHEMA_VERSION: number;
+    ensureCurrentWordSchemaMetadata: (content: Record<string, unknown>) => Record<string, unknown>;
+    readWordSchemaVersion: (content: unknown) => number;
+  };
 
 interface LoggerLike {
   debug: (obj: unknown, msg?: string) => void;
@@ -60,6 +63,21 @@ interface RequestLike {
 }
 
 type DbOrTxLike = any;
+
+interface SaveWordOptions {
+  source?: 'import';
+}
+
+interface PreparedWordYaml {
+  ok: boolean;
+  yaml?: string;
+  data?: Record<string, any>;
+  language?: string;
+  changed: boolean;
+  canSave: boolean;
+  repairs: unknown[];
+  diagnostics: unknown[];
+}
 
 interface WordRepositoryV2Like {
   findByLemma: (
@@ -87,6 +105,27 @@ const isUniqueConstraintError = (error: { code?: string; message?: string }): bo
   error.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
   error.code === 'SQLITE_CONSTRAINT' ||
   String(error.message || '').includes('UNIQUE constraint failed');
+
+const isRecord = (value: unknown): value is Record<string, any> =>
+  Boolean(value && typeof value === 'object' && !Array.isArray(value));
+
+const getDiagnosticMessages = (diagnostics: unknown[]): string[] =>
+  diagnostics.map(diagnostic =>
+    typeof diagnostic === 'object' && diagnostic && 'message' in diagnostic
+      ? String((diagnostic as { message?: unknown }).message)
+      : String(diagnostic)
+  );
+
+const buildSaveValidationFailure = (prepared: PreparedWordYaml): Record<string, unknown> => ({
+  success: false,
+  error: 'Invalid YAML',
+  errors: getDiagnosticMessages(prepared.diagnostics),
+  diagnostics: prepared.diagnostics,
+  repairs: prepared.repairs,
+  yaml: prepared.yaml,
+  changed: prepared.changed,
+  canSave: prepared.canSave,
+});
 
 interface WordAssemblerV2Like {
   extractWordData: (data: Record<string, any>, language: string) => Record<string, unknown>;
@@ -408,55 +447,112 @@ class WordServiceV2 {
   async saveWord(
     req: RequestLike,
     yamlStr: string,
-    forceUpdate = false
+    forceUpdate = false,
+    options: SaveWordOptions = {}
   ): Promise<Record<string, unknown>> {
     const requestId = req.id || 'unknown';
-    const logger = createContextLogger({ requestId, operation: 'saveWordV2', forceUpdate });
+    const logger = createContextLogger({
+      requestId,
+      operation: 'saveWordV2',
+      forceUpdate,
+      source: options.source,
+    });
 
     if (!yamlStr) {
       logger.error('Save word failed: No YAML content');
       return { success: false, error: 'No YAML content' };
     }
 
-    const prepared = prepareYamlForWordSave('', yamlStr);
-    if (!prepared.ok || !prepared.data) {
-      logger.warn({ diagnostics: prepared.diagnostics }, 'Validation failed in saveWord');
-      return {
-        success: false,
-        error: 'Invalid YAML',
-        errors: prepared.diagnostics.map(diagnostic =>
-          typeof diagnostic === 'object' && diagnostic && 'message' in diagnostic
-            ? String((diagnostic as { message?: unknown }).message)
-            : String(diagnostic)
-        ),
-        diagnostics: prepared.diagnostics,
-        repairs: prepared.repairs,
-        yaml: prepared.yaml,
-        changed: prepared.changed,
-        canSave: prepared.canSave,
-      };
+    let parsedData: Record<string, any>;
+    try {
+      const parsed = yaml.load(yamlStr);
+      if (!isRecord(parsed)) {
+        return {
+          success: false,
+          error: 'Invalid YAML',
+          errors: ['YAML must be an object'],
+          diagnostics: [
+            {
+              severity: 'error',
+              code: 'yaml.not_object',
+              path: 'root',
+              message: 'YAML must be an object',
+            },
+          ],
+          repairs: [],
+          yaml: yamlStr,
+          changed: false,
+          canSave: false,
+        };
+      }
+      parsedData = parsed;
+    } catch (_error) {
+      const prepared = prepareYamlForWordSave('', yamlStr);
+      if (!prepared.ok || !prepared.data) {
+        logger.warn({ diagnostics: prepared.diagnostics }, 'Validation failed in saveWord');
+        return buildSaveValidationFailure(prepared);
+      }
+      parsedData = prepared.data;
     }
 
-    const data = prepared.data;
-    const language = prepared.language || this.detectLanguage(data);
-    const lemma = String(
-      (data.yield as Record<string, any> | undefined)?.lemma || ''
+    const initialLanguage = this.detectLanguage(parsedData);
+    const initialLemma = String(
+      (parsedData.yield as Record<string, any> | undefined)?.lemma || ''
     ).toLowerCase();
-    if (!lemma) {
+    if (!initialLemma) {
       logger.error('Save word failed: YAML missing yield.lemma');
       return { success: false, error: 'YAML missing yield.lemma' };
     }
 
     logger.debug(
-      { lemma, language, contentLength: prepared.yaml?.length || yamlStr.length },
+      { lemma: initialLemma, language: initialLanguage, contentLength: yamlStr.length },
       'Saving word (v2)'
     );
+
+    let lemma = initialLemma;
+    let language = initialLanguage;
 
     try {
       const db = getDb();
       logger.debug('Transaction started');
 
       return db.transaction((tx: DbOrTxLike) => {
+        const existingForPolicy = repositoryV2.findByLemma(initialLemma, initialLanguage, tx);
+        const incomingVersion = readWordSchemaVersion(parsedData);
+        const existingVersion = existingForPolicy
+          ? readWordSchemaVersion(existingForPolicy.content)
+          : null;
+        const isImport = options.source === 'import';
+        const requiresCurrentValidation =
+          incomingVersion === CURRENT_WORD_SCHEMA_VERSION ||
+          (!existingForPolicy && !isImport) ||
+          (Boolean(existingForPolicy) &&
+            existingVersion === CURRENT_WORD_SCHEMA_VERSION &&
+            !isImport);
+
+        let prepared: PreparedWordYaml;
+        if (requiresCurrentValidation) {
+          prepared = prepareYamlForWordSave('', yamlStr);
+          if (!prepared.ok || !prepared.data) {
+            logger.warn({ diagnostics: prepared.diagnostics }, 'Validation failed in saveWord');
+            return buildSaveValidationFailure(prepared);
+          }
+        } else {
+          prepared = {
+            ok: true,
+            yaml: yamlStr,
+            data: parsedData,
+            language: initialLanguage,
+            changed: false,
+            canSave: true,
+            repairs: [],
+            diagnostics: [],
+          };
+        }
+
+        const data = prepared.data as Record<string, any>;
+        language = prepared.language || this.detectLanguage(data);
+        lemma = String((data.yield as Record<string, any> | undefined)?.lemma || '').toLowerCase();
         const existing = repositoryV2.findByLemma(lemma, language, tx);
         const analysisRes = existing ? conflictService.analyze(existing.content, data) : null;
 
