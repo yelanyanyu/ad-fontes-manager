@@ -95,6 +95,10 @@ The configuration that determines which YAML data source populates which Anki Fi
 A named extractable value from a Word's YAML (e.g., `lemma`, `synonyms_word`, `rendered_html`). The enumerated set `AnkiDataSource` is the interface between word data and Anki card rendering.
 _Avoid_: Field key, extractor key
 
+**Built-in Word Card HTML** (内置词卡 HTML):
+The default HTML rendering of a Word's Content for user preview and the `rendered_html` Data Source. It is app-owned rendering logic, not a user-owned template. Word Preview, Job Result Preview, and Anki export paths should use the same Built-in Word Card HTML Module so new YAML fields such as Word Schema Version additions render consistently across preview and export. This is distinct from a user-provided custom preview template stored in renderer-only preferences.
+_Avoid_: Preview-only HTML, Anki-only HTML, custom template
+
 **Card Template**:
 The HTML/CSS structure defining how a single Anki card type renders. Templates are currently hardcoded in the server-side field extractor.
 
