@@ -1,10 +1,14 @@
 # English Word YAML Schema
 
 ```yaml
+ad_fontes:
+  word_schema_version: 2
+
 yield:
   user_word: "(Original user input)"
   lemma: "(Lemma of the word)"
   syllabification: "(Lemma syllabification)"
+  word_forms: ["(Inflected form 1)", "(Inflected form 2)", "(Inflected form 3)"]
   user_context_sentence: "(User context sentence)"
   part_of_speech: "(Part of speech)"
   contextual_meaning:
@@ -23,7 +27,11 @@ etymology:
     structure_analysis: "(Morphological logic)"
   historical_origins:
     history_myth: "(Historical/cultural context or 'N/A')"
-    source_word: "(Source language word and meaning)"
+    source_word:
+      language: "(Source language code, e.g. la, grc, oe, fr, N/A)"
+      word: "(Source word or 'N/A')"
+      meaning: "(Meaning of the source word or 'N/A')"
+      relation: "(borrowed_from / inherited_from / derived_from / related_to / N/A)"
     pie_root: "(PIE root and meaning or 'N/A')"
 
   visual_imagery_zh: |
@@ -32,13 +40,27 @@ etymology:
   meaning_evolution_zh: |
     (词义从身体动作到抽象用法的引申路径)
 
+word_formation:
+  derivations:
+    - language: "(Language code, e.g. en)"
+      word: "(Derived or related lemma)"
+      part_of_speech: "(Part of speech)"
+      relation: "(nominalization / verbalization / adjectivalization / adverbialization / derived_from / base_form)"
+      logic: "(说明构词关系)"
+
 cognate_family:
   cognates:
     - word: "(Cognate 1)"
+      language: "(Language code, e.g. en, fr, de, es, it)"
+      relation: "cognate"
       logic: "(说明同源关系)"
     - word: "(Cognate 2)"
+      language: "(Language code)"
+      relation: "cognate"
       logic: "(说明同源关系)"
     - word: "(Cognate 3)"
+      language: "(Language code)"
+      relation: "cognate"
       logic: "(说明同源关系)"
 
 application:

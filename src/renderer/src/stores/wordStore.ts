@@ -3,6 +3,7 @@ import yaml from 'js-yaml';
 import request from '@/utils/request';
 import { useAppStore } from '@/stores/appStore';
 import { wordLogger } from '@/utils/logger';
+import { hideWordAppMetadataInYaml } from '@/utils/wordMetadata';
 import type { DbListMeta, WordRecord } from '@/types/word-list';
 
 interface SaveConflictResult {
@@ -234,7 +235,7 @@ export const useWordStore = defineStore('word', {
     },
 
     setEditorYaml(yamlContent: string): void {
-      this.editorYaml = yamlContent;
+      this.editorYaml = hideWordAppMetadataInYaml(yamlContent);
       this.editorReloadToken++;
     },
   },

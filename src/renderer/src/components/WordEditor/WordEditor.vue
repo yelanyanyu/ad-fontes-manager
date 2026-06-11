@@ -12,6 +12,7 @@ import request from '@/utils/request';
 import { useYamlHierarchy } from '@/composables/useYamlHierarchy';
 import { createWordEditorValidationController } from '@/modules/wordEditor/validationController';
 import { createFormatFixCommand } from '@/modules/wordEditor/formatFixCommand';
+import { hideWordAppMetadataInYaml } from '@/utils/wordMetadata';
 
 interface WordStoreLike {
   editorYaml: string;
@@ -51,7 +52,7 @@ const formatFixCommand = createFormatFixCommand({
   state: validationState,
   repairYaml: payload => request.post('/v2/words/validate', payload),
   replaceYaml: yamlContent => {
-    input.value = yamlContent;
+    input.value = hideWordAppMetadataInYaml(yamlContent);
   },
   addToast: (message, type) => appStore.addToast(message, type),
 });
@@ -266,7 +267,7 @@ const overwrite = async () => {
 };
 
 const applyGeneratedYaml = (yamlContent: string) => {
-  input.value = yamlContent;
+  input.value = hideWordAppMetadataInYaml(yamlContent);
 };
 
 defineExpose({ applyGeneratedYaml });

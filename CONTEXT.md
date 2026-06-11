@@ -26,6 +26,10 @@ _Avoid_: Document, payload, body
 The JSON column in `words_v2` that holds the complete YAML document. The single source of truth for a Word.
 _Avoid_: Data, blob, payload
 
+**Word Schema Version** (词条结构版本):
+The integer version of the Word Content schema that a saved Word's YAML conforms to. It answers whether a Word is structurally current after the app's Word YAML fields change. It lives in Content at `ad_fontes.word_schema_version`, where `ad_fontes` is application metadata rather than learning content. The app owns the `ad_fontes` metadata block; users should not be expected or encouraged to edit it directly, and the ordinary YAML editor should hide it. Read-only details may show Word Schema Version as metadata, while Word Export keeps `ad_fontes` in Content for lossless exchange. The `words_v2.word_schema_version` column is a derived query cache for lists, filters, and freshness badges; Content remains the source of truth. The version increments by 1 whenever a Word structure change needs user-visible freshness checks. Existing Words without this field are treated as version 1. The app does not automatically migrate old Word Content to a newer Word Schema Version; it only shows that the Word is outdated and should be regenerated. Outdated schema messaging should use an informational or warning tone, not danger styling, because old Word Content may still be valid learning material. It is distinct from Prompt version, App Version, Word Export File version, and revision count.
+_Avoid_: Prompt version, export version, app version, revision
+
 **Part of Speech** (词性):
 Grammatical category of a Lemma — stored at the top level of the YAML, not inferred from content.
 

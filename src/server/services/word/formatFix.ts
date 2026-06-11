@@ -7,6 +7,9 @@ const { stripMarkdownFences, repairCommonYamlScalarSlips, repairLlmYamlQuirks } 
   };
 const { EnglishWordSchema } = require('../../schemas/word/english');
 const { GermanWordSchema } = require('../../schemas/word/german');
+const { ensureCurrentWordSchemaMetadata } = require('../../schemas/word/version') as {
+  ensureCurrentWordSchemaMetadata: (content: Record<string, unknown>) => Record<string, unknown>;
+};
 const validator = require('./WordValidator') as {
   validate: (
     data: unknown,
@@ -77,7 +80,7 @@ interface DoubleQuotedScalarPreference {
 }
 
 const EXPECTED_ROOT_SECTIONS: Record<WordLanguage, string[]> = {
-  en: ['yield', 'etymology', 'cognate_family', 'application', 'nuance'],
+  en: ['yield', 'etymology', 'word_formation', 'cognate_family', 'application', 'nuance'],
   de: ['yield', 'etymology', 'cognate_family', 'application', 'nuance'],
 };
 
@@ -570,17 +573,33 @@ export function prepareYamlForWordSave(wordText: string, yamlText: string): Form
 
   const language = detectLanguage(data);
   const doubleQuotedScalarPreferences = collectDoubleQuotedScalarPreferences(parseableYaml);
+  try {
+    ensureCurrentWordSchemaMetadata(data);
+  } catch (error) {
+    return buildInvalidResult(
+      {
+        severity: 'error',
+        code: 'schema.unsupported_word_schema_version',
+        path: 'ad_fontes.word_schema_version',
+        message: error instanceof Error ? error.message : 'Unsupported Word Schema Version',
+      },
+      parseableYaml,
+      data,
+      language,
+      parseableYaml !== String(yamlText || '').trim() || repairs.length > 0
+    );
+  }
   const promotionResult = applySectionPromotion(data, language);
   repairs.push(...promotionResult.repairs);
   const diagnostics = promotionResult.diagnostics;
-  const changed = parseableYaml !== String(yamlText || '').trim() || repairs.length > 0;
-  const repairedYaml =
-    promotionResult.repairs.length > 0
-      ? applyDoubleQuotedScalarPreferences(
-          yaml.dump(data, { lineWidth: -1, noRefs: true }),
-          doubleQuotedScalarPreferences
-        )
-      : parseableYaml;
+  const repairedYaml = applyDoubleQuotedScalarPreferences(
+    yaml.dump(data, { lineWidth: -1, noRefs: true }),
+    doubleQuotedScalarPreferences
+  );
+  const changed =
+    parseableYaml !== String(yamlText || '').trim() ||
+    repairedYaml.trim() !== parseableYaml.trim() ||
+    repairs.length > 0;
   const wordLower = String(wordText || getLemma(data))
     .trim()
     .toLowerCase();

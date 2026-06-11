@@ -1,6 +1,9 @@
 # German Word YAML Schema
 
 ```yaml
+ad_fontes:
+  word_schema_version: 2
+
 yield:
   user_word: "(Original user input with case/gender as given)"
   lemma: "(Dictionary form: Infinitive for verbs, Nominativ Singular for nouns)"

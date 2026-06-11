@@ -49,6 +49,9 @@ function buildStructuralMock(word: string, language: string, context: string): s
   if (language === 'de') {
     return yaml.dump(
       {
+        ad_fontes: {
+          word_schema_version: 2,
+        },
         yield: {
           user_word: word,
           lemma: word,
@@ -91,10 +94,14 @@ function buildStructuralMock(word: string, language: string, context: string): s
 
   return yaml.dump(
     {
+      ad_fontes: {
+        word_schema_version: 2,
+      },
       yield: {
         user_word: word,
         lemma: word.toLowerCase(),
         syllabification: word,
+        word_forms: [word.toLowerCase(), `${word.toLowerCase()}s`, `${word.toLowerCase()}ed`],
         user_context_sentence: context || `I want to understand the word ${word}.`,
         part_of_speech: 'noun',
         contextual_meaning: {
@@ -113,9 +120,25 @@ function buildStructuralMock(word: string, language: string, context: string): s
         },
         historical_origins: {
           history_myth: 'HELLO FROM RESEARCH AGENT',
-          source_word: `${word.toLowerCase()} (mock source)`,
+          source_word: {
+            language: 'en',
+            word: `${word.toLowerCase()} (mock source)`,
+            meaning: 'mock source meaning',
+            relation: 'derived_from',
+          },
           pie_root: 'N/A',
         },
+      },
+      word_formation: {
+        derivations: [
+          {
+            language: 'en',
+            word: word.toLowerCase(),
+            part_of_speech: 'noun',
+            relation: 'base_form',
+            logic: 'Mock formation relationship.',
+          },
+        ],
       },
     },
     { lineWidth: -1, noRefs: true }
@@ -131,7 +154,14 @@ function buildCreativeMock(word: string, language: string, context: string): str
           'HELLO FROM ENRICHMENT AGENT：这里展示从词源画面到现代含义的测试路径。',
       },
       cognate_family: {
-        cognates: [{ word: `${word.toLowerCase()}-kin`, logic: 'Mock cognate relationship.' }],
+        cognates: [
+          {
+            word: `${word.toLowerCase()}-kin`,
+            language,
+            relation: 'cognate',
+            logic: 'Mock cognate relationship.',
+          },
+        ],
       },
       application: {
         selected_examples: [

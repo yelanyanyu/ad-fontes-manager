@@ -25,10 +25,17 @@ Critical rules:
 
 Output format:
 
+ad_fontes:
+  word_schema_version: 2
+
 yield:
   user_word: "(Original user input)"
   lemma: "(Dictionary lemma)"
   syllabification: "(Syllable division)"
+  word_forms:
+    - "(Inflected or common form 1)"
+    - "(Inflected or common form 2)"
+    - "(Inflected or common form 3)"
   user_context_sentence: "(User context, or generated context if empty)"
   part_of_speech: "(noun/verb/adjective/etc.)"
   contextual_meaning:
@@ -47,5 +54,17 @@ etymology:
     structure_analysis: "(Morphological logic)"
   historical_origins:
     history_myth: "(Historical/cultural context or N/A)"
-    source_word: "(Source language word and meaning)"
+    source_word:
+      language: "(Source language code, e.g. la, grc, oe, fr, N/A)"
+      word: "(Source word or 'N/A')"
+      meaning: "(Meaning of the source word or 'N/A')"
+      relation: "(borrowed_from / inherited_from / derived_from / related_to / N/A)"
     pie_root: "(PIE root with * and meaning, or N/A)"
+
+word_formation:
+  derivations:
+    - language: "(Language code, e.g. en)"
+      word: "(Derived or related lemma)"
+      part_of_speech: "(Part of speech)"
+      relation: "(nominalization / verbalization / adjectivalization / adverbialization / derived_from / base_form)"
+      logic: "(说明构词关系)"

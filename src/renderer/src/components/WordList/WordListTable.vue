@@ -32,6 +32,12 @@ const gridTemplateColumns = computed(() => {
   const optionalColumns = props.shownColumns.map(() => 'auto').join(' ');
   return `34px 1fr ${optionalColumns} 122px`;
 });
+
+const getOutdatedVersionLabel = (item: WordRecord): string => {
+  if ((item as any).is_latest_schema !== false) return '';
+  const version = Number((item as any).word_schema_version ?? 1);
+  return Number.isFinite(version) && version > 0 ? `v${version}` : 'v1';
+};
 </script>
 
 <template>
@@ -127,7 +133,10 @@ const gridTemplateColumns = computed(() => {
           <span v-if="isSelected(item)">&#10003;</span>
         </div>
         <div class="lemma-cell">
-          {{ item.lemma || item.yield?.lemma }}
+          <span v-if="getOutdatedVersionLabel(item)" class="word-version-badge">
+            {{ getOutdatedVersionLabel(item) }}
+          </span>
+          <span class="lemma-text">{{ item.lemma || item.yield?.lemma }}</span>
         </div>
         <div v-for="col in shownColumns" :key="col" class="data-cell">
           {{ formatColValue(item, col) }}
@@ -258,12 +267,22 @@ const gridTemplateColumns = computed(() => {
 }
 
 .lemma-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-family: var(--serif);
   font-size: 17px;
   font-weight: 650;
   letter-spacing: -0.025em;
   color: #27231f;
   padding: 0 8px;
+}
+
+.lemma-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 [data-theme='dark'] .lemma-cell {
@@ -275,6 +294,28 @@ const gridTemplateColumns = computed(() => {
   font-size: 13px;
   color: var(--muted);
   white-space: nowrap;
+}
+
+.word-version-badge {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 20px;
+  padding: 0 6px;
+  border: 1px solid rgba(176, 103, 25, 0.32);
+  border-radius: var(--radius-sm);
+  background: rgba(176, 103, 25, 0.12);
+  color: #8a4d13;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: 0;
+}
+
+[data-theme='dark'] .word-version-badge {
+  border-color: rgba(230, 159, 76, 0.34);
+  background: rgba(230, 159, 76, 0.14);
+  color: #e1a157;
 }
 
 .row-actions {

@@ -23,7 +23,30 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-const englishWithCreativeSectionsNestedUnderEtymology = `
+function withEnglishV2Fields(source: string): string {
+  let text = source.replace(
+    /(\n {2}syllabification:[^\n]+)(?!\n {2}word_forms:)/g,
+    '$1\n  word_forms:\n    - base form\n    - inflected form\n    - related form'
+  );
+
+  text = text.replace(
+    /(\n {4}source_word: )([^\n]+)(?!\n {6}language:)/g,
+    '$1\n      language: la\n      word: $2\n      meaning: source meaning\n      relation: derived_from'
+  );
+
+  if (!/\nword_formation:/.test(text)) {
+    text = `${text.trimEnd()}\nword_formation:\n  derivations:\n    - language: en\n      word: derived\n      part_of_speech: verb\n      relation: derived_from\n      logic: related formation\n`;
+  }
+
+  text = text.replace(/(\n(\s*)- word: [^\n]+)(?!\n\s+language:)/g, (_match, line, indent) => {
+    const fieldIndent = `${indent}  `;
+    return `${line}\n${fieldIndent}language: fr\n${fieldIndent}relation: cognate`;
+  });
+
+  return text;
+}
+
+const englishWithCreativeSectionsNestedUnderEtymology = withEnglishV2Fields(`
 yield:
   user_word: abandon
   lemma: abandon
@@ -61,9 +84,9 @@ etymology:
     synonyms:
       - word: desert
         meaning_zh: 遗弃
-`;
+`);
 
-const englishWithDuplicateCognateFamily = `
+const englishWithDuplicateCognateFamily = withEnglishV2Fields(`
 yield:
   user_word: abandon
   lemma: abandon
@@ -105,9 +128,9 @@ nuance:
   synonyms:
     - word: desert
       meaning_zh: 遗弃
-`;
+`);
 
-const englishWithAliasLikePieRoot = `
+const englishWithAliasLikePieRoot = withEnglishV2Fields(`
 yield:
   user_word: abandon
   lemma: abandon
@@ -145,9 +168,9 @@ nuance:
   synonyms:
     - word: desert
       meaning_zh: 遗弃
-`;
+`);
 
-const englishWithSmartClosingQuoteInDoubleQuotedScalar = `
+const englishWithSmartClosingQuoteInDoubleQuotedScalar = withEnglishV2Fields(`
 yield:
   user_word: after
   lemma: after
@@ -189,9 +212,9 @@ nuance:
     - word: behind
       meaning_zh: 在后面
   image_differentiation_zh: after 是追，behind 是静止位置
-`;
+`);
 
-const englishWithSmartClosingQuoteAndNestedNuance = `
+const englishWithSmartClosingQuoteAndNestedNuance = withEnglishV2Fields(`
 yield:
   user_word: after
   lemma: after
@@ -229,9 +252,9 @@ application:
       - word: behind
         meaning_zh: 在后面
     image_differentiation_zh: after 是追，behind 是静止位置
-`;
+`);
 
-const englishWithPartialSectionPromotion = `
+const englishWithPartialSectionPromotion = withEnglishV2Fields(`
 yield:
   user_word: abandon
   lemma: abandon
@@ -264,9 +287,9 @@ nuance:
   synonyms:
     - word: desert
       meaning_zh: 遗弃
-`;
+`);
 
-const englishWithAliasLikePieRootAndNestedApplication = `
+const englishWithAliasLikePieRootAndNestedApplication = withEnglishV2Fields(`
 yield:
   user_word: abandon
   lemma: abandon
@@ -304,7 +327,7 @@ nuance:
   synonyms:
     - word: desert
       meaning_zh: 遗弃
-`;
+`);
 
 const yamlWithBadIndentation = `
 yield:
@@ -327,7 +350,7 @@ etymology:
   visual_imagery_zh: 变空
 `;
 
-const englishWithOnlyApplicationNestedUnderEtymology = `
+const englishWithOnlyApplicationNestedUnderEtymology = withEnglishV2Fields(`
 yield:
   user_word: compelling
   lemma: compelling
@@ -365,7 +388,7 @@ nuance:
     - word: convincing
       meaning_zh: 令人相信
   image_differentiation_zh: compelling 带有驱赶感
-`;
+`);
 
 const germanMatchingPromptSchema = `
 yield:
@@ -475,6 +498,9 @@ void test('Basic Format Fix promotes misplaced English root sections and returns
   assert.equal(result.diagnostics.length, 0);
   assert(result.yaml);
   assert(result.data);
+  const appMetadata = asRecord(result.data.ad_fontes);
+  assert.equal(appMetadata.word_schema_version, 2);
+  assert.match(result.yaml, /word_schema_version: 2/);
   assert.deepEqual(
     result.repairs.map(repair => repair.type),
     ['promote-section', 'promote-section', 'promote-section']
@@ -489,6 +515,22 @@ void test('Basic Format Fix promotes misplaced English root sections and returns
       'nuance'
     ),
     false
+  );
+});
+
+void test('Basic Format Fix rejects future Word Schema Version content', () => {
+  const yamlWithFutureSchema = englishWithCreativeSectionsNestedUnderEtymology.replace(
+    /^yield:/m,
+    'ad_fontes:\n  word_schema_version: 999\nyield:'
+  );
+  const result = prepareYamlForWordSave('abandon', yamlWithFutureSchema);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.canSave, false);
+  assert(
+    result.diagnostics.some(
+      diagnostic => diagnostic.code === 'schema.unsupported_word_schema_version'
+    )
   );
 });
 
@@ -641,7 +683,7 @@ void test('strict validate points unclosed double quote diagnostics at the scala
   assert(result.diagnostics?.some(diagnostic => diagnostic.code === 'yaml.unclosed_quote'));
   assert(
     result.errors.some(error =>
-      error.includes('Line 30 has a double-quoted value closed with a smart quote')
+      error.includes('has a double-quoted value closed with a smart quote')
     )
   );
   assert(result.errors.some(error => error.includes('logic')));

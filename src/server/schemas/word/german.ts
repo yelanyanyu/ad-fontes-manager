@@ -1,5 +1,8 @@
 import { z } from 'zod';
 const { createBaseWordSchema } = require('./base');
+const { CURRENT_WORD_SCHEMA_VERSION } = require('./version') as {
+  CURRENT_WORD_SCHEMA_VERSION: number;
+};
 const {
   isRecord,
   isNonEmptyString,
@@ -13,6 +16,12 @@ const base = createBaseWordSchema({ meaningLang: 'de' });
 
 const GermanWordSchema = z
   .object({
+    ad_fontes: strictObject(
+      {
+        word_schema_version: z.literal(CURRENT_WORD_SCHEMA_VERSION),
+      },
+      'ad_fontes'
+    ),
     root: z
       .unknown()
       .optional()

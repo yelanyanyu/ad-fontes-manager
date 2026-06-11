@@ -4,6 +4,11 @@ const { getDb } = require('../../db') as {
   getDb: () => DrizzleLike;
 };
 const { wordsV2 } = require('../../db/schema') as typeof import('../../db/schema');
+const { readWordSchemaVersion, isLatestWordSchemaVersion } =
+  require('../../schemas/word/version') as {
+    readWordSchemaVersion: (content: unknown) => number;
+    isLatestWordSchemaVersion: (version: number) => boolean;
+  };
 
 type SortMode = 'az' | 'za' | 'newest' | 'oldest' | 'updated-newest' | 'updated-oldest' | string;
 type WordRow = typeof wordsV2.$inferSelect;
@@ -18,6 +23,8 @@ interface WordRecord {
   created_at: string;
   updated_at: string;
   revision_count: number;
+  word_schema_version: number;
+  is_latest_schema: boolean;
 }
 
 interface CreateWordDataV2 {
@@ -58,15 +65,19 @@ const parseContent = (content: unknown): Record<string, unknown> => {
 
 const toWordRecord = (row: WordRow | undefined): WordRecord | null => {
   if (!row) return null;
+  const content = parseContent(row.content);
+  const wordSchemaVersion = row.wordSchemaVersion ?? readWordSchemaVersion(content);
   return {
     id: row.id,
     lemma: row.lemma,
     language: row.language,
     part_of_speech: row.partOfSpeech,
-    content: parseContent(row.content),
+    content,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
     revision_count: row.revisionCount,
+    word_schema_version: wordSchemaVersion,
+    is_latest_schema: isLatestWordSchemaVersion(wordSchemaVersion),
   };
 };
 
@@ -104,6 +115,7 @@ class WordRepositoryV2 {
       language: wordData.language || 'en',
       partOfSpeech: wordData.partOfSpeech ?? null,
       content: wordData.content,
+      wordSchemaVersion: readWordSchemaVersion(wordData.content),
     };
 
     db.insert(wordsV2).values(values).run();
@@ -121,6 +133,7 @@ class WordRepositoryV2 {
       .set({
         partOfSpeech: wordData.partOfSpeech ?? null,
         content: wordData.content,
+        wordSchemaVersion: readWordSchemaVersion(wordData.content),
         updatedAt: sql`datetime('now')`,
         revisionCount: sql`${wordsV2.revisionCount} + 1`,
       })

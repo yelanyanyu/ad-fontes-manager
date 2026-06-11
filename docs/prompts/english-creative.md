@@ -44,11 +44,17 @@ cognate_family:
   instruction: "请用中文写本板块，选择 3-4 个同源词。逻辑说明要自然，避免模板腔。"
   cognates:
     - word: "(Cognate 1)"
+      language: "(Language code, e.g. en, fr, de, es, it)"
+      relation: "cognate"
       logic: "(Format: 前缀'...'表示... + 想象/感受/看到[根词动作]... = 含义)"
     - word: "(Cognate 2)"
-      logic: "(Format: 前缀'...'表示... + 想象/感受/看到[根词动作]... = 含义)"
+      language: "(Language code)"
+      relation: "cognate"
+      logic: "(说明同源关系)"
     - word: "(Cognate 3)"
-      logic: "(Format: 前缀'...'表示... + 想象/感受/看到[根词动作]... = 含义)"
+      language: "(Language code)"
+      relation: "cognate"
+      logic: "(说明同源关系)"
 
 application:
   selected_examples:

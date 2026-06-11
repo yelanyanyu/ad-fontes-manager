@@ -23,6 +23,7 @@ const ensureDatabaseSchema = (target: SqliteDatabase): void => {
       language TEXT NOT NULL DEFAULT 'en',
       part_of_speech TEXT,
       content TEXT NOT NULL,
+      word_schema_version INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       revision_count INTEGER NOT NULL DEFAULT 1
@@ -94,6 +95,17 @@ const ensureDatabaseSchema = (target: SqliteDatabase): void => {
     'ALTER TABLE job_queue ADD COLUMN completed_at TEXT',
   ];
   for (const sql of jobQueueAdditions) {
+    try {
+      target.exec(sql);
+    } catch {
+      // Column already exists — fine.
+    }
+  }
+
+  const wordsV2Additions = [
+    'ALTER TABLE words_v2 ADD COLUMN word_schema_version INTEGER NOT NULL DEFAULT 1',
+  ];
+  for (const sql of wordsV2Additions) {
     try {
       target.exec(sql);
     } catch {

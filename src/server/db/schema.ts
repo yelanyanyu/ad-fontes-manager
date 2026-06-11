@@ -45,6 +45,7 @@ export const wordsV2 = sqliteTable(
     language: text('language').notNull().default('en'),
     partOfSpeech: text('part_of_speech'),
     content: text('content', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+    wordSchemaVersion: integer('word_schema_version').notNull().default(1),
     createdAt: text('created_at')
       .notNull()
       .default(sql`(datetime('now'))`),

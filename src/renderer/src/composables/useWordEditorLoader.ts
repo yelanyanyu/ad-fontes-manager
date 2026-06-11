@@ -3,6 +3,7 @@ import request from '@/utils/request';
 import yaml from 'js-yaml';
 import { wordLogger } from '@/utils/logger';
 import { useAppStore } from '@/stores/appStore';
+import { stripWordAppMetadata } from '@/utils/wordMetadata';
 import type { WordRecord } from '@/types/word-list';
 
 interface WordStoreLike {
@@ -33,9 +34,19 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
 
   const formatYamlForEditor = (yamlObj: unknown): string => {
     const orderedObj: Record<string, unknown> = {};
-    const keyOrder = ['yield', 'etymology', 'cognate_family', 'application', 'nuance'];
+    const keyOrder = [
+      'yield',
+      'etymology',
+      'word_formation',
+      'cognate_family',
+      'application',
+      'nuance',
+    ];
+    const visibleYamlObj = stripWordAppMetadata(yamlObj);
     const source =
-      yamlObj && typeof yamlObj === 'object' ? (yamlObj as Record<string, unknown>) : {};
+      visibleYamlObj && typeof visibleYamlObj === 'object'
+        ? (visibleYamlObj as Record<string, unknown>)
+        : {};
 
     for (const k of keyOrder) {
       if (source[k] !== undefined) orderedObj[k] = source[k];

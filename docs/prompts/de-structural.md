@@ -27,6 +27,9 @@ Critical rules:
 
 Output format:
 
+ad_fontes:
+  word_schema_version: 2
+
 yield:
   user_word: "(Original user input)"
   lemma: "(Dictionary form)"

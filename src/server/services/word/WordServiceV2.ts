@@ -42,6 +42,9 @@ const { prepareYamlForWordSave, buildYamlParseDiagnostic } = require('./formatFi
     text: string
   ) => { severity: string; code: string; path: string; message: string };
 };
+const { ensureCurrentWordSchemaMetadata } = require('../../schemas/word/version') as {
+  ensureCurrentWordSchemaMetadata: (content: Record<string, unknown>) => Record<string, unknown>;
+};
 
 interface LoggerLike {
   debug: (obj: unknown, msg?: string) => void;
@@ -269,6 +272,29 @@ class WordServiceV2 {
                 code: 'yaml.not_object',
                 path: 'root',
                 message: 'YAML must be an object',
+              },
+            ],
+          };
+        }
+
+        try {
+          ensureCurrentWordSchemaMetadata(data);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Unsupported Word Schema Version';
+          return {
+            valid: false,
+            errors: [message],
+            yaml: yamlStr,
+            changed: false,
+            canSave: false,
+            repairs: [],
+            diagnostics: [
+              {
+                severity: 'error',
+                code: 'schema.unsupported_word_schema_version',
+                path: 'ad_fontes.word_schema_version',
+                message,
               },
             ],
           };
