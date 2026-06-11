@@ -6,6 +6,8 @@ import type { WordEditorValidationState } from './validationController';
 const makeState = (): WordEditorValidationState => ({
   status: '',
   schemaErrors: [],
+  notices: [],
+  schemaFreshness: null,
   validating: false,
 });
 

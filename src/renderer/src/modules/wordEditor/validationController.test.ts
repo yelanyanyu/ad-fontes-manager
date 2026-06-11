@@ -34,8 +34,38 @@ describe('createWordEditorValidationController', () => {
     expect(validateYaml).toHaveBeenCalledWith({
       yaml: 'yield:\n  lemma: after\n  language: en\n',
       repair: false,
+      intent: undefined,
     });
     expect(controller.state.status).toBe('Valid YAML');
+    expect(controller.state.schemaErrors).toEqual([]);
+  });
+
+  it('sends update-existing intent when supplied by the editor context', async () => {
+    const validateYaml = vi.fn().mockResolvedValue({
+      valid: true,
+      errors: [],
+      canSave: true,
+      schemaFreshness: 'old',
+      notices: ['This is an old Word structure.'],
+    });
+    const controller = createWordEditorValidationController({
+      validateYaml,
+      inputDebounceMs: 0,
+      serverDebounceMs: 0,
+      getIntent: () => 'update-existing',
+    });
+
+    controller.handleTextChanged('yield:\n  lemma: legacy\n');
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(validateYaml).toHaveBeenCalledWith({
+      yaml: 'yield:\n  lemma: legacy\n',
+      repair: false,
+      intent: 'update-existing',
+    });
+    expect(controller.state.status).toBe('Valid YAML');
+    expect(controller.state.schemaFreshness).toBe('old');
+    expect(controller.state.notices).toEqual(['This is an old Word structure.']);
     expect(controller.state.schemaErrors).toEqual([]);
   });
 
@@ -82,6 +112,7 @@ describe('createWordEditorValidationController', () => {
     expect(validateYaml).not.toHaveBeenCalled();
     expect(controller.state.status).toBe('Invalid YAML');
     expect(controller.state.schemaErrors).toEqual([]);
+    expect(controller.state.notices).toEqual([]);
   });
 
   it('shows schema diagnostics returned by strict validation', async () => {

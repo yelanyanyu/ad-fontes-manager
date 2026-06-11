@@ -16,8 +16,9 @@ import { hideWordAppMetadataInYaml } from '@/utils/wordMetadata';
 
 interface WordStoreLike {
   editorYaml: string;
+  currentEditingId: string | number | null;
   saveWord: (yamlContent: string, force?: boolean) => Promise<boolean | ConflictData>;
-  setEditingContext: (context: { id: string | null }) => void;
+  setEditingContext: (context: { id: string | number | null }) => void;
 }
 
 interface AppStoreLike {
@@ -27,9 +28,10 @@ interface AppStoreLike {
 const wordStore = useWordStore() as unknown as WordStoreLike;
 const appStore = useAppStore() as unknown as AppStoreLike;
 
-const { editorYaml, editorReloadToken } = storeToRefs(wordStore as any) as {
+const { editorYaml, editorReloadToken, currentEditingId } = storeToRefs(wordStore as any) as {
   editorYaml: Ref<string>;
   editorReloadToken: Ref<number>;
+  currentEditingId: Ref<string | number | null>;
 };
 
 const input = ref<string>('');
@@ -46,6 +48,7 @@ let editorResizeObserver: ResizeObserver | null = null;
 const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
 const validationController = createWordEditorValidationController({
   validateYaml: payload => request.post('/v2/words/validate', payload),
+  getIntent: () => (currentEditingId.value ? 'update-existing' : 'create'),
 });
 const validationState = validationController.state;
 const formatFixCommand = createFormatFixCommand({
@@ -171,6 +174,7 @@ function handleKeydown(e: KeyboardEvent): void {
 }
 
 const isEmpty = computed(() => !input.value || input.value.trim().length === 0);
+const editorSaveIntentLabel = computed(() => (currentEditingId.value ? 'Editing Word' : 'New Word'));
 
 const saveLabel = 'Save';
 
@@ -294,10 +298,10 @@ defineExpose({ applyGeneratedYaml });
       @primary="overwrite"
     />
 
-    <div class="ui-panel__head">
-      <div class="ui-panel__title">
+    <div class="ui-panel__head editor-head">
+      <div class="ui-panel__title editor-title">
         <strong>YAML Editor</strong>
-        <span>
+        <span class="editor-status-line">
           <span
             class="status-dot"
             :class="{
@@ -307,7 +311,14 @@ defineExpose({ applyGeneratedYaml });
               'dot-ready': validationState.status === '',
             }"
           />
-          {{ validationState.status || 'Ready' }}
+          <span class="editor-status-text">{{ validationState.status || 'Ready' }}</span>
+          <span class="editor-intent-chip">{{ editorSaveIntentLabel }}</span>
+          <span v-if="validationState.schemaFreshness === 'old'" class="editor-freshness-chip">
+            旧
+          </span>
+          <span v-if="validationState.schemaFreshness === 'future'" class="editor-freshness-chip">
+            新版
+          </span>
         </span>
       </div>
       <div class="head-actions">
@@ -335,7 +346,9 @@ defineExpose({ applyGeneratedYaml });
             <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4" />
             <path d="m15 5 4 4" />
           </svg>
-          {{ formatFixState.repairing ? 'Repairing...' : 'Repair' }}
+          <span class="head-action-label">
+            {{ formatFixState.repairing ? 'Repairing...' : 'Repair' }}
+          </span>
         </button>
         <button
           :class="[
@@ -351,9 +364,13 @@ defineExpose({ applyGeneratedYaml });
             <path d="M17 21v-8H7v8" />
             <path d="M7 3v4h8" />
           </svg>
-          {{ saving ? 'Saving...' : saveLabel }}
+          <span class="head-action-label">{{ saving ? 'Saving...' : saveLabel }}</span>
         </button>
       </div>
+    </div>
+
+    <div v-if="validationState.notices.length" class="editor-notice">
+      {{ validationState.notices[0] }}
     </div>
 
     <div class="breadcrumb-bar">
@@ -420,8 +437,37 @@ defineExpose({ applyGeneratedYaml });
 <style scoped>
 .editor-panel {
   display: grid;
-  grid-template-rows: 48px auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   flex: 1;
+}
+
+.editor-head {
+  gap: 12px;
+  min-width: 0;
+}
+
+.editor-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+}
+
+.editor-title strong {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.editor-status-line {
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+}
+
+.editor-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-dot {
@@ -451,6 +497,41 @@ defineExpose({ applyGeneratedYaml });
   box-shadow: 0 0 0 3px rgba(44, 96, 143, 0.1);
 }
 
+.editor-intent-chip,
+.editor-freshness-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 0 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: 0;
+  font-family: var(--sans);
+  white-space: nowrap;
+}
+
+.editor-intent-chip {
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+.editor-freshness-chip {
+  border: 1px solid rgba(176, 103, 25, 0.32);
+  background: rgba(176, 103, 25, 0.12);
+  color: #8a4d13;
+}
+
+.editor-notice {
+  border-bottom: 1px solid rgba(176, 103, 25, 0.22);
+  background: rgba(176, 103, 25, 0.08);
+  color: #7c4713;
+  padding: 8px 20px;
+  font-size: 12px;
+  font-weight: 620;
+}
+
 [data-theme="dark"] .dot-valid {
   box-shadow: 0 0 0 3px rgba(67, 179, 127, 0.1);
 }
@@ -471,6 +552,7 @@ defineExpose({ applyGeneratedYaml });
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .head-save {
@@ -482,6 +564,10 @@ defineExpose({ applyGeneratedYaml });
 .head-repair {
   height: 30px;
   padding: 0 10px;
+}
+
+.head-action-label {
+  white-space: nowrap;
 }
 
 .head-repair:hover:not(:disabled),
@@ -679,6 +765,57 @@ defineExpose({ applyGeneratedYaml });
   font-size: 12px;
   color: var(--red);
   line-height: 1.6;
+}
+
+@media (max-width: 860px) {
+  .editor-head {
+    min-height: 48px;
+    height: auto;
+    padding: 8px 12px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .editor-title {
+    flex-basis: 100%;
+    gap: 10px;
+  }
+
+  .head-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .editor-notice {
+    padding-inline: 12px;
+  }
+}
+
+@media (max-width: 520px) {
+  .editor-title {
+    gap: 8px;
+  }
+
+  .editor-status-line {
+    gap: 6px;
+  }
+
+  .editor-intent-chip {
+    max-width: 76px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .head-repair,
+  .head-save {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+  }
+
+  .head-action-label {
+    display: none;
+  }
 }
 
 </style>

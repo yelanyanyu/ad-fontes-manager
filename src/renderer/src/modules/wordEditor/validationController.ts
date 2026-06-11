@@ -17,16 +17,24 @@ export interface FormatValidationResponse {
   changed?: boolean;
   repairs?: Array<{ type: string; message?: string }>;
   diagnostics?: FormatDiagnosticMessage[];
+  parseStatus?: 'ok' | 'error';
+  schemaFreshness?: 'current' | 'old' | 'future';
+  saveIntent?: 'create' | 'update-existing';
+  canSave?: boolean;
+  notices?: string[];
 }
 
 export interface StrictValidationPayload {
   yaml: string;
   repair: false;
+  intent?: 'create' | 'update-existing';
 }
 
 export interface WordEditorValidationState {
   status: EditorStatus;
   schemaErrors: string[];
+  notices: string[];
+  schemaFreshness: 'current' | 'old' | 'future' | null;
   validating: boolean;
 }
 
@@ -35,6 +43,7 @@ interface WordEditorValidationControllerOptions {
   inputDebounceMs?: number;
   serverDebounceMs?: number;
   parseYaml?: (text: string) => unknown;
+  getIntent?: () => 'create' | 'update-existing';
 }
 
 export function formatValidationMessages(res: FormatValidationResponse): string[] {
@@ -56,10 +65,13 @@ export function createWordEditorValidationController({
   inputDebounceMs = 500,
   serverDebounceMs = 300,
   parseYaml = yaml.load,
+  getIntent,
 }: WordEditorValidationControllerOptions) {
   const state = reactive<WordEditorValidationState>({
     status: '',
     schemaErrors: [],
+    notices: [],
+    schemaFreshness: null,
     validating: false,
   });
 
@@ -84,6 +96,8 @@ export function createWordEditorValidationController({
     clearValidateTimer();
     state.status = '';
     state.schemaErrors = [];
+    state.notices = [];
+    state.schemaFreshness = null;
     state.validating = false;
   };
 
@@ -96,10 +110,14 @@ export function createWordEditorValidationController({
       const res = await validateYaml({
         yaml: yamlToValidate,
         repair: false,
+        intent: getIntent?.(),
       });
       if (requestId !== validationRequestId || currentYaml !== yamlToValidate) return;
 
-      if (res.valid) {
+      state.schemaFreshness = res.schemaFreshness ?? null;
+      state.notices = res.notices || [];
+
+      if (res.valid || res.canSave) {
         state.schemaErrors = [];
         state.status = 'Valid YAML';
       } else {
@@ -150,6 +168,8 @@ export function createWordEditorValidationController({
     } catch {
       state.status = 'Invalid YAML';
       state.schemaErrors = [];
+      state.notices = [];
+      state.schemaFreshness = null;
       clearValidateTimer();
     }
   };

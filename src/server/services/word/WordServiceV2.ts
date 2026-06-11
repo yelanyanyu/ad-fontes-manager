@@ -279,7 +279,7 @@ class WordServiceV2 {
   async validateYaml(
     req: RequestLike,
     yamlStr: string,
-    options: { repair?: boolean } = {}
+    options: { repair?: boolean; intent?: 'create' | 'update-existing' } = {}
   ): Promise<{
     valid: boolean;
     errors: string[];
@@ -289,6 +289,10 @@ class WordServiceV2 {
     canSave?: boolean;
     repairs?: unknown[];
     diagnostics?: unknown[];
+    parseStatus?: 'ok' | 'error';
+    schemaFreshness?: 'current' | 'old' | 'future';
+    saveIntent?: 'create' | 'update-existing';
+    notices?: string[];
   }> {
     if (!yamlStr) {
       return { valid: false, errors: ['YAML content is required'] };
@@ -316,34 +320,75 @@ class WordServiceV2 {
           };
         }
 
-        try {
-          ensureCurrentWordSchemaMetadata(data);
-        } catch (error) {
+        const language = this.detectLanguage(data);
+        const lemma = data?.yield?.lemma;
+        const wordLower = String(lemma || '')
+          .trim()
+          .toLowerCase();
+        const version = readWordSchemaVersion(data);
+        const schemaFreshness =
+          version > CURRENT_WORD_SCHEMA_VERSION
+            ? 'future'
+            : version === CURRENT_WORD_SCHEMA_VERSION
+              ? 'current'
+              : 'old';
+        const saveIntent = options.intent === 'update-existing' ? 'update-existing' : 'create';
+        const existing = wordLower ? repositoryV2.findByLemma(wordLower, language) : null;
+        const existingVersion = existing ? readWordSchemaVersion(existing.content) : null;
+        const canMaintainOldWord =
+          saveIntent === 'update-existing' &&
+          Boolean(existing) &&
+          existingVersion !== CURRENT_WORD_SCHEMA_VERSION &&
+          schemaFreshness !== 'current';
+
+        if (canMaintainOldWord) {
+          return {
+            valid: true,
+            errors: [],
+            language,
+            yaml: yamlStr,
+            changed: false,
+            canSave: true,
+            repairs: [],
+            diagnostics: [],
+            parseStatus: 'ok',
+            schemaFreshness,
+            saveIntent,
+            notices: [
+              schemaFreshness === 'future'
+                ? 'This Word uses a newer structure. You can save edits losslessly, but this app may not fully understand it.'
+                : 'This is an old Word structure. You can save edits losslessly; regenerate to update its structure.',
+            ],
+          };
+        }
+
+        if (schemaFreshness === 'future') {
           const message =
-            error instanceof Error ? error.message : 'Unsupported Word Schema Version';
+            'This Word uses a newer structure. Update the app before creating or upgrading it.';
           return {
             valid: false,
             errors: [message],
+            language,
             yaml: yamlStr,
             changed: false,
             canSave: false,
             repairs: [],
             diagnostics: [
               {
-                severity: 'error',
-                code: 'schema.unsupported_word_schema_version',
+                severity: 'warning',
+                code: 'schema.future_word_schema_version',
                 path: 'ad_fontes.word_schema_version',
                 message,
               },
             ],
+            parseStatus: 'ok',
+            schemaFreshness,
+            saveIntent,
+            notices: [],
           };
         }
 
-        const language = this.detectLanguage(data);
-        const lemma = data?.yield?.lemma;
-        const wordLower = String(lemma || '')
-          .trim()
-          .toLowerCase();
+        ensureCurrentWordSchemaMetadata(data);
         const validation = wordLower
           ? validator.validate(data, wordLower, language)
           : { valid: false, errors: ['yield.lemma is required'] };
@@ -363,6 +408,10 @@ class WordServiceV2 {
           canSave: validation.valid,
           repairs: [],
           diagnostics,
+          parseStatus: 'ok',
+          schemaFreshness,
+          saveIntent,
+          notices: [],
         };
       } catch (error) {
         const diagnostic = buildYamlParseDiagnostic(error as { message?: string }, yamlStr);
@@ -374,6 +423,10 @@ class WordServiceV2 {
           canSave: false,
           repairs: [],
           diagnostics: [diagnostic],
+          parseStatus: 'error',
+          schemaFreshness: undefined,
+          saveIntent: options.intent === 'update-existing' ? 'update-existing' : 'create',
+          notices: [],
         };
       }
     }

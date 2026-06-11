@@ -165,7 +165,7 @@ export const useWordStore = defineStore('word', {
           });
           appStore.addToast(`Word "${res.lemma}" saved!`, 'success');
           void this.fetchDbRecords({ background: true });
-          this.setEditingContext({ id: null });
+          this.setEditingContext({ id: res.status === 'created' ? null : (res.id ?? null) });
           return true;
         }
         wordLogger.error('Save failed', { lemma, response: res });
