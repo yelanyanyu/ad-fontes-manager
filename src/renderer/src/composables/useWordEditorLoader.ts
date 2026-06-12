@@ -7,8 +7,15 @@ import { stripWordAppMetadata } from '@/utils/wordMetadata';
 import type { WordRecord } from '@/types/word-list';
 
 interface WordStoreLike {
-  setEditorYaml: (yaml: string) => void;
-  setEditingContext: (context: { id: string | null; isLocal: boolean }) => void;
+  loadEditorSession: (session: {
+    yaml: string;
+    context: {
+      id: string | null;
+      isLocal?: boolean;
+      wordSchemaVersion?: number | null;
+      isLatestSchema?: boolean | null;
+    };
+  }) => void;
 }
 
 interface UseWordEditorLoaderParams {
@@ -27,6 +34,38 @@ function resolveYamlSource(data: Record<string, unknown>): unknown {
   if (!source) return null;
   if (typeof source === 'string') return yaml.load(source);
   return source;
+}
+
+function readWordSchemaVersion(value: unknown): number | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const metadata = (value as Record<string, unknown>).ad_fontes;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const version = (metadata as Record<string, unknown>).word_schema_version;
+  return typeof version === 'number' && Number.isInteger(version) && version > 0 ? version : null;
+}
+
+function buildEditingContext(
+  id: string | null,
+  isLocal: boolean,
+  record: WordRecord,
+  source: unknown
+) {
+  const rowVersion =
+    typeof (record as any).word_schema_version === 'number'
+      ? ((record as any).word_schema_version as number)
+      : null;
+  const sourceVersion = readWordSchemaVersion(source);
+  const isLatestSchema =
+    typeof (record as any).is_latest_schema === 'boolean'
+      ? ((record as any).is_latest_schema as boolean)
+      : null;
+
+  return {
+    id,
+    isLocal,
+    wordSchemaVersion: rowVersion ?? sourceVersion,
+    isLatestSchema,
+  };
 }
 
 export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEditorLoaderParams) => {
@@ -85,9 +124,11 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
       if (res?.code === 200 && res?.data) {
         const obj = resolveYamlSource(res.data as Record<string, unknown>);
         if (obj) {
-          wordStore.setEditorYaml(formatYamlForEditor(obj));
           const id = (res.data as Record<string, unknown>).id as string | undefined;
-          wordStore.setEditingContext({ id: id || null, isLocal: false });
+          wordStore.loadEditorSession({
+            yaml: formatYamlForEditor(obj),
+            context: buildEditingContext(id || null, false, res.data as WordRecord, obj),
+          });
           return true;
         }
       }
@@ -119,14 +160,19 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
         const rawYaml = String(item.raw_yaml || item.content || item.original_yaml || '');
         wordLogger.debug(`[loadIntoEditor] 本地词条 rawYaml 长度: ${rawYaml.length}`);
         const obj = yaml.load(rawYaml);
-        wordStore.setEditorYaml(formatYamlForEditor(obj));
+        wordStore.loadEditorSession({
+          yaml: formatYamlForEditor(obj),
+          context: buildEditingContext(id, true, item, obj),
+        });
         wordLogger.debug(`[loadIntoEditor] 本地词条 YAML 解析成功: ${id}`);
       } catch (e) {
         wordLogger.warn(`[loadIntoEditor] 本地词条 YAML 解析失败，使用原始文本: ${id}`, e);
         const rawYaml = String(item.raw_yaml || item.content || item.original_yaml || '');
-        wordStore.setEditorYaml(rawYaml);
+        wordStore.loadEditorSession({
+          yaml: rawYaml,
+          context: buildEditingContext(id, true, item, null),
+        });
       }
-      wordStore.setEditingContext({ id, isLocal: true });
       wordLogger.debug(`[loadIntoEditor] 本地词条已加载到编辑器: ${id}`);
       return;
     }
@@ -143,8 +189,10 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
       if (full) {
         const obj = resolveYamlSource(full as Record<string, unknown>);
         if (obj) {
-          wordStore.setEditorYaml(formatYamlForEditor(obj));
-          wordStore.setEditingContext({ id, isLocal: false });
+          wordStore.loadEditorSession({
+            yaml: formatYamlForEditor(obj),
+            context: buildEditingContext(id, false, item, obj),
+          });
           wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（v2 API）: ${id}`);
           return;
         }
@@ -158,7 +206,10 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
       try {
         const source = (item.content || item.original_yaml) as string | Record<string, unknown>;
         const obj = typeof source === 'string' ? yaml.load(source) : source;
-        wordStore.setEditorYaml(formatYamlForEditor(obj));
+        wordStore.loadEditorSession({
+          yaml: formatYamlForEditor(obj),
+          context: buildEditingContext(id, false, item, obj),
+        });
         wordLogger.debug(`[loadIntoEditor] 数据库词条已加载（从缓存）: ${id}`);
       } catch (e) {
         wordLogger.warn(`[loadIntoEditor] 缓存 YAML 解析失败: ${id}`, e);
@@ -166,9 +217,11 @@ export const useWordEditorLoader = ({ displayedRecords, wordStore }: UseWordEdit
           typeof (item.content || item.original_yaml) === 'string'
             ? String(item.content || item.original_yaml)
             : yaml.dump(item.content || item.original_yaml, { lineWidth: -1, noRefs: true });
-        wordStore.setEditorYaml(txt);
+        wordStore.loadEditorSession({
+          yaml: txt,
+          context: buildEditingContext(id, false, item, null),
+        });
       }
-      wordStore.setEditingContext({ id, isLocal: false });
       return;
     }
 

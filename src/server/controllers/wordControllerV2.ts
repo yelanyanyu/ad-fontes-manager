@@ -16,7 +16,12 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
   validateYaml: (
     req: Request,
     yamlStr: string,
-    options?: { repair?: boolean; intent?: 'create' | 'update-existing' }
+    options?: {
+      repair?: boolean;
+      intent?: 'create' | 'update-existing';
+      wordId?: string | number | null;
+      baseWordSchemaVersion?: number | null;
+    }
   ) => Promise<{ valid: boolean; errors: string[]; language?: string }>;
 };
 
@@ -142,10 +147,14 @@ class WordControllerV2 {
       yaml: yamlStr,
       repair,
       intent,
+      wordId,
+      baseWordSchemaVersion,
     } = req.body as {
       yaml?: string;
       repair?: boolean;
       intent?: 'create' | 'update-existing';
+      wordId?: string | number | null;
+      baseWordSchemaVersion?: number | null;
     };
     if (!yamlStr) {
       res.status(422).json({ valid: false, errors: ['YAML content is required'] });
@@ -154,6 +163,8 @@ class WordControllerV2 {
     const result = await wordServiceV2.validateYaml(req, yamlStr, {
       repair,
       intent,
+      wordId,
+      baseWordSchemaVersion,
     });
     res.json(result);
   });

@@ -28,6 +28,8 @@ export interface StrictValidationPayload {
   yaml: string;
   repair: false;
   intent?: 'create' | 'update-existing';
+  wordId?: string | number;
+  baseWordSchemaVersion?: number;
 }
 
 export interface WordEditorValidationState {
@@ -44,6 +46,8 @@ interface WordEditorValidationControllerOptions {
   serverDebounceMs?: number;
   parseYaml?: (text: string) => unknown;
   getIntent?: () => 'create' | 'update-existing';
+  getWordId?: () => string | number | null | undefined;
+  getBaseWordSchemaVersion?: () => number | null | undefined;
 }
 
 export function formatValidationMessages(res: FormatValidationResponse): string[] {
@@ -66,6 +70,8 @@ export function createWordEditorValidationController({
   serverDebounceMs = 300,
   parseYaml = yaml.load,
   getIntent,
+  getWordId,
+  getBaseWordSchemaVersion,
 }: WordEditorValidationControllerOptions) {
   const state = reactive<WordEditorValidationState>({
     status: '',
@@ -111,6 +117,8 @@ export function createWordEditorValidationController({
         yaml: yamlToValidate,
         repair: false,
         intent: getIntent?.(),
+        wordId: getWordId?.() ?? undefined,
+        baseWordSchemaVersion: getBaseWordSchemaVersion?.() ?? undefined,
       });
       if (requestId !== validationRequestId || currentYaml !== yamlToValidate) return;
 
@@ -185,6 +193,8 @@ export function createWordEditorValidationController({
     }
 
     state.status = 'Checking YAML';
+    state.schemaFreshness = null;
+    state.notices = [];
     clearClientTimer();
     if (inputDebounceMs <= 0) {
       runClientParse(yamlText, requestId);

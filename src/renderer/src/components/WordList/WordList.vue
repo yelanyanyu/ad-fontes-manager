@@ -84,8 +84,14 @@ interface WordStoreLike {
   fetchDbRecords: (params?: Partial<DbListMeta> & { background?: boolean }) => Promise<void>;
   deleteWord: (id: string) => Promise<void>;
   deleteWords: (ids: string[]) => Promise<void>;
-  setEditorYaml: (yaml: string) => void;
-  setEditingContext: (context: { id: string | null }) => void;
+  loadEditorSession: (session: {
+    yaml: string;
+    context: {
+      id: string | null;
+      wordSchemaVersion?: number | null;
+      isLatestSchema?: boolean | null;
+    };
+  }) => void;
 }
 
 interface AppStoreLike {

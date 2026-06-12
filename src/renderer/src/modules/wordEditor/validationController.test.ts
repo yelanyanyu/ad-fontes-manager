@@ -35,6 +35,7 @@ describe('createWordEditorValidationController', () => {
       yaml: 'yield:\n  lemma: after\n  language: en\n',
       repair: false,
       intent: undefined,
+      wordId: undefined,
     });
     expect(controller.state.status).toBe('Valid YAML');
     expect(controller.state.schemaErrors).toEqual([]);
@@ -62,11 +63,92 @@ describe('createWordEditorValidationController', () => {
       yaml: 'yield:\n  lemma: legacy\n',
       repair: false,
       intent: 'update-existing',
+      wordId: undefined,
     });
     expect(controller.state.status).toBe('Valid YAML');
     expect(controller.state.schemaFreshness).toBe('old');
     expect(controller.state.notices).toEqual(['This is an old Word structure.']);
     expect(controller.state.schemaErrors).toEqual([]);
+  });
+
+  it('sends the editing word id when validating an existing word', async () => {
+    const validateYaml = vi.fn().mockResolvedValue({
+      valid: true,
+      errors: [],
+      schemaFreshness: 'current',
+      notices: [],
+    });
+    const controller = createWordEditorValidationController({
+      validateYaml,
+      inputDebounceMs: 0,
+      serverDebounceMs: 0,
+      getIntent: () => 'update-existing',
+      getWordId: () => 'word-123',
+    });
+
+    controller.handleTextChanged('yield:\n  lemma: current\n');
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(validateYaml).toHaveBeenCalledWith({
+      yaml: 'yield:\n  lemma: current\n',
+      repair: false,
+      intent: 'update-existing',
+      wordId: 'word-123',
+    });
+    expect(controller.state.schemaFreshness).toBe('current');
+    expect(controller.state.notices).toEqual([]);
+  });
+
+  it('sends the base Word Schema Version from the editor session', async () => {
+    const validateYaml = vi.fn().mockResolvedValue({
+      valid: true,
+      errors: [],
+      schemaFreshness: 'old',
+      notices: ['This is an old Word structure.'],
+    });
+    const controller = createWordEditorValidationController({
+      validateYaml,
+      inputDebounceMs: 0,
+      serverDebounceMs: 0,
+      getIntent: () => 'update-existing',
+      getWordId: () => 'word-1',
+      getBaseWordSchemaVersion: () => 1,
+    });
+
+    controller.handleTextChanged('yield:\n  lemma: legacy\n');
+    await vi.runOnlyPendingTimersAsync();
+
+    expect(validateYaml).toHaveBeenCalledWith({
+      yaml: 'yield:\n  lemma: legacy\n',
+      repair: false,
+      intent: 'update-existing',
+      wordId: 'word-1',
+      baseWordSchemaVersion: 1,
+    });
+  });
+
+  it('clears stale schema freshness while a new validation is pending', async () => {
+    const validateYaml = vi.fn().mockResolvedValueOnce({
+      valid: true,
+      errors: [],
+      schemaFreshness: 'old',
+      notices: ['This is an old Word structure.'],
+    });
+    const controller = createWordEditorValidationController({
+      validateYaml,
+      inputDebounceMs: 0,
+      serverDebounceMs: 300,
+    });
+
+    controller.handleTextChanged('yield:\n  lemma: legacy\n');
+    await vi.advanceTimersByTimeAsync(300);
+    expect(controller.state.schemaFreshness).toBe('old');
+
+    controller.handleTextChanged('yield:\n  lemma: current\n');
+
+    expect(controller.state.status).toBe('Checking YAML');
+    expect(controller.state.schemaFreshness).toBeNull();
+    expect(controller.state.notices).toEqual([]);
   });
 
   it('rejects stale validation responses from older YAML', async () => {

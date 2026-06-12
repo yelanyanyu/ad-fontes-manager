@@ -5,6 +5,10 @@ import { useAppStore } from '@/stores/appStore';
 import { wordLogger } from '@/utils/logger';
 import { hideWordAppMetadataInYaml } from '@/utils/wordMetadata';
 import type { DbListMeta, WordRecord } from '@/types/word-list';
+import type {
+  WordEditorSessionContext,
+  WordEditorSessionSnapshot,
+} from '@/modules/wordEditor/session';
 
 interface SaveConflictResult {
   status: 'conflict';
@@ -19,9 +23,7 @@ interface SaveConflictResult {
 interface WordStoreState {
   dbRecords: WordRecord[];
   dbListMeta: DbListMeta;
-  currentEditingId: string | number | null;
-  editorYaml: string;
-  editorReloadToken: number;
+  editorSession: WordEditorSessionSnapshot;
   loading: boolean;
 }
 
@@ -43,13 +45,21 @@ const defaultDbListMeta = (): DbListMeta => ({
   sort: 'updated-newest',
 });
 
+const defaultEditorSession = (): WordEditorSessionSnapshot => ({
+  yaml: '',
+  reloadToken: 0,
+  context: {
+    id: null,
+    wordSchemaVersion: null,
+    isLatestSchema: null,
+  },
+});
+
 export const useWordStore = defineStore('word', {
   state: (): WordStoreState => ({
     dbRecords: [],
     dbListMeta: defaultDbListMeta(),
-    currentEditingId: null,
-    editorYaml: '',
-    editorReloadToken: 0,
+    editorSession: defaultEditorSession(),
     loading: false,
   }),
 
@@ -139,7 +149,7 @@ export const useWordStore = defineStore('word', {
         if (res && res.error) {
           wordLogger.error('Save failed', { lemma, error: res.error });
           if (typeof res.yaml === 'string' && res.changed) {
-            this.setEditorYaml(res.yaml);
+            this.updateEditorYaml(res.yaml);
             appStore.addToast('Format repaired, but save still has validation errors.', 'warning');
           }
           appStore.addToast(`Save failed: ${res.error}`, 'error');
@@ -147,7 +157,7 @@ export const useWordStore = defineStore('word', {
         }
         if (res && res.status === 'conflict') {
           if (typeof res.yaml === 'string' && res.changed) {
-            this.setEditorYaml(res.yaml);
+            this.updateEditorYaml(res.yaml);
             appStore.addToast('Format repaired before conflict review.', 'info');
           }
           wordLogger.warn('Save conflict detected', { lemma: res.lemma, diff: res.diff });
@@ -155,7 +165,7 @@ export const useWordStore = defineStore('word', {
         }
         if (res && res.success) {
           if (typeof res.yaml === 'string' && res.changed) {
-            this.setEditorYaml(res.yaml);
+            this.updateEditorYaml(res.yaml);
             appStore.addToast('Format repaired before save.', 'info');
           }
           wordLogger.success(`Word "${res.lemma}" saved`, {
@@ -165,7 +175,11 @@ export const useWordStore = defineStore('word', {
           });
           appStore.addToast(`Word "${res.lemma}" saved!`, 'success');
           void this.fetchDbRecords({ background: true });
-          this.setEditingContext({ id: res.status === 'created' ? null : (res.id ?? null) });
+          this.updateEditorSessionContext(
+            res.status === 'created'
+              ? { id: null, wordSchemaVersion: null, isLatestSchema: null }
+              : { id: res.id ?? null }
+          );
           return true;
         }
         wordLogger.error('Save failed', { lemma, response: res });
@@ -221,22 +235,40 @@ export const useWordStore = defineStore('word', {
       }
     },
 
-    setEditingContext({
-      id = null,
-      yaml: yamlContent = undefined,
+    loadEditorSession({
+      yaml: yamlContent,
+      context = {},
     }: {
-      id?: string | number | null;
-      yaml?: string;
-    } = {}): void {
-      this.currentEditingId = id;
-      if (yamlContent !== undefined) {
-        this.editorYaml = yamlContent;
-      }
+      yaml: string;
+      context?: WordEditorSessionContext;
+    }): void {
+      this.editorSession = {
+        yaml: hideWordAppMetadataInYaml(yamlContent),
+        reloadToken: this.editorSession.reloadToken + 1,
+        context: {
+          id: context.id ?? null,
+          wordSchemaVersion: context.wordSchemaVersion ?? null,
+          isLatestSchema: context.isLatestSchema ?? null,
+        },
+      };
     },
 
-    setEditorYaml(yamlContent: string): void {
-      this.editorYaml = hideWordAppMetadataInYaml(yamlContent);
-      this.editorReloadToken++;
+    updateEditorYaml(yamlContent: string): void {
+      this.editorSession = {
+        ...this.editorSession,
+        yaml: hideWordAppMetadataInYaml(yamlContent),
+        reloadToken: this.editorSession.reloadToken + 1,
+      };
+    },
+
+    updateEditorSessionContext(context: WordEditorSessionContext): void {
+      this.editorSession = {
+        ...this.editorSession,
+        context: {
+          ...this.editorSession.context,
+          ...context,
+        },
+      };
     },
   },
 });

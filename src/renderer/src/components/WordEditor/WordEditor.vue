@@ -12,13 +12,21 @@ import request from '@/utils/request';
 import { useYamlHierarchy } from '@/composables/useYamlHierarchy';
 import { createWordEditorValidationController } from '@/modules/wordEditor/validationController';
 import { createFormatFixCommand } from '@/modules/wordEditor/formatFixCommand';
+import { createWordEditorSession } from '@/modules/wordEditor/session';
 import { hideWordAppMetadataInYaml } from '@/utils/wordMetadata';
 
 interface WordStoreLike {
-  editorYaml: string;
-  currentEditingId: string | number | null;
+  editorSession: {
+    yaml: string;
+    reloadToken: number;
+    context: {
+      id?: string | number | null;
+      wordSchemaVersion?: number | null;
+      isLatestSchema?: boolean | null;
+    };
+  };
   saveWord: (yamlContent: string, force?: boolean) => Promise<boolean | ConflictData>;
-  setEditingContext: (context: { id: string | number | null }) => void;
+  updateEditorSessionContext: (context: { id: string | number | null }) => void;
 }
 
 interface AppStoreLike {
@@ -28,13 +36,12 @@ interface AppStoreLike {
 const wordStore = useWordStore() as unknown as WordStoreLike;
 const appStore = useAppStore() as unknown as AppStoreLike;
 
-const { editorYaml, editorReloadToken, currentEditingId } = storeToRefs(wordStore as any) as {
-  editorYaml: Ref<string>;
-  editorReloadToken: Ref<number>;
-  currentEditingId: Ref<string | number | null>;
+const { editorSession } = storeToRefs(wordStore as any) as {
+  editorSession: Ref<WordStoreLike['editorSession']>;
 };
 
-const input = ref<string>('');
+const session = createWordEditorSession();
+const input = session.currentYaml;
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const lineNumberRef = ref<HTMLElement | null>(null);
 const lineMeasureRef = ref<HTMLElement | null>(null);
@@ -48,7 +55,9 @@ let editorResizeObserver: ResizeObserver | null = null;
 const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
 const validationController = createWordEditorValidationController({
   validateYaml: payload => request.post('/v2/words/validate', payload),
-  getIntent: () => (currentEditingId.value ? 'update-existing' : 'create'),
+  getIntent: () => session.validationContext.value.intent,
+  getWordId: () => session.validationContext.value.wordId,
+  getBaseWordSchemaVersion: () => session.validationContext.value.baseWordSchemaVersion,
 });
 const validationState = validationController.state;
 const formatFixCommand = createFormatFixCommand({
@@ -174,7 +183,14 @@ function handleKeydown(e: KeyboardEvent): void {
 }
 
 const isEmpty = computed(() => !input.value || input.value.trim().length === 0);
-const editorSaveIntentLabel = computed(() => (currentEditingId.value ? 'Editing Word' : 'New Word'));
+const editorSaveIntentLabel = computed(() =>
+  session.mode.value === 'update' ? 'Editing Word' : 'New Word'
+);
+const editorSchemaFreshness = computed(
+  () =>
+    (validationState.schemaFreshness === 'future' ? 'future' : session.displayFreshness.value) ||
+    (validationState.schemaFreshness === 'old' ? 'old' : null)
+);
 
 const saveLabel = 'Save';
 
@@ -194,10 +210,19 @@ watch(
 );
 
 watch(
-  editorReloadToken,
+  () => editorSession.value.reloadToken,
   () => {
-    if (typeof editorYaml.value === 'string') {
-      input.value = editorYaml.value;
+    if (typeof editorSession.value.yaml === 'string') {
+      const context = editorSession.value.context || {};
+      if (context.id) {
+        session.loadExistingWord(editorSession.value.yaml, {
+          id: context.id,
+          wordSchemaVersion: context.wordSchemaVersion ?? null,
+          isLatestSchema: context.isLatestSchema ?? null,
+        });
+      } else {
+        session.loadNewWord(editorSession.value.yaml);
+      }
       cursorPos.value = 0;
       void nextTick(scheduleLineMeasure);
     }
@@ -251,7 +276,7 @@ const useExisting = () => {
     input.value = yaml.dump(conflictData.value.oldData || {}, { lineWidth: -1, noRefs: true });
   }
   if (conflictData.value.source === 'local' && conflictData.value.id) {
-    wordStore.setEditingContext({ id: conflictData.value.id });
+    wordStore.updateEditorSessionContext({ id: conflictData.value.id });
   }
   closeConflict();
 };
@@ -313,10 +338,10 @@ defineExpose({ applyGeneratedYaml });
           />
           <span class="editor-status-text">{{ validationState.status || 'Ready' }}</span>
           <span class="editor-intent-chip">{{ editorSaveIntentLabel }}</span>
-          <span v-if="validationState.schemaFreshness === 'old'" class="editor-freshness-chip">
+          <span v-if="editorSchemaFreshness === 'old'" class="editor-freshness-chip">
             旧
           </span>
-          <span v-if="validationState.schemaFreshness === 'future'" class="editor-freshness-chip">
+          <span v-if="editorSchemaFreshness === 'future'" class="editor-freshness-chip">
             新版
           </span>
         </span>

@@ -109,6 +109,20 @@ const isUniqueConstraintError = (error: { code?: string; message?: string }): bo
 const isRecord = (value: unknown): value is Record<string, any> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
 
+const hasDeclaredWordSchemaVersion = (content: unknown): boolean => {
+  if (!isRecord(content)) return false;
+  const metadata = content.ad_fontes;
+  if (!isRecord(metadata)) return false;
+  const value = metadata.word_schema_version;
+  return typeof value === 'number' && Number.isInteger(value) && value > 0;
+};
+
+const getSchemaFreshness = (version: number): 'current' | 'old' | 'future' => {
+  if (version > CURRENT_WORD_SCHEMA_VERSION) return 'future';
+  if (version === CURRENT_WORD_SCHEMA_VERSION) return 'current';
+  return 'old';
+};
+
 const getDiagnosticMessages = (diagnostics: unknown[]): string[] =>
   diagnostics.map(diagnostic =>
     typeof diagnostic === 'object' && diagnostic && 'message' in diagnostic
@@ -279,7 +293,12 @@ class WordServiceV2 {
   async validateYaml(
     req: RequestLike,
     yamlStr: string,
-    options: { repair?: boolean; intent?: 'create' | 'update-existing' } = {}
+    options: {
+      repair?: boolean;
+      intent?: 'create' | 'update-existing';
+      wordId?: string | number | null;
+      baseWordSchemaVersion?: number | null;
+    } = {}
   ): Promise<{
     valid: boolean;
     errors: string[];
@@ -325,20 +344,37 @@ class WordServiceV2 {
         const wordLower = String(lemma || '')
           .trim()
           .toLowerCase();
-        const version = readWordSchemaVersion(data);
-        const schemaFreshness =
-          version > CURRENT_WORD_SCHEMA_VERSION
-            ? 'future'
-            : version === CURRENT_WORD_SCHEMA_VERSION
-              ? 'current'
-              : 'old';
         const saveIntent = options.intent === 'update-existing' ? 'update-existing' : 'create';
-        const existing = wordLower ? repositoryV2.findByLemma(wordLower, language) : null;
+        const baseVersion =
+          typeof options.baseWordSchemaVersion === 'number' &&
+          Number.isInteger(options.baseWordSchemaVersion) &&
+          options.baseWordSchemaVersion > 0
+            ? options.baseWordSchemaVersion
+            : null;
+        const existing =
+          saveIntent === 'update-existing' && baseVersion === null
+            ? options.wordId
+              ? repositoryV2.findById(String(options.wordId))
+              : wordLower
+                ? repositoryV2.findByLemma(wordLower, language)
+                : null
+            : null;
         const existingVersion = existing ? readWordSchemaVersion(existing.content) : null;
+        const declaredVersion = hasDeclaredWordSchemaVersion(data);
+        const version = declaredVersion
+          ? readWordSchemaVersion(data)
+          : saveIntent === 'update-existing'
+            ? (baseVersion ?? existingVersion ?? CURRENT_WORD_SCHEMA_VERSION)
+            : CURRENT_WORD_SCHEMA_VERSION;
+        const schemaFreshness = getSchemaFreshness(version);
+        const baseIndicatesStoredOldWord =
+          saveIntent === 'update-existing' &&
+          baseVersion !== null &&
+          baseVersion !== CURRENT_WORD_SCHEMA_VERSION;
         const canMaintainOldWord =
           saveIntent === 'update-existing' &&
-          Boolean(existing) &&
-          existingVersion !== CURRENT_WORD_SCHEMA_VERSION &&
+          (baseIndicatesStoredOldWord ||
+            (Boolean(existing) && existingVersion !== CURRENT_WORD_SCHEMA_VERSION)) &&
           schemaFreshness !== 'current';
 
         if (canMaintainOldWord) {
