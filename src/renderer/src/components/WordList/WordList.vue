@@ -60,12 +60,9 @@ import {
   type WordImportConflict,
   type WordImportConflictAction,
 } from '@/services/wordImportService';
-import {
-  buildSelectAllMatchingDecision,
-  collectAllDbMatchingRecords,
-  mergeRecordsIntoSelectionMap,
-  type SelectAllMatchingPageResult,
-} from '@/services/selectAllMatchingService';
+import type { SelectAllMatchingPageResult } from '@/services/selectAllMatchingService';
+import { selectAllMatchingWords } from '@/modules/wordList/selectAllMatching';
+import { deleteSelectedWords as deleteSelectedWordRecords } from '@/modules/wordList/deleteSelectedWords';
 import type {
   DbListMeta,
   DiffBadge,
@@ -232,9 +229,6 @@ const showBatchSummaryBar = computed<boolean>(() => {
       batchAnkiBusy.value)
   );
 });
-const selectedDeleteRecords = computed<WordRecord[]>(() =>
-  selectedExportRecords.value.filter(record => !record.isLocal)
-);
 
 const emit = defineEmits<{
   (e: 'preview', id: string): void;
@@ -459,25 +453,14 @@ const exportSelectedWords = (): void => {
 
 const deleteSelectedWords = async (): Promise<void> => {
   if (deletingWords.value) return;
-  const ids = selectedDeleteRecords.value.map(record => String(record.id)).filter(Boolean);
-  if (!ids.length) return;
-
-  const requiresTypedConfirm = ids.length > 20;
-  const confirmed = await requestBulkDeleteConfirm({
-    title: `Delete ${ids.length} selected words?`,
-    message: 'This permanently removes the selected words from the database.',
-    confirmLabel: 'Delete Words',
-    variant: 'danger',
-    requiredText: requiresTypedConfirm ? '确认删除' : '',
-    requiredTextLabel: requiresTypedConfirm ? '输入“确认删除”以继续。' : '',
-    requiredTextPlaceholder: requiresTypedConfirm ? '确认删除' : '',
-  });
-  if (!confirmed) return;
-
   deletingWords.value = true;
   try {
-    await wordStore.deleteWords(ids);
-    clearSelection();
+    await deleteSelectedWordRecords({
+      getSelectedRecords: () => selectedExportRecords.value,
+      requestConfirm: requestBulkDeleteConfirm,
+      deleteWords: wordStore.deleteWords,
+      clearSelection,
+    });
   } finally {
     deletingWords.value = false;
   }
@@ -696,28 +679,14 @@ const selectAllMatching = async (): Promise<void> => {
   selectingAllMatching.value = true;
 
   try {
-    const dbTotal = dbListMeta.value.total || 0;
-    const decision = buildSelectAllMatchingDecision(dbTotal, 0);
-
-    if (decision.total <= 0) {
-      appStore.addToast('No matching words found', 'info');
-      return;
-    }
-
-    if (decision.requiresConfirm) {
-      const confirmed = await requestSelectAllMatchingConfirm({
-        title: 'Select all matching words?',
-        message: `This will select ${decision.total} words and may take longer to process.`,
-        confirmLabel: 'Select All',
-      });
-      if (!confirmed) return;
-    }
-
-    const dbMatched =
-      dbTotal > 0 ? await collectAllDbMatchingRecords(fetchDbPageForSelection, 200) : [];
-    const mergedMap = mergeRecordsIntoSelectionMap(selectedItemsByKey.value, [...dbMatched]);
-    replaceSelectionMap(mergedMap);
-    appStore.addToast(`Selected ${decision.total} matching words`, 'success');
+    await selectAllMatchingWords({
+      getDbTotal: () => dbListMeta.value.total || 0,
+      getExistingSelection: () => selectedItemsByKey.value,
+      fetchPage: fetchDbPageForSelection,
+      requestConfirm: requestSelectAllMatchingConfirm,
+      replaceSelectionMap,
+      addToast: (message, type) => appStore.addToast(message, type),
+    });
   } catch (error) {
     const err = error as { message?: string };
     appStore.addToast(err.message || 'Failed to select all matching words', 'error');
