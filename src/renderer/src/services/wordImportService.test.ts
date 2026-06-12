@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   importWordExportFile,
   parseWordImportFile,
@@ -14,6 +14,10 @@ vi.mock('@/utils/request', () => ({
     post: requestPostMock,
   },
 }));
+
+beforeEach(() => {
+  requestPostMock.mockReset();
+});
 
 describe('parseWordImportFile', () => {
   it('parses the versioned Word Export JSON envelope', () => {
@@ -74,6 +78,7 @@ describe('importWordExportFile', () => {
       total: 2,
       imported: 1,
       skippedConflicts: 1,
+      skippedUnsupportedSchema: 0,
       overwritten: 0,
       failed: 0,
       errors: [],
@@ -94,6 +99,48 @@ describe('importWordExportFile', () => {
       { skipErrorToast: true }
     );
     expect(requestPostMock.mock.calls[0][1].yaml).toContain('language: en');
+  });
+
+  it('skips server-rejected unsupported Word structures without counting them as failed', async () => {
+    requestPostMock.mockResolvedValueOnce({
+      success: false,
+      error: 'Invalid YAML',
+      diagnostics: [
+        {
+          code: 'schema.unsupported_word_schema_version',
+          message: 'Unsupported Word Schema Version',
+        },
+      ],
+    });
+
+    const result = await importWordExportFile({
+      format: 'ad-fontes.words.export',
+      version: 1,
+      exportedAt: '2026-06-07T00:00:00.000Z',
+      items: [
+        {
+          lemma: 'future',
+          language: 'en',
+          content: {
+            ad_fontes: { word_schema_version: 999 },
+            yield: { lemma: 'future' },
+          },
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({
+      total: 1,
+      imported: 0,
+      skippedConflicts: 0,
+      skippedUnsupportedSchema: 1,
+      overwritten: 0,
+      failed: 0,
+    });
+    expect(result.errors[0]).toEqual({
+      lemma: 'future',
+      message: 'Invalid YAML',
+    });
   });
 
   it('overwrites only conflicts explicitly marked for overwrite', async () => {

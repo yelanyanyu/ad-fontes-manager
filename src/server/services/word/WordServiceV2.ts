@@ -73,6 +73,14 @@ const {
     blockedFutureMessage?: string;
   };
 };
+const { detectWordSchema } = require('./WordSchemaDetector') as {
+  detectWordSchema: (
+    content: Record<string, unknown>,
+    options?: { validateCurrent?: (content: Record<string, unknown>) => boolean }
+  ) => {
+    freshness: 'current' | 'old' | 'future' | 'unknown';
+  };
+};
 
 interface LoggerLike {
   debug: (obj: unknown, msg?: string) => void;
@@ -370,31 +378,34 @@ class WordServiceV2 {
           baseWordSchemaVersion: options.baseWordSchemaVersion,
           existingContent: existing?.content,
         });
-        const shouldProbeCurrentSchema =
+        const detection = detectWordSchema(data, {
+          validateCurrent: candidate => {
+            if (!wordLower) return false;
+            const currentCandidate = ensureCurrentWordSchemaMetadata({ ...candidate });
+            return validator.validate(currentCandidate, wordLower, language).valid;
+          },
+        });
+
+        if (
           saveIntent === 'update-existing' &&
           !hasDeclaredWordSchemaVersion(data) &&
           policy.schemaFreshness !== 'current' &&
-          wordLower.length > 0;
-
-        if (shouldProbeCurrentSchema) {
-          const currentCandidate = ensureCurrentWordSchemaMetadata({ ...data });
-          const currentValidation = validator.validate(currentCandidate, wordLower, language);
-          if (currentValidation.valid) {
-            return {
-              valid: true,
-              errors: [],
-              language,
-              yaml: yamlStr,
-              changed: false,
-              canSave: true,
-              repairs: [],
-              diagnostics: [],
-              parseStatus: 'ok',
-              schemaFreshness: 'current',
-              saveIntent: policy.saveIntent,
-              notices: [],
-            };
-          }
+          detection.freshness === 'current'
+        ) {
+          return {
+            valid: true,
+            errors: [],
+            language,
+            yaml: yamlStr,
+            changed: false,
+            canSave: true,
+            repairs: [],
+            diagnostics: [],
+            parseStatus: 'ok',
+            schemaFreshness: 'current',
+            saveIntent: policy.saveIntent,
+            notices: [],
+          };
         }
 
         if (policy.canMaintainNonCurrentWord) {

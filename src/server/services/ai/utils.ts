@@ -188,6 +188,7 @@ export function loadYamlObjectWithRepairs(text: string): Record<string, unknown>
 export function mergeYamlTexts(primaryYaml: string, overlayYaml: string): string {
   const primary = loadYamlObjectWithRepairs(primaryYaml);
   const overlay = loadYamlObjectWithRepairs(overlayYaml);
+  delete overlay.ad_fontes;
   const merged = deepMerge(primary, overlay);
   return yaml.dump(merged, { lineWidth: -1, noRefs: true });
 }

@@ -98,13 +98,12 @@ const requiresCurrentSchemaValidation = ({
   incomingVersion,
   hasExistingWord,
   existingVersion,
-  source,
 }: SavePreparationPolicyInput): boolean => {
-  const isImport = source === 'import';
   return (
+    incomingVersion > CURRENT_WORD_SCHEMA_VERSION ||
     incomingVersion === CURRENT_WORD_SCHEMA_VERSION ||
-    (!hasExistingWord && !isImport) ||
-    (hasExistingWord && existingVersion === CURRENT_WORD_SCHEMA_VERSION && !isImport)
+    !hasExistingWord ||
+    (hasExistingWord && existingVersion === CURRENT_WORD_SCHEMA_VERSION)
   );
 };
 

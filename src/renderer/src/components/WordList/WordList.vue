@@ -475,6 +475,9 @@ const summarizeWordImport = (result: Awaited<ReturnType<typeof importWordExportF
   const parts = [`Imported ${result.imported}`];
   if (result.overwritten) parts.push(`overwrote ${result.overwritten}`);
   if (result.skippedConflicts) parts.push(`found ${result.skippedConflicts} conflicts`);
+  if (result.skippedUnsupportedSchema) {
+    parts.push(`skipped ${result.skippedUnsupportedSchema} incompatible`);
+  }
   if (result.failed) parts.push(`failed ${result.failed}`);
   return `${parts.join(', ')} of ${result.total} words`;
 };

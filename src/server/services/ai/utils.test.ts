@@ -49,4 +49,30 @@ void describe('mergeYamlTexts', () => {
     assert.match(merged, /visual_imagery_zh:/);
     assert.match(merged, /image_differentiation_zh:/);
   });
+
+  void it('keeps app-owned Word Schema metadata from the primary YAML', () => {
+    const yaml = require('js-yaml') as typeof import('js-yaml');
+    const { mergeYamlTexts } = require('./utils') as typeof import('./utils');
+
+    const merged = mergeYamlTexts(
+      [
+        'ad_fontes:',
+        '  word_schema_version: 2',
+        'yield:',
+        '  lemma: composure',
+        '  language: en',
+      ].join('\n'),
+      [
+        'ad_fontes:',
+        '  word_schema_version: 999',
+        '  generated_by: creative-stage',
+        'etymology:',
+        '  visual_imagery_zh: composure image',
+      ].join('\n')
+    );
+    const parsed = yaml.load(merged) as Record<string, any>;
+
+    assert.deepEqual(parsed.ad_fontes, { word_schema_version: 2 });
+    assert.equal(parsed.etymology.visual_imagery_zh, 'composure image');
+  });
 });

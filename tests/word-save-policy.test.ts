@@ -61,7 +61,7 @@ void test('strict validation blocks explicitly future content when not maintaini
   assert.match(policy.blockedFutureMessage || '', /Update the app/);
 });
 
-void test('save preparation requires current schema for manual new Words but not old Word imports', () => {
+void test('save preparation requires current schema for all new Words including imports', () => {
   assert.equal(
     requiresCurrentSchemaValidation({
       incomingVersion: 1,
@@ -75,6 +75,36 @@ void test('save preparation requires current schema for manual new Words but not
       hasExistingWord: false,
       source: 'import',
     }),
+    true
+  );
+});
+
+void test('save preparation allows old maintenance only for existing old Words', () => {
+  assert.equal(
+    requiresCurrentSchemaValidation({
+      incomingVersion: 1,
+      hasExistingWord: true,
+      existingVersion: 1,
+    }),
     false
+  );
+  assert.equal(
+    requiresCurrentSchemaValidation({
+      incomingVersion: 1,
+      hasExistingWord: true,
+      existingVersion: 2,
+    }),
+    true
+  );
+});
+
+void test('save preparation requires validation for future incoming Content', () => {
+  assert.equal(
+    requiresCurrentSchemaValidation({
+      incomingVersion: 999,
+      hasExistingWord: true,
+      existingVersion: 1,
+    }),
+    true
   );
 });

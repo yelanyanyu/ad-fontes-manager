@@ -11,6 +11,7 @@ export interface WordImportResult {
   total: number;
   imported: number;
   skippedConflicts: number;
+  skippedUnsupportedSchema: number;
   overwritten: number;
   failed: number;
   errors: Array<{ lemma: string; message: string }>;
@@ -22,6 +23,7 @@ interface SaveConflictResponse {
   status?: string;
   lemma?: string;
   error?: string;
+  diagnostics?: Array<{ code?: string; message?: string }>;
   oldData?: Record<string, unknown>;
   newData?: Record<string, unknown>;
   diff?: unknown[];
@@ -123,6 +125,13 @@ const toImportConflict = (
   action: 'skip',
 });
 
+const isUnsupportedSchemaResponse = (response: SaveConflictResponse): boolean =>
+  response.diagnostics?.some(diagnostic =>
+    ['schema.unsupported_word_schema_version', 'schema.future_word_schema_version'].includes(
+      String(diagnostic.code || '')
+    )
+  ) === true;
+
 export const importWordExportFile = async (
   exportFile: WordExportFile
 ): Promise<WordImportResult> => {
@@ -130,6 +139,7 @@ export const importWordExportFile = async (
     total: exportFile.items.length,
     imported: 0,
     skippedConflicts: 0,
+    skippedUnsupportedSchema: 0,
     overwritten: 0,
     failed: 0,
     errors: [],
@@ -150,6 +160,14 @@ export const importWordExportFile = async (
         continue;
       }
       if (response && typeof response === 'object' && response.success === false) {
+        if (isUnsupportedSchemaResponse(response)) {
+          result.skippedUnsupportedSchema += 1;
+          result.errors.push({
+            lemma: item.lemma,
+            message: response.error || 'Skipped unsupported Word structure',
+          });
+          continue;
+        }
         result.failed += 1;
         result.errors.push({
           lemma: item.lemma,
