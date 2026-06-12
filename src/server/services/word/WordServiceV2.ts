@@ -47,28 +47,32 @@ const { ensureCurrentWordSchemaMetadata, readWordSchemaVersion } =
     ensureCurrentWordSchemaMetadata: (content: Record<string, unknown>) => Record<string, unknown>;
     readWordSchemaVersion: (content: unknown) => number;
   };
-const { requiresCurrentSchemaValidation, resolveStrictValidationPolicy } =
-  require('./WordSavePolicy') as {
-    requiresCurrentSchemaValidation: (input: {
-      incomingVersion: number;
-      hasExistingWord: boolean;
-      existingVersion?: number | null;
-      source?: 'import';
-    }) => boolean;
-    resolveStrictValidationPolicy: (input: {
-      content: Record<string, unknown>;
-      intent?: 'create' | 'update-existing';
-      baseWordSchemaVersion?: number | null;
-      existingContent?: unknown;
-    }) => {
-      saveIntent: 'create' | 'update-existing';
-      version: number;
-      schemaFreshness: 'current' | 'old' | 'future';
-      canMaintainNonCurrentWord: boolean;
-      notice?: string;
-      blockedFutureMessage?: string;
-    };
+const {
+  hasDeclaredWordSchemaVersion,
+  requiresCurrentSchemaValidation,
+  resolveStrictValidationPolicy,
+} = require('./WordSavePolicy') as {
+  hasDeclaredWordSchemaVersion: (content: unknown) => boolean;
+  requiresCurrentSchemaValidation: (input: {
+    incomingVersion: number;
+    hasExistingWord: boolean;
+    existingVersion?: number | null;
+    source?: 'import';
+  }) => boolean;
+  resolveStrictValidationPolicy: (input: {
+    content: Record<string, unknown>;
+    intent?: 'create' | 'update-existing';
+    baseWordSchemaVersion?: number | null;
+    existingContent?: unknown;
+  }) => {
+    saveIntent: 'create' | 'update-existing';
+    version: number;
+    schemaFreshness: 'current' | 'old' | 'future';
+    canMaintainNonCurrentWord: boolean;
+    notice?: string;
+    blockedFutureMessage?: string;
   };
+};
 
 interface LoggerLike {
   debug: (obj: unknown, msg?: string) => void;
@@ -366,6 +370,32 @@ class WordServiceV2 {
           baseWordSchemaVersion: options.baseWordSchemaVersion,
           existingContent: existing?.content,
         });
+        const shouldProbeCurrentSchema =
+          saveIntent === 'update-existing' &&
+          !hasDeclaredWordSchemaVersion(data) &&
+          policy.schemaFreshness !== 'current' &&
+          wordLower.length > 0;
+
+        if (shouldProbeCurrentSchema) {
+          const currentCandidate = ensureCurrentWordSchemaMetadata({ ...data });
+          const currentValidation = validator.validate(currentCandidate, wordLower, language);
+          if (currentValidation.valid) {
+            return {
+              valid: true,
+              errors: [],
+              language,
+              yaml: yamlStr,
+              changed: false,
+              canSave: true,
+              repairs: [],
+              diagnostics: [],
+              parseStatus: 'ok',
+              schemaFreshness: 'current',
+              saveIntent: policy.saveIntent,
+              notices: [],
+            };
+          }
+        }
 
         if (policy.canMaintainNonCurrentWord) {
           return {
@@ -610,6 +640,21 @@ class WordServiceV2 {
             logger.warn({ diagnostics: prepared.diagnostics }, 'Validation failed in saveWord');
             return buildSaveValidationFailure(prepared);
           }
+        } else if (!hasDeclaredWordSchemaVersion(parsedData)) {
+          const currentPrepared = prepareYamlForWordSave('', yamlStr);
+          prepared =
+            currentPrepared.ok && currentPrepared.data
+              ? currentPrepared
+              : {
+                  ok: true,
+                  yaml: yamlStr,
+                  data: parsedData,
+                  language: initialLanguage,
+                  changed: false,
+                  canSave: true,
+                  repairs: [],
+                  diagnostics: [],
+                };
         } else {
           prepared = {
             ok: true,
