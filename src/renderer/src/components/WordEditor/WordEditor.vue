@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, watch, computed, onUnmounted, nextTick } from 'vue';
 import type { Ref } from 'vue';
 import yaml from 'js-yaml';
 import { useWordStore } from '@/stores/wordStore';
 import { useAppStore } from '@/stores/appStore';
 import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
+import YamlEditorSurface from '@/components/WordEditor/YamlEditorSurface.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import type { ConflictData } from '@/types/word-editor';
 import request from '@/utils/request';
@@ -42,15 +43,10 @@ const { editorSession } = storeToRefs(wordStore as any) as {
 
 const session = createWordEditorSession();
 const input = session.currentYaml;
-const textareaRef = ref<HTMLTextAreaElement | null>(null);
-const lineNumberRef = ref<HTMLElement | null>(null);
-const lineMeasureRef = ref<HTMLElement | null>(null);
-const lineHeights = ref<number[]>([]);
+const editorSurfaceRef = ref<InstanceType<typeof YamlEditorSurface> | null>(null);
 const cursorPos = ref(0);
 const conflictData = ref<ConflictData | null>(null);
 const saving = ref(false);
-let lineMeasureFrame: number | null = null;
-let editorResizeObserver: ResizeObserver | null = null;
 
 const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
 const validationController = createWordEditorValidationController({
@@ -70,118 +66,6 @@ const formatFixCommand = createFormatFixCommand({
 });
 const formatFixState = formatFixCommand.state;
 
-const syncScroll = () => {
-  if (textareaRef.value && lineNumberRef.value) {
-    lineNumberRef.value.scrollTop = textareaRef.value.scrollTop;
-  }
-};
-
-function getDefaultLineHeight(): number {
-  const textarea = textareaRef.value;
-  if (!textarea) return 22;
-  const lineHeight = Number.parseFloat(window.getComputedStyle(textarea).lineHeight);
-  return Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight : 22;
-}
-
-function measureLineHeights(): void {
-  const textarea = textareaRef.value;
-  const measure = lineMeasureRef.value;
-  if (!textarea || !measure) return;
-
-  measure.style.width = `${textarea.clientWidth}px`;
-  measure.textContent = '';
-
-  const defaultHeight = getDefaultLineHeight();
-  const nextHeights = input.value.split('\n').map(line => {
-    const row = document.createElement('div');
-    row.className = 'line-measure-row';
-    row.textContent = line.length > 0 ? line : ' ';
-    measure.appendChild(row);
-    return Math.max(defaultHeight, row.getBoundingClientRect().height);
-  });
-
-  lineHeights.value = nextHeights.length > 0 ? nextHeights : [defaultHeight];
-  measure.textContent = '';
-  syncScroll();
-}
-
-function scheduleLineMeasure(): void {
-  if (lineMeasureFrame !== null) window.cancelAnimationFrame(lineMeasureFrame);
-  lineMeasureFrame = window.requestAnimationFrame(() => {
-    lineMeasureFrame = null;
-    measureLineHeights();
-  });
-}
-
-function updateCursorPos(): void {
-  cursorPos.value = textareaRef.value?.selectionStart ?? 0;
-}
-
-function handleKeydown(e: KeyboardEvent): void {
-  if (e.key !== 'Tab') return;
-  e.preventDefault();
-
-  const ta = textareaRef.value;
-  if (!ta) return;
-
-  const start = ta.selectionStart;
-  const end = ta.selectionEnd;
-  const indent = '  ';
-
-  if (e.shiftKey) {
-    const lines = input.value.split('\n');
-    const startLine = input.value.slice(0, start).split('\n').length - 1;
-    const endLine = input.value.slice(0, end).split('\n').length - 1;
-
-    let newStart = start;
-    let newEnd = end;
-
-    for (let i = startLine; i <= endLine; i++) {
-      const line = lines[i];
-      const leadingSpaces = line.length - line.trimStart().length;
-      const removeCount = Math.min(leadingSpaces, 2);
-
-      if (removeCount > 0) {
-        lines[i] = line.slice(removeCount);
-        if (i === startLine) newStart = Math.max(0, newStart - removeCount);
-        newEnd = Math.max(0, newEnd - removeCount);
-      }
-    }
-
-    input.value = lines.join('\n');
-    void nextTick(() => {
-      ta.selectionStart = newStart;
-      ta.selectionEnd = newEnd;
-      updateCursorPos();
-    });
-  } else {
-    if (start === end) {
-      input.value = input.value.slice(0, start) + indent + input.value.slice(end);
-      void nextTick(() => {
-        ta.selectionStart = ta.selectionEnd = start + indent.length;
-        updateCursorPos();
-      });
-    } else {
-      const lines = input.value.split('\n');
-      const startLine = input.value.slice(0, start).split('\n').length - 1;
-      const endLine = input.value.slice(0, end).split('\n').length - 1;
-
-      let addedChars = 0;
-      for (let i = startLine; i <= endLine; i++) {
-        lines[i] = indent + lines[i];
-        addedChars += indent.length;
-      }
-
-      input.value = lines.join('\n');
-      void nextTick(() => {
-        ta.selectionStart = start + indent.length;
-        ta.selectionEnd = end + addedChars;
-        updateCursorPos();
-      });
-    }
-  }
-}
-
 const isEmpty = computed(() => !input.value || input.value.trim().length === 0);
 const editorSaveIntentLabel = computed(() =>
   session.mode.value === 'update' ? 'Editing Word' : 'New Word'
@@ -196,14 +80,11 @@ const saveLabel = 'Save';
 
 onUnmounted(() => {
   validationController.dispose();
-  if (lineMeasureFrame !== null) window.cancelAnimationFrame(lineMeasureFrame);
-  editorResizeObserver?.disconnect();
 });
 
 watch(
   input,
   () => {
-    void nextTick(scheduleLineMeasure);
     validationController.handleTextChanged(input.value);
   },
   { flush: 'post' }
@@ -224,19 +105,11 @@ watch(
         session.loadNewWord(editorSession.value.yaml);
       }
       cursorPos.value = 0;
-      void nextTick(scheduleLineMeasure);
+      void nextTick(() => editorSurfaceRef.value?.scheduleLineMeasure());
     }
   },
   { immediate: true }
 );
-
-onMounted(() => {
-  scheduleLineMeasure();
-  if (textareaRef.value) {
-    editorResizeObserver = new ResizeObserver(() => scheduleLineMeasure());
-    editorResizeObserver.observe(textareaRef.value);
-  }
-});
 
 const clear = () => {
   if (saving.value) return;
@@ -264,7 +137,7 @@ const repairFormat = async () => {
 const closeConflict = () => {
   if (saving.value) return;
   conflictData.value = null;
-  void nextTick(() => textareaRef.value?.focus());
+  void nextTick(() => editorSurfaceRef.value?.focus());
 };
 
 const useExisting = () => {
@@ -288,7 +161,7 @@ const overwrite = async () => {
     const ok = await wordStore.saveWord(input.value, true);
     if (ok) {
       conflictData.value = null;
-      void nextTick(() => textareaRef.value?.focus());
+      void nextTick(() => editorSurfaceRef.value?.focus());
     }
   } finally {
     saving.value = false;
@@ -416,40 +289,14 @@ defineExpose({ applyGeneratedYaml });
       <span v-else class="breadcrumb-empty">---</span>
     </div>
 
-    <div class="editor-area">
-      <div ref="lineNumberRef" class="line-number">
-        <div
-          v-for="(info, idx) in lineDepths"
-          :key="idx"
-          class="ln-row"
-          :class="{ 'ln-row-active': idx === cursorLine }"
-          :style="{ height: `${lineHeights[idx] || getDefaultLineHeight()}px` }"
-        >
-          <span class="ln-num">{{ idx + 1 }}</span>
-          <span v-if="info.depth > 0" class="ln-dots">
-            <span
-              v-for="d in Math.min(info.depth, 8)"
-              :key="d"
-              class="ln-dot"
-              :style="{ opacity: 0.2 + (d / 8) * 0.5 }"
-            />
-          </span>
-        </div>
-      </div>
-      <div class="editor-input">
-        <textarea
-          ref="textareaRef"
-          v-model="input"
-          spellcheck="false"
-          placeholder="每行输入 YAML 内容，例如：lemma: apple..."
-          @scroll="syncScroll"
-          @click="updateCursorPos"
-          @keyup="updateCursorPos"
-          @keydown="handleKeydown"
-        />
-        <div ref="lineMeasureRef" class="line-measure" aria-hidden="true" />
-      </div>
-    </div>
+    <YamlEditorSurface
+      ref="editorSurfaceRef"
+      v-model="input"
+      :line-depths="lineDepths"
+      :cursor-line="cursorLine"
+      :readonly="saving"
+      @cursor-change="cursorPos = $event"
+    />
 
     <div v-if="validationState.schemaErrors.length > 0" class="schema-errors">
       <ul>
@@ -602,22 +449,6 @@ defineExpose({ applyGeneratedYaml });
   background: rgba(44, 96, 143, 0.08);
 }
 
-.editor-area {
-  min-height: 0;
-  background: var(--editor-field);
-  display: grid;
-  grid-template-columns: 46px 1fr;
-  border-bottom: 1px solid var(--line);
-  font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.72;
-  color: #3b3732;
-}
-
-[data-theme="dark"] .editor-area {
-  color: #d8d0c5;
-}
-
 .breadcrumb-bar {
   height: 22px;
   padding: 0 14px;
@@ -663,115 +494,6 @@ defineExpose({ applyGeneratedYaml });
 .breadcrumb-empty {
   color: var(--border-strong);
   font-style: italic;
-}
-
-.line-number {
-  padding-top: 18px;
-  padding-bottom: 18px;
-  color: #b5ada2;
-  border-right: 1px solid var(--line);
-  user-select: none;
-  overflow: hidden;
-  line-height: 1.72;
-  font-size: 13px;
-  box-sizing: border-box;
-}
-
-[data-theme="dark"] .line-number {
-  color: #706961;
-  background: #1b1814;
-}
-
-.ln-row {
-  display: flex;
-  align-items: flex-start;
-  height: calc(1em * 1.72);
-  padding: 0 4px;
-}
-
-.ln-row-active {
-  background: rgba(36, 114, 83, 0.06);
-}
-
-[data-theme="dark"] .ln-row-active {
-  background: rgba(67, 179, 127, 0.08);
-}
-
-.ln-num {
-  width: 22px;
-  text-align: right;
-  color: var(--faint);
-  flex-shrink: 0;
-  font-size: 12px;
-}
-
-.ln-dots {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: 4px;
-  min-width: 10px;
-  flex-shrink: 0;
-}
-
-.ln-dot {
-  width: 2px;
-  height: 2px;
-  border-radius: 50%;
-  background: var(--faint);
-  flex-shrink: 0;
-}
-
-.editor-input {
-  position: relative;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.editor-input textarea {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  border: 0;
-  outline: 0;
-  resize: none;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  line-height: inherit;
-  box-sizing: border-box;
-  padding: 18px 16px;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-}
-
-.line-measure {
-  position: absolute;
-  inset: 0 auto auto 0;
-  box-sizing: border-box;
-  padding: 18px 16px;
-  visibility: hidden;
-  pointer-events: none;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  font: inherit;
-  line-height: inherit;
-  color: transparent;
-  z-index: -1;
-}
-
-:deep(.line-measure-row) {
-  min-height: calc(1em * 1.72);
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-}
-
-.editor-input textarea::placeholder {
-  color: #9a9389;
-}
-
-[data-theme="dark"] .editor-input textarea::placeholder {
-  color: #80786f;
 }
 
 .schema-errors {

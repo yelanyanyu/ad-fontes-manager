@@ -42,11 +42,32 @@ const { prepareYamlForWordSave, buildYamlParseDiagnostic } = require('./formatFi
     text: string
   ) => { severity: string; code: string; path: string; message: string };
 };
-const { CURRENT_WORD_SCHEMA_VERSION, ensureCurrentWordSchemaMetadata, readWordSchemaVersion } =
+const { ensureCurrentWordSchemaMetadata, readWordSchemaVersion } =
   require('../../schemas/word/version') as {
-    CURRENT_WORD_SCHEMA_VERSION: number;
     ensureCurrentWordSchemaMetadata: (content: Record<string, unknown>) => Record<string, unknown>;
     readWordSchemaVersion: (content: unknown) => number;
+  };
+const { requiresCurrentSchemaValidation, resolveStrictValidationPolicy } =
+  require('./WordSavePolicy') as {
+    requiresCurrentSchemaValidation: (input: {
+      incomingVersion: number;
+      hasExistingWord: boolean;
+      existingVersion?: number | null;
+      source?: 'import';
+    }) => boolean;
+    resolveStrictValidationPolicy: (input: {
+      content: Record<string, unknown>;
+      intent?: 'create' | 'update-existing';
+      baseWordSchemaVersion?: number | null;
+      existingContent?: unknown;
+    }) => {
+      saveIntent: 'create' | 'update-existing';
+      version: number;
+      schemaFreshness: 'current' | 'old' | 'future';
+      canMaintainNonCurrentWord: boolean;
+      notice?: string;
+      blockedFutureMessage?: string;
+    };
   };
 
 interface LoggerLike {
@@ -108,20 +129,6 @@ const isUniqueConstraintError = (error: { code?: string; message?: string }): bo
 
 const isRecord = (value: unknown): value is Record<string, any> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
-
-const hasDeclaredWordSchemaVersion = (content: unknown): boolean => {
-  if (!isRecord(content)) return false;
-  const metadata = content.ad_fontes;
-  if (!isRecord(metadata)) return false;
-  const value = metadata.word_schema_version;
-  return typeof value === 'number' && Number.isInteger(value) && value > 0;
-};
-
-const getSchemaFreshness = (version: number): 'current' | 'old' | 'future' => {
-  if (version > CURRENT_WORD_SCHEMA_VERSION) return 'future';
-  if (version === CURRENT_WORD_SCHEMA_VERSION) return 'current';
-  return 'old';
-};
 
 const getDiagnosticMessages = (diagnostics: unknown[]): string[] =>
   diagnostics.map(diagnostic =>
@@ -345,39 +352,22 @@ class WordServiceV2 {
           .trim()
           .toLowerCase();
         const saveIntent = options.intent === 'update-existing' ? 'update-existing' : 'create';
-        const baseVersion =
-          typeof options.baseWordSchemaVersion === 'number' &&
-          Number.isInteger(options.baseWordSchemaVersion) &&
-          options.baseWordSchemaVersion > 0
-            ? options.baseWordSchemaVersion
-            : null;
         const existing =
-          saveIntent === 'update-existing' && baseVersion === null
+          saveIntent === 'update-existing' && !options.baseWordSchemaVersion
             ? options.wordId
               ? repositoryV2.findById(String(options.wordId))
               : wordLower
                 ? repositoryV2.findByLemma(wordLower, language)
                 : null
             : null;
-        const existingVersion = existing ? readWordSchemaVersion(existing.content) : null;
-        const declaredVersion = hasDeclaredWordSchemaVersion(data);
-        const version = declaredVersion
-          ? readWordSchemaVersion(data)
-          : saveIntent === 'update-existing'
-            ? (baseVersion ?? existingVersion ?? CURRENT_WORD_SCHEMA_VERSION)
-            : CURRENT_WORD_SCHEMA_VERSION;
-        const schemaFreshness = getSchemaFreshness(version);
-        const baseIndicatesStoredOldWord =
-          saveIntent === 'update-existing' &&
-          baseVersion !== null &&
-          baseVersion !== CURRENT_WORD_SCHEMA_VERSION;
-        const canMaintainOldWord =
-          saveIntent === 'update-existing' &&
-          (baseIndicatesStoredOldWord ||
-            (Boolean(existing) && existingVersion !== CURRENT_WORD_SCHEMA_VERSION)) &&
-          schemaFreshness !== 'current';
+        const policy = resolveStrictValidationPolicy({
+          content: data,
+          intent: saveIntent,
+          baseWordSchemaVersion: options.baseWordSchemaVersion,
+          existingContent: existing?.content,
+        });
 
-        if (canMaintainOldWord) {
+        if (policy.canMaintainNonCurrentWord) {
           return {
             valid: true,
             errors: [],
@@ -388,19 +378,14 @@ class WordServiceV2 {
             repairs: [],
             diagnostics: [],
             parseStatus: 'ok',
-            schemaFreshness,
-            saveIntent,
-            notices: [
-              schemaFreshness === 'future'
-                ? 'This Word uses a newer structure. You can save edits losslessly, but this app may not fully understand it.'
-                : 'This is an old Word structure. You can save edits losslessly; regenerate to update its structure.',
-            ],
+            schemaFreshness: policy.schemaFreshness,
+            saveIntent: policy.saveIntent,
+            notices: policy.notice ? [policy.notice] : [],
           };
         }
 
-        if (schemaFreshness === 'future') {
-          const message =
-            'This Word uses a newer structure. Update the app before creating or upgrading it.';
+        if (policy.blockedFutureMessage) {
+          const message = policy.blockedFutureMessage;
           return {
             valid: false,
             errors: [message],
@@ -418,8 +403,8 @@ class WordServiceV2 {
               },
             ],
             parseStatus: 'ok',
-            schemaFreshness,
-            saveIntent,
+            schemaFreshness: policy.schemaFreshness,
+            saveIntent: policy.saveIntent,
             notices: [],
           };
         }
@@ -445,8 +430,8 @@ class WordServiceV2 {
           repairs: [],
           diagnostics,
           parseStatus: 'ok',
-          schemaFreshness,
-          saveIntent,
+          schemaFreshness: policy.schemaFreshness,
+          saveIntent: policy.saveIntent,
           notices: [],
         };
       } catch (error) {
@@ -611,13 +596,12 @@ class WordServiceV2 {
         const existingVersion = existingForPolicy
           ? readWordSchemaVersion(existingForPolicy.content)
           : null;
-        const isImport = options.source === 'import';
-        const requiresCurrentValidation =
-          incomingVersion === CURRENT_WORD_SCHEMA_VERSION ||
-          (!existingForPolicy && !isImport) ||
-          (Boolean(existingForPolicy) &&
-            existingVersion === CURRENT_WORD_SCHEMA_VERSION &&
-            !isImport);
+        const requiresCurrentValidation = requiresCurrentSchemaValidation({
+          incomingVersion,
+          hasExistingWord: Boolean(existingForPolicy),
+          existingVersion,
+          source: options.source,
+        });
 
         let prepared: PreparedWordYaml;
         if (requiresCurrentValidation) {
