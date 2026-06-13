@@ -43,6 +43,8 @@ Desktop.ini
 *.sln
 *.sw?
 skills
+!.agents/skills/
+!.agents/skills/**
 CLAUDE.md
 docs/AGENTS.md
 ad-fontes-host.code-workspace
