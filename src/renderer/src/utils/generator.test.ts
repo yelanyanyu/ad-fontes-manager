@@ -88,20 +88,37 @@ describe('generateCardHTML', () => {
         },
         historical_origins: {
           earliest_attestation: 'Althochdeutsch faran',
-          source_form: 'Proto-Germanic *faraną',
+          source_word: {
+            language: 'gem-pro',
+            word: '*faraną',
+            meaning: 'to go, travel',
+            relation: 'inherited_from',
+          },
           pgmc_root: '*faraną',
           pie_root: '*per-',
-          sound_changes: 'N/A',
+          sound_changes: 'PIE *p > PGmc *f',
         },
         visual_imagery_zh: '移动之力',
         meaning_evolution_zh: '从行进到驾驶',
+      },
+      word_formation: {
+        derivations: [
+          {
+            language: 'de',
+            word: 'Fahrt',
+            part_of_speech: 'Nomen',
+            relation: 'nominalization',
+            logic: 'fahren gives Fahrt its movement image.',
+          },
+        ],
       },
       cognate_family: {
         instruction: 'Diese Anweisung darf nicht angezeigt werden.',
         cognates: [
           {
             word: 'fare',
-            german_equivalent: 'fahren',
+            language: 'en',
+            relation: 'cognate',
             logic: 'same Germanic movement image',
           },
         ],
@@ -109,7 +126,15 @@ describe('generateCardHTML', () => {
     });
 
     expect(html).not.toContain('Diese Anweisung darf nicht angezeigt werden.');
-    expect(html).toContain('fare → fahren');
+    expect(html).toContain('Etymology: Deep Analysis');
+    expect(html).toContain('ROOT: fahren');
+    expect(html).toContain('*faraną (gem-pro, inherited_from): to go, travel');
+    expect(html).toContain('History:');
+    expect(html).toContain('PIE *p > PGmc *f');
+    expect(html).toContain('fare');
+    expect(html).toContain('en, cognate');
+    expect(html).not.toContain('Etymologie: Morphologische Analyse');
+    expect(html).not.toContain('Historische Ursprünge');
   });
 
   it('renders Word Schema v2 word forms and structured source words in the HTML card', () => {

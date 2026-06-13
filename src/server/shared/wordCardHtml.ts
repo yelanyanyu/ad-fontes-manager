@@ -3,6 +3,8 @@ type Dict = Record<string, unknown>;
 interface CognateItem {
   word?: string;
   german_equivalent?: string;
+  language?: string;
+  relation?: string;
   logic?: string;
 }
 
@@ -196,72 +198,54 @@ function renderGermanEtymologyCard(etymData: Dict): string {
   const morph = (etymData.morphological_analysis as Dict | undefined) || {};
   const components = (morph.components as MorphologicalComponent[] | undefined) || [];
   const origins = (etymData.historical_origins as Dict | undefined) || {};
-  const phonology = (etymData.historical_phonology as Dict | undefined) || {};
-  const semantics = (etymData.historical_semantics as Dict | undefined) || {};
+  const sourceWord = formatSourceWord(origins.source_word || origins.source_form);
+  const componentTags = components
+    .map(component => {
+      const type = trimText(component.type).toLowerCase();
+      const element = trimText(component.element);
+      if (!element || element === 'N/A') return '';
+      const label =
+        type.includes('präfix') || type.includes('praefix')
+          ? 'PRE'
+          : type.includes('suffix')
+            ? 'SUF'
+            : 'ROOT';
+      const tagStyle = label === 'ROOT' ? `${s.tag} background: #ebf8ff; color: #2b6cb0;` : s.tag;
+      return `<span style="${tagStyle}">${label}: ${element}</span>`;
+    })
+    .join('');
+  const rootSummary = components
+    .map(component => {
+      const element = trimText(component.element);
+      const meaning = trimText(component.de_meaning);
+      return [element, meaning].filter(Boolean).join(' = ');
+    })
+    .filter(Boolean)
+    .join('; ');
+  const historyParts = [
+    trimText(origins.earliest_attestation)
+      ? `Earliest attestation: ${trimText(origins.earliest_attestation)}`
+      : '',
+    trimText(origins.sound_changes) && trimText(origins.sound_changes) !== 'N/A'
+      ? `Sound changes: ${trimText(origins.sound_changes)}`
+      : '',
+  ].filter(Boolean);
 
-  let html = `<div style="${s.section.replace('background: white;', '')} border-bottom: 1px solid ${c.border};">
-    <h2 style="${s.h2}">Etymologie: Morphologische Analyse</h2>
-    <p style="${s.p} font-size: 14px;"><strong>Wortbildung:</strong> ${trimText(morph.word_formation)}</p>`;
-
-  // Components
-  if (components.length > 0) {
-    html += `<div style="display:flex; flex-wrap:wrap; gap: 6px; margin-bottom: 12px; font-family: monospace; font-size: 13px;">`;
-    for (const comp of components) {
-      html += `<span style="${s.tag} background: #ebf8ff; color: #2b6cb0;">${trimText(comp.element)}</span>`;
+  return `<div style="${s.section.replace('background: white;', '')} border-bottom: 1px solid ${c.border};">
+    <h2 style="${s.h2}">Etymology: Deep Analysis</h2>
+    <div style="display:flex; gap: 5px; margin-bottom: 15px; font-family: monospace; font-size: 13px;">
+      ${componentTags || `<span style="${s.tag} background: #ebf8ff; color: #2b6cb0;">ROOT: ${trimText(morph.word_formation)}</span>`}
+    </div>
+    <p style="${s.p} font-size: 14px;"><strong>Structure:</strong> ${trimText(morph.structure_analysis) || rootSummary}</p>
+    <p style="${s.p} font-size: 14px;"><strong>Source:</strong> ${sourceWord} <span style="color:${c.accent}">(${trimText(origins.pgmc_root) || trimText(origins.pie_root)})</span></p>
+    ${
+      historyParts.length > 0
+        ? `<div style="${s.mythBox}"><strong>History:</strong> ${historyParts.join('; ')}</div>`
+        : ''
     }
-    html += `</div>`;
-    html += `<div style="${s.grid} margin-bottom: 12px;">`;
-    for (const comp of components) {
-      html += `<div style="background: #f7fafc; border: 1px solid ${c.border}; padding: 8px 10px; border-radius: 6px;">
-        <span style="font-weight: 700; color: ${c.sectionHeader};">${trimText(comp.element)}</span>
-        <span style="font-size: 12px; color: ${c.textSub}; margin-left: 6px;">${trimText(comp.type)}</span>
-        <div style="font-size: 13px; color: #4a5568; margin-top: 2px;">${trimText(comp.de_meaning)}</div>
-      </div>`;
-    }
-    html += `</div>`;
-  }
-
-  html += `<p style="${s.p} font-size: 14px;"><strong>Strukturanalyse:</strong> ${trimText(morph.structure_analysis)}</p>`;
-
-  // Historical origins
-  html += `<div style="margin-top: 12px;"><div style="${s.h3}">Historische Ursprünge</div>`;
-  html += `<p style="${s.p} font-size: 14px;"><strong>Früheste Bezeugung:</strong> ${trimText(origins.earliest_attestation)}</p>`;
-  html += `<p style="${s.p} font-size: 14px;"><strong>Quellform:</strong> ${trimText(origins.source_form)}</p>`;
-  html += `<p style="${s.p} font-size: 14px;"><strong>PGmc Wurzel:</strong> <span style="color:${c.accent}">${trimText(origins.pgmc_root)}</span></p>`;
-  html += `<p style="${s.p} font-size: 14px;"><strong>PIE Wurzel:</strong> <span style="color:${c.accent}">${trimText(origins.pie_root)}</span></p>`;
-  html += `<p style="${s.p} font-size: 14px;"><strong>Lautverschiebungen:</strong> ${trimText(origins.sound_changes)}</p>`;
-  html += `</div>`;
-
-  // Historical phonology
-  if (phonology.pie_root || phonology.proto_germanic) {
-    html += `<div style="margin-top: 12px;"><div style="${s.h3}">Historische Phonologie</div>`;
-    html += `<p style="${s.p} font-size: 14px;"><strong>PIE:</strong> ${trimText(phonology.pie_root)} → <strong>PGmc:</strong> ${trimText(phonology.proto_germanic)}</p>`;
-    if (trimText(phonology.grimm_step))
-      html += `<p style="${s.p} font-size: 14px;"><strong>Grimm:</strong> ${trimText(phonology.grimm_step)}</p>`;
-    if (trimText(phonology.verner_law))
-      html += `<p style="${s.p} font-size: 14px;"><strong>Verner:</strong> ${trimText(phonology.verner_law)}</p>`;
-    html += `<p style="${s.p} font-size: 14px;"><strong>OHG:</strong> ${trimText(phonology.old_high_german)} · <strong>MHG:</strong> ${trimText(phonology.middle_high_german)}</p>`;
-    if (trimText(phonology.consonant_shift))
-      html += `<p style="${s.p} font-size: 14px;"><strong>Konsonantenverschiebung:</strong> ${trimText(phonology.consonant_shift)}</p>`;
-    html += `</div>`;
-  }
-
-  // Historical semantics
-  if (semantics.proto_meaning || semantics.semantic_shifts) {
-    html += `<div style="margin-top: 12px;"><div style="${s.h3}">Historische Semantik</div>`;
-    if (trimText(semantics.proto_meaning))
-      html += `<p style="${s.p} font-size: 14px;"><strong>Urbedeutung:</strong> ${trimText(semantics.proto_meaning)}</p>`;
-    if (trimText(semantics.semantic_shifts))
-      html += `<p style="${s.p} font-size: 14px;"><strong>Bedeutungsverschiebungen:</strong> ${trimText(semantics.semantic_shifts)}</p>`;
-    html += `</div>`;
-  }
-
-  // Visual imagery & meaning evolution
-  html += `<div style="margin-top: 15px;"><div style="${s.h3}">Visual Imagery (画面)</div><div style="${s.textBlock}">${trimText(etymData.visual_imagery_zh)}</div></div>`;
-  html += `<div style="margin-top: 15px;"><div style="${s.h3}">Meaning Evolution (词义演变)</div><div style="${s.textBlock}">${trimText(etymData.meaning_evolution_zh)}</div></div>`;
-  html += `</div>`;
-
-  return html;
+    <div style="margin-top: 15px;"><div style="${s.h3}">Visual Imagery</div><div style="${s.textBlock}">${trimText(etymData.visual_imagery_zh)}</div></div>
+    <div style="margin-top: 15px;"><div style="${s.h3}">Meaning Evolution</div><div style="${s.textBlock}">${trimText(etymData.meaning_evolution_zh)}</div></div>
+  </div>`;
 }
 
 // ==============================================================================
@@ -307,12 +291,14 @@ function renderCognateCard(data: Dict): string {
     <h2 style="${s.h2}">${de ? 'Kognatenfamilie' : 'Link: Cognate Family'}</h2>`;
   html += `<div style="${s.grid}">`;
   for (const cog of cognates) {
+    const meta = [trimText(cog.language), trimText(cog.relation)].filter(Boolean).join(', ');
     const label =
       de && cog.german_equivalent
         ? `${trimText(cog.word)} → ${trimText(cog.german_equivalent)}`
         : trimText(cog.word);
     html += `<div style="background: white; border: 1px solid ${c.border}; padding: 10px; border-radius: 6px;">
       <span style="font-weight: 700; color: ${c.sectionHeader}; font-size: 15px;">${label}</span>
+      ${meta ? `<span style="font-size: 12px; color: ${c.textSub}; margin-left: 6px;">${meta}</span>` : ''}
       <div style="font-size: 13px; color: #4a5568; margin-top: 4px; border-top: 1px solid #f7fafc; padding-top: 4px;">${trimText(cog.logic)}</div>
     </div>`;
   }
