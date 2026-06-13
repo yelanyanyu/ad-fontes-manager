@@ -81,7 +81,7 @@ interface DoubleQuotedScalarPreference {
 
 const EXPECTED_ROOT_SECTIONS: Record<WordLanguage, string[]> = {
   en: ['yield', 'etymology', 'word_formation', 'cognate_family', 'application', 'nuance'],
-  de: ['yield', 'etymology', 'cognate_family', 'application', 'nuance'],
+  de: ['yield', 'etymology', 'word_formation', 'cognate_family', 'application', 'nuance'],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -136,7 +136,7 @@ function applySectionPromotion(
 
   for (const section of EXPECTED_ROOT_SECTIONS[language]) {
     const nestedCandidates = findNestedCandidates(data, section).filter(
-      candidate => !candidate.path.startsWith(`${section}.`)
+      candidate => !candidate.path.startsWith(`${section}.`) && isRecord(candidate.value)
     );
 
     if (Object.prototype.hasOwnProperty.call(data, section)) {

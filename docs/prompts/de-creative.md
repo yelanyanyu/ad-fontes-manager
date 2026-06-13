@@ -29,15 +29,10 @@ Strict Syntax Instructions:
 ```
 etymology:
   visual_imagery_zh: |
-    (当代寓言。场所没有任何限定，单词前后缀以及其词根词源共同营造的意蕴决定全文的风格、基调、描写方式。总共三段。
-    当代有故事名称的散文诗。场所没有任何限定，单词前后缀以及其词根词源共同营造的意蕴决定全文的风格、基调、描写方式。总共三段+一个标题。
-    1. 第一段引入物，或物与人的环境，笔法是“景中含兴”。物只是在那里，未被定名，未被指认，有种将发未发的静。这种引而不发的势，就是场景的起点。
-    2. 场所是人与物相生相激的场。物可以牵连着另一个人，也可以是让场活起来的无言角色。无论哪种，物身上都带着一份未了的情，绝不是死物。人与人之间若有心事，只能从物的情态上透出来，叙述者不直接点破。
-    3. 情境要逼出一个只有词根核心动作才能了结的关口。这关口不必惊险，但必须是一个动作恰好落下的时刻。核心动作是人自然去应那个物的情，由情势和物的“脾气”催送出来，不用“想起”“决定”等字眼去牵引。
-    4. 只写动作落下去的结果。接着是体感的“气”在走：或是一抹触觉，或是一响动静，或是气息缓了一拍。体感是一层一层化开的，从初落的迟疑，到动作收住时的气息落定，像墨在纸上走。
-    5. 场所不写物理量，不用对象化的分解式描述。物有性情：有的顺，有的倔，有的滑开。场所仿佛有自身的吐纳。若词根词缀涉及空间性（如前、后、上、下、之间、穿过），不可写成静态的空间摆放或方位说明。空间必须化在物的相摩相激里始终有势（时间性）在其中。
-    6. 结尾停在动作过后，人与物两不相碍，又彼此含容的状态上。句子长短错落，不使排比与转折句式。唯一可从物身上生发的联想，是“像”字句，须用得惜墨如金。)
-
+    (写一段散文诗，100-180字。不要分段，要有标题。场所不限（不要专业场所），由词根、前后缀和词源意蕴决定画面的气息。画面必须有一个具体的物或场景，物要像场所中的无言角色，带着未被说出的情绪或关系，用词行文朴素有亲和力，克制。不要直接解释人的心理，也不要把词义说破。
+    - 不要选择需要职业身份才能成立的场景；即使用到职业人物，也只能写普通人一眼能感到的动作后果，不能写专业步骤、工具结构或术语。
+  	- 情境中必须出现一个由物的状态自然逼出的核心动作，这个动作应贴近词根的原始力量。物可以留下痕迹、滑开、卡住、退去、压住、松开、等待或抵抗，于是人不得不伸手、移动、承接、辨认、追随、收拾或停下。动作之后，只写触感、声响、呼吸、脚步或物的位置变化，让词义从后果中显出来。
+  	- 不写抽象概念，不写物理量，不做静态方位说明。若词根涉及前、后、上、下、之间、穿过等空间关系，必须把空间写成正在发生的势：逼近、远去、越过、留下、隔开、追随；如果词源本身抽象，可以借助隐喻来具象化描写。句子长短自然错落，避免排比、解释和“不是……而是……”式转折。结尾停在动作之后的人与物的新关系上。)
   meaning_evolution_zh: |
     (顺着上面的画面，说明这个词如何获得它最初的生气，并一步步走向后来的用法。不要写成概念宣讲，须从词的来处自然化出来。如果这个词是从身体、物、气息和场所的遇合中生长出来的，就顺着那个画面走，让意义从人与世界的相摩相荡中一层层化开。
     - 前后缀以及词根如果包含空间关系，不应理解为静态的空间关系，应该避免对词根词缀解释的忠诚。
@@ -48,15 +43,18 @@ etymology:
 cognate_family:
   instruction: "请用中文写本板块，选择 3-4 个日耳曼语同源词（英语、荷兰语、瑞典语等）。逻辑说明要自然，避免模板腔。"
   cognates:
-    - word: "(Germanic cognate 1)"
-      german_equivalent: "(Cognate meaning in German)"
+    - word: "(Cognate 1)"
+      language: "(Language code, e.g. en, fr, de, es, it)"
+      relation: "cognate"
       logic: "(Format: 前缀'...'表示... + 想象/感受/看到[根词动作]... = 含义)"
-    - word: "(Germanic cognate 2)"
-      german_equivalent: "(Cognate meaning in German)"
-      logic: "(Format: 前缀'...'表示... + 想象/感受/看到[根词动作]... = 含义)"
-    - word: "(Germanic cognate 3)"
-      german_equivalent: "(Cognate meaning in German)"
-      logic: "(Format: 前缀'...'表示... + 想象/感受/看到[根词动作]... = 含义)"
+    - word: "(Cognate 2)"
+      language: "(Language code)"
+      relation: "cognate"
+      logic: "(说明同源关系)"
+    - word: "(Cognate 3)"
+      language: "(Language code)"
+      relation: "cognate"
+      logic: "(说明同源关系)"
 
 application:
   selected_examples:
@@ -64,11 +62,11 @@ application:
       sentence: "(German sentence showing the literal spatial/actional root image)"
       translation_zh: "(Chinese translation)"
     - type: "Current Context"
-      sentence: "(Reuse the user_context_sentence from structural research)"
-      translation_zh: "(Chinese translation)"
+      sentence: "(German sentence)"
+      translation_zh: "(中文翻译)"
     - type: "Abstract / Metaphorical"
-      sentence: "(German sentence for abstract meaning)"
-      translation_zh: "(Chinese translation)"
+      sentence: "(German sentence)"
+      translation_zh: "(中文翻译)"
 
 nuance:
   synonyms:
@@ -76,14 +74,12 @@ nuance:
       meaning_zh: "(Chinese definition)"
       connotation_difference: "(语义色彩：口语/书面、正式/随意、地域差异等)"
     - word: "(German synonym 2)"
-      meaning_zh: "(Chinese definition)"
-      connotation_difference: "(语义色彩：口语/书面、正式/随意、地域差异等)"
+      meaning_zh: "(中文定义)"
+      connotation_difference: "(语义色彩)"
 
   image_differentiation_zh: |
-    (请比较 lemma 与近义词所牵引的“根词画面”与“场”的气质，有何不同。
-    不说用法，只说风骨。每个词一站出来，它带出的手势、气息、目光轻重、远近之感，就已各自不同。把词当成一个在场的动作，去描它的情态，不必分点罗列，像随口说起两个不同性情的人那样去谈它们。
-    德语尤其要注意可分前缀带来的差异。
-    )
+    (比较 lemma 与近义词所牵引的“根词画面”与“场”的气质，有何不同。
+    不说用法，只说风骨。每个词一站出来，它带出的手势、气息、目光轻重、远近之感，就已各自不同。把词当成一个在场的动作，去描它的情态，不必分点罗列，像随口说起两个不同性情的人那样去谈它们。)
 ```
 
 ---

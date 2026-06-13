@@ -391,11 +391,17 @@ nuance:
 `);
 
 const germanMatchingPromptSchema = `
+ad_fontes:
+  word_schema_version: 2
 yield:
   user_word: Haus
   lemma: haus
   genus: das
   syllabification: Haus
+  word_forms:
+    - Häuser
+    - Hauses
+    - Hause
   kasus: Nominativ
   user_context_sentence: Das Haus steht am Fluss.
   part_of_speech: Nomen
@@ -415,16 +421,29 @@ etymology:
     structure_analysis: Haus ist ein einfacher germanischer Stamm.
   historical_origins:
     earliest_attestation: Althochdeutsch hus
-    source_form: Proto-Germanic *husan
+    source_word:
+      language: gem-pro
+      word: "*husan"
+      meaning: Haus
+      relation: inherited_from
     pgmc_root: '*husan'
     pie_root: N/A
     sound_changes: N/A
   visual_imagery_zh: 一座屋子挡住风雨
   meaning_evolution_zh: 从遮蔽处到家庭空间
+word_formation:
+  derivations:
+    - language: de
+      word: Haus
+      part_of_speech: Nomen
+      relation: base_form
+      logic: Haus ist die Grundform; Häuser und häuslich stehen im selben Wortbildungsfeld.
 cognate_family:
+  instruction: 请用中文写本板块，选择 3-4 个日耳曼语同源词。
   cognates:
     - word: house
-      german_equivalent: Haus
+      language: en
+      relation: cognate
       logic: 英语 house 和德语 Haus 同源，都指遮蔽居住的空间。
 application:
   selected_examples:
@@ -440,11 +459,17 @@ nuance:
 `;
 
 const germanWithApplicationNestedUnderEtymology = `
+ad_fontes:
+  word_schema_version: 2
 yield:
   user_word: Haus
   lemma: haus
   genus: das
   syllabification: Haus
+  word_forms:
+    - Häuser
+    - Hauses
+    - Hause
   kasus: Nominativ
   user_context_sentence: Das Haus steht am Fluss.
   part_of_speech: Nomen
@@ -464,7 +489,11 @@ etymology:
     structure_analysis: Haus ist ein einfacher germanischer Stamm.
   historical_origins:
     earliest_attestation: Althochdeutsch hus
-    source_form: Proto-Germanic *husan
+    source_word:
+      language: gem-pro
+      word: "*husan"
+      meaning: Haus
+      relation: inherited_from
     pgmc_root: '*husan'
     pie_root: N/A
     sound_changes: N/A
@@ -475,10 +504,18 @@ etymology:
       - type: Literal / Root Image
         sentence: Das Haus steht am Fluss.
         translation_zh: 那座房子在河边。
+  word_formation:
+    derivations:
+      - language: de
+        word: Haus
+        part_of_speech: Nomen
+        relation: base_form
+        logic: Haus ist die Grundform; Häuser und häuslich stehen im selben Wortbildungsfeld.
 cognate_family:
   cognates:
     - word: house
-      german_equivalent: Haus
+      language: en
+      relation: cognate
       logic: 英语 house 和德语 Haus 同源，都指遮蔽居住的空间。
 nuance:
   synonyms:
@@ -709,6 +746,15 @@ void test('German validation accepts the current prompt schema without legacy to
   assert.equal(result.diagnostics.length, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(result.data || {}, 'dialectal_notes'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(result.data || {}, 'observations'), false);
+  const etymology = asRecord(result.data?.etymology);
+  const historicalOrigins = asRecord(etymology.historical_origins);
+  const sourceWord = asRecord(historicalOrigins.source_word);
+  assert.equal(sourceWord.language, 'gem-pro');
+  const cognateFamily = asRecord(result.data?.cognate_family);
+  const cognates = cognateFamily.cognates as Array<Record<string, unknown>>;
+  assert.equal(cognates[0].language, 'en');
+  assert.equal(cognates[0].relation, 'cognate');
+  assert.equal(typeof result.data?.word_formation, 'object');
 });
 
 void test('Basic Format Fix promotes misplaced German root sections without legacy section diagnostics', () => {
@@ -720,4 +766,5 @@ void test('Basic Format Fix promotes misplaced German root sections without lega
   assert(result.repairs.some(repair => repair.type === 'promote-section'));
   assert.equal(result.diagnostics.length, 0);
   assert.match(result.yaml || '', /^application:/m);
+  assert.match(result.yaml || '', /^word_formation:/m);
 });

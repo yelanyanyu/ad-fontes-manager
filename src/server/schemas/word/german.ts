@@ -14,6 +14,12 @@ const {
 
 const base = createBaseWordSchema({ meaningLang: 'de' });
 
+const requiredStringRecord = (fieldPath: string, keys: string[]) =>
+  strictObject(
+    Object.fromEntries(keys.map(key => [key, requiredString(`${fieldPath}.${key}`)])),
+    fieldPath
+  );
+
 const GermanWordSchema = z
   .object({
     ad_fontes: strictObject(
@@ -27,6 +33,9 @@ const GermanWordSchema = z
       .optional()
       .refine(value => value === undefined || isRecord(value), 'root must be an object'),
     yield: base.yieldSchema.extend({
+      word_forms: nonEmptyArray('yield.word_forms').refine((rows: unknown[]) => {
+        return rows.every((item: unknown) => isNonEmptyString(item));
+      }, 'yield.word_forms items must be non-empty strings'),
       genus: requiredString('yield.genus'),
       kasus: requiredString('yield.kasus'),
     }),
@@ -60,7 +69,12 @@ const GermanWordSchema = z
             earliest_attestation: requiredString(
               'etymology.historical_origins.earliest_attestation'
             ),
-            source_form: requiredString('etymology.historical_origins.source_form'),
+            source_word: requiredStringRecord('etymology.historical_origins.source_word', [
+              'language',
+              'word',
+              'meaning',
+              'relation',
+            ]),
             pgmc_root: requiredString('etymology.historical_origins.pgmc_root'),
             pie_root: requiredString('etymology.historical_origins.pie_root'),
             sound_changes: requiredString('etymology.historical_origins.sound_changes'),
@@ -72,6 +86,24 @@ const GermanWordSchema = z
       },
       'etymology'
     ),
+    word_formation: requiredObject(
+      {
+        derivations: nonEmptyArray('word_formation.derivations').refine((rows: unknown[]) => {
+          return rows.every((item: unknown) => {
+            if (!isRecord(item)) return false;
+            const rec = item as Record<string, unknown>;
+            return (
+              isNonEmptyString(rec.language) &&
+              isNonEmptyString(rec.word) &&
+              isNonEmptyString(rec.part_of_speech) &&
+              isNonEmptyString(rec.relation) &&
+              isNonEmptyString(rec.logic)
+            );
+          });
+        }, 'word_formation.derivations items must have language, word, part_of_speech, relation, logic'),
+      },
+      'word_formation'
+    ),
     cognate_family: requiredObject(
       {
         cognates: nonEmptyArray('cognate_family.cognates').refine((rows: unknown[]) => {
@@ -80,11 +112,12 @@ const GermanWordSchema = z
             const rec = item as Record<string, unknown>;
             return (
               isNonEmptyString(rec.word) &&
-              isNonEmptyString(rec.german_equivalent) &&
+              isNonEmptyString(rec.language) &&
+              isNonEmptyString(rec.relation) &&
               isNonEmptyString(rec.logic)
             );
           });
-        }, 'cognate_family.cognates items must have word, german_equivalent, and logic'),
+        }, 'cognate_family.cognates items must have word, language, relation, logic'),
       },
       'cognate_family'
     ),
