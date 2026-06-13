@@ -15,6 +15,12 @@ const wordControllerV2 = require('../controllers/wordControllerV2') as {
   validate: (req: Request, res: Response) => Promise<void>;
 };
 
+const { getWordSchemaReference, isWordSchemaReferenceLanguage } =
+  require('../services/word/WordSchemaReference') as {
+    getWordSchemaReference: (language: unknown) => Record<string, unknown>;
+    isWordSchemaReferenceLanguage: (value: unknown) => boolean;
+  };
+
 const { requireWriteAccess } = require('../middleware/writeAuth') as {
   requireWriteAccess: (req: Request, res: Response, next: () => void) => void;
 };
@@ -45,7 +51,7 @@ const {
   AddWordBodySchema: ZodType<unknown>;
 };
 
-// v2 API â€?single-table JSONB storage, language-aware
+// v2 API: single-table JSON storage, language-aware
 router.get('/', validateQuery(WordListQuerySchemaV2), (req: Request, res: Response) =>
   wordControllerV2.list(req, res)
 );
@@ -53,6 +59,14 @@ router.get('/details', validateQuery(WordDetailsQuerySchemaV2), (req: Request, r
   wordControllerV2.getDetails(req, res)
 );
 router.get('/check', (req: Request, res: Response) => wordControllerV2.check(req, res));
+router.get('/schema-reference', (req: Request, res: Response) => {
+  const language = String((req.query as Record<string, unknown>).language || 'en');
+  if (!isWordSchemaReferenceLanguage(language)) {
+    res.status(400).json({ message: 'Unsupported schema reference language.' });
+    return;
+  }
+  res.json(getWordSchemaReference(language));
+});
 router.post('/validate', (req: Request, res: Response) => wordControllerV2.validate(req, res));
 router.get('/:id', validateParams(WordIdParamsSchema), (req: Request, res: Response) =>
   wordControllerV2.get(req, res)

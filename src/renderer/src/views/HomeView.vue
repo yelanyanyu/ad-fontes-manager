@@ -12,6 +12,7 @@ import {
   type JobState,
   type QueueHistoryJob,
 } from '@/composables/useAiGenerate';
+import { bringOverlayToFrontById } from '@/composables/useOverlayStack';
 
 const aiState = useAiGenerate();
 provide(AI_STATE_KEY, aiState);
@@ -50,10 +51,12 @@ const applyGeneratedYaml = (yamlContent: string) => {
 
 const openAiGenerate = () => {
   aiDrawerOpen.value = true;
+  bringOverlayToFrontById('ai-generate');
 };
 
 const openAiJob = () => {
   aiDrawerOpen.value = true;
+  bringOverlayToFrontById('ai-generate');
 };
 
 const openHistoryJob = async (job: QueueHistoryJob) => {
@@ -62,6 +65,7 @@ const openHistoryJob = async (job: QueueHistoryJob) => {
   previewJob.value = null;
   aiState.selectJob(job.jobId);
   aiDrawerOpen.value = true;
+  bringOverlayToFrontById('ai-generate');
 };
 
 let handleResizeMove: ((e: MouseEvent) => void) | null = null;

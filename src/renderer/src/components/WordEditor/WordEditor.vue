@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref, watch, computed, onUnmounted, nextTick } from 'vue';
+import { ref, watch, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import type { Ref } from 'vue';
 import yaml from 'js-yaml';
 import { useWordStore } from '@/stores/wordStore';
 import { useAppStore } from '@/stores/appStore';
 import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
+import CurrentSchemaReference from '@/components/WordEditor/CurrentSchemaReference.vue';
 import YamlEditorSurface from '@/components/WordEditor/YamlEditorSurface.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import type { ConflictData } from '@/types/word-editor';
@@ -15,6 +16,7 @@ import { createWordEditorValidationController } from '@/modules/wordEditor/valid
 import { createFormatFixCommand } from '@/modules/wordEditor/formatFixCommand';
 import { createWordEditorSession } from '@/modules/wordEditor/session';
 import { hideWordAppMetadataInYaml } from '@/utils/wordMetadata';
+import { useOverlayStack } from '@/composables/useOverlayStack';
 
 interface WordStoreLike {
   editorSession: {
@@ -44,9 +46,13 @@ const { editorSession } = storeToRefs(wordStore as any) as {
 const session = createWordEditorSession();
 const input = session.currentYaml;
 const editorSurfaceRef = ref<InstanceType<typeof YamlEditorSurface> | null>(null);
+const moreMenuRef = ref<HTMLElement | null>(null);
 const cursorPos = ref(0);
 const conflictData = ref<ConflictData | null>(null);
 const saving = ref(false);
+const moreMenuOpen = ref(false);
+const schemaReferenceOpen = ref(false);
+const schemaReferenceStack = useOverlayStack('schema-reference');
 
 const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
 const validationController = createWordEditorValidationController({
@@ -78,7 +84,19 @@ const editorSchemaFreshness = computed(
 
 const saveLabel = 'Save';
 
+function closeMoreMenuOnOutsideClick(event: MouseEvent): void {
+  const menu = moreMenuRef.value;
+  if (!menu || menu.contains(event.target as Node)) return;
+  moreMenuOpen.value = false;
+}
+
+onMounted(() => {
+  document.addEventListener('click', closeMoreMenuOnOutsideClick);
+});
+
 onUnmounted(() => {
+  document.removeEventListener('click', closeMoreMenuOnOutsideClick);
+  schemaReferenceStack.remove();
   validationController.dispose();
 });
 
@@ -172,6 +190,17 @@ const applyGeneratedYaml = (yamlContent: string) => {
   input.value = hideWordAppMetadataInYaml(yamlContent);
 };
 
+const openSchemaReference = () => {
+  schemaReferenceOpen.value = true;
+  schemaReferenceStack.bringToFront();
+  moreMenuOpen.value = false;
+};
+
+const closeSchemaReference = () => {
+  schemaReferenceOpen.value = false;
+  schemaReferenceStack.remove();
+};
+
 defineExpose({ applyGeneratedYaml });
 </script>
 
@@ -220,6 +249,28 @@ defineExpose({ applyGeneratedYaml });
         </span>
       </div>
       <div class="head-actions">
+        <div ref="moreMenuRef" class="editor-more">
+          <button
+            class="ui-icon-button"
+            type="button"
+            title="More"
+            aria-label="More editor actions"
+            aria-haspopup="menu"
+            :aria-expanded="moreMenuOpen"
+            @click.stop="moreMenuOpen = !moreMenuOpen"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <circle cx="12" cy="5" r="1.8" />
+              <circle cx="12" cy="12" r="1.8" />
+              <circle cx="12" cy="19" r="1.8" />
+            </svg>
+          </button>
+          <div v-if="moreMenuOpen" class="editor-more-menu" role="menu">
+            <button type="button" role="menuitem" @click="openSchemaReference">
+              Current Schema Reference
+            </button>
+          </div>
+        </div>
         <button
           class="ui-icon-button"
           type="button"
@@ -289,14 +340,25 @@ defineExpose({ applyGeneratedYaml });
       <span v-else class="breadcrumb-empty">---</span>
     </div>
 
-    <YamlEditorSurface
-      ref="editorSurfaceRef"
-      v-model="input"
-      :line-depths="lineDepths"
-      :cursor-line="cursorLine"
-      :readonly="saving"
-      @cursor-change="cursorPos = $event"
-    />
+    <div class="editor-body">
+      <YamlEditorSurface
+        ref="editorSurfaceRef"
+        v-model="input"
+        :line-depths="lineDepths"
+        :cursor-line="cursorLine"
+        :readonly="saving"
+        @cursor-change="cursorPos = $event"
+      />
+    </div>
+
+    <Teleport to="[data-tour='word-list']" defer>
+      <CurrentSchemaReference
+        v-if="schemaReferenceOpen"
+        :style="{ zIndex: schemaReferenceStack.zIndex.value }"
+        @pointerdown="schemaReferenceStack.bringToFront"
+        @close="closeSchemaReference"
+      />
+    </Teleport>
 
     <div v-if="validationState.schemaErrors.length > 0" class="schema-errors">
       <ul>
@@ -427,6 +489,44 @@ defineExpose({ applyGeneratedYaml });
   flex: 0 0 auto;
 }
 
+.editor-more {
+  position: relative;
+}
+
+.editor-more-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 10;
+  min-width: 210px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.editor-more-menu button {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor-more-menu button:hover,
+.editor-more-menu button:focus-visible {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
 .head-save {
   min-width: 92px;
   height: 30px;
@@ -512,6 +612,13 @@ defineExpose({ applyGeneratedYaml });
   font-size: 12px;
   color: var(--red);
   line-height: 1.6;
+}
+
+.editor-body {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @media (max-width: 860px) {

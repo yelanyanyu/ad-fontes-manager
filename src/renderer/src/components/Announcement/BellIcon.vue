@@ -1,31 +1,66 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import AnnouncementDropdown from './AnnouncementDropdown.vue';
 import { useAnnouncementStore } from '@/stores/announcementStore';
+import { useOverlayStack } from '@/composables/useOverlayStack';
 
 const announcementStore = useAnnouncementStore();
 const open = ref(false);
 const rootRef = ref<HTMLElement | null>(null);
+const dropdownPositionStyle = ref<Record<string, string>>({});
+const overlayStack = useOverlayStack('announcement');
+const dropdownStyle = computed(() => ({
+  ...dropdownPositionStyle.value,
+  zIndex: String(overlayStack.zIndex.value),
+}));
+
+function positionDropdown(): void {
+  const root = rootRef.value;
+  if (!root) return;
+  const rect = root.getBoundingClientRect();
+  const width = Math.min(352, window.innerWidth - 32);
+  const left = Math.max(16, Math.min(rect.right - width, window.innerWidth - width - 16));
+  dropdownPositionStyle.value = {
+    position: 'fixed',
+    top: `${rect.bottom + 8}px`,
+    left: `${left}px`,
+    width: `${width}px`,
+  };
+}
 
 function toggle(): void {
   open.value = !open.value;
   if (open.value) {
+    overlayStack.bringToFront();
     announcementStore.markLatestAsRead();
+    void nextTick(positionDropdown);
+  } else {
+    overlayStack.remove();
   }
 }
 
 function onDocumentClick(event: MouseEvent): void {
+  const target = event.target as Element | null;
+  if (target?.closest('.announcement-dropdown')) return;
   if (rootRef.value && !rootRef.value.contains(event.target as Node)) {
     open.value = false;
+    overlayStack.remove();
   }
 }
 
 onMounted(() => {
   void announcementStore.fetchAnnouncements();
   document.addEventListener('click', onDocumentClick);
+  window.addEventListener('resize', positionDropdown);
+  window.addEventListener('scroll', positionDropdown, true);
 });
 
-onUnmounted(() => document.removeEventListener('click', onDocumentClick));
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick);
+  window.removeEventListener('resize', positionDropdown);
+  window.removeEventListener('scroll', positionDropdown, true);
+  overlayStack.remove();
+});
 </script>
 
 <template>
@@ -52,13 +87,17 @@ onUnmounted(() => document.removeEventListener('click', onDocumentClick));
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 translate-y-1"
     >
-      <AnnouncementDropdown
-        v-if="open"
-        :announcements="announcementStore.announcements"
-        :source-notice="announcementStore.sourceNotice"
-        :loading="announcementStore.loading"
-        :error="announcementStore.error"
-      />
+      <Teleport to="body">
+        <AnnouncementDropdown
+          v-if="open"
+          :style="dropdownStyle"
+          :announcements="announcementStore.announcements"
+          :source-notice="announcementStore.sourceNotice"
+          :loading="announcementStore.loading"
+          :error="announcementStore.error"
+          @pointerdown="overlayStack.bringToFront"
+        />
+      </Teleport>
     </Transition>
   </div>
 </template>

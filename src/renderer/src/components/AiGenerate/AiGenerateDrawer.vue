@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref, watch } from 'vue';
+import { computed, inject, onUnmounted, ref, watch } from 'vue';
 import { useAppStore, type LanguageCode } from '@/stores/appStore';
 import { useWordStore } from '@/stores/wordStore';
 import { AI_STATE_KEY, type ResumeStage, type StepState } from '@/composables/useAiGenerate';
@@ -12,8 +12,9 @@ import SingleGenerateForm from './SingleGenerateForm.vue';
 import type { BatchGenerateDraftItem } from '@/services/batchGenerateParser';
 import { buildDisplaySteps, resolveStageDetailsStep } from './stageDisplay';
 import request from '@/utils/request';
+import { useOverlayStack } from '@/composables/useOverlayStack';
 
-defineProps<{
+const props = defineProps<{
   open: boolean;
 }>();
 
@@ -59,6 +60,7 @@ const errorMessage = ref('');
 const selectedStageKey = ref<string | null>(null);
 const stagePanelOpen = ref(false);
 const language = computed<LanguageCode>(() => appStore.currentLanguage);
+const overlayStack = useOverlayStack('ai-generate');
 
 const hasRevisionNotes = computed(() => {
   const notes = currentJob.value?.scores?.revision_notes as string | undefined;
@@ -78,6 +80,17 @@ watch(selectedStage, step => {
     stagePanelOpen.value = false;
   }
 });
+
+watch(
+  () => props.open,
+  open => {
+    if (open) overlayStack.bringToFront();
+    else overlayStack.remove();
+  },
+  { immediate: true }
+);
+
+onUnmounted(() => overlayStack.remove());
 
 const reviewScore = computed(() => {
   const userScore = currentJob.value?.scores?.user_review_score;
@@ -293,7 +306,13 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
 </script>
 
 <template>
-  <aside v-show="open" class="ai-drawer" aria-label="AI Generate Drawer">
+  <aside
+    v-show="open"
+    class="ai-drawer"
+    aria-label="AI Generate Drawer"
+    :style="{ zIndex: overlayStack.zIndex.value }"
+    @pointerdown="overlayStack.bringToFront"
+  >
     <ConfirmDialog
       v-bind="saveConfirmDialog"
       @cancel="settleSaveConfirm(false)"
@@ -411,7 +430,6 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   position: absolute;
   inset: 0;
   width: 100%;
-  z-index: 20;
   background: var(--surface-panel);
   border-left: 1px solid var(--line);
   box-shadow: var(--shadow-md);

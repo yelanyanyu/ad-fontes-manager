@@ -19,7 +19,7 @@ const sortedAnnouncements = computed(() =>
 
 <template>
   <div
-    class="absolute right-0 top-full mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-md border border-emerald-100 bg-white shadow-xl z-50 overflow-hidden"
+    class="rounded-md border border-emerald-100 bg-white shadow-xl overflow-hidden announcement-dropdown"
   >
     <div class="px-4 py-3 border-b border-emerald-50">
       <h2 class="text-sm font-semibold text-slate-800">更新公告</h2>
@@ -90,3 +90,9 @@ const sortedAnnouncements = computed(() =>
     </template>
   </div>
 </template>
+
+<style scoped>
+.announcement-dropdown {
+  max-width: calc(100vw - 2rem);
+}
+</style>
