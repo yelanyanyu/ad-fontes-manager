@@ -350,6 +350,111 @@ etymology:
   visual_imagery_zh: 变空
 `;
 
+const yamlWithRepeatedKeysInDifferentDerivationItems = `
+ad_fontes:
+  word_schema_version: 2
+yield:
+  user_word: biographer
+  lemma: biographer
+  syllabification: bi-og-ra-pher
+  word_forms:
+    - biographer
+    - biographers
+  user_context_sentence: The biographer spent years researching the subject's life.
+  part_of_speech: noun
+  contextual_meaning:
+    en: a writer of an account of someone's life
+    zh: 传记作者
+  other_common_meanings:
+    - a person who writes biographies
+  language: en
+etymology:
+  root_and_affixes:
+    prefix: bio-
+    root: graph
+    suffix: -er
+    structure_analysis: bio plus graph plus er
+  historical_origins:
+    history_myth: First recorded in English in 1715.
+    source_word:
+      language: en
+      word: biography
+      meaning: account of a person's life
+      relation: derived_from
+    pie_root: '*gwei-'
+  visual_imagery_zh: 书桌上的传记
+  meaning_evolution_zh: 从生命到书写
+word_formation:
+  derivations:
+    - language: en
+      word: biography
+      part_of_speech: noun
+      relation: base_form
+      logic: biographer is derived from biography by adding -er
+    - language: en
+      word: biographical
+      part_of_speech: adjective
+      relation: adjectivalization
+      logic: biographer relates to biographical as the adjective form of biography
+cognate_family:
+  cognates:
+    - word: biography
+      language: en
+      relation: cognate
+      logic: bio plus graph
+application:
+  selected_examples:
+    - type: Current Context
+      sentence: The biographer spent years researching the subject's life.
+      translation_zh: 传记作家花了多年研究传主的一生。
+nuance:
+  synonyms:
+    - word: chronicler
+      meaning_zh: 编年史作者
+  image_differentiation_zh: biographer 写一个生命，chronicler 记录时间顺序。
+`;
+
+const yamlWithDuplicateEtymologyAfterValidDerivationItems = `
+ad_fontes:
+  word_schema_version: 2
+yield:
+  user_word: biographer
+  lemma: biographer
+  syllabification: bi-og-ra-pher
+  word_forms:
+    - biographer
+  user_context_sentence: The biographer spent years researching the subject's life.
+  part_of_speech: noun
+  contextual_meaning:
+    en: a writer of an account of someone's life
+    zh: 传记作者
+  other_common_meanings:
+    - a person who writes biographies
+  language: en
+etymology:
+  historical_origins:
+    source_word:
+      language: en
+      word: biography
+      meaning: account of a person's life
+      relation: derived_from
+    pie_root: '*gwei-'
+word_formation:
+  derivations:
+    - language: en
+      word: biography
+      part_of_speech: noun
+      relation: base_form
+      logic: derived from biography
+    - language: en
+      word: biographical
+      part_of_speech: adjective
+      relation: adjectivalization
+      logic: related adjective
+etymology:
+  visual_imagery_zh: 书桌上的传记
+`;
+
 const englishWithOnlyApplicationNestedUnderEtymology = withEnglishV2Fields(`
 yield:
   user_word: compelling
@@ -718,6 +823,40 @@ void test('strict validate reports duplicate YAML key with first and duplicate l
   assert(result.errors.some(error => error.includes('"etymology"')));
   assert(result.errors.some(error => error.includes('line 4')));
   assert(result.errors.some(error => error.includes('line 7')));
+});
+
+void test('strict validate does not treat repeated keys in separate list items as duplicates', async () => {
+  const result = await wordService.validateYaml(
+    {},
+    yamlWithRepeatedKeysInDifferentDerivationItems,
+    { repair: false }
+  );
+
+  assert.equal(result.valid, true);
+  assert.equal(
+    result.diagnostics?.some(diagnostic => diagnostic.code === 'yaml.duplicate_key'),
+    false
+  );
+  assert.equal(
+    result.errors.some(error => error.includes('word_formation.derivations.language')),
+    false
+  );
+});
+
+void test('strict validate reports the real duplicated root section after list item keys', async () => {
+  const result = await wordService.validateYaml(
+    {},
+    yamlWithDuplicateEtymologyAfterValidDerivationItems,
+    { repair: false }
+  );
+
+  assert.equal(result.valid, false);
+  assert(result.diagnostics?.some(diagnostic => diagnostic.code === 'yaml.duplicate_key'));
+  assert(result.errors.some(error => error.includes('"etymology"')));
+  assert.equal(
+    result.errors.some(error => error.includes('word_formation.derivations.language')),
+    false
+  );
 });
 
 void test('strict validate points unclosed double quote diagnostics at the scalar line', async () => {

@@ -78,7 +78,10 @@ describe('createFormatFixCommand', () => {
     expect(replaceYaml).not.toHaveBeenCalled();
     expect(state.status).toBe('Invalid YAML');
     expect(state.schemaErrors).toEqual(['root: YAML parse error.']);
-    expect(addToast).toHaveBeenCalledWith('No safe automatic repair was available.', 'warning');
+    expect(addToast).toHaveBeenCalledWith(
+      'No safe automatic repair was available: root: YAML parse error.',
+      'warning'
+    );
   });
 
   it('only replaces YAML when the response includes changed YAML text', async () => {

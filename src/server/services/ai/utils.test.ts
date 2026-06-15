@@ -75,4 +75,44 @@ void describe('mergeYamlTexts', () => {
     assert.deepEqual(parsed.ad_fontes, { word_schema_version: 2 });
     assert.equal(parsed.etymology.visual_imagery_zh, 'composure image');
   });
+
+  void it('merges creative root sections even when the creative YAML repeats a field', () => {
+    const yaml = require('js-yaml') as typeof import('js-yaml');
+    const { mergeYamlTexts } = require('./utils') as typeof import('./utils');
+
+    const merged = mergeYamlTexts(
+      [
+        'ad_fontes:',
+        '  word_schema_version: 2',
+        'yield:',
+        '  lemma: biographer',
+        '  language: en',
+        'etymology:',
+        '  root_and_affixes:',
+        '    root: graph',
+        'word_formation:',
+        '  derivations:',
+        '    - language: en',
+        '      word: biography',
+        '    - language: en',
+        '      word: biographical',
+      ].join('\n'),
+      [
+        'etymology:',
+        '  visual_imagery_zh: image',
+        '  meaning_evolution_zh: first',
+        '  meaning_evolution_zh: second',
+        'application:',
+        '  selected_examples:',
+        '    - sentence: example',
+      ].join('\n')
+    );
+    const parsed = yaml.load(merged) as Record<string, any>;
+
+    assert.equal(parsed.etymology.root_and_affixes.root, 'graph');
+    assert.equal(parsed.etymology.visual_imagery_zh, 'image');
+    assert.equal(parsed.etymology.meaning_evolution_zh, 'second');
+    assert.equal(parsed.word_formation.derivations.length, 2);
+    assert.doesNotMatch(merged, /^etymology:[\s\S]*^etymology:/m);
+  });
 });

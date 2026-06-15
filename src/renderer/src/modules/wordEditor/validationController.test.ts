@@ -180,8 +180,12 @@ describe('createWordEditorValidationController', () => {
     expect(controller.state.schemaErrors).toEqual([]);
   });
 
-  it('marks parse errors invalid without calling the server', async () => {
-    const validateYaml = vi.fn();
+  it('asks strict validation for diagnostics when client parsing fails', async () => {
+    const validateYaml = vi.fn().mockResolvedValue({
+      valid: false,
+      errors: ['YAML parse error.'],
+      diagnostics: [{ code: 'yaml.parse_error', path: 'root', message: 'YAML parse error.' }],
+    });
     const controller = createWordEditorValidationController({
       validateYaml,
       inputDebounceMs: 0,
@@ -191,9 +195,14 @@ describe('createWordEditorValidationController', () => {
     controller.handleTextChanged('yield:\n  lemma: "after\napplication:\n');
     await vi.runOnlyPendingTimersAsync();
 
-    expect(validateYaml).not.toHaveBeenCalled();
+    expect(validateYaml).toHaveBeenCalledWith({
+      yaml: 'yield:\n  lemma: "after\napplication:\n',
+      repair: false,
+      intent: undefined,
+      wordId: undefined,
+    });
     expect(controller.state.status).toBe('Invalid YAML');
-    expect(controller.state.schemaErrors).toEqual([]);
+    expect(controller.state.schemaErrors).toEqual(['root: YAML parse error.']);
     expect(controller.state.notices).toEqual([]);
   });
 

@@ -185,9 +185,38 @@ export function loadYamlObjectWithRepairs(text: string): Record<string, unknown>
   }
 }
 
+function loadYamlObjectForMerge(text: string): Record<string, unknown> {
+  const loadForMerge = (source: string): Record<string, unknown> =>
+    yaml.load(source, { json: true }) as Record<string, unknown>;
+
+  try {
+    return loadForMerge(text);
+  } catch (firstError) {
+    const pass1 = repairLlmYamlQuirks(text);
+    if (pass1 !== text) {
+      try {
+        return loadForMerge(pass1);
+      } catch {
+        // Continue to pass 2.
+      }
+    }
+
+    const pass2 = repairCommonYamlScalarSlips(pass1);
+    if (pass2 !== pass1) {
+      try {
+        return loadForMerge(pass2);
+      } catch {
+        // Prefer the original parser error; the repair attempt failed too.
+      }
+    }
+
+    throw firstError;
+  }
+}
+
 export function mergeYamlTexts(primaryYaml: string, overlayYaml: string): string {
-  const primary = loadYamlObjectWithRepairs(primaryYaml);
-  const overlay = loadYamlObjectWithRepairs(overlayYaml);
+  const primary = loadYamlObjectForMerge(primaryYaml);
+  const overlay = loadYamlObjectForMerge(overlayYaml);
   delete overlay.ad_fontes;
   const merged = deepMerge(primary, overlay);
   return yaml.dump(merged, { lineWidth: -1, noRefs: true });

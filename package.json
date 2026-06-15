@@ -1,6 +1,6 @@
 {
   "name": "ad-fontes-manager",
-  "version": "2.0.5",
+  "version": "2.0.6",
   "description": "Ad Fontes Manager web and desktop application",
   "license": "AGPL-3.0-only",
   "main": "out/main/index.js",

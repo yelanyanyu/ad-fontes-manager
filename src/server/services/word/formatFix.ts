@@ -247,7 +247,7 @@ function getLemma(data: Record<string, unknown>): string {
 
 function findDuplicateMappingKey(text: string): DuplicateKeyInfo | null {
   const seen = new Map<string, { key: string; line: number }>();
-  const stack: Array<{ indent: number; key: string }> = [];
+  const stack: Array<{ indent: number; key: string; synthetic?: boolean }> = [];
   let blockScalarIndent: number | null = null;
   const lines = text.split(/\r?\n/);
 
@@ -262,29 +262,37 @@ function findDuplicateMappingKey(text: string): DuplicateKeyInfo | null {
       blockScalarIndent = null;
     }
 
-    const keyMatch = line.match(/^(\s*)(?:-\s*)?(['"]?)([^:'"#][^:#]*?)\2\s*:\s*(.*)$/);
+    const keyMatch = line.match(/^(\s*)(-\s*)?(['"]?)([^:'"#][^:#]*?)\3\s*:\s*(.*)$/);
     if (!keyMatch) continue;
 
-    const key = keyMatch[3].trim();
-    const value = keyMatch[4].trim();
+    const hasListMarker = Boolean(keyMatch[2]);
+    const key = keyMatch[4].trim();
+    const value = keyMatch[5].trim();
     if (!key) continue;
 
     while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
       stack.pop();
     }
 
-    const path = [...stack.map(item => item.key), key].join('.');
-    const existing = seen.get(path);
+    if (hasListMarker) {
+      stack.push({ indent, key: `[]${index + 1}`, synthetic: true });
+    }
+
+    const pathKey = [...stack.map(item => item.key), key].join('.');
+    const displayPath = [...stack.filter(item => !item.synthetic).map(item => item.key), key].join(
+      '.'
+    );
+    const existing = seen.get(pathKey);
     if (existing) {
       return {
         key,
-        path,
+        path: displayPath,
         firstLine: existing.line,
         duplicateLine: index + 1,
       };
     }
 
-    seen.set(path, { key, line: index + 1 });
+    seen.set(pathKey, { key, line: index + 1 });
 
     if (
       value === '' ||

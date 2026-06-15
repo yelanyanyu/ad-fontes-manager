@@ -28,10 +28,11 @@ Ad Fontes 英语/德语词源词条管理工具。它把 AI 生成、YAML 修订
 
 ## 能做什么
 
-- **AI 生成词条**：多阶段流水线生成英语/德语词源 YAML，支持搜索、创意扩写、审核、修复和批量队列。
-- **YAML 编辑与修复**：编辑器提供实时校验、层级导航、智能缩进、Basic Format Fix 和重复键诊断。
-- **词条管理**：SQLite 本地数据库保存词条，支持搜索、排序、分页、多语言切换、JSON 无损导入导出和冲突检测。
-- **预览与导出**：预览 Anki 卡片效果，支持 AnkiConnect 导入、`.apkg` 文件导出和词条 JSON 迁移。
+- **AI 生成词条**：多阶段流水线生成英语/德语词源 YAML，支持搜索、创意扩写、审核、修复、批量队列和当前结构生成校验。
+- **YAML 编辑与修复**：编辑器提供实时校验、层级导航、智能缩进、Basic Format Fix、重复键诊断和当前 schema 参考面板。
+- **词条结构版本**：保存的词条会记录 Word Schema Version；旧结构词条以温和提示展示，可无损维护，也可重新生成到当前结构。
+- **词条管理**：SQLite 本地数据库保存词条，支持搜索、排序、分页、多语言切换、批量删除、JSON 无损导入导出和冲突检测。
+- **预览与导出**：Word Preview、生成结果预览和 Anki 导出共用内置词卡 HTML，支持 AnkiConnect 导入、`.apkg` 文件导出和词条 JSON 迁移。
 - **桌面优先**：Windows/macOS Electron 应用支持自定义数据目录、自动更新和本地运行；同一代码库也支持 Web 模式。
 
 ## 快速开始
@@ -143,6 +144,8 @@ docs/
 - [docs/JOB_QUEUE.md](./docs/JOB_QUEUE.md)：AI 作业队列、状态机、SSE 事件和并发规则。
 - [docs/ELECTRON_NATIVE_MODULES.md](./docs/ELECTRON_NATIVE_MODULES.md)：Electron/Node 原生模块 ABI 切换手册。
 - [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)：桌面构建、Docker/Web 部署、备份恢复。
+- [docs/adr/0005-word-schema-version.md](./docs/adr/0005-word-schema-version.md)：Word Schema Version 的存储、导入和旧词条维护规则。
+- [docs/prompts/](./docs/prompts/)：英语/德语 AI prompt 与当前词条 schema 参考。
 
 给 Agent 和维护者看的入口：
 

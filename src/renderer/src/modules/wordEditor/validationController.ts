@@ -178,7 +178,7 @@ export function createWordEditorValidationController({
       state.schemaErrors = [];
       state.notices = [];
       state.schemaFreshness = null;
-      clearValidateTimer();
+      runServerValidation(yamlToValidate, requestId);
     }
   };
 

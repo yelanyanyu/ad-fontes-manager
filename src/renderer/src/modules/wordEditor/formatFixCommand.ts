@@ -25,6 +25,10 @@ interface FormatFixCommandOptions {
   addToast: (message: string, type?: ToastType) => void;
 }
 
+function firstValidationMessage(res: FormatValidationResponse): string {
+  return formatValidationMessages(res)[0] || 'Review the YAML error details.';
+}
+
 export function createFormatFixCommand({
   state,
   repairYaml,
@@ -54,7 +58,9 @@ export function createFormatFixCommand({
       }
 
       addToast(
-        res.valid ? 'No format repairs needed.' : 'No safe automatic repair was available.',
+        res.valid
+          ? 'No format repairs needed.'
+          : `No safe automatic repair was available: ${firstValidationMessage(res)}`,
         res.valid ? 'info' : 'warning'
       );
       return { status: 'notRepaired', response: res };
