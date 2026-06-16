@@ -399,7 +399,7 @@ The shared presentation surface for row-based Queue views, including Active Queu
 _Avoid_: Generic table, data grid
 
 **Queue Table Row** (队列表格行):
-The display model passed into Queue Table by Active Queue, Job History, or Workset. It is not a persisted Job row and not a Workset Item; it is the normalized presentation input containing the row id, Job type, Lemma/Word text, status, optional Language, optional Review Score, optional Improve Count, optional note chip, and optional row action metadata.
+The display model passed into Queue Table by Active Queue, Job History, or Workset. It is not a persisted Job row and not a Workset Item; it is the normalized presentation input containing the row id, Job type, Lemma/Word text, status, optional Language, optional Review Score, optional Improve Count, optional note chip, and optional row action metadata. In Workset, the note chip represents only the durable Workset Sync Marker (`synced`, `unsynced`, `not saved`, or `blocked`). Save diagnostics and Improve blocking details belong in short-lived feedback, Improve controls, or detail panels rather than this compact row marker.
 _Avoid_: Job row, Workset row
 
 **Queue Runtime Metrics** (队列运行指标):
@@ -423,8 +423,12 @@ A review-and-save surface for the latest generated YAML results the user is acti
 _Avoid_: Current batch, History subset, temporary database
 
 **Workset Sync Marker** (工作集同步标记):
-A compact row-level indicator in the Workset that tells whether the latest Workset result is synced to the App Database. It distinguishes synced results, unsynced results for Words that already exist in the App Database, not-saved results for Words that do not yet exist in the App Database, and blocked results that cannot be saved. It is about the relationship between the latest Workset result and the App Database's current Word Content, not merely whether a Word with the same Lemma + Language exists. Its purpose is to keep users from repeatedly saving the same generated result and spending unnecessary resources. Default Workset save actions should submit unsynced and not-saved complete results rather than already synced results. It must survive app restart because it records review progress on durable Job Results, not a transient UI filter.
+A compact row-level indicator in the Workset that tells whether the latest Workset result is synced to the App Database. It distinguishes synced results, unsynced results for Words that already exist in the App Database, not-saved results for Words that do not yet exist in the App Database, and blocked results that cannot be saved. It is about the relationship between the latest Workset result and the App Database's current Word Content, not merely whether a Word with the same Lemma + Language exists. Its purpose is to keep users from repeatedly saving the same generated result and spending unnecessary resources. Default Workset save actions should submit unsynced and not-saved complete results rather than already synced results. It must survive app restart because it records review progress on durable Job Results, not a transient UI filter. Save and refresh actions may show short-lived toast feedback, but they must not replace the durable Workset Sync Marker. The Workset row marker deliberately does not display `no notes`, `audit`, `partial`, `invalid`, or `error`; those are detailed operation states surfaced by Improve or Job details.
 _Avoid_: Job status, Review Score, Word content state
+
+**Word Save Provenance** (词条保存来源):
+The source metadata carried by a Word save action when the saved YAML came from a Job Result. It connects the saved Word back to the source Job so a successful save can update the Workset Sync Marker. Word Save Provenance does not change Word Content, does not decide whether the Word save succeeded, and does not create a user-visible save history. If provenance recording fails after the Word is saved, the Word save remains successful and the response should expose the provenance warning separately.
+_Avoid_: Save status, audit log, Workset note
 
 **Circuit Breaker** (熔断):
 A safety mechanism that pauses all Jobs assigned to a specific Provider after 3 consecutive failures from that Provider. The user is notified; manual intervention is required to resume.
@@ -469,6 +473,7 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - Saving or overwriting a **Word** remains an Editor responsibility; **Job History** may fill the Editor from a complete Job after Basic **Format Fix** has run, but does not write directly to `words_v2`
 - A **Workset** is derived from **Job History** rows but is not itself History: it answers "what latest YAML results should I save now?" and can batch-save through the Word save path, reporting per-Word save outcomes such as saved, conflict, invalid, missing, or error
 - A **Workset Sync Marker** separates App Database sync state from Queue status, so a `complete` Job can be visibly unsynced even when an older Word with the same Lemma + Language already exists
+- **Word Save Provenance** connects a saved **Word** back to the source **Job** only after the save succeeds, allowing the **Workset Sync Marker** to update without making Queue status part of Word Content
 - Basic **Format Fix** can run automatically before Fill Editor, Word save, and Workset save, and it can be triggered manually from the Word Editor. It can repair common YAML syntax slips, safely promote misplaced top-level sections when schema evidence is unambiguous, and return structured diagnostics when automatic repair is unsafe. Enhanced **Format Fix** is user-triggered. `partial` and `error` Jobs are rejected.
 - A **Content Fix** applies to `complete` Jobs whose `overall_score < 6`. It creates a new Queue-based Fix Job (priority `high`) that runs `fixing` then re-runs `auditing`. Can be triggered per-word or as a Workset batch.
 - **Workset Improve** applies Content Fix only to eligible low-score Jobs in the current visible **Workset**, never to older deduplicated **Job History** rows. A user can remove Jobs from the **Pending Improve Selection** before creating Fix Jobs.

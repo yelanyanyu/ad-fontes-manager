@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref, watch } from 'vue';
+import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   AI_STATE_KEY,
   type QueueHistoryJob,
@@ -123,14 +123,6 @@ const total = computed(() => queueOverview.value.length);
 const historyPages = computed(() =>
   Math.max(1, Math.ceil(queueHistoryTotal.value / queueHistoryPageSize.value))
 );
-const worksetSaveSummary = computed(() => {
-  const summary = { conflict: 0, invalid: 0, missing: 0, error: 0 };
-  for (const detail of worksetSaveResults.value.values()) {
-    if (detail.status === 'saved') continue;
-    summary[detail.status]++;
-  }
-  return summary;
-});
 const conflictJobIds = computed(() =>
   [...worksetSaveResults.value.entries()]
     .filter(([, detail]) => detail.status === 'conflict')
@@ -148,54 +140,35 @@ const pendingImproveJobs = computed(() =>
   todayWorkset.value.filter(job => pendingImproveJobIds.value.has(job.jobId))
 );
 
-function formatBlockedReason(reason: WorksetJob['improveBlockedReason']): string {
-  switch (reason) {
-    case 'score-not-low':
-      return '';
-    case 'partial-result':
-      return 'partial';
-    case 'audit-incomplete':
-      return 'audit';
-    case 'missing-revision-notes':
-      return 'no notes';
-    default:
-      return 'blocked';
+function describeWorksetNote(job: WorksetJob) {
+  if (job.syncStatus === 'blocked') {
+    return {
+      label: 'blocked',
+      title: 'This Workset result cannot be saved to the App Database.',
+      tone: 'muted' as const,
+    };
   }
-}
 
-function shouldShowBlockedReason(reason: WorksetJob['improveBlockedReason']): boolean {
-  return Boolean(reason && reason !== 'score-not-low');
-}
-
-function describeWorksetSyncStatus(job: WorksetJob): WorksetSaveDetail | undefined {
   if (job.syncStatus === 'synced') {
     return {
-      status: 'saved',
       label: 'synced',
-      message: 'This latest Workset result is already synced to the App Database.',
+      title: 'This latest Workset result is synced to the App Database.',
+      tone: 'success' as const,
     };
   }
 
   if (job.syncStatus === 'unsynced') {
     return {
-      status: 'conflict',
       label: 'unsynced',
-      message: 'The App Database has this Word, but not this latest Workset result.',
-    };
-  }
-
-  if (job.syncStatus === 'blocked') {
-    return {
-      status: 'missing',
-      label: 'blocked',
-      message: 'This Workset result is not saveable to the App Database.',
+      title: 'The App Database has this Word, but not this latest Workset result.',
+      tone: 'warning' as const,
     };
   }
 
   return {
-    status: 'missing',
     label: 'not saved',
-    message: 'This generated result has not been added to the App Database.',
+    title: 'This generated result has not been added to the App Database.',
+    tone: 'muted' as const,
   };
 }
 
@@ -257,8 +230,6 @@ const historyQueueRows = computed<QueueTableRow[]>(() =>
 
 const worksetQueueRows = computed<QueueTableRow[]>(() =>
   todayWorkset.value.map(job => {
-    const saveResult =
-      worksetSaveResults.value.get(job.jobId) || describeWorksetSyncStatus(job);
     return {
       id: job.jobId,
       status: job.status,
@@ -269,26 +240,7 @@ const worksetQueueRows = computed<QueueTableRow[]>(() =>
       improveCount: job.improveCount,
       runMetrics: job.runMetrics,
       runMetricsExpanded: isRunMetricsExpanded(job.jobId),
-      note: saveResult
-        ? {
-            label: saveResult.label,
-            title: saveResult.message,
-            tone:
-              saveResult.status === 'saved'
-                ? 'success'
-                : saveResult.status === 'conflict'
-                  ? 'warning'
-                  : saveResult.status === 'missing'
-                    ? 'muted'
-                    : 'danger',
-          }
-        : shouldShowBlockedReason(job.improveBlockedReason)
-          ? {
-              label: formatBlockedReason(job.improveBlockedReason),
-              title: job.improveBlockedReason,
-              tone: 'warning',
-            }
-          : undefined,
+      note: describeWorksetNote(job),
       raw: job,
     };
   })
@@ -314,17 +266,25 @@ function recordWorksetSave(response: WorksetSaveResponse): void {
   const next = new Map(worksetSaveResults.value);
   for (const item of response.results) {
     const detail = describeWorksetSaveResult(item.result);
-    if (detail.status === 'saved') next.delete(item.jobId);
-    else next.set(item.jobId, detail);
-  }
-  for (const jobId of response.missing) {
-    next.set(jobId, {
-      status: 'missing',
-      label: 'missing',
-      message: 'No saveable YAML result was found for this Job.',
-    });
+    if (detail.status === 'conflict') next.set(item.jobId, detail);
+    else next.delete(item.jobId);
   }
   worksetSaveResults.value = next;
+}
+
+async function refreshWorkset(options: { toast?: boolean } = {}): Promise<void> {
+  worksetSaveResults.value = new Map();
+  await fetchTodayWorkset();
+  if (options.toast) {
+    appStore.addToast('Refresh complete', 'info', 3000);
+  }
+}
+
+function refreshWorksetAfterWordSave(): void {
+  worksetSaveResults.value = new Map();
+  if (mode.value === 'workset') {
+    void fetchTodayWorkset();
+  }
 }
 
 function toggleExpand(): void {
@@ -333,7 +293,7 @@ function toggleExpand(): void {
   if (queueOpen.value) {
     if (mode.value === 'active') fetchQueueOverview();
     else if (mode.value === 'history') fetchQueueHistory();
-    else fetchTodayWorkset();
+    else refreshWorkset();
   }
 }
 
@@ -420,12 +380,6 @@ function handleWorksetRowSelect(row: QueueTableRow): void {
 async function handleSaveWorkset(): Promise<void> {
   const jobIds = unsyncedWorksetJobs.value.map(job => job.jobId);
   if (jobIds.length === 0 || savingWorkset.value) return;
-  const confirmed = await requestQueueConfirm({
-    title: 'Save unsynced workset items?',
-    message: `Save ${jobIds.length} complete generated results that are not synced to the word database?`,
-    confirmLabel: 'Save',
-  });
-  if (!confirmed) return;
 
   savingWorkset.value = true;
   try {
@@ -438,9 +392,11 @@ async function handleSaveWorkset(): Promise<void> {
     if (result.conflicts || result.failed || result.missing.length) {
       appStore.addToast(
         `Not saved: ${result.conflicts} conflict, ${result.failed} failed, ${result.missing.length} missing`,
-        'warning'
+        'warning',
+        3000
       );
     }
+    await fetchTodayWorkset();
   } finally {
     savingWorkset.value = false;
   }
@@ -509,7 +465,8 @@ async function handleOverwriteConflicts(): Promise<void> {
     if (result.failed || result.missing.length) {
       appStore.addToast(
         `Still not saved: ${result.failed} failed, ${result.missing.length} missing`,
-        'warning'
+        'warning',
+        3000
       );
     }
   } finally {
@@ -539,6 +496,14 @@ async function handleClearHistory(): Promise<void> {
   if (!confirmed) return;
   await clearQueueHistory();
 }
+
+onMounted(() => {
+  window.addEventListener('ad-fontes:word-saved', refreshWorksetAfterWordSave);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('ad-fontes:word-saved', refreshWorksetAfterWordSave);
+});
 </script>
 
 <template>
@@ -725,7 +690,7 @@ async function handleClearHistory(): Promise<void> {
             type="button"
             class="ui-button ui-button--quiet queue-button"
             :disabled="todayWorkset.length === 0 || savingWorkset"
-            @click="fetchTodayWorkset"
+            @click="refreshWorkset({ toast: true })"
           >
             Refresh
           </button>
@@ -754,21 +719,6 @@ async function handleClearHistory(): Promise<void> {
           >
             Overwrite Conflicts
           </button>
-        </div>
-
-        <div v-if="worksetSaveResults.size > 0" class="workset-result-summary">
-          <span v-if="worksetSaveSummary.conflict" class="ui-chip ui-chip--warning">
-            Conflict {{ worksetSaveSummary.conflict }}
-          </span>
-          <span v-if="worksetSaveSummary.invalid" class="ui-chip ui-chip--danger">
-            Invalid {{ worksetSaveSummary.invalid }}
-          </span>
-          <span v-if="worksetSaveSummary.error" class="ui-chip ui-chip--danger">
-            Error {{ worksetSaveSummary.error }}
-          </span>
-          <span v-if="worksetSaveSummary.missing" class="ui-chip ui-chip--neutral">
-            Missing {{ worksetSaveSummary.missing }}
-          </span>
         </div>
 
         <QueueTable

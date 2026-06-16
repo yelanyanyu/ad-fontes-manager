@@ -844,7 +844,7 @@ export class QueueStore {
        ORDER BY COALESCE(r.completed_at, r.created_at) DESC`
     );
 
-    const jobs = rows.map(row => {
+    const jobs: WorksetJob[] = rows.map(row => {
       const scores = parseWorksetScores(row.result_scores);
       const eligibility = resolveWorksetImproveEligibility(row.status as string, scores);
       return {
@@ -950,7 +950,9 @@ export class QueueStore {
 
     const result = this.getDb().run(
       `UPDATE job_queue
-       SET synced_word_id = ?, synced_content_hash = ?, synced_at = datetime('now')
+       SET synced_word_id = ?,
+           synced_content_hash = ?,
+           synced_at = datetime('now')
        WHERE id = ?
          AND status = 'complete'
          AND result_yaml IS NOT NULL
