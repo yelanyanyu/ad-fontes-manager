@@ -114,6 +114,7 @@ export interface QueueHistoryJob extends QueueJobOverview {
 
 export interface WorksetJob extends QueueHistoryJob {
   batchId?: string;
+  syncStatus: 'synced' | 'unsynced' | 'not-saved' | 'blocked';
   finalScore: number | null;
   aiReviewScore: number | null;
   userReviewScore: number | null;

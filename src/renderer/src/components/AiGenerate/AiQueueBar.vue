@@ -136,6 +136,13 @@ const conflictJobIds = computed(() =>
     .map(([jobId]) => jobId)
 );
 const eligibleWorksetJobs = computed(() => todayWorkset.value.filter(job => job.improveEligible));
+const unsyncedWorksetJobs = computed(() =>
+  todayWorkset.value.filter(
+    job =>
+      job.status === 'complete' &&
+      (job.syncStatus === 'not-saved' || job.syncStatus === 'unsynced')
+  )
+);
 const pendingImproveJobs = computed(() =>
   todayWorkset.value.filter(job => pendingImproveJobIds.value.has(job.jobId))
 );
@@ -157,6 +164,38 @@ function formatBlockedReason(reason: WorksetJob['improveBlockedReason']): string
 
 function shouldShowBlockedReason(reason: WorksetJob['improveBlockedReason']): boolean {
   return Boolean(reason && reason !== 'score-not-low');
+}
+
+function describeWorksetSyncStatus(job: WorksetJob): WorksetSaveDetail | undefined {
+  if (job.syncStatus === 'synced') {
+    return {
+      status: 'saved',
+      label: 'synced',
+      message: 'This latest Workset result is already synced to the App Database.',
+    };
+  }
+
+  if (job.syncStatus === 'unsynced') {
+    return {
+      status: 'conflict',
+      label: 'unsynced',
+      message: 'The App Database has this Word, but not this latest Workset result.',
+    };
+  }
+
+  if (job.syncStatus === 'blocked') {
+    return {
+      status: 'missing',
+      label: 'blocked',
+      message: 'This Workset result is not saveable to the App Database.',
+    };
+  }
+
+  return {
+    status: 'missing',
+    label: 'not saved',
+    message: 'This generated result has not been added to the App Database.',
+  };
 }
 
 function isRunMetricsExpanded(jobId: string): boolean {
@@ -217,7 +256,8 @@ const historyQueueRows = computed<QueueTableRow[]>(() =>
 
 const worksetQueueRows = computed<QueueTableRow[]>(() =>
   todayWorkset.value.map(job => {
-    const saveResult = worksetSaveResults.value.get(job.jobId);
+    const saveResult =
+      worksetSaveResults.value.get(job.jobId) || describeWorksetSyncStatus(job);
     return {
       id: job.jobId,
       status: job.status,
@@ -375,17 +415,18 @@ function handleWorksetRowSelect(row: QueueTableRow): void {
 }
 
 async function handleSaveWorkset(): Promise<void> {
-  if (todayWorkset.value.length === 0 || savingWorkset.value) return;
+  const jobIds = unsyncedWorksetJobs.value.map(job => job.jobId);
+  if (jobIds.length === 0 || savingWorkset.value) return;
   const confirmed = await requestQueueConfirm({
-    title: 'Save Today workset?',
-    message: `Save ${todayWorkset.value.length} latest YAML results to the word database?`,
-    confirmLabel: 'Save All',
+    title: 'Save unsynced workset items?',
+    message: `Save ${jobIds.length} complete generated results that are not synced to the word database?`,
+    confirmLabel: 'Save',
   });
   if (!confirmed) return;
 
   savingWorkset.value = true;
   try {
-    const result = await saveTodayWorkset();
+    const result = await saveTodayWorkset(jobIds);
     recordWorksetSave(result);
     if (result.saved > 0) {
       appStore.addToast(`Saved ${result.saved} workset words`, 'success');
@@ -688,10 +729,10 @@ async function handleClearHistory(): Promise<void> {
           <button
             type="button"
             class="ui-button ui-button--primary queue-button"
-            :disabled="todayWorkset.length === 0 || savingWorkset"
+            :disabled="unsyncedWorksetJobs.length === 0 || savingWorkset"
             @click="handleSaveWorkset"
           >
-            Save All
+            Save Unsynced
           </button>
           <button
             type="button"

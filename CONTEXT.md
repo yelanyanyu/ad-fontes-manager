@@ -422,6 +422,10 @@ _Avoid_: Word detail, saved preview
 A review-and-save surface for the latest generated YAML results the user is actively working through. The current Workset is the Queue Today view: it is derived from today's persisted `complete` and `partial` Job History rows, deduplicated by Lemma + Language so only the newest Job result for each Word remains. It is not an independent saved list or cache; deleting the backing History Job removes the corresponding Workset item. It displays each Job's Review Score when available, helping the user spot low-quality results before saving. It batch-saves through the same Word save path used by the Editor, first detecting conflicts without overwriting and only overwriting conflict items after an explicit user action.
 _Avoid_: Current batch, History subset, temporary database
 
+**Workset Sync Marker** (工作集同步标记):
+A compact row-level indicator in the Workset that tells whether the latest Workset result is synced to the App Database. It distinguishes synced results, unsynced results for Words that already exist in the App Database, not-saved results for Words that do not yet exist in the App Database, and blocked results that cannot be saved. It is about the relationship between the latest Workset result and the App Database's current Word Content, not merely whether a Word with the same Lemma + Language exists. Its purpose is to keep users from repeatedly saving the same generated result and spending unnecessary resources. Default Workset save actions should submit unsynced and not-saved complete results rather than already synced results.
+_Avoid_: Job status, Review Score, Word content state
+
 **Circuit Breaker** (熔断):
 A safety mechanism that pauses all Jobs assigned to a specific Provider after 3 consecutive failures from that Provider. The user is notified; manual intervention is required to resume.
 _Avoid_: Rate limiter, throttle
@@ -464,6 +468,7 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - The Queue panel presents **Active Queue** and **Job History** as two modes in the same UI surface; execution controls belong only to Active Queue, while review and filtering controls belong to Job History
 - Saving or overwriting a **Word** remains an Editor responsibility; **Job History** may fill the Editor from a complete Job after Basic **Format Fix** has run, but does not write directly to `words_v2`
 - A **Workset** is derived from **Job History** rows but is not itself History: it answers "what latest YAML results should I save now?" and can batch-save through the Word save path, reporting per-Word save outcomes such as saved, conflict, invalid, missing, or error
+- A **Workset Sync Marker** separates App Database sync state from Queue status, so a `complete` Job can be visibly unsynced even when an older Word with the same Lemma + Language already exists
 - Basic **Format Fix** can run automatically before Fill Editor, Word save, and Workset save, and it can be triggered manually from the Word Editor. It can repair common YAML syntax slips, safely promote misplaced top-level sections when schema evidence is unambiguous, and return structured diagnostics when automatic repair is unsafe. Enhanced **Format Fix** is user-triggered. `partial` and `error` Jobs are rejected.
 - A **Content Fix** applies to `complete` Jobs whose `overall_score < 6`. It creates a new Queue-based Fix Job (priority `high`) that runs `fixing` then re-runs `auditing`. Can be triggered per-word or as a Workset batch.
 - **Workset Improve** applies Content Fix only to eligible low-score Jobs in the current visible **Workset**, never to older deduplicated **Job History** rows. A user can remove Jobs from the **Pending Improve Selection** before creating Fix Jobs.

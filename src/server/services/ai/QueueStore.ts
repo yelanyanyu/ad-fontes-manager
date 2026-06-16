@@ -1,5 +1,13 @@
 import type { PipelineProgressEvent, StepResult } from './types';
 
+const yaml = require('js-yaml') as { load: (content: string) => unknown };
+const { prepareYamlForWordSave } = require('../word/formatFix') as {
+  prepareYamlForWordSave: (
+    wordText: string,
+    yamlText: string
+  ) => { ok: boolean; data?: Record<string, unknown> };
+};
+
 export interface SqliteLike {
   get: (sql: string, ...params: unknown[]) => Record<string, unknown> | undefined;
   run: (sql: string, ...params: unknown[]) => { changes: number };
@@ -80,6 +88,7 @@ export interface WorksetJob {
   status: string;
   word: string;
   language: string;
+  syncStatus: 'synced' | 'unsynced' | 'not-saved' | 'blocked';
   priority: string;
   batchId?: string;
   createdAt: string;
@@ -137,6 +146,54 @@ const EMPTY_RUN_METRICS: RunMetrics = {
   totalTokens: null,
   stages: [],
 };
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(item => stableStringify(item)).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map(key => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  try {
+    return asRecord(JSON.parse(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function parseYamlObject(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const prepared = prepareYamlForWordSave('', value);
+  if (prepared.ok && prepared.data) return prepared.data;
+
+  try {
+    return asRecord(yaml.load(value));
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveWorksetSyncStatus(row: Record<string, unknown>): WorksetJob['syncStatus'] {
+  if (row.status !== 'complete') return 'blocked';
+  if (!row.word_content) return 'not-saved';
+
+  const generatedContent = parseYamlObject(row.result_yaml);
+  const savedContent = parseJsonObject(row.word_content);
+  if (!generatedContent || !savedContent) return 'unsynced';
+
+  return stableStringify(generatedContent) === stableStringify(savedContent)
+    ? 'synced'
+    : 'unsynced';
+}
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -760,11 +817,31 @@ export class QueueStore {
            AND result_yaml IS NOT NULL
            AND result_yaml <> ''
            AND date(COALESCE(completed_at, created_at), 'localtime') = date('now', 'localtime')
+       ),
+       saved_words AS (
+         SELECT lower(lemma) AS lemma_key, language, content
+         FROM words_v2
        )
-       SELECT id, job_type, status, word, language, priority, batch_id, created_at, completed_at, result_scores, progress_events, has_result
-       FROM ranked_jobs
-       WHERE workset_rank = 1
-       ORDER BY COALESCE(completed_at, created_at) DESC`
+       SELECT
+         r.id,
+         r.job_type,
+         r.status,
+         r.word,
+         r.language,
+         r.priority,
+         r.batch_id,
+         r.created_at,
+         r.completed_at,
+         r.result_scores,
+         r.progress_events,
+         r.has_result,
+         sw.content AS word_content
+       FROM ranked_jobs r
+       LEFT JOIN saved_words sw
+         ON sw.lemma_key = lower(r.word)
+        AND sw.language = r.language
+       WHERE r.workset_rank = 1
+       ORDER BY COALESCE(r.completed_at, r.created_at) DESC`
     );
 
     const jobs = rows.map(row => {
@@ -776,6 +853,7 @@ export class QueueStore {
         status: row.status as string,
         word: row.word as string,
         language: row.language as string,
+        syncStatus: resolveWorksetSyncStatus(row),
         priority: row.priority as string,
         batchId: row.batch_id as string | undefined,
         createdAt: row.created_at as string,

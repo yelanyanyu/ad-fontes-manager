@@ -9,6 +9,7 @@ import {
   type SqliteLike,
   type BatchStatus,
   type JobState,
+  type WorksetJob,
   type WorksetImproveSubmission,
 } from './QueueStore';
 import { JobLifecycle } from './JobLifecycle';
@@ -291,30 +292,7 @@ export class JobQueue {
   }
 
   getTodayWorkset(): {
-    jobs: Array<{
-      jobId: string;
-      jobType: string;
-      status: string;
-      word: string;
-      language: string;
-      priority: string;
-      batchId?: string;
-      createdAt: string;
-      completedAt?: string;
-      hasResult: boolean;
-      finalScore: number | null;
-      aiReviewScore: number | null;
-      userReviewScore: number | null;
-      effectiveReviewScore: number | null;
-      auditState: 'complete' | 'incomplete' | 'missing';
-      improveCount: number;
-      improveEligible: boolean;
-      improveBlockedReason?:
-        | 'score-not-low'
-        | 'partial-result'
-        | 'audit-incomplete'
-        | 'missing-revision-notes';
-    }>;
+    jobs: WorksetJob[];
     total: number;
   } {
     return this.store.getTodayWorkset();

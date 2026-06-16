@@ -40,6 +40,22 @@ const JOB_QUEUE_DDL = `
   CREATE INDEX IF NOT EXISTS idx_job_queue_workset_today
     ON job_queue(status, language, word, completed_at, created_at)
     WHERE result_yaml IS NOT NULL AND result_yaml <> '';
+
+  CREATE TABLE IF NOT EXISTS words_v2 (
+    id TEXT PRIMARY KEY NOT NULL,
+    lemma TEXT NOT NULL,
+    language TEXT NOT NULL DEFAULT 'en',
+    part_of_speech TEXT,
+    content TEXT NOT NULL,
+    word_schema_version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    revision_count INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS unique_lemma_lang_v2
+    ON words_v2 (lemma, language);
+  CREATE INDEX IF NOT EXISTS idx_words_v2_lower_lemma_lang
+    ON words_v2 (LOWER(lemma), language);
 `;
 
 function createTestDb(): SqliteLike {
@@ -198,6 +214,32 @@ void describe('QueueStore', () => {
     assert.deepEqual(workset.jobs.map(job => job.jobId).sort(), ['de-crate', 'new-crate']);
     assert.equal(workset.jobs.find(job => job.jobId === 'new-crate')?.finalScore, 8);
     assert.equal(workset.jobs.find(job => job.jobId === 'de-crate')?.finalScore, 7);
+  });
+
+  void it('marks workset jobs by latest result sync state', () => {
+    db.run(
+      `INSERT INTO words_v2 (id, lemma, language, content)
+       VALUES
+       ('word-crate', 'Crate', 'en', '{"yield":{"lemma":"crate"}}'),
+       ('word-agent', 'agent', 'en', '{"yield":{"lemma":"old-agent"}}')`
+    );
+    db.run(
+      `INSERT INTO job_queue (
+         id, job_type, priority, status, word, language, result_yaml, completed_at, created_at
+       )
+       VALUES
+       ('synced-crate', 'generate', 'normal', 'complete', 'crate', 'en', 'yield:\n  lemma: crate', datetime('now'), datetime('now')),
+       ('unsynced-agent', 'generate', 'normal', 'complete', 'agent', 'en', 'yield:\n  lemma: agent', datetime('now'), datetime('now')),
+       ('unsaved-kiste', 'generate', 'normal', 'complete', 'Kiste', 'de', 'yield:\n  lemma: Kiste', datetime('now'), datetime('now')),
+       ('blocked-partial', 'generate', 'normal', 'partial', 'partial', 'en', 'yield:\n  lemma: partial', datetime('now'), datetime('now'))`
+    );
+
+    const jobs = new Map(store.getTodayWorkset().jobs.map(job => [job.jobId, job]));
+
+    assert.equal(jobs.get('synced-crate')?.syncStatus, 'synced');
+    assert.equal(jobs.get('unsynced-agent')?.syncStatus, 'unsynced');
+    assert.equal(jobs.get('unsaved-kiste')?.syncStatus, 'not-saved');
+    assert.equal(jobs.get('blocked-partial')?.syncStatus, 'blocked');
   });
 
   void it('uses user review score as the effective workset score', () => {
