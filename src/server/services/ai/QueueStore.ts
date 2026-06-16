@@ -1,12 +1,6 @@
 import type { PipelineProgressEvent, StepResult } from './types';
 
-const yaml = require('js-yaml') as { load: (content: string) => unknown };
-const { prepareYamlForWordSave } = require('../word/formatFix') as {
-  prepareYamlForWordSave: (
-    wordText: string,
-    yamlText: string
-  ) => { ok: boolean; data?: Record<string, unknown> };
-};
+const crypto = require('node:crypto') as typeof import('node:crypto');
 
 export interface SqliteLike {
   get: (sql: string, ...params: unknown[]) => Record<string, unknown> | undefined;
@@ -39,6 +33,9 @@ export interface JobQueueRow extends Record<string, unknown> {
   batch_id?: string | null;
   target_job_id?: string | null;
   target_word_id?: string | null;
+  synced_word_id?: string | null;
+  synced_content_hash?: string | null;
+  synced_at?: string | null;
   provider_id?: string | null;
   result_yaml?: string | null;
   result_scores?: string | null;
@@ -161,6 +158,12 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function hashContent(value: unknown): string | null {
+  const content = typeof value === 'string' ? parseJsonObject(value) : asRecord(value);
+  if (!content) return null;
+  return crypto.createHash('sha256').update(stableStringify(content)).digest('hex');
+}
+
 function parseJsonObject(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== 'string' || !value.trim()) return undefined;
   try {
@@ -170,29 +173,17 @@ function parseJsonObject(value: unknown): Record<string, unknown> | undefined {
   }
 }
 
-function parseYamlObject(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value !== 'string' || !value.trim()) return undefined;
-  const prepared = prepareYamlForWordSave('', value);
-  if (prepared.ok && prepared.data) return prepared.data;
-
-  try {
-    return asRecord(yaml.load(value));
-  } catch {
-    return undefined;
-  }
-}
-
 function resolveWorksetSyncStatus(row: Record<string, unknown>): WorksetJob['syncStatus'] {
   if (row.status !== 'complete') return 'blocked';
-  if (!row.word_content) return 'not-saved';
+  const syncedWordId = typeof row.synced_word_id === 'string' ? row.synced_word_id : '';
+  const syncedContentHash =
+    typeof row.synced_content_hash === 'string' ? row.synced_content_hash : '';
+  if (syncedWordId && syncedContentHash && row.synced_word_content) {
+    const currentSyncedHash = hashContent(row.synced_word_content);
+    if (currentSyncedHash === syncedContentHash) return 'synced';
+  }
 
-  const generatedContent = parseYamlObject(row.result_yaml);
-  const savedContent = parseJsonObject(row.word_content);
-  if (!generatedContent || !savedContent) return 'unsynced';
-
-  return stableStringify(generatedContent) === stableStringify(savedContent)
-    ? 'synced'
-    : 'unsynced';
+  return row.word_content ? 'unsynced' : 'not-saved';
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -807,6 +798,9 @@ export class QueueStore {
            completed_at,
            result_scores,
            progress_events,
+           synced_word_id,
+           synced_content_hash,
+           synced_at,
            CASE WHEN result_yaml IS NULL OR result_yaml = '' THEN 0 ELSE 1 END AS has_result,
            ROW_NUMBER() OVER (
              PARTITION BY lower(word), language
@@ -835,11 +829,17 @@ export class QueueStore {
          r.result_scores,
          r.progress_events,
          r.has_result,
-         sw.content AS word_content
+         r.synced_word_id,
+         r.synced_content_hash,
+         r.synced_at,
+         sw.content AS word_content,
+         synced_word.content AS synced_word_content
        FROM ranked_jobs r
        LEFT JOIN saved_words sw
          ON sw.lemma_key = lower(r.word)
         AND sw.language = r.language
+       LEFT JOIN words_v2 synced_word
+         ON synced_word.id = r.synced_word_id
        WHERE r.workset_rank = 1
        ORDER BY COALESCE(r.completed_at, r.created_at) DESC`
     );
@@ -941,6 +941,26 @@ export class QueueStore {
       jobId: row.id as string,
       yaml: row.result_yaml as string,
     }));
+  }
+
+  markWorksetJobSynced(jobId: string, wordId: string): 'updated' | 'not-found' | 'word-not-found' {
+    const word = this.getDb().get('SELECT content FROM words_v2 WHERE id = ?', wordId);
+    const contentHash = hashContent(word?.content);
+    if (!word || !contentHash) return 'word-not-found';
+
+    const result = this.getDb().run(
+      `UPDATE job_queue
+       SET synced_word_id = ?, synced_content_hash = ?, synced_at = datetime('now')
+       WHERE id = ?
+         AND status = 'complete'
+         AND result_yaml IS NOT NULL
+         AND result_yaml <> ''`,
+      wordId,
+      contentHash,
+      jobId
+    );
+
+    return result.changes > 0 ? 'updated' : 'not-found';
   }
 
   deleteHistoryJob(jobId: string): 'deleted' | 'not-found' | 'active' {

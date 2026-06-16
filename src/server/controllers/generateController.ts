@@ -527,6 +527,9 @@ async function handleSaveWorkset(req: Request, res: Response): Promise<void> {
   try {
     for (const row of yamlRows) {
       const result = await wordServiceV2.saveWord(req, row.yaml, parsed.data.forceUpdate);
+      if (result.success === true && typeof result.id === 'string') {
+        queue.markWorksetJobSynced(row.jobId, result.id);
+      }
       results.push({ jobId: row.jobId, result });
     }
     sqlite.exec('COMMIT');

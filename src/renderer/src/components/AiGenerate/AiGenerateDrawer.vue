@@ -20,7 +20,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  'yaml-ready': [yaml: string];
+  'yaml-ready': [yaml: string, sourceJobId?: string | null];
 }>();
 
 const appStore = useAppStore();
@@ -204,7 +204,7 @@ async function fillEditor(): Promise<void> {
     try {
       const result = await request.post<FormatValidationResponse>('/v2/words/validate', { yaml });
       if (result.yaml && result.valid) {
-        emit('yaml-ready', result.yaml);
+        emit('yaml-ready', result.yaml, job.jobId);
         if (result.changed) {
           appStore.addToast('Format repaired before filling editor.', 'success');
         }
@@ -215,7 +215,7 @@ async function fillEditor(): Promise<void> {
         errorMessage.value = formatDiagnosticSummary(result);
         const shouldFill = await confirmFillPartialRepair(result);
         if (shouldFill) {
-          emit('yaml-ready', result.yaml);
+          emit('yaml-ready', result.yaml, job.jobId);
           appStore.addToast('YAML filled into editor for manual repair.', 'warning');
         }
         return;
@@ -243,7 +243,7 @@ async function saveGeneratedYaml(): Promise<void> {
   saving.value = true;
   errorMessage.value = '';
   try {
-    const result = await wordStore.saveWord(job.yaml, false);
+    const result = await wordStore.saveWord(job.yaml, false, { sourceJobId: job.jobId });
     if (result === true) return;
 
     if (result && typeof result === 'object' && result.status === 'conflict') {
@@ -258,7 +258,7 @@ async function saveGeneratedYaml(): Promise<void> {
         appStore.addToast('Save cancelled. Existing word was not changed.', 'info');
         return;
       }
-      const overwriteResult = await wordStore.saveWord(job.yaml, true);
+      const overwriteResult = await wordStore.saveWord(job.yaml, true, { sourceJobId: job.jobId });
       if (overwriteResult !== true) {
         errorMessage.value = 'Overwrite failed. Use Fill Editor to repair manually or regenerate.';
       }

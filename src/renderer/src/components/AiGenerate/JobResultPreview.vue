@@ -9,7 +9,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  'yaml-ready': [yaml: string];
+  'yaml-ready': [yaml: string, sourceJobId?: string | null];
 }>();
 
 const previewContent = computed(() => buildPreviewContent(props.job.yaml));
@@ -22,7 +22,7 @@ const schemaNoticeText = computed(() => {
 });
 
 function fillEditor(): void {
-  if (props.job.yaml) emit('yaml-ready', props.job.yaml);
+  if (props.job.yaml) emit('yaml-ready', props.job.yaml, props.job.jobId);
 }
 </script>
 

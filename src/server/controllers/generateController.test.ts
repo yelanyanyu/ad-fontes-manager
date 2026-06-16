@@ -88,6 +88,9 @@ const JOB_QUEUE_DDL = `
     notes TEXT,
     target_job_id TEXT,
     target_word_id TEXT,
+    synced_word_id TEXT,
+    synced_content_hash TEXT,
+    synced_at TEXT,
     result_yaml TEXT,
     result_scores TEXT,
     provider_id TEXT,
@@ -102,6 +105,22 @@ const JOB_QUEUE_DDL = `
   CREATE INDEX IF NOT EXISTS idx_job_queue_batch_id ON job_queue(batch_id);
   CREATE INDEX IF NOT EXISTS idx_job_queue_status ON job_queue(status);
   CREATE INDEX IF NOT EXISTS idx_job_queue_priority_created ON job_queue(priority, created_at);
+
+  CREATE TABLE IF NOT EXISTS words_v2 (
+    id TEXT PRIMARY KEY NOT NULL,
+    lemma TEXT NOT NULL,
+    language TEXT NOT NULL DEFAULT 'en',
+    part_of_speech TEXT,
+    content TEXT NOT NULL,
+    word_schema_version INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    revision_count INTEGER NOT NULL DEFAULT 1
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS unique_lemma_lang_v2
+    ON words_v2 (lemma, language);
+  CREATE INDEX IF NOT EXISTS idx_words_v2_lower_lemma_lang
+    ON words_v2 (LOWER(lemma), language);
 `;
 
 interface SqliteLike {

@@ -124,8 +124,9 @@ const historyPages = computed(() =>
   Math.max(1, Math.ceil(queueHistoryTotal.value / queueHistoryPageSize.value))
 );
 const worksetSaveSummary = computed(() => {
-  const summary = { saved: 0, conflict: 0, invalid: 0, missing: 0, error: 0 };
+  const summary = { conflict: 0, invalid: 0, missing: 0, error: 0 };
   for (const detail of worksetSaveResults.value.values()) {
+    if (detail.status === 'saved') continue;
     summary[detail.status]++;
   }
   return summary;
@@ -312,7 +313,9 @@ const currentRunMetricsHeaderExpanded = computed(() =>
 function recordWorksetSave(response: WorksetSaveResponse): void {
   const next = new Map(worksetSaveResults.value);
   for (const item of response.results) {
-    next.set(item.jobId, describeWorksetSaveResult(item.result));
+    const detail = describeWorksetSaveResult(item.result);
+    if (detail.status === 'saved') next.delete(item.jobId);
+    else next.set(item.jobId, detail);
   }
   for (const jobId of response.missing) {
     next.set(jobId, {
@@ -429,7 +432,7 @@ async function handleSaveWorkset(): Promise<void> {
     const result = await saveTodayWorkset(jobIds);
     recordWorksetSave(result);
     if (result.saved > 0) {
-      appStore.addToast(`Saved ${result.saved} workset words`, 'success');
+      appStore.addToast('Save success', 'success', 3000);
       await wordStore.fetchDbRecords({ background: true });
     }
     if (result.conflicts || result.failed || result.missing.length) {
@@ -754,9 +757,6 @@ async function handleClearHistory(): Promise<void> {
         </div>
 
         <div v-if="worksetSaveResults.size > 0" class="workset-result-summary">
-          <span v-if="worksetSaveSummary.saved" class="ui-chip ui-chip--success">
-            Saved {{ worksetSaveSummary.saved }}
-          </span>
           <span v-if="worksetSaveSummary.conflict" class="ui-chip ui-chip--warning">
             Conflict {{ worksetSaveSummary.conflict }}
           </span>

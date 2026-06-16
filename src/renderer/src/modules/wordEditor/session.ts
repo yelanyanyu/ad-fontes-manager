@@ -7,6 +7,7 @@ export interface WordEditorSessionContext {
   id?: string | number | null;
   wordSchemaVersion?: number | null;
   isLatestSchema?: boolean | null;
+  sourceJobId?: string | null;
 }
 
 export interface WordEditorSessionSnapshot {

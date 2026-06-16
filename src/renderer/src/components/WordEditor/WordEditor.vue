@@ -26,10 +26,27 @@ interface WordStoreLike {
       id?: string | number | null;
       wordSchemaVersion?: number | null;
       isLatestSchema?: boolean | null;
+      sourceJobId?: string | null;
     };
   };
-  saveWord: (yamlContent: string, force?: boolean) => Promise<boolean | ConflictData>;
-  updateEditorSessionContext: (context: { id: string | number | null }) => void;
+  saveWord: (
+    yamlContent: string,
+    force?: boolean,
+    options?: { sourceJobId?: string | null }
+  ) => Promise<boolean | ConflictData>;
+  updateEditorSessionContext: (context: {
+    id?: string | number | null;
+    sourceJobId?: string | null;
+  }) => void;
+  loadEditorSession: (session: {
+    yaml: string;
+    context?: {
+      id?: string | number | null;
+      wordSchemaVersion?: number | null;
+      isLatestSchema?: boolean | null;
+      sourceJobId?: string | null;
+    };
+  }) => void;
 }
 
 interface AppStoreLike {
@@ -139,7 +156,9 @@ const save = async () => {
   if (!input.value || saving.value) return;
   saving.value = true;
   try {
-    const res = await wordStore.saveWord(input.value);
+    const res = await wordStore.saveWord(input.value, false, {
+      sourceJobId: editorSession.value.context.sourceJobId ?? null,
+    });
     if (res && typeof res === 'object' && 'status' in res && res.status === 'conflict') {
       conflictData.value = res as ConflictData;
     }
@@ -167,7 +186,7 @@ const useExisting = () => {
     input.value = yaml.dump(conflictData.value.oldData || {}, { lineWidth: -1, noRefs: true });
   }
   if (conflictData.value.source === 'local' && conflictData.value.id) {
-    wordStore.updateEditorSessionContext({ id: conflictData.value.id });
+    wordStore.updateEditorSessionContext({ id: conflictData.value.id, sourceJobId: null });
   }
   closeConflict();
 };
@@ -176,7 +195,9 @@ const overwrite = async () => {
   if (saving.value) return;
   saving.value = true;
   try {
-    const ok = await wordStore.saveWord(input.value, true);
+    const ok = await wordStore.saveWord(input.value, true, {
+      sourceJobId: editorSession.value.context.sourceJobId ?? null,
+    });
     if (ok) {
       conflictData.value = null;
       void nextTick(() => editorSurfaceRef.value?.focus());
@@ -186,8 +207,16 @@ const overwrite = async () => {
   }
 };
 
-const applyGeneratedYaml = (yamlContent: string) => {
-  input.value = hideWordAppMetadataInYaml(yamlContent);
+const applyGeneratedYaml = (yamlContent: string, context: { sourceJobId?: string | null } = {}) => {
+  wordStore.loadEditorSession({
+    yaml: hideWordAppMetadataInYaml(yamlContent),
+    context: {
+      id: null,
+      wordSchemaVersion: null,
+      isLatestSchema: null,
+      sourceJobId: context.sourceJobId ?? null,
+    },
+  });
 };
 
 const openSchemaReference = () => {

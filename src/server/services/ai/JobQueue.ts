@@ -357,6 +357,10 @@ export class JobQueue {
     return this.store.getWorksetYaml(jobIds);
   }
 
+  markWorksetJobSynced(jobId: string, wordId: string): 'updated' | 'not-found' | 'word-not-found' {
+    return this.store.markWorksetJobSynced(jobId, wordId);
+  }
+
   deleteHistoryJob(jobId: string): 'deleted' | 'not-found' | 'active' {
     const result = this.store.deleteHistoryJob(jobId);
     if (result === 'deleted') {

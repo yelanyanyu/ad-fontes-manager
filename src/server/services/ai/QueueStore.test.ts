@@ -18,6 +18,9 @@ const JOB_QUEUE_DDL = `
     notes TEXT,
     target_job_id TEXT,
     target_word_id TEXT,
+    synced_word_id TEXT,
+    synced_content_hash TEXT,
+    synced_at TEXT,
     result_yaml TEXT,
     result_scores TEXT,
     provider_id TEXT,
@@ -233,6 +236,7 @@ void describe('QueueStore', () => {
        ('unsaved-kiste', 'generate', 'normal', 'complete', 'Kiste', 'de', 'yield:\n  lemma: Kiste', datetime('now'), datetime('now')),
        ('blocked-partial', 'generate', 'normal', 'partial', 'partial', 'en', 'yield:\n  lemma: partial', datetime('now'), datetime('now'))`
     );
+    assert.equal(store.markWorksetJobSynced('synced-crate', 'word-crate'), 'updated');
 
     const jobs = new Map(store.getTodayWorkset().jobs.map(job => [job.jobId, job]));
 

@@ -24,6 +24,14 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
     }
   ) => Promise<{ valid: boolean; errors: string[]; language?: string }>;
 };
+const { getQueue } = require('../services/ai/queue') as {
+  getQueue: () => {
+    markWorksetJobSynced: (
+      jobId: string,
+      wordId: string
+    ) => 'updated' | 'not-found' | 'word-not-found';
+  };
+};
 
 const { asyncHandler, BadRequest } = require('../utils/errors') as {
   asyncHandler: <T extends (req: Request, res: Response) => Promise<unknown>>(fn: T) => T;
@@ -82,9 +90,14 @@ class WordControllerV2 {
   });
 
   save = asyncHandler(async (req: Request, res: Response) => {
-    const { yaml: yamlStr, forceUpdate } = req.body as {
+    const {
+      yaml: yamlStr,
+      forceUpdate,
+      sourceJobId,
+    } = req.body as {
       yaml?: string;
       forceUpdate?: boolean;
+      sourceJobId?: string;
     };
     const source = toStringValue((req.query as Record<string, unknown>).source);
 
@@ -96,6 +109,18 @@ class WordControllerV2 {
     const result = await wordServiceV2.saveWord(req, yamlStr as string, forceUpdate, {
       source: source === 'import' ? 'import' : undefined,
     });
+    if (
+      result &&
+      typeof result === 'object' &&
+      'success' in result &&
+      result.success === true &&
+      'id' in result &&
+      typeof result.id === 'string' &&
+      typeof sourceJobId === 'string' &&
+      sourceJobId.trim()
+    ) {
+      getQueue().markWorksetJobSynced(sourceJobId.trim(), result.id);
+    }
     res.json(result);
   });
 

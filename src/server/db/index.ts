@@ -10,6 +10,7 @@ const config = require('../utils/config') as {
 
 type SqliteDatabase = Database.Database;
 type DrizzleDb = ReturnType<typeof drizzle<typeof schema>>;
+type TableColumnRow = { name?: unknown };
 
 let sqlite: SqliteDatabase | null = null;
 let db: DrizzleDb | null = null;
@@ -54,6 +55,9 @@ const ensureDatabaseSchema = (target: SqliteDatabase): void => {
       notes TEXT,
       target_job_id TEXT,
       target_word_id TEXT,
+      synced_word_id TEXT,
+      synced_content_hash TEXT,
+      synced_at TEXT,
       provider_id TEXT,
       result_yaml TEXT,
       result_scores TEXT,
@@ -80,39 +84,43 @@ const ensureDatabaseSchema = (target: SqliteDatabase): void => {
       WHERE result_yaml IS NOT NULL AND result_yaml <> '';
   `);
 
-  // Migrate existing job_queue tables that may be missing columns added in later
-  // schema versions.  ALTER TABLE … ADD COLUMN throws if the column already exists,
-  // so we run each addition in a try/catch guard.
-  const jobQueueAdditions = [
-    'ALTER TABLE job_queue ADD COLUMN provider_id TEXT',
-    'ALTER TABLE job_queue ADD COLUMN target_job_id TEXT',
-    'ALTER TABLE job_queue ADD COLUMN target_word_id TEXT',
-    'ALTER TABLE job_queue ADD COLUMN result_scores TEXT',
-    'ALTER TABLE job_queue ADD COLUMN progress_events TEXT',
-    'ALTER TABLE job_queue ADD COLUMN retry_count INTEGER DEFAULT 0',
-    'ALTER TABLE job_queue ADD COLUMN max_retries INTEGER DEFAULT 2',
-    'ALTER TABLE job_queue ADD COLUMN started_at TEXT',
-    'ALTER TABLE job_queue ADD COLUMN completed_at TEXT',
-  ];
-  for (const sql of jobQueueAdditions) {
-    try {
-      target.exec(sql);
-    } catch {
-      // Column already exists — fine.
-    }
-  }
+  addMissingColumns(target, 'job_queue', {
+    provider_id: 'TEXT',
+    target_job_id: 'TEXT',
+    target_word_id: 'TEXT',
+    synced_word_id: 'TEXT',
+    synced_content_hash: 'TEXT',
+    synced_at: 'TEXT',
+    result_scores: 'TEXT',
+    progress_events: 'TEXT',
+    retry_count: 'INTEGER DEFAULT 0',
+    max_retries: 'INTEGER DEFAULT 2',
+    started_at: 'TEXT',
+    completed_at: 'TEXT',
+  });
 
-  const wordsV2Additions = [
-    'ALTER TABLE words_v2 ADD COLUMN word_schema_version INTEGER NOT NULL DEFAULT 1',
-  ];
-  for (const sql of wordsV2Additions) {
-    try {
-      target.exec(sql);
-    } catch {
-      // Column already exists — fine.
-    }
-  }
+  addMissingColumns(target, 'words_v2', {
+    word_schema_version: 'INTEGER NOT NULL DEFAULT 1',
+  });
 };
+
+function addMissingColumns(
+  target: SqliteDatabase,
+  tableName: string,
+  additions: Record<string, string>
+): void {
+  const existing = new Set(
+    (target.prepare(`PRAGMA table_info(${tableName})`).all() as TableColumnRow[])
+      .map(row => (typeof row.name === 'string' ? row.name : ''))
+      .filter(Boolean)
+  );
+
+  for (const [columnName, definition] of Object.entries(additions)) {
+    if (existing.has(columnName)) continue;
+    target.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+    existing.add(columnName);
+  }
+}
 
 const resolveDbPath = (): string => {
   if (process.env.DATABASE_URL) {

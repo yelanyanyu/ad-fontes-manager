@@ -20,6 +20,10 @@ interface SaveConflictResult {
   [key: string]: unknown;
 }
 
+interface SaveWordOptions {
+  sourceJobId?: string | null;
+}
+
 interface WordStoreState {
   dbRecords: WordRecord[];
   dbListMeta: DbListMeta;
@@ -119,7 +123,11 @@ export const useWordStore = defineStore('word', {
       }
     },
 
-    async saveWord(yamlContent: string, force = false): Promise<boolean | SaveConflictResult> {
+    async saveWord(
+      yamlContent: string,
+      force = false,
+      options: SaveWordOptions = {}
+    ): Promise<boolean | SaveConflictResult> {
       const appStore = useAppStore();
 
       let lemma = 'unknown';
@@ -142,7 +150,11 @@ export const useWordStore = defineStore('word', {
       try {
         const res = await request.post(
           '/v2/words',
-          { yaml: yamlContent, forceUpdate: !!force },
+          {
+            yaml: yamlContent,
+            forceUpdate: !!force,
+            sourceJobId: options.sourceJobId ?? this.editorSession.context.sourceJobId ?? undefined,
+          },
           { skipErrorToast: true }
         );
 
@@ -175,10 +187,15 @@ export const useWordStore = defineStore('word', {
           });
           appStore.addToast(`Word "${res.lemma}" saved!`, 'success');
           void this.fetchDbRecords({ background: true });
+          window.dispatchEvent(
+            new CustomEvent('ad-fontes:word-saved', {
+              detail: { id: res.id, lemma: res.lemma, status: res.status },
+            })
+          );
           this.updateEditorSessionContext(
             res.status === 'created'
-              ? { id: null, wordSchemaVersion: null, isLatestSchema: null }
-              : { id: res.id ?? null }
+              ? { id: null, wordSchemaVersion: null, isLatestSchema: null, sourceJobId: null }
+              : { id: res.id ?? null, sourceJobId: null }
           );
           return true;
         }
@@ -249,6 +266,7 @@ export const useWordStore = defineStore('word', {
           id: context.id ?? null,
           wordSchemaVersion: context.wordSchemaVersion ?? null,
           isLatestSchema: context.isLatestSchema ?? null,
+          sourceJobId: context.sourceJobId ?? null,
         },
       };
     },

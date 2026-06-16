@@ -42,8 +42,8 @@ const closeJobPreview = () => {
   previewJob.value = null;
 };
 
-const applyGeneratedYaml = (yamlContent: string) => {
-  wordEditorRef.value?.applyGeneratedYaml(yamlContent);
+const applyGeneratedYaml = (yamlContent: string, sourceJobId?: string | null) => {
+  wordEditorRef.value?.applyGeneratedYaml(yamlContent, { sourceJobId: sourceJobId ?? null });
   aiDrawerOpen.value = false;
   queueExpanded.value = false;
   previewJob.value = null;
@@ -68,11 +68,16 @@ const openHistoryJob = async (job: QueueHistoryJob) => {
   bringOverlayToFrontById('ai-generate');
 };
 
+const refreshWorksetAfterWordSave = (): void => {
+  void aiState.fetchTodayWorkset();
+};
+
 let handleResizeMove: ((e: MouseEvent) => void) | null = null;
 let handleResizeUp: (() => void) | null = null;
 
 onMounted(() => {
   window.addEventListener('ad-fontes:ai-generate-open', openAiGenerate);
+  window.addEventListener('ad-fontes:word-saved', refreshWorksetAfterWordSave);
 
   const handle = dragHandle.value;
   const left = leftPanel.value;
@@ -118,6 +123,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('ad-fontes:ai-generate-open', openAiGenerate);
+  window.removeEventListener('ad-fontes:word-saved', refreshWorksetAfterWordSave);
   if (handleResizeMove) document.removeEventListener('mousemove', handleResizeMove);
   if (handleResizeUp) document.removeEventListener('mouseup', handleResizeUp);
 });
