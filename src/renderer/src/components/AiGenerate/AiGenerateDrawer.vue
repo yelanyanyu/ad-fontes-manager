@@ -40,6 +40,7 @@ const {
   resumeGeneration,
   fixGeneration,
   setUserReviewScore,
+  fetchTodayWorkset,
 } = inject(AI_STATE_KEY)!;
 
 type EntryMode = 'single' | 'batch';
@@ -99,6 +100,11 @@ const reviewScore = computed(() => {
   return typeof aiScore === 'number' ? aiScore : null;
 });
 const isRevisionNotesMode = computed(() => isComplete.value || hasRevisionNotes.value);
+
+async function refreshWorksetAfterDrawerSave(): Promise<void> {
+  await fetchTodayWorkset();
+  window.dispatchEvent(new CustomEvent('ad-fontes:workset-refresh-requested'));
+}
 
 async function handleFix(): Promise<void> {
   const jobId = currentJob.value?.jobId;
@@ -244,7 +250,10 @@ async function saveGeneratedYaml(): Promise<void> {
   errorMessage.value = '';
   try {
     const result = await wordStore.saveWord(job.yaml, false, { sourceJobId: job.jobId });
-    if (result === true) return;
+    if (result === true) {
+      await refreshWorksetAfterDrawerSave();
+      return;
+    }
 
     if (result && typeof result === 'object' && result.status === 'conflict') {
       const lemma = typeof result.lemma === 'string' ? result.lemma : job.word;
@@ -259,7 +268,9 @@ async function saveGeneratedYaml(): Promise<void> {
         return;
       }
       const overwriteResult = await wordStore.saveWord(job.yaml, true, { sourceJobId: job.jobId });
-      if (overwriteResult !== true) {
+      if (overwriteResult === true) {
+        await refreshWorksetAfterDrawerSave();
+      } else {
         errorMessage.value = 'Overwrite failed. Use Fill Editor to repair manually or regenerate.';
       }
       return;

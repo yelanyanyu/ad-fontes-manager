@@ -156,8 +156,9 @@ const save = async () => {
   if (!input.value || saving.value) return;
   saving.value = true;
   try {
-    const res = await wordStore.saveWord(input.value, false, {
-      sourceJobId: editorSession.value.context.sourceJobId ?? null,
+    const sourceJobId = editorSession.value.context.sourceJobId ?? null;
+    const res = await wordStore.saveWord(input.value, Boolean(sourceJobId), {
+      sourceJobId,
     });
     if (res && typeof res === 'object' && 'status' in res && res.status === 'conflict') {
       conflictData.value = res as ConflictData;

@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import type { JobQueue } from '../services/ai/JobQueue';
+import { saveWordWithProvenance } from '../services/word/WordSaveProvenance';
 
 const { z } = require('zod') as typeof import('zod');
 const crypto = require('node:crypto') as typeof import('node:crypto');
@@ -10,7 +11,8 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
   saveWord: (
     req: Request,
     yamlStr: string,
-    forceUpdate?: boolean
+    forceUpdate?: boolean,
+    options?: { source?: 'import' }
   ) => Promise<Record<string, unknown>>;
 };
 const { getSqlite } = require('../db') as {
@@ -526,10 +528,14 @@ async function handleSaveWorkset(req: Request, res: Response): Promise<void> {
   sqlite.exec('BEGIN IMMEDIATE');
   try {
     for (const row of yamlRows) {
-      const result = await wordServiceV2.saveWord(req, row.yaml, parsed.data.forceUpdate);
-      if (result.success === true && typeof result.id === 'string') {
-        queue.markWorksetJobSynced(row.jobId, result.id);
-      }
+      const result = await saveWordWithProvenance({
+        req,
+        yaml: row.yaml,
+        forceUpdate: parsed.data.forceUpdate,
+        sourceJobId: row.jobId,
+        saveWord: wordServiceV2.saveWord.bind(wordServiceV2),
+        syncMarkerWriter: queue,
+      });
       results.push({ jobId: row.jobId, result });
     }
     sqlite.exec('COMMIT');

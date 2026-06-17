@@ -24,6 +24,14 @@ interface SaveWordOptions {
   sourceJobId?: string | null;
 }
 
+interface WordSaveProvenance {
+  sourceJobId: string | null;
+  syncMarkerUpdated: boolean;
+  syncMarkerStatus: 'updated' | 'not-found' | 'word-not-found' | 'skipped';
+  shouldRefreshWorkset: boolean;
+  provenanceWarning?: 'source-job-not-found' | 'word-not-found';
+}
+
 interface WordStoreState {
   dbRecords: WordRecord[];
   dbListMeta: DbListMeta;
@@ -176,6 +184,7 @@ export const useWordStore = defineStore('word', {
           return { ...(res as object) } as SaveConflictResult;
         }
         if (res && res.success) {
+          const provenance = res.provenance as WordSaveProvenance | undefined;
           if (typeof res.yaml === 'string' && res.changed) {
             this.updateEditorYaml(res.yaml);
             appStore.addToast('Format repaired before save.', 'info');
@@ -184,12 +193,24 @@ export const useWordStore = defineStore('word', {
             id: res.id,
             lemma: res.lemma,
             status: res.status,
+            provenance,
           });
           appStore.addToast(`Word "${res.lemma}" saved!`, 'success');
+          if (
+            provenance?.sourceJobId &&
+            provenance.syncMarkerUpdated === false &&
+            provenance.syncMarkerStatus !== 'skipped'
+          ) {
+            appStore.addToast(
+              `Saved, but Queue status did not sync (${provenance.syncMarkerStatus}).`,
+              'warning',
+              3000
+            );
+          }
           void this.fetchDbRecords({ background: true });
           window.dispatchEvent(
             new CustomEvent('ad-fontes:word-saved', {
-              detail: { id: res.id, lemma: res.lemma, status: res.status },
+              detail: { id: res.id, lemma: res.lemma, status: res.status, provenance },
             })
           );
           this.updateEditorSessionContext(

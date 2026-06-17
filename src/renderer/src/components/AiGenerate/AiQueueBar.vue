@@ -499,10 +499,12 @@ async function handleClearHistory(): Promise<void> {
 
 onMounted(() => {
   window.addEventListener('ad-fontes:word-saved', refreshWorksetAfterWordSave);
+  window.addEventListener('ad-fontes:workset-refresh-requested', refreshWorksetAfterWordSave);
 });
 
 onUnmounted(() => {
   window.removeEventListener('ad-fontes:word-saved', refreshWorksetAfterWordSave);
+  window.removeEventListener('ad-fontes:workset-refresh-requested', refreshWorksetAfterWordSave);
 });
 </script>
 

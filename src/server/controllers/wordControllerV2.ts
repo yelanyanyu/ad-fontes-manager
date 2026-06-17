@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { saveWordWithProvenance } from '../services/word/WordSaveProvenance';
 
 const wordServiceV2 = require('../services/word/WordServiceV2') as {
   listWords: (req: Request) => Promise<unknown>;
@@ -10,7 +11,7 @@ const wordServiceV2 = require('../services/word/WordServiceV2') as {
     yamlStr: string,
     forceUpdate?: boolean,
     options?: { source?: 'import' }
-  ) => Promise<unknown>;
+  ) => Promise<Record<string, unknown>>;
   addWord: (req: Request, word: string, yamlStr: string) => Promise<Record<string, unknown>>;
   deleteWord: (req: Request, id: string) => Promise<unknown>;
   validateYaml: (
@@ -106,21 +107,15 @@ class WordControllerV2 {
       'saveV2 asyncHandler'
     );
 
-    const result = await wordServiceV2.saveWord(req, yamlStr as string, forceUpdate, {
+    const result = await saveWordWithProvenance({
+      req,
+      yaml: yamlStr as string,
+      forceUpdate,
+      sourceJobId,
+      saveWord: wordServiceV2.saveWord.bind(wordServiceV2),
+      syncMarkerWriter: getQueue(),
       source: source === 'import' ? 'import' : undefined,
     });
-    if (
-      result &&
-      typeof result === 'object' &&
-      'success' in result &&
-      result.success === true &&
-      'id' in result &&
-      typeof result.id === 'string' &&
-      typeof sourceJobId === 'string' &&
-      sourceJobId.trim()
-    ) {
-      getQueue().markWorksetJobSynced(sourceJobId.trim(), result.id);
-    }
     res.json(result);
   });
 
