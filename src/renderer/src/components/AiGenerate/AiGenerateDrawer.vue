@@ -41,6 +41,7 @@ const {
   fixGeneration,
   setUserReviewScore,
   fetchTodayWorkset,
+  saveTodayWorkset,
 } = inject(AI_STATE_KEY)!;
 
 type EntryMode = 'single' | 'batch';
@@ -104,6 +105,12 @@ const isRevisionNotesMode = computed(() => isComplete.value || hasRevisionNotes.
 async function refreshWorksetAfterDrawerSave(): Promise<void> {
   await fetchTodayWorkset();
   window.dispatchEvent(new CustomEvent('ad-fontes:workset-refresh-requested'));
+}
+
+function firstWorksetSaveResult(
+  response: Awaited<ReturnType<typeof saveTodayWorkset>>
+): Record<string, unknown> | null {
+  return response.results[0]?.result ?? null;
 }
 
 async function handleFix(): Promise<void> {
@@ -249,13 +256,16 @@ async function saveGeneratedYaml(): Promise<void> {
   saving.value = true;
   errorMessage.value = '';
   try {
-    const result = await wordStore.saveWord(job.yaml, false, { sourceJobId: job.jobId });
-    if (result === true) {
+    const response = await saveTodayWorkset([job.jobId]);
+    const result = firstWorksetSaveResult(response);
+    if (result?.success === true) {
+      appStore.addToast('Save success', 'success', 3000);
+      await wordStore.fetchDbRecords({ background: true });
       await refreshWorksetAfterDrawerSave();
       return;
     }
 
-    if (result && typeof result === 'object' && result.status === 'conflict') {
+    if (result?.status === 'conflict') {
       const lemma = typeof result.lemma === 'string' ? result.lemma : job.word;
       const shouldOverwrite = await requestSaveConfirm({
         title: 'Overwrite existing word?',
@@ -267,8 +277,11 @@ async function saveGeneratedYaml(): Promise<void> {
         appStore.addToast('Save cancelled. Existing word was not changed.', 'info');
         return;
       }
-      const overwriteResult = await wordStore.saveWord(job.yaml, true, { sourceJobId: job.jobId });
-      if (overwriteResult === true) {
+      const overwriteResponse = await saveTodayWorkset([job.jobId], { forceUpdate: true });
+      const overwriteResult = firstWorksetSaveResult(overwriteResponse);
+      if (overwriteResult?.success === true) {
+        appStore.addToast('Save success', 'success', 3000);
+        await wordStore.fetchDbRecords({ background: true });
         await refreshWorksetAfterDrawerSave();
       } else {
         errorMessage.value = 'Overwrite failed. Use Fill Editor to repair manually or regenerate.';
