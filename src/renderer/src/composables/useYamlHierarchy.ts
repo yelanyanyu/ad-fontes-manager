@@ -5,11 +5,6 @@ export interface BreadcrumbSegment {
   isListItem?: boolean;
 }
 
-export interface LineDepthInfo {
-  depth: number;
-  isList: boolean;
-}
-
 function getLeadingSpaces(line: string): number {
   return line.length - line.trimStart().length;
 }
@@ -41,8 +36,6 @@ export function useYamlHierarchy(
   indentUnit = 2
 ): {
   breadcrumbPath: ComputedRef<BreadcrumbSegment[]>;
-  lineDepths: ComputedRef<LineDepthInfo[]>;
-  cursorLine: ComputedRef<number>;
 } {
   const lines = computed(() => text.value.split('\n'));
 
@@ -50,13 +43,6 @@ export function useYamlHierarchy(
     const before = text.value.slice(0, cursorOffset.value);
     return before.split('\n').length - 1;
   });
-
-  const lineDepths = computed<LineDepthInfo[]>(() =>
-    lines.value.map(line => ({
-      depth: Math.floor(getLeadingSpaces(line) / indentUnit),
-      isList: isListItem(line),
-    }))
-  );
 
   const breadcrumbPath = computed<BreadcrumbSegment[]>(() => {
     const allLines = lines.value;
@@ -104,5 +90,5 @@ export function useYamlHierarchy(
     return path;
   });
 
-  return { breadcrumbPath, lineDepths, cursorLine };
+  return { breadcrumbPath };
 }

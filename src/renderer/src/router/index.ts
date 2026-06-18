@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 const HomeView = () => import('@/views/HomeView.vue');
 const EditorView = () => import('@/views/EditorView.vue');
 const SettingsView = () => import('@/views/SettingsView.vue');
+const TestView = () => import('@/views/TestView.vue');
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -25,6 +26,11 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: SettingsView,
+    },
+    {
+      path: '/test',
+      name: 'test-lab',
+      component: TestView,
     },
   ],
 });

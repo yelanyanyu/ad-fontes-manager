@@ -206,6 +206,37 @@ describe('createWordEditorValidationController', () => {
     expect(controller.state.notices).toEqual([]);
   });
 
+  it('shows a local line diagnostic immediately when client YAML parsing fails', () => {
+    const validateYaml = vi.fn();
+    const controller = createWordEditorValidationController({
+      validateYaml,
+      inputDebounceMs: 0,
+      serverDebounceMs: 300,
+      parseYaml: () => {
+        const error = new Error('can not read a block mapping entry (4:11)') as Error & {
+          mark?: { line: number; column: number };
+        };
+        error.mark = { line: 3, column: 10 };
+        throw error;
+      },
+    });
+
+    controller.handleTextChanged('yield:\n  lemma: Sinn\nnuance:啊\n  synonyms:\n');
+
+    expect(controller.state.status).toBe('Invalid YAML');
+    expect(controller.state.schemaErrors).toEqual([
+      'YAML parse error: can not read a block mapping entry (4:11)',
+    ]);
+    expect(controller.state.formatDiagnostics).toEqual([
+      {
+        code: 'yaml.parse_error',
+        path: 'root',
+        message: 'YAML parse error: can not read a block mapping entry (4:11)',
+        line: 4,
+      },
+    ]);
+  });
+
   it('shows schema diagnostics returned by strict validation', async () => {
     const validateYaml = vi.fn().mockResolvedValue({
       valid: false,
@@ -229,6 +260,13 @@ describe('createWordEditorValidationController', () => {
 
     expect(controller.state.status).toBe('Invalid YAML');
     expect(controller.state.schemaErrors).toEqual(['yield.lemma: yield.lemma must match word']);
+    expect(controller.state.formatDiagnostics).toEqual([
+      {
+        code: 'schema.invalid',
+        path: 'yield.lemma',
+        message: 'yield.lemma must match word',
+      },
+    ]);
   });
 
   it('clears state for empty YAML', () => {
@@ -239,6 +277,7 @@ describe('createWordEditorValidationController', () => {
 
     expect(controller.state.status).toBe('');
     expect(controller.state.schemaErrors).toEqual([]);
+    expect(controller.state.formatDiagnostics).toEqual([]);
     expect(controller.state.validating).toBe(false);
     expect(validateYaml).not.toHaveBeenCalled();
   });

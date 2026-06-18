@@ -7,6 +7,8 @@ export interface FormatDiagnosticMessage {
   message: string;
   path?: string;
   suggestion?: string;
+  line?: number;
+  range?: { startLine?: number; endLine?: number };
 }
 
 export interface FormatValidationResponse {
@@ -35,6 +37,7 @@ export interface StrictValidationPayload {
 export interface WordEditorValidationState {
   status: EditorStatus;
   schemaErrors: string[];
+  formatDiagnostics: FormatDiagnosticMessage[];
   notices: string[];
   schemaFreshness: 'current' | 'old' | 'future' | null;
   validating: boolean;
@@ -64,6 +67,29 @@ export function formatValidationMessages(res: FormatValidationResponse): string[
   return res.errors || [];
 }
 
+function lineFromParseError(error: unknown): number | undefined {
+  const markLine = (error as { mark?: { line?: unknown } })?.mark?.line;
+  if (typeof markLine === 'number' && Number.isInteger(markLine) && markLine >= 0) {
+    return markLine + 1;
+  }
+
+  const message = (error as { message?: unknown })?.message;
+  if (typeof message !== 'string') return undefined;
+  const tuple = /\((\d+):\d+\)/.exec(message);
+  return tuple ? Number(tuple[1]) : undefined;
+}
+
+function buildLocalParseDiagnostic(error: unknown): FormatDiagnosticMessage {
+  const rawMessage =
+    error instanceof Error && error.message ? error.message : 'YAML could not be parsed.';
+  return {
+    code: 'yaml.parse_error',
+    path: 'root',
+    message: `YAML parse error: ${rawMessage}`,
+    line: lineFromParseError(error),
+  };
+}
+
 export function createWordEditorValidationController({
   validateYaml,
   inputDebounceMs = 500,
@@ -76,6 +102,7 @@ export function createWordEditorValidationController({
   const state = reactive<WordEditorValidationState>({
     status: '',
     schemaErrors: [],
+    formatDiagnostics: [],
     notices: [],
     schemaFreshness: null,
     validating: false,
@@ -102,6 +129,7 @@ export function createWordEditorValidationController({
     clearValidateTimer();
     state.status = '';
     state.schemaErrors = [];
+    state.formatDiagnostics = [];
     state.notices = [];
     state.schemaFreshness = null;
     state.validating = false;
@@ -124,9 +152,11 @@ export function createWordEditorValidationController({
 
       state.schemaFreshness = res.schemaFreshness ?? null;
       state.notices = res.notices || [];
+      state.formatDiagnostics = res.diagnostics || [];
 
       if (res.valid || res.canSave) {
         state.schemaErrors = [];
+        state.formatDiagnostics = [];
         state.status = 'Valid YAML';
       } else {
         state.schemaErrors = formatValidationMessages(res);
@@ -166,16 +196,20 @@ export function createWordEditorValidationController({
       ) {
         state.status = 'Checking YAML';
         state.schemaErrors = [];
+        state.formatDiagnostics = [];
         runServerValidation(yamlToValidate, requestId);
         return;
       }
 
       state.status = 'Invalid YAML';
       state.schemaErrors = [];
+      state.formatDiagnostics = [];
       clearValidateTimer();
-    } catch {
+    } catch (error) {
+      const diagnostic = buildLocalParseDiagnostic(error);
       state.status = 'Invalid YAML';
-      state.schemaErrors = [];
+      state.schemaErrors = [diagnostic.message];
+      state.formatDiagnostics = [diagnostic];
       state.notices = [];
       state.schemaFreshness = null;
       runServerValidation(yamlToValidate, requestId);

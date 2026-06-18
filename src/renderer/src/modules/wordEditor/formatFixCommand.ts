@@ -46,6 +46,7 @@ export function createFormatFixCommand({
     try {
       const res = await repairYaml({ yaml: yamlText });
       state.schemaErrors = formatValidationMessages(res);
+      state.formatDiagnostics = res.diagnostics || [];
       state.status = (res.valid ? 'Valid YAML' : 'Invalid YAML') as EditorStatus;
 
       if (res.changed && typeof res.yaml === 'string') {

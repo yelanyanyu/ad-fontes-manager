@@ -6,6 +6,7 @@ import type { WordEditorValidationState } from './validationController';
 const makeState = (): WordEditorValidationState => ({
   status: '',
   schemaErrors: [],
+  formatDiagnostics: [],
   notices: [],
   schemaFreshness: null,
   validating: false,
@@ -54,6 +55,9 @@ describe('createFormatFixCommand', () => {
     expect(replaceYaml).toHaveBeenCalledWith('partly repaired yaml');
     expect(state.status).toBe('Invalid YAML');
     expect(state.schemaErrors).toEqual(['nuance: nuance is missing.']);
+    expect(state.formatDiagnostics).toEqual([
+      { code: 'section.missing', path: 'nuance', message: 'nuance is missing.' },
+    ]);
     expect(addToast).toHaveBeenCalledWith(
       'Format partly repaired; remaining errors need review.',
       'warning'

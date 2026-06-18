@@ -7,7 +7,7 @@ import { useAppStore } from '@/stores/appStore';
 import { storeToRefs } from 'pinia';
 import ConflictModal from '@/components/ui/ConflictModal.vue';
 import CurrentSchemaReference from '@/components/WordEditor/CurrentSchemaReference.vue';
-import YamlEditorSurface from '@/components/WordEditor/YamlEditorSurface.vue';
+import CodeMirrorYamlEditor from '@/components/WordEditor/CodeMirrorYamlEditor.vue';
 import { deepDiffAdapter, yamlFormatter } from '@/utils/conflict';
 import type { ConflictData } from '@/types/word-editor';
 import request from '@/utils/request';
@@ -62,7 +62,7 @@ const { editorSession } = storeToRefs(wordStore as any) as {
 
 const session = createWordEditorSession();
 const input = session.currentYaml;
-const editorSurfaceRef = ref<InstanceType<typeof YamlEditorSurface> | null>(null);
+const editorSurfaceRef = ref<InstanceType<typeof CodeMirrorYamlEditor> | null>(null);
 const moreMenuRef = ref<HTMLElement | null>(null);
 const cursorPos = ref(0);
 const conflictData = ref<ConflictData | null>(null);
@@ -71,7 +71,7 @@ const moreMenuOpen = ref(false);
 const schemaReferenceOpen = ref(false);
 const schemaReferenceStack = useOverlayStack('schema-reference');
 
-const { breadcrumbPath, lineDepths, cursorLine } = useYamlHierarchy(input, cursorPos);
+const { breadcrumbPath } = useYamlHierarchy(input, cursorPos);
 const validationController = createWordEditorValidationController({
   validateYaml: payload => request.post('/v2/words/validate', payload),
   getIntent: () => session.validationContext.value.intent,
@@ -140,7 +140,6 @@ watch(
         session.loadNewWord(editorSession.value.yaml);
       }
       cursorPos.value = 0;
-      void nextTick(() => editorSurfaceRef.value?.scheduleLineMeasure());
     }
   },
   { immediate: true }
@@ -229,6 +228,12 @@ const openSchemaReference = () => {
 const closeSchemaReference = () => {
   schemaReferenceOpen.value = false;
   schemaReferenceStack.remove();
+};
+
+const focusDiagnostic = (index: number) => {
+  const diagnostic = validationState.formatDiagnostics[index];
+  if (!diagnostic) return;
+  editorSurfaceRef.value?.goToDiagnostic(diagnostic);
 };
 
 defineExpose({ applyGeneratedYaml });
@@ -371,11 +376,10 @@ defineExpose({ applyGeneratedYaml });
     </div>
 
     <div class="editor-body">
-      <YamlEditorSurface
+      <CodeMirrorYamlEditor
         ref="editorSurfaceRef"
         v-model="input"
-        :line-depths="lineDepths"
-        :cursor-line="cursorLine"
+        :diagnostics="validationState.formatDiagnostics"
         :readonly="saving"
         @cursor-change="cursorPos = $event"
       />
@@ -392,7 +396,11 @@ defineExpose({ applyGeneratedYaml });
 
     <div v-if="validationState.schemaErrors.length > 0" class="schema-errors">
       <ul>
-        <li v-for="(err, i) in validationState.schemaErrors" :key="i">{{ err }}</li>
+        <li v-for="(err, i) in validationState.schemaErrors" :key="i">
+          <button type="button" class="schema-error-button" @click="focusDiagnostic(i)">
+            {{ err }}
+          </button>
+        </li>
       </ul>
     </div>
   </div>
@@ -642,6 +650,23 @@ defineExpose({ applyGeneratedYaml });
   font-size: 12px;
   color: var(--red);
   line-height: 1.6;
+}
+
+.schema-error-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.schema-error-button:hover {
+  text-decoration: underline;
 }
 
 .editor-body {
