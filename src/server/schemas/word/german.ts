@@ -10,6 +10,7 @@ const {
   requiredObject,
   strictObject,
   nonEmptyArray,
+  arrayAllowEmpty,
 } = require('./helpers');
 
 const base = createBaseWordSchema({ meaningLang: 'de' });
@@ -88,7 +89,7 @@ const GermanWordSchema = z
     ),
     word_formation: requiredObject(
       {
-        derivations: nonEmptyArray('word_formation.derivations').refine((rows: unknown[]) => {
+        derivations: arrayAllowEmpty('word_formation.derivations').refine((rows: unknown[]) => {
           return rows.every((item: unknown) => {
             if (!isRecord(item)) return false;
             const rec = item as Record<string, unknown>;

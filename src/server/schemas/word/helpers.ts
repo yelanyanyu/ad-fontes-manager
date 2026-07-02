@@ -31,6 +31,8 @@ const strictObject = <T extends z.ZodRawShape>(shape: T, _fieldPath: string) =>
 const nonEmptyArray = (fieldPath: string) =>
   z.array(z.unknown()).min(1, `${fieldPath} must be a non-empty array`);
 
+const arrayAllowEmpty = (_fieldPath: string) => z.array(z.unknown());
+
 module.exports = {
   isRecord,
   isNonEmptyString,
@@ -40,4 +42,5 @@ module.exports = {
   requiredObject,
   strictObject,
   nonEmptyArray,
+  arrayAllowEmpty,
 };
