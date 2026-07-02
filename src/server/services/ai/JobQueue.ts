@@ -68,8 +68,6 @@ export class JobQueue {
     }
   >();
 
-  private readonly defaultStageOrder = ['searching', 'pondering', 'auditing', 'fixing'];
-
   constructor(config: QueueConfig) {
     this.store = new QueueStore(config.getDb);
     this.lifecycle = new JobLifecycle(this.store);
@@ -603,6 +601,10 @@ export class JobQueue {
       reasoningText?: string;
     }>;
   } {
+    const row = this.store.getRow(jobId);
+    const stageOrder = row
+      ? this.getPipelineDefinitionForRow(row).stages.map(stage => stage.id)
+      : [];
     const steps = this.getCompletedSteps(jobId);
     const completedStepResults = steps
       .filter(event => event.type === 'step:complete')
@@ -621,15 +623,15 @@ export class JobQueue {
     const resumeFromStage =
       currentStage && !completedStages.has(currentStage)
         ? currentStage
-        : this.defaultStageOrder.find(stage => !completedStages.has(stage));
+        : stageOrder.find(stage => !completedStages.has(stage));
     const effectiveResumeFromStage = resumeFromStageOverride || resumeFromStage;
     const resumeIndex = effectiveResumeFromStage
-      ? this.defaultStageOrder.indexOf(effectiveResumeFromStage)
+      ? stageOrder.indexOf(effectiveResumeFromStage)
       : -1;
     const previousSteps =
       resumeIndex >= 0
         ? completedStepResults.filter(step => {
-            const stepIndex = this.defaultStageOrder.indexOf(step.step);
+            const stepIndex = stageOrder.indexOf(step.step);
             return stepIndex >= 0 && stepIndex < resumeIndex;
           })
         : completedStepResults;
@@ -645,6 +647,13 @@ export class JobQueue {
       previousContext,
       previousSteps,
     };
+  }
+
+  private getPipelineDefinitionForRow(row: Record<string, unknown>): PipelineDefinition {
+    const language = row.language as string;
+    if (row.job_type === 'fix') return fixPipeline;
+    if (row.job_type === 'audit-fix') return auditFixPipeline;
+    return language === 'de' ? germanPipeline : englishPipeline;
   }
 
   private tryDequeue(): void {
@@ -692,15 +701,7 @@ export class JobQueue {
     const resume = this.resumeState.get(jobId);
     this.resumeState.delete(jobId);
 
-    let definition: PipelineDefinition;
-    const language = row.language as string;
-    if (row.job_type === 'fix') {
-      definition = fixPipeline;
-    } else if (row.job_type === 'audit-fix') {
-      definition = auditFixPipeline;
-    } else {
-      definition = language === 'de' ? germanPipeline : englishPipeline;
-    }
+    const definition = this.getPipelineDefinitionForRow(row);
     const notes = (row.notes as string) || undefined;
     let targetYaml: string | undefined;
 

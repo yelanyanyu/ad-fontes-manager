@@ -1370,6 +1370,105 @@ void describe('JobQueue queue-wide operations', () => {
     assert.equal(calls[0].previousSteps?.[0].reasoningText, 'search thinking');
   });
 
+  void it('resumes a Fix Job using the fix Pipeline Definition order', () => {
+    const db = getDb();
+    db.run(
+      `INSERT INTO job_queue (id, job_type, priority, status, word, language, progress_events)
+       VALUES (?, 'fix', 'high', 'paused', 'repair', 'en', ?)`,
+      'paused-fix',
+      JSON.stringify([
+        { type: 'job:started' },
+        { type: 'step:start', step: 'fixing', message: 'Fixing' },
+        {
+          type: 'step:complete',
+          step: 'fixing',
+          duration: 100,
+          summary: 'Fixed',
+          result: { fullYaml: 'yield:\n  lemma: repair\nfixed: true\n' },
+        },
+        { type: 'job:paused' },
+      ])
+    );
+
+    const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+    const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
+
+    const snapshot = queue.buildResumeSnapshot('paused-fix');
+
+    assert.equal(snapshot.resumeFromStage, 'auditing');
+    assert.deepEqual(
+      snapshot.previousSteps?.map((step: { step: string }) => step.step),
+      ['fixing']
+    );
+    assert.deepEqual(snapshot.previousContext, {
+      fullYaml: 'yield:\n  lemma: repair\nfixed: true\n',
+    });
+  });
+
+  void it('resumes a Generate Job using a non-standard Pipeline Definition stage order', async () => {
+    const englishModule =
+      require('./definitions/english') as typeof import('./definitions/english');
+    const originalStages = englishModule.englishPipeline.stages;
+    englishModule.englishPipeline.stages = [
+      { id: 'drafting' },
+      { id: 'source-check' },
+      { id: 'publishing' },
+    ] as typeof englishModule.englishPipeline.stages;
+    delete require.cache[require.resolve('./JobQueue')];
+
+    try {
+      const calls: Array<Parameters<PipelineRunner['run']>[0]> = [];
+      const resumableRunner: PipelineRunner = {
+        async run(params) {
+          calls.push(params);
+          return { yaml: FAKE_YAML, scores: FAKE_SCORES };
+        },
+      };
+      const db = getDb();
+      db.run(
+        `INSERT INTO job_queue (id, job_type, priority, status, word, language, progress_events)
+         VALUES (?, 'generate', 'normal', 'paused', 'custom-stage-word', 'en', ?)`,
+        'custom-stage-paused',
+        JSON.stringify([
+          { type: 'job:started' },
+          { type: 'step:start', step: 'drafting', message: 'Drafting' },
+          {
+            type: 'step:complete',
+            step: 'drafting',
+            duration: 100,
+            summary: 'Drafted',
+            result: { draftYaml: 'yield:\n  lemma: custom-stage-word\n' },
+          },
+          { type: 'step:start', step: 'source-check', message: 'Checking sources' },
+          { type: 'job:paused', step: 'source-check' },
+        ])
+      );
+
+      const { JobQueue } = require('./JobQueue') as { JobQueue: new (...args: any[]) => any };
+      const queue = new JobQueue({ getDb, maxConcurrency: 1, runner: resumableRunner });
+
+      queue.resumeAll();
+      await new Promise(r => setTimeout(r, 0));
+
+      assert.equal(calls.length, 1);
+      assert.deepEqual(
+        calls[0].definition.stages.map(stage => stage.id),
+        ['drafting', 'source-check', 'publishing']
+      );
+      assert.equal(calls[0].resumeFromStage, 'source-check');
+      assert.deepEqual(
+        calls[0].previousSteps?.map(step => step.step),
+        ['drafting']
+      );
+      assert.deepEqual(calls[0].previousContext, {
+        draftYaml: 'yield:\n  lemma: custom-stage-word\n',
+      });
+    } finally {
+      englishModule.englishPipeline.stages = originalStages;
+      delete require.cache[require.resolve('./JobQueue')];
+    }
+  });
+
   void it('keeps only upstream stage context when regenerating from pondering', () => {
     const db = getDb();
     db.run(
