@@ -865,7 +865,10 @@ function checkStopLoss(
   if (policy.kind === 'none') return { stopped: false };
 
   if (!text.trim()) {
-    return { stopped: true, reason: `${stage.id}: LLM returned empty text` };
+    return {
+      stopped: true,
+      reason: `${stage.id}: required ${policy.contextKey || 'output'} is empty because LLM returned empty text`,
+    };
   }
 
   const value = getContextValue(parsed, policy.contextKey);
@@ -877,6 +880,17 @@ function checkStopLoss(
   }
 
   return { stopped: false };
+}
+
+function parseStageOutput(stage: PipelineStage, text: string): Partial<PipelineContext> {
+  if (stage.outputParser) return stage.outputParser(text);
+
+  const outputPolicy = getStagePolicy(stage).output;
+  if (outputPolicy.kind === 'scores') return { scores: {} };
+  if (outputPolicy.contextKey) {
+    return { [outputPolicy.contextKey]: text } as Partial<PipelineContext>;
+  }
+  return { fullYaml: text };
 }
 
 function resolveStageTools(
@@ -1002,7 +1016,7 @@ export class SequentialRunner implements PipelineRunner {
           step: stage.id,
           diagnostics: streamDiagnostics,
         });
-        let parsed = stage.outputParser ? stage.outputParser(text) : { fullYaml: text };
+        let parsed = parseStageOutput(stage, text);
         if (stagePolicy.output.kind === 'scores' && parsed.scores?._parse_error) {
           runLogger.error(
             {
@@ -1074,9 +1088,7 @@ export class SequentialRunner implements PipelineRunner {
                 step: stage.id,
                 diagnostics: streamDiagnostics,
               });
-              fallbackParsed = stage.outputParser
-                ? stage.outputParser(fallbackText)
-                : { fullYaml: fallbackText };
+              fallbackParsed = parseStageOutput(stage, fallbackText);
               stopResult = checkStopLoss(stage, fallbackText, fallbackParsed);
             } catch (err) {
               runLogger.error(

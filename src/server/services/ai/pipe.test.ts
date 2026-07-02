@@ -856,6 +856,119 @@ void describe('SequentialRunner', () => {
     }
   });
 
+  void it('uses Output Policy and Stop-loss Policy for a renamed required full YAML stage', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [{ id: 'model-fast', name: 'model-fast' }],
+            },
+          ],
+          stages: {
+            fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const outputs = ['yield:\n  lemma: aurora\n  language: en\n', ''];
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      streamText: () => {
+        const text = outputs.shift() || '';
+        return {
+          fullStream: (async function* () {
+            if (text) yield { type: 'text-delta', text };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+
+    const requiredFullYamlStage = {
+      id: 'final-compose-pass',
+      description: 'Final compose pass',
+      type: 'llm' as const,
+      modelKey: 'fast' as const,
+      systemPromptFile: 'english-structural.md',
+      policy: {
+        execution: { kind: 'llm' as const, timeoutMs: 60_000 },
+        output: { kind: 'full-yaml' as const, contextKey: 'fullYaml' as const },
+        assembly: { kind: 'none' as const },
+        stopLoss: {
+          kind: 'require-text-and-context' as const,
+          contextKey: 'fullYaml' as const,
+          partialResultKey: 'researchYaml' as const,
+        },
+      },
+    };
+
+    try {
+      const successEvents: PipelineProgressEvent[] = [];
+      const success = await new SequentialRunner().run({
+        definition: {
+          id: 'renamed-full-yaml',
+          language: 'en',
+          stages: [requiredFullYamlStage],
+        },
+        input: { word: 'aurora', language: 'en' },
+        onProgress: event => successEvents.push(event),
+      });
+
+      assert.match(success.yaml, /lemma: aurora/);
+      assert.ok(
+        successEvents.some(
+          (event): event is Extract<PipelineProgressEvent, { type: 'pipeline:complete' }> =>
+            event.type === 'pipeline:complete' && /lemma: aurora/.test(event.yaml)
+        )
+      );
+
+      const stoppedEvents: PipelineProgressEvent[] = [];
+      const stopped = await new SequentialRunner().run({
+        definition: {
+          id: 'renamed-full-yaml-empty',
+          language: 'en',
+          stages: [requiredFullYamlStage],
+        },
+        input: { word: 'empty', language: 'en' },
+        previousContext: { researchYaml: 'yield:\n  lemma: partial\n  language: en\n' },
+        onProgress: event => stoppedEvents.push(event),
+      });
+
+      assert.equal(stopped.yaml, 'yield:\n  lemma: partial\n  language: en\n');
+      assert.ok(
+        stoppedEvents.some(
+          (event): event is Extract<PipelineProgressEvent, { type: 'pipeline:stopped' }> =>
+            event.type === 'pipeline:stopped' &&
+            event.stoppedAtStage === 'final-compose-pass' &&
+            event.reason.includes('fullYaml')
+        )
+      );
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
+  });
+
   void it('selects German structural keys in the German mock pipeline', async () => {
     writeMockAIConfig();
     const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
