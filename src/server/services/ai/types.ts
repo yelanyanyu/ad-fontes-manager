@@ -1,7 +1,55 @@
+export type PipelineContextKey =
+  | 'searchSummary'
+  | 'researchYaml'
+  | 'creativeYaml'
+  | 'fullYaml'
+  | 'scores';
+
+export interface StageExecutionPolicy {
+  kind: 'llm' | 'validate';
+  timeoutMs?: number;
+  maxOutputTokens?: number;
+  tools?: {
+    names: string[];
+    maxRounds?: number;
+    requiresSearchApiKey?: boolean;
+    fallbackOnFailureToolName?: string;
+  };
+}
+
+export interface StageOutputPolicy {
+  kind: 'yaml-fragment' | 'full-yaml' | 'scores';
+  contextKey?: PipelineContextKey;
+}
+
+export interface StageAssemblyPolicy {
+  kind: 'none' | 'merge-yaml';
+  sourceKeys?: ['researchYaml', 'creativeYaml'];
+  targetKey?: 'fullYaml';
+}
+
+export interface StageStopLossPolicy {
+  kind: 'none' | 'require-text-and-context';
+  contextKey?: PipelineContextKey;
+  partialResultKey?: PipelineContextKey;
+  fallback?: {
+    kind: 'retry-without-tools';
+    useToolEvidenceSummary?: boolean;
+  };
+}
+
+export interface StagePolicy {
+  execution: StageExecutionPolicy;
+  output: StageOutputPolicy;
+  assembly: StageAssemblyPolicy;
+  stopLoss: StageStopLossPolicy;
+}
+
 export interface PipelineStage {
   id: string;
   description: string;
   type: 'llm' | 'validate';
+  policy?: StagePolicy;
   modelKey?: 'fast' | 'balanced' | 'expert';
   systemPromptFile?: string;
   schemaFile?: string;

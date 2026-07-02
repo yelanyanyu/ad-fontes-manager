@@ -1,4 +1,10 @@
-import type { PipelineContext, PipelineRunner, PipelineStage } from './types';
+import type {
+  PipelineContext,
+  PipelineContextKey,
+  PipelineRunner,
+  PipelineStage,
+  StagePolicy,
+} from './types';
 import type { Tool } from 'ai';
 import type { AssembledPrompt } from './prompts/assembler';
 
@@ -248,6 +254,100 @@ const AUDITING_MAX_OUTPUT_TOKENS = AUDITING_MAX_COMPLETION_TOKENS - DEFAULT_THIN
 
 const BACKOFF_SCHEDULE = [2000, 8000];
 
+function legacyStagePolicy(stage: PipelineStage): StagePolicy {
+  if (stage.id === 'searching') {
+    return {
+      execution: {
+        kind: stage.type,
+        timeoutMs: STAGE_TIMEOUT_MS.searching,
+        ...(stage.toolNames?.length
+          ? {
+              tools: {
+                names: stage.toolNames,
+                maxRounds: 3,
+                requiresSearchApiKey: true,
+                fallbackOnFailureToolName: 'search_etymology',
+              },
+            }
+          : {}),
+      },
+      output: { kind: 'yaml-fragment', contextKey: 'researchYaml' },
+      assembly: { kind: 'none' },
+      stopLoss: {
+        kind: 'require-text-and-context',
+        contextKey: 'researchYaml',
+        partialResultKey: 'researchYaml',
+        ...(stage.toolNames?.length
+          ? { fallback: { kind: 'retry-without-tools', useToolEvidenceSummary: true } }
+          : {}),
+      },
+    };
+  }
+
+  if (stage.id === 'pondering') {
+    return {
+      execution: { kind: stage.type, timeoutMs: STAGE_TIMEOUT_MS.pondering },
+      output: { kind: 'yaml-fragment', contextKey: 'creativeYaml' },
+      assembly: {
+        kind: 'merge-yaml',
+        sourceKeys: ['researchYaml', 'creativeYaml'],
+        targetKey: 'fullYaml',
+      },
+      stopLoss: {
+        kind: 'require-text-and-context',
+        contextKey: 'creativeYaml',
+        partialResultKey: 'researchYaml',
+      },
+    };
+  }
+
+  if (stage.id === 'auditing') {
+    return {
+      execution: {
+        kind: stage.type,
+        timeoutMs: STAGE_TIMEOUT_MS.auditing,
+        maxOutputTokens: AUDITING_MAX_OUTPUT_TOKENS,
+      },
+      output: { kind: 'scores' },
+      assembly: { kind: 'none' },
+      stopLoss: { kind: 'none' },
+    };
+  }
+
+  if (stage.id === 'fixing') {
+    return {
+      execution: { kind: stage.type, timeoutMs: STAGE_TIMEOUT_MS.fixing },
+      output: { kind: 'full-yaml', contextKey: 'fullYaml' },
+      assembly: { kind: 'none' },
+      stopLoss: { kind: 'none' },
+    };
+  }
+
+  return {
+    execution: { kind: stage.type, timeoutMs: STAGE_TIMEOUT_MS[stage.id] || 60_000 },
+    output: { kind: 'full-yaml', contextKey: 'fullYaml' },
+    assembly: { kind: 'none' },
+    stopLoss: { kind: 'none' },
+  };
+}
+
+function getStagePolicy(stage: PipelineStage): StagePolicy {
+  return stage.policy || legacyStagePolicy(stage);
+}
+
+function getContextValue(ctx: Partial<PipelineContext>, key?: PipelineContextKey): unknown {
+  if (!key) return undefined;
+  return ctx[key];
+}
+
+function shouldUseReviewOutput(stage: PipelineStage): boolean {
+  return getStagePolicy(stage).output.kind === 'scores';
+}
+
+function shouldUseStructuralOutput(stage: PipelineStage): boolean {
+  return getStagePolicy(stage).output.contextKey === 'researchYaml';
+}
+
 interface StageTextDiagnostics {
   stageId: string;
   provider: string;
@@ -402,7 +502,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
       reasoningChunkCount: 0,
       lastPartType: 'mock',
     };
-    if (stage.id === 'auditing') {
+    if (shouldUseReviewOutput(stage)) {
       const text = buildMockReview();
       return {
         text,
@@ -410,7 +510,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
         toolEvidence: [],
       };
     }
-    if (stage.id === 'searching') {
+    if (shouldUseStructuralOutput(stage)) {
       const text = buildStructuralMock(ctx.word, ctx.language, ctx.context);
       return {
         text,
@@ -425,11 +525,12 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
   const maxRetries = 1;
   let lastError: unknown;
   const toolStartTimes = new Map<string, number>();
+  const policy = getStagePolicy(stage);
   const tools = resolveStageTools(stage, runLogger);
   const reasoningParams = buildReasoningParams(model.format, model.reasoningEffort, model.provider);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const timeoutMs = STAGE_TIMEOUT_MS[stage.id] || 60_000;
+    const timeoutMs = policy.execution.timeoutMs || STAGE_TIMEOUT_MS[stage.id] || 60_000;
     const stageController = new globalThis.AbortController();
     const timeoutId = setTimeout(() => stageController.abort(), timeoutMs);
     const signals: globalThis.AbortSignal[] = [stageController.signal];
@@ -442,8 +543,12 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
         system: prompt.system,
         prompt: prompt.user,
         abortSignal: combinedSignal,
-        ...(stage.id === 'auditing' ? { maxOutputTokens: AUDITING_MAX_OUTPUT_TOKENS } : {}),
-        ...(Object.keys(tools).length > 0 ? { tools, stopWhen: stepCountIs(3) } : {}),
+        ...(policy.execution.maxOutputTokens
+          ? { maxOutputTokens: policy.execution.maxOutputTokens }
+          : {}),
+        ...(Object.keys(tools).length > 0
+          ? { tools, stopWhen: stepCountIs(policy.execution.tools?.maxRounds || 3) }
+          : {}),
         ...(Object.keys(reasoningParams.providerOptions).length > 0
           ? {
               providerOptions: reasoningParams.providerOptions as Record<
@@ -532,8 +637,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
             duration: Date.now() - startedAt,
           });
           if (
-            stage.id === 'searching' &&
-            toolName === 'search_etymology' &&
+            toolName === policy.execution.tools?.fallbackOnFailureToolName &&
             resultObject.success === false
           ) {
             runLogger?.info(
@@ -542,7 +646,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
                 toolName,
                 errorCode: resultObject.errorCode,
               },
-              'Search tool failed; switching searching stage to no-tool fallback'
+              'Search tool failed; switching stage to no-tool fallback'
             );
             return {
               text: '',
@@ -585,7 +689,9 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
         chunkCount,
         reasoningChunkCount,
         lastPartType,
-        ...(stage.id === 'auditing' ? { maxOutputTokens: AUDITING_MAX_OUTPUT_TOKENS } : {}),
+        ...(policy.execution.maxOutputTokens
+          ? { maxOutputTokens: policy.execution.maxOutputTokens }
+          : {}),
       };
 
       runLogger?.info(diagnostics as unknown as Record<string, unknown>, 'LLM stream finished');
@@ -678,16 +784,19 @@ function checkStopLoss(
   text: string,
   parsed: Partial<PipelineContext>
 ): { stopped: boolean; reason?: string } {
-  if (stage.id !== 'searching' && stage.id !== 'pondering') return { stopped: false };
+  const policy = getStagePolicy(stage).stopLoss;
+  if (policy.kind === 'none') return { stopped: false };
 
   if (!text.trim()) {
     return { stopped: true, reason: `${stage.id}: LLM returned empty text` };
   }
 
-  const key = stage.id === 'searching' ? 'researchYaml' : 'creativeYaml';
-  const value = (parsed as Record<string, unknown>)[key];
+  const value = getContextValue(parsed, policy.contextKey);
   if (!value || (typeof value === 'string' && !value.trim())) {
-    return { stopped: true, reason: `${stage.id}: parsed ${key} is empty after fence stripping` };
+    return {
+      stopped: true,
+      reason: `${stage.id}: parsed ${policy.contextKey || 'output'} is empty after fence stripping`,
+    };
   }
 
   return { stopped: false };
@@ -699,8 +808,9 @@ function resolveStageTools(
     info: (payload: Record<string, unknown>, msg?: string) => void;
   }
 ): Record<string, Tool> {
-  const toolNames = stage.toolNames || [];
-  if (stage.id === 'searching' && toolNames.includes('search_etymology')) {
+  const policy = getStagePolicy(stage);
+  const toolNames = policy.execution.tools?.names || stage.toolNames || [];
+  if (policy.execution.tools?.requiresSearchApiKey && toolNames.includes('search_etymology')) {
     const aiConfig = getAIConfig();
     if (!aiConfig.search?.apiKey) {
       runLogger?.info(
@@ -712,6 +822,26 @@ function resolveStageTools(
   }
 
   return resolveTools(toolNames);
+}
+
+function applyAssemblyPolicy(
+  stage: PipelineStage,
+  ctx: PipelineContext,
+  runLogger?: {
+    info: (payload: Record<string, unknown>, msg?: string) => void;
+    error: (payload: Record<string, unknown>, msg?: string) => void;
+  }
+): void {
+  const policy = getStagePolicy(stage).assembly;
+  if (policy.kind === 'merge-yaml') {
+    mergeCreativeYaml(ctx, runLogger);
+  }
+}
+
+function getPartialYamlForStop(stage: PipelineStage, ctx: PipelineContext): string {
+  const key = getStagePolicy(stage).stopLoss.partialResultKey;
+  const value = getContextValue(ctx, key);
+  return typeof value === 'string' ? value : ctx.researchYaml || '';
 }
 
 export class SequentialRunner implements PipelineRunner {
@@ -786,15 +916,17 @@ export class SequentialRunner implements PipelineRunner {
         });
         let text = stageRun.text;
         let streamDiagnostics = stageRun.diagnostics;
-        const searchEvidenceSummary =
-          stage.id === 'searching' ? summarizeToolEvidence(stageRun.toolEvidence) : '';
+        const stagePolicy = getStagePolicy(stage);
+        const searchEvidenceSummary = stagePolicy.stopLoss.fallback?.useToolEvidenceSummary
+          ? summarizeToolEvidence(stageRun.toolEvidence)
+          : '';
         onProgress({
           type: 'step:diagnostic',
           step: stage.id,
           diagnostics: streamDiagnostics,
         });
         let parsed = stage.outputParser ? stage.outputParser(text) : { fullYaml: text };
-        if (stage.id === 'auditing' && parsed.scores?._parse_error) {
+        if (stagePolicy.output.kind === 'scores' && parsed.scores?._parse_error) {
           runLogger.error(
             {
               stageId: stage.id,
@@ -813,7 +945,7 @@ export class SequentialRunner implements PipelineRunner {
           let fallbackText = text;
           let fallbackParsed = parsed;
 
-          if (stage.id === 'searching' && stage.toolNames?.length) {
+          if (stagePolicy.stopLoss.fallback?.kind === 'retry-without-tools') {
             runLogger.info(
               {
                 step: stage.id,
@@ -825,7 +957,17 @@ export class SequentialRunner implements PipelineRunner {
                 : 'Retrying searching stage without tools'
             );
 
-            const fallbackStage: PipelineStage = { ...stage, toolNames: [] };
+            const fallbackStage: PipelineStage = {
+              ...stage,
+              toolNames: [],
+              policy: {
+                ...stagePolicy,
+                execution: {
+                  ...stagePolicy.execution,
+                  tools: undefined,
+                },
+              },
+            };
             const fallbackCtx: PipelineContext = searchEvidenceSummary
               ? {
                   ...ctx,
@@ -884,7 +1026,7 @@ export class SequentialRunner implements PipelineRunner {
               'AI step stopped by stop-loss'
             );
 
-            const partialYaml = ctx.researchYaml || '';
+            const partialYaml = getPartialYamlForStop(stage, ctx);
             onProgress({
               type: 'pipeline:stopped',
               yaml: partialYaml,
@@ -904,9 +1046,7 @@ export class SequentialRunner implements PipelineRunner {
           runLogger.info({ step: stage.id }, 'Fallback searching stage succeeded');
         }
 
-        if (stage.id === 'pondering') {
-          mergeCreativeYaml(ctx, runLogger);
-        }
+        applyAssemblyPolicy(stage, ctx, runLogger);
         const duration = Date.now() - stepStart;
         onProgress({
           type: 'step:complete',

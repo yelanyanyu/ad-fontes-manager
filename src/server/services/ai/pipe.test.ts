@@ -664,6 +664,20 @@ void describe('SequentialRunner', () => {
       require('./definitions/english') as typeof import('./definitions/english');
     const events: PipelineProgressEvent[] = [];
 
+    assert.deepEqual(
+      englishPipeline.stages.map(stage => [
+        stage.policy?.execution.kind,
+        stage.policy?.output.kind,
+        stage.policy?.assembly.kind,
+        stage.policy?.stopLoss.kind,
+      ]),
+      [
+        ['llm', 'yaml-fragment', 'none', 'require-text-and-context'],
+        ['llm', 'yaml-fragment', 'merge-yaml', 'require-text-and-context'],
+        ['llm', 'scores', 'none', 'none'],
+      ]
+    );
+
     const result = await new SequentialRunner().run({
       definition: englishPipeline,
       input: { word: 'conduct', context: 'The conductor raised a baton.', language: 'en' },
@@ -688,6 +702,151 @@ void describe('SequentialRunner', () => {
         event.type === 'step:complete' && event.step === 'pondering'
     );
     assert.ok(pondering?.rawText?.includes('visual_imagery_zh'));
+  });
+
+  void it('runs an English generate pipeline from Stage Policy without fixed Stage names', async () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        ai: {
+          providers: [
+            {
+              id: 'realish',
+              name: 'Realish',
+              type: 'openai',
+              baseUrl: 'https://mock.invalid/v1',
+              apiKey: 'sk-live-test',
+              models: [
+                { id: 'model-fast', name: 'model-fast' },
+                { id: 'model-expert', name: 'model-expert' },
+              ],
+            },
+          ],
+          stages: {
+            fast: { provider: 'realish', model: 'model-fast', reasoningEffort: 'auto' },
+            expert: { provider: 'realish', model: 'model-expert', reasoningEffort: 'auto' },
+          },
+          review: { threshold: 6, thresholdByLanguage: {} },
+        },
+      }),
+      'utf8'
+    );
+    const config = require('../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+
+    const aiPath = require.resolve('ai');
+    const originalAI = require(aiPath);
+    const stageOutputs = [
+      'yield:\n  lemma: conduct\n  language: en\netymology:\n  historical_origins:\n    history_myth: research\n',
+      'etymology:\n  visual_imagery_zh: 指挥棒把声音聚拢。\nnuance:\n  image_differentiation_zh: conduct 是引导路径。\n',
+      JSON.stringify({ overall_score: 8, revision_notes: 'Keep it concrete.' }),
+    ];
+    require.cache[aiPath]!.exports = {
+      ...originalAI,
+      stepCountIs: originalAI.stepCountIs,
+      streamText: () => {
+        const text = stageOutputs.shift() || '';
+        return {
+          fullStream: (async function* () {
+            yield { type: 'text-delta', text };
+          })(),
+        };
+      },
+    };
+
+    delete require.cache[require.resolve('./pipe')];
+    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const events: PipelineProgressEvent[] = [];
+
+    try {
+      const result = await new SequentialRunner().run({
+        definition: {
+          id: 'policy-defined-english',
+          language: 'en',
+          stages: [
+            {
+              id: 'research-pass',
+              description: 'Research pass',
+              type: 'llm',
+              modelKey: 'fast',
+              systemPromptFile: 'english-structural.md',
+              outputParser: (text: string) => ({ researchYaml: text }),
+              policy: {
+                execution: { kind: 'llm', timeoutMs: 240_000 },
+                output: { kind: 'yaml-fragment', contextKey: 'researchYaml' },
+                assembly: { kind: 'none' },
+                stopLoss: {
+                  kind: 'require-text-and-context',
+                  contextKey: 'researchYaml',
+                  partialResultKey: 'researchYaml',
+                },
+              },
+            },
+            {
+              id: 'creative-pass',
+              description: 'Creative pass',
+              type: 'llm',
+              modelKey: 'expert',
+              systemPromptFile: 'english-creative.md',
+              outputParser: (text: string) => ({ creativeYaml: text }),
+              policy: {
+                execution: { kind: 'llm', timeoutMs: 600_000 },
+                output: { kind: 'yaml-fragment', contextKey: 'creativeYaml' },
+                assembly: {
+                  kind: 'merge-yaml',
+                  sourceKeys: ['researchYaml', 'creativeYaml'],
+                  targetKey: 'fullYaml',
+                },
+                stopLoss: {
+                  kind: 'require-text-and-context',
+                  contextKey: 'creativeYaml',
+                  partialResultKey: 'researchYaml',
+                },
+              },
+            },
+            {
+              id: 'review-pass',
+              description: 'Review pass',
+              type: 'llm',
+              modelKey: 'expert',
+              systemPromptFile: 'content-reviewer.md',
+              outputParser: (text: string) => ({ scores: JSON.parse(text) }),
+              policy: {
+                execution: {
+                  kind: 'llm',
+                  timeoutMs: 600_000,
+                  maxOutputTokens: 377_216,
+                },
+                output: { kind: 'scores' },
+                assembly: { kind: 'none' },
+                stopLoss: { kind: 'none' },
+              },
+            },
+          ],
+        },
+        input: { word: 'conduct', context: 'The conductor raised a baton.', language: 'en' },
+        onProgress: event => events.push(event),
+      });
+
+      const completedSteps = events
+        .filter(
+          (event): event is Extract<PipelineProgressEvent, { type: 'step:complete' }> =>
+            event.type === 'step:complete'
+        )
+        .map(event => event.step);
+
+      assert.deepEqual(completedSteps, ['research-pass', 'creative-pass', 'review-pass']);
+      assert.match(result.yaml, /historical_origins:/);
+      assert.match(result.yaml, /visual_imagery_zh:/);
+      assert.equal(result.scores.overall_score, 8);
+    } finally {
+      require.cache[aiPath]!.exports = originalAI;
+    }
   });
 
   void it('selects German structural keys in the German mock pipeline', async () => {

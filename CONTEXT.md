@@ -257,7 +257,7 @@ One step in a Pipeline Definition. Each Stage has a model assignment (`fast`/`ba
 _Avoid_: Step, phase, node
 
 **Stage Policy** (阶段策略):
-The declared behaviour attached to a Stage beyond ordinary LLM execution, such as Stop-loss rules, Tool fallback, evidence synthesis, YAML assembly, token budget choices, or recovery behaviour. Stage Policy belongs with the Pipeline Definition so a Runner can execute generic sequencing without hardcoding product-specific Stage names. Stage Policy should be declarative by default: Pipeline Definitions name policy capabilities, while the implementation lives in shared policy modules. Custom executable hooks are a future escape hatch, not the first design. Stage Policy should separate execution, output, and assembly concerns: Execution Policy decides whether the Stage runs as a single LLM call or an Agent Loop; Output Policy decides which Pipeline Context slot the Stage writes, such as research YAML, creative YAML, full YAML, or Review Score metadata; Assembly Policy decides whether and how Stage outputs are combined after a Stage completes.
+The declared behaviour attached to a Stage beyond ordinary LLM execution, such as Stop-loss rules, Tool fallback, evidence synthesis, YAML assembly, token budget choices, or recovery behaviour. Stage Policy belongs with the Pipeline Definition so a Runner can execute generic sequencing without hardcoding product-specific Stage names. Stage Policy should be declarative by default: Pipeline Definitions name policy capabilities, while the implementation lives in shared policy modules. Custom executable hooks are a future escape hatch, not the first design. Stage Policy is split into Execution Policy, Output Policy, Assembly Policy, and Stop-loss Policy: Execution Policy decides whether the Stage runs as a single LLM call or an Agent Loop; Output Policy decides which Pipeline Context slot the Stage writes, such as research YAML, creative YAML, full YAML, or Review Score metadata; Assembly Policy decides whether and how Stage outputs are combined after a Stage completes; Stop-loss Policy decides when empty or unusable output should stop the Pipeline and which partial YAML is preserved.
 _Avoid_: Runner special case, stage hack
 
 **Execution Policy** (执行策略):
@@ -464,7 +464,7 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 
 - A **Word** is identified by a **Lemma** + **Language** pair
 - A **Word**'s full data lives in its **Content** (the JSON column holding the **YAML**)
-- A **Pipeline** contains 3 **Stages**: searching → pondering → auditing
+- The current English and German Generate **Pipeline Definitions** contain 3 **Stages** labeled `searching` → `pondering` → `auditing` for compatibility and UI continuity, but Stage behaviour is declared by **Stage Policy** rather than inferred from those ids.
 - A **Job** is one run of a **Pipeline** for one **Word**
 - A **Batch** contains N **Jobs**, executed by the **Queue** with configurable concurrency
 - The **Active Queue** is for controlling live Jobs; **Job History** is for revisiting completed, partial, or failed Jobs
