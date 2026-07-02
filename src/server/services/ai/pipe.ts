@@ -9,7 +9,7 @@ import type { Tool } from 'ai';
 import type { AssembledPrompt } from './prompts/assembler';
 
 const yaml = require('js-yaml') as typeof import('js-yaml');
-const { streamText, stepCountIs } = require('ai') as typeof import('ai');
+const { streamText } = require('ai') as typeof import('ai');
 const { createOpenAI } = require('@ai-sdk/openai') as typeof import('@ai-sdk/openai');
 const { createOpenAICompatible } =
   require('@ai-sdk/openai-compatible') as typeof import('@ai-sdk/openai-compatible');
@@ -366,6 +366,7 @@ interface StageTextDiagnostics {
 interface ToolEvidence {
   toolName: string;
   output?: unknown;
+  modelResult?: string;
 }
 
 interface StageTextResult {
@@ -447,6 +448,62 @@ function summarizeToolEvidence(evidence: ToolEvidence[]): string {
   }
 
   return lines.join('\n').trim();
+}
+
+function formatToolModelResult(toolName: string, output: unknown): string {
+  const outputRecord = asRecord(output);
+  if (!outputRecord) return `Tool ${toolName} returned: ${compactText(String(output), 1200)}`;
+
+  if (outputRecord.success === false) {
+    const errorMessage = compactText(outputRecord.errorMessage, 600);
+    return `Tool ${toolName} failed${errorMessage ? `: ${errorMessage}` : '.'}`;
+  }
+
+  const data = asRecord(outputRecord.data);
+  if (!data) {
+    return `Tool ${toolName} returned: ${compactText(JSON.stringify(outputRecord), 1200)}`;
+  }
+
+  if (toolName === 'fetch_page') {
+    const title = compactText(data.title, 160);
+    const url = compactText(data.url, 240);
+    const content = compactText(data.content, 900);
+    return [
+      `Tool fetch_page result: ${title || url || 'untitled'}`,
+      url ? `URL: ${url}` : '',
+      content ? `Content: ${content}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  if (toolName === 'search_etymology') {
+    const results = Array.isArray(data.results) ? data.results.slice(0, 5) : [];
+    const resultLines = results
+      .map(result => {
+        const record = asRecord(result);
+        if (!record) return '';
+        const title = compactText(record.title, 140);
+        const url = compactText(record.url, 220);
+        const snippet = compactText(record.snippet, 360);
+        return `- ${title || url || 'untitled'}${url ? ` (${url})` : ''}${snippet ? `: ${snippet}` : ''}`;
+      })
+      .filter(Boolean);
+    return [`Tool search_etymology results:`, ...resultLines].join('\n');
+  }
+
+  return `Tool ${toolName} returned: ${compactText(JSON.stringify(data), 1200)}`;
+}
+
+function appendToolResultsToPrompt(prompt: string, toolModelResults: string[]): string {
+  if (toolModelResults.length === 0) return prompt;
+  return [
+    prompt,
+    '',
+    'Tool Results',
+    'Use these compressed tool results as evidence for the next answer. Do not repeat tool calls unless more evidence is needed.',
+    ...toolModelResults,
+  ].join('\n');
 }
 
 interface RunStageTextOptions {
@@ -538,27 +595,6 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
     const combinedSignal = signals.length > 1 ? globalThis.AbortSignal.any(signals) : signals[0];
 
     try {
-      const result = streamText({
-        model: createProvider(model),
-        system: prompt.system,
-        prompt: prompt.user,
-        abortSignal: combinedSignal,
-        ...(policy.execution.maxOutputTokens
-          ? { maxOutputTokens: policy.execution.maxOutputTokens }
-          : {}),
-        ...(Object.keys(tools).length > 0
-          ? { tools, stopWhen: stepCountIs(policy.execution.tools?.maxRounds || 3) }
-          : {}),
-        ...(Object.keys(reasoningParams.providerOptions).length > 0
-          ? {
-              providerOptions: reasoningParams.providerOptions as Record<
-                string,
-                Record<string, unknown>
-              >,
-            }
-          : {}),
-      } as Parameters<typeof streamText>[0]);
-
       let fullText = '';
       let finishReason: unknown;
       let usage: unknown;
@@ -568,113 +604,154 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
       let reasoningChunkCount = 0;
       let lastPartType: string | undefined;
       const toolEvidence: ToolEvidence[] = [];
-      for await (const part of result.fullStream as AsyncIterable<Record<string, unknown>>) {
-        lastPartType = String(part.type || '');
-        if (part.type === 'text-delta') {
-          const text =
-            typeof part.delta === 'string'
-              ? part.delta
-              : typeof part.text === 'string'
-                ? part.text
-                : typeof part.textDelta === 'string'
-                  ? part.textDelta
-                  : '';
-          fullText += text;
-          textChars += text.length;
-          chunkCount += 1;
-          onChunk(text);
-        } else if (part.type === 'reasoning-delta' || part.type === 'reasoning') {
-          const reasoningText =
-            typeof (part as Record<string, unknown>).delta === 'string'
-              ? ((part as Record<string, unknown>).delta as string)
-              : typeof (part as Record<string, unknown>).text === 'string'
-                ? ((part as Record<string, unknown>).text as string)
-                : typeof (part as Record<string, unknown>).textDelta === 'string'
-                  ? ((part as Record<string, unknown>).textDelta as string)
-                  : '';
-          if (reasoningText) {
-            reasoningChars += reasoningText.length;
-            reasoningChunkCount += 1;
-            onReasoning?.(reasoningText);
-          }
-        } else if (part.type === 'tool-call') {
-          const toolCallId = String(part.toolCallId || `${stage.id}-${Date.now()}`);
-          const toolName = String(part.toolName || 'unknown_tool');
-          const startTime = Date.now();
-          toolStartTimes.set(toolCallId, startTime);
-          onToolCall?.({
-            toolCallId,
-            toolName,
-            input: part.input,
-            startTime,
-          });
-        } else if (part.type === 'tool-result') {
-          const toolCallId = String(part.toolCallId || `${stage.id}-${Date.now()}`);
-          const toolName = String(part.toolName || 'unknown_tool');
-          const startedAt = toolStartTimes.get(toolCallId) || Date.now();
-          const output = part.output;
-          const resultObject =
-            output && typeof output === 'object' && !Array.isArray(output)
-              ? (output as Record<string, unknown>)
-              : {};
-          if (resultObject.success !== false) {
-            toolEvidence.push({ toolName, output });
-          }
-          onToolResult?.({
-            toolCallId,
-            toolName,
-            output,
-            error:
-              typeof resultObject.errorMessage === 'string' ? resultObject.errorMessage : undefined,
-            warning:
-              resultObject.success === false
-                ? typeof resultObject.errorMessage === 'string'
+
+      const hasTools = Object.keys(tools).length > 0;
+      const maxToolRounds = hasTools ? policy.execution.tools?.maxRounds || 3 : 0;
+      const toolModelResults: string[] = [];
+
+      for (let toolRound = 0; ; toolRound += 1) {
+        const roundModelResults: string[] = [];
+        const result = streamText({
+          model: createProvider(model),
+          system: prompt.system,
+          prompt: appendToolResultsToPrompt(prompt.user, toolModelResults),
+          abortSignal: combinedSignal,
+          ...(policy.execution.maxOutputTokens
+            ? { maxOutputTokens: policy.execution.maxOutputTokens }
+            : {}),
+          ...(hasTools ? { tools } : {}),
+          ...(Object.keys(reasoningParams.providerOptions).length > 0
+            ? {
+                providerOptions: reasoningParams.providerOptions as Record<
+                  string,
+                  Record<string, unknown>
+                >,
+              }
+            : {}),
+        } as Parameters<typeof streamText>[0]);
+
+        for await (const part of result.fullStream as AsyncIterable<Record<string, unknown>>) {
+          lastPartType = String(part.type || '');
+          if (part.type === 'text-delta') {
+            const text =
+              typeof part.delta === 'string'
+                ? part.delta
+                : typeof part.text === 'string'
+                  ? part.text
+                  : typeof part.textDelta === 'string'
+                    ? part.textDelta
+                    : '';
+            fullText += text;
+            textChars += text.length;
+            chunkCount += 1;
+            onChunk(text);
+          } else if (part.type === 'reasoning-delta' || part.type === 'reasoning') {
+            const reasoningText =
+              typeof (part as Record<string, unknown>).delta === 'string'
+                ? ((part as Record<string, unknown>).delta as string)
+                : typeof (part as Record<string, unknown>).text === 'string'
+                  ? ((part as Record<string, unknown>).text as string)
+                  : typeof (part as Record<string, unknown>).textDelta === 'string'
+                    ? ((part as Record<string, unknown>).textDelta as string)
+                    : '';
+            if (reasoningText) {
+              reasoningChars += reasoningText.length;
+              reasoningChunkCount += 1;
+              onReasoning?.(reasoningText);
+            }
+          } else if (part.type === 'tool-call') {
+            const toolCallId = String(part.toolCallId || `${stage.id}-${Date.now()}`);
+            const toolName = String(part.toolName || 'unknown_tool');
+            const startTime = Date.now();
+            toolStartTimes.set(toolCallId, startTime);
+            onToolCall?.({
+              toolCallId,
+              toolName,
+              input: part.input,
+              startTime,
+            });
+          } else if (part.type === 'tool-result') {
+            const toolCallId = String(part.toolCallId || `${stage.id}-${Date.now()}`);
+            const toolName = String(part.toolName || 'unknown_tool');
+            const startedAt = toolStartTimes.get(toolCallId) || Date.now();
+            const output = part.output;
+            const resultObject =
+              output && typeof output === 'object' && !Array.isArray(output)
+                ? (output as Record<string, unknown>)
+                : {};
+            const modelResult = formatToolModelResult(toolName, output);
+            if (resultObject.success !== false) {
+              toolEvidence.push({ toolName, output, modelResult });
+              roundModelResults.push(modelResult);
+            }
+            onToolResult?.({
+              toolCallId,
+              toolName,
+              output,
+              error:
+                typeof resultObject.errorMessage === 'string'
                   ? resultObject.errorMessage
-                  : 'Tool returned no usable result.'
-                : typeof resultObject.warning === 'string'
-                  ? resultObject.warning
                   : undefined,
-            duration: Date.now() - startedAt,
-          });
-          if (
-            toolName === policy.execution.tools?.fallbackOnFailureToolName &&
-            resultObject.success === false
-          ) {
-            runLogger?.info(
-              {
-                step: stage.id,
-                toolName,
-                errorCode: resultObject.errorCode,
-              },
-              'Search tool failed; switching stage to no-tool fallback'
-            );
-            return {
-              text: '',
-              toolEvidence,
-              diagnostics: {
-                stageId: stage.id,
-                provider: model.provider,
-                modelId: model.modelId,
-                attempt: attempt + 1,
-                finishReason: 'tool-fallback',
-                textChars,
-                reasoningChars,
-                chunkCount,
-                reasoningChunkCount,
-                lastPartType,
-              },
-            };
+              warning:
+                resultObject.success === false
+                  ? typeof resultObject.errorMessage === 'string'
+                    ? resultObject.errorMessage
+                    : 'Tool returned no usable result.'
+                  : typeof resultObject.warning === 'string'
+                    ? resultObject.warning
+                    : undefined,
+              duration: Date.now() - startedAt,
+            });
+            if (
+              toolName === policy.execution.tools?.fallbackOnFailureToolName &&
+              resultObject.success === false
+            ) {
+              runLogger?.info(
+                {
+                  step: stage.id,
+                  toolName,
+                  errorCode: resultObject.errorCode,
+                },
+                'Search tool failed; switching stage to no-tool fallback'
+              );
+              return {
+                text: '',
+                toolEvidence,
+                diagnostics: {
+                  stageId: stage.id,
+                  provider: model.provider,
+                  modelId: model.modelId,
+                  attempt: attempt + 1,
+                  finishReason: 'tool-fallback',
+                  textChars,
+                  reasoningChars,
+                  chunkCount,
+                  reasoningChunkCount,
+                  lastPartType,
+                },
+              };
+            }
+          }
+
+          if ('finishReason' in part) {
+            finishReason = part.finishReason;
+          }
+          if ('usage' in part) {
+            usage = part.usage;
+          } else if ('totalUsage' in part) {
+            usage = part.totalUsage;
           }
         }
 
-        if ('finishReason' in part) {
-          finishReason = part.finishReason;
+        if (
+          fullText.trim() ||
+          !hasTools ||
+          roundModelResults.length === 0 ||
+          toolRound >= maxToolRounds
+        ) {
+          break;
         }
-        if ('usage' in part) {
-          usage = part.usage;
-        } else if ('totalUsage' in part) {
-          usage = part.totalUsage;
-        }
+        toolModelResults.push(...roundModelResults);
       }
 
       const diagnostics: StageTextDiagnostics = {

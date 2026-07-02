@@ -91,11 +91,9 @@ void describe('SequentialRunner', () => {
 
     const aiPath = require.resolve('ai');
     const originalAI = require(aiPath);
-    const stopMarker = { kind: 'three-steps' };
     const calls: Array<Record<string, unknown>> = [];
     require.cache[aiPath]!.exports = {
       ...originalAI,
-      stepCountIs: (count: number) => ({ ...stopMarker, count }),
       streamText: (options: Record<string, unknown>) => {
         calls.push(options);
         return {
@@ -134,7 +132,7 @@ void describe('SequentialRunner', () => {
     }
 
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].stopWhen, { ...stopMarker, count: 3 });
+    assert.equal(calls[0].stopWhen, undefined);
   });
 
   void it('does not expose search or fetch tools when search API key is missing', async () => {
@@ -319,7 +317,7 @@ void describe('SequentialRunner', () => {
     assert.equal(calls[1].stopWhen, undefined);
   });
 
-  void it('synthesizes searching output from successful tool evidence when the tool loop ends without text', async () => {
+  void it('continues the agent loop with compressed model-readable tool results', async () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-pipe-')),
       'config.json'
@@ -374,8 +372,7 @@ void describe('SequentialRunner', () => {
                       data: {
                         url: 'https://www.etymonline.com/word/swept',
                         title: 'swept | Etymology',
-                        content:
-                          'swept: past tense and past participle of sweep; Old English swapan.',
+                        content: `swept: past tense and past participle of sweep; Old English swapan. ${'extra detail '.repeat(200)}`,
                       },
                     },
                   };
@@ -399,6 +396,9 @@ void describe('SequentialRunner', () => {
                   yield { type: 'finish', finishReason: 'tool-calls' };
                 })()
               : (async function* () {
+                  assert.ok(String(options.prompt).includes('Tool Results'));
+                  assert.ok(String(options.prompt).includes('Old English swapan'));
+                  assert.ok(!String(options.prompt).includes('extra detail '.repeat(120)));
                   yield {
                     type: 'text-delta',
                     text: 'yield:\n  user_word: Swept\n  lemma: sweep\n  language: en\netymology:\n  historical_origins:\n    source_word: Old English swapan\n',
@@ -410,6 +410,7 @@ void describe('SequentialRunner', () => {
 
     delete require.cache[require.resolve('./pipe')];
     const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const events: PipelineProgressEvent[] = [];
 
     try {
       const result = await new SequentialRunner().run({
@@ -429,7 +430,7 @@ void describe('SequentialRunner', () => {
           ],
         },
         input: { word: 'Swept', language: 'en' },
-        onProgress: () => undefined,
+        onProgress: event => events.push(event),
       });
 
       assert.match(result.yaml, /Old English swapan/);
@@ -437,11 +438,17 @@ void describe('SequentialRunner', () => {
       require.cache[aiPath]!.exports = originalAI;
     }
 
+    const toolResultEvent = events.find(
+      (event): event is Extract<PipelineProgressEvent, { type: 'step:tool-result' }> =>
+        event.type === 'step:tool-result' && event.toolName === 'fetch_page'
+    );
+    assert.ok(toolResultEvent);
+    assert.match(JSON.stringify(toolResultEvent.output), /extra detail/);
     assert.equal(calls.length, 2);
     assert.ok(calls[0].tools);
-    assert.equal(calls[1].tools, undefined);
-    assert.match(String(calls[1].system), /swept: past tense and past participle of sweep/);
-    assert.match(String(calls[1].system), /sweep is from Old English swapan/);
+    assert.ok(calls[1].tools);
+    assert.match(String(calls[1].prompt), /swept: past tense and past participle of sweep/);
+    assert.match(String(calls[1].prompt), /sweep is from Old English swapan/);
   });
 
   void it('stores accumulated reasoning and raw text on completed stages', async () => {
