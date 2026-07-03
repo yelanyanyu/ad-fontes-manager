@@ -1,15 +1,30 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import yaml from 'js-yaml';
 import { describe, expect, test } from 'vitest';
 import { buildAnkiFields, extractBySource, extractLemma } from '@/services/ankiFieldMapper';
 import type { FieldMappingConfig } from '@/types/anki';
 
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const fixturePath = path.resolve(currentDir, '../../../../yml_example.yml');
-const fixtureRaw = fs.readFileSync(fixturePath, 'utf8');
-const fixtureData = yaml.load(fixtureRaw) as Record<string, unknown>;
+const fixtureData = {
+  yield: {
+    lemma: 'test',
+    user_context_sentence: 'I want to test this word.',
+    other_common_meanings: ['exam', 'trial'],
+  },
+  application: {
+    selected_examples: [
+      {
+        sentence: 'This is a test sentence.',
+        translation_zh: '这是一个测试句。',
+      },
+    ],
+  },
+  nuance: {
+    synonyms: [
+      {
+        word: 'exam',
+        meaning_zh: '考试',
+      },
+    ],
+  },
+};
 
 describe('ankiFieldMapper', () => {
   test('extracts every supported YAML data source', () => {

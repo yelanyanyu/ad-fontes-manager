@@ -16,6 +16,9 @@ export function deepMerge<T extends PlainObject, U extends PlainObject>(
     const targetValue = result[key];
     if (isPlainObject(targetValue) && isPlainObject(sourceValue)) {
       result[key] = deepMerge(targetValue, sourceValue);
+    } else if (isPlainObject(targetValue) && !isPlainObject(sourceValue)) {
+      // 旧值已经是结构化对象时，后续片段不能用数组或字符串把它整块冲掉。
+      result[key] = targetValue;
     } else {
       result[key] = sourceValue;
     }

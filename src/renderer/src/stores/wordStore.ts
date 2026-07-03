@@ -208,11 +208,13 @@ export const useWordStore = defineStore('word', {
             );
           }
           void this.fetchDbRecords({ background: true });
-          window.dispatchEvent(
-            new CustomEvent('ad-fontes:word-saved', {
-              detail: { id: res.id, lemma: res.lemma, status: res.status, provenance },
-            })
-          );
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+              new CustomEvent('ad-fontes:word-saved', {
+                detail: { id: res.id, lemma: res.lemma, status: res.status, provenance },
+              })
+            );
+          }
           this.updateEditorSessionContext(
             res.status === 'created'
               ? { id: null, wordSchemaVersion: null, isLatestSchema: null, sourceJobId: null }

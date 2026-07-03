@@ -90,4 +90,85 @@ void describe('PipelineDefinitionNormalizer', () => {
       stopLoss: { kind: 'none' },
     });
   });
+
+  void it('adds the legacy pondering policy when an old Stage has no policy', () => {
+    const definition: PipelineDefinition = {
+      id: 'legacy-ponder',
+      language: 'en',
+      stages: [
+        {
+          id: 'pondering',
+          description: 'Pondering',
+          type: 'llm',
+        },
+      ],
+    };
+
+    const normalized = new PipelineDefinitionNormalizer().normalize(definition);
+
+    assert.deepEqual(normalized.stages[0].policy, {
+      execution: { kind: 'llm', timeoutMs: 600_000 },
+      output: { kind: 'yaml-fragment', contextKey: 'creativeYaml' },
+      assembly: {
+        kind: 'merge-yaml',
+        sourceKeys: ['researchYaml', 'creativeYaml'],
+        targetKey: 'fullYaml',
+      },
+      stopLoss: {
+        kind: 'require-text-and-context',
+        contextKey: 'creativeYaml',
+        partialResultKey: 'researchYaml',
+      },
+    });
+  });
+
+  void it('adds the legacy auditing policy when an old Stage has no policy', () => {
+    const definition: PipelineDefinition = {
+      id: 'legacy-audit',
+      language: 'en',
+      stages: [
+        {
+          id: 'auditing',
+          description: 'Auditing',
+          type: 'llm',
+        },
+      ],
+    };
+
+    const normalized = new PipelineDefinitionNormalizer().normalize(definition);
+
+    assert.deepEqual(normalized.stages[0].policy, {
+      execution: {
+        kind: 'llm',
+        timeoutMs: 600_000,
+        maxOutputTokens: 377_216,
+      },
+      output: { kind: 'scores' },
+      assembly: { kind: 'none' },
+      stopLoss: { kind: 'none' },
+    });
+  });
+
+  void it('adds the legacy fixing policy when an old Stage has no policy', () => {
+    const definition: PipelineDefinition = {
+      id: 'legacy-fix',
+      language: 'en',
+      stages: [
+        {
+          id: 'fixing',
+          description: 'Fixing',
+          type: 'llm',
+        },
+      ],
+    };
+
+    const normalized = new PipelineDefinitionNormalizer().normalize(definition);
+
+    assert.deepEqual(normalized.stages[0].policy, {
+      execution: { kind: 'llm', timeoutMs: 1_200_000 },
+      output: { kind: 'full-yaml', contextKey: 'fullYaml' },
+      assembly: { kind: 'none' },
+      stopLoss: { kind: 'none' },
+    });
+  });
 });
