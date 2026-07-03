@@ -82,6 +82,12 @@ function diagnosticMessage(diagnostic: FormatDiagnosticMessage): string {
   return diagnostic.path ? `${diagnostic.path}: ${diagnostic.message}` : diagnostic.message;
 }
 
+function diagnosticMarkClass(diagnostic: FormatDiagnosticMessage): string {
+  return diagnostic.code.startsWith('schema.')
+    ? 'cm-yaml-schema-underline'
+    : 'cm-yaml-error-underline';
+}
+
 function inferPathFromMessage(message: string): string | null {
   const match = /^([A-Za-z_][\w-]*(?:\.[A-Za-z_][\w-]*)+)\b/.exec(message.trim());
   return match?.[1] ?? null;
@@ -103,7 +109,7 @@ export function formatDiagnosticsToCodeMirror(
         severity: 'error' as const,
         source: diagnostic.code,
         message: diagnosticMessage(diagnostic),
-        markClass: 'cm-yaml-error-underline',
+        markClass: diagnosticMarkClass(diagnostic),
       },
     ];
   });

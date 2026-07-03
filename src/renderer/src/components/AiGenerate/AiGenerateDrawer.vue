@@ -10,6 +10,8 @@ import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import GenerateProgressPanel from './GenerateProgressPanel.vue';
 import SingleGenerateForm from './SingleGenerateForm.vue';
 import type { BatchGenerateDraftItem } from '@/services/batchGenerateParser';
+import { buildManualRepairMessage } from './manualRepairMessages';
+import { resolveManualRepairSources } from './manualRepairSources';
 import { buildDisplaySteps, resolveStageDetailsStep } from './stageDisplay';
 import request from '@/utils/request';
 import { useOverlayStack } from '@/composables/useOverlayStack';
@@ -50,7 +52,23 @@ interface FormatValidationResponse {
   errors: string[];
   yaml?: string;
   changed?: boolean;
-  diagnostics?: Array<{ message: string; path?: string }>;
+  diagnostics?: Array<{ code?: string; message: string; path?: string }>;
+}
+type ManualRepairFillChoice = 'minimal' | 'original';
+
+interface ManualRepairDialogState {
+  open: boolean;
+  title: string;
+  message: string;
+  diagnosis: string;
+  rawPath: string;
+  actionHint: string;
+  primaryFillLabel: string;
+  primaryFillTooltip: string;
+  originalFillLabel: string;
+  originalFillTooltip: string;
+  minimalYaml: string;
+  originalYaml: string;
 }
 
 const entryMode = ref<EntryMode>('single');
@@ -61,8 +79,23 @@ const batchSubmitting = ref(false);
 const errorMessage = ref('');
 const selectedStageKey = ref<string | null>(null);
 const stagePanelOpen = ref(false);
+const manualRepairDialog = ref<ManualRepairDialogState>({
+  open: false,
+  title: '',
+  message: '',
+  diagnosis: '',
+  rawPath: '',
+  actionHint: '',
+  primaryFillLabel: '',
+  primaryFillTooltip: '',
+  originalFillLabel: '',
+  originalFillTooltip: '',
+  minimalYaml: '',
+  originalYaml: '',
+});
 const language = computed<LanguageCode>(() => appStore.currentLanguage);
 const overlayStack = useOverlayStack('ai-generate');
+let resolveManualRepairChoice: ((choice: ManualRepairFillChoice | null) => void) | null = null;
 
 const hasRevisionNotes = computed(() => {
   const notes = currentJob.value?.scores?.revision_notes as string | undefined;
@@ -193,17 +226,42 @@ function formatDiagnosticSummary(res: FormatValidationResponse): string {
   return res.errors?.[0] || 'YAML format check failed';
 }
 
-async function confirmFillPartialRepair(result: FormatValidationResponse): Promise<boolean> {
+async function chooseManualRepairFill(
+  result: FormatValidationResponse,
+  originalYaml: string
+): Promise<ManualRepairFillChoice | null> {
   const summary = formatDiagnosticSummary(result);
-  const repairState = result.changed
-    ? 'Basic Format Fix made partial repairs, but the YAML is not saveable yet.'
-    : 'Basic Format Fix could not safely repair this YAML automatically.';
-  return requestSaveConfirm({
-    title: 'Format still needs manual repair',
-    message: `${repairState}\n\n${summary}\n\nFill the YAML into the Editor so you can finish the fix manually?`,
-    confirmLabel: 'Fill Editor',
-    cancelLabel: 'Keep Reviewing',
+  const message = buildManualRepairMessage({
+    locale: 'zh',
+    changed: Boolean(result.changed),
+    diagnostics: result.diagnostics || [],
+    summary,
   });
+  resolveManualRepairChoice?.(null);
+  manualRepairDialog.value = {
+    open: true,
+    title: message.title,
+    message: message.body,
+    diagnosis: message.diagnosis,
+    rawPath: message.rawPath,
+    actionHint: message.actionHint,
+    primaryFillLabel: message.primaryFillLabel,
+    primaryFillTooltip: message.primaryFillTooltip,
+    originalFillLabel: message.originalFillLabel,
+    originalFillTooltip: message.originalFillTooltip,
+    minimalYaml: result.yaml || originalYaml,
+    originalYaml,
+  };
+
+  return new Promise(resolve => {
+    resolveManualRepairChoice = resolve;
+  });
+}
+
+function settleManualRepairFill(choice: ManualRepairFillChoice | null): void {
+  manualRepairDialog.value.open = false;
+  resolveManualRepairChoice?.(choice);
+  resolveManualRepairChoice = null;
 }
 
 async function fillEditor(): Promise<void> {
@@ -212,10 +270,12 @@ async function fillEditor(): Promise<void> {
     errorMessage.value = 'No active job';
     return;
   }
-  const yaml = job.yaml;
-  if (yaml) {
+  const sources = resolveManualRepairSources(job);
+  if (sources.minimalInputYaml) {
     try {
-      const result = await request.post<FormatValidationResponse>('/v2/words/validate', { yaml });
+      const result = await request.post<FormatValidationResponse>('/v2/words/validate', {
+        yaml: sources.minimalInputYaml,
+      });
       if (result.yaml && result.valid) {
         emit('yaml-ready', result.yaml, job.jobId);
         if (result.changed) {
@@ -226,9 +286,13 @@ async function fillEditor(): Promise<void> {
 
       if (result.yaml) {
         errorMessage.value = formatDiagnosticSummary(result);
-        const shouldFill = await confirmFillPartialRepair(result);
-        if (shouldFill) {
-          emit('yaml-ready', result.yaml, job.jobId);
+        const fillChoice = await chooseManualRepairFill(result, sources.originalYaml);
+        if (fillChoice) {
+          const yamlToFill =
+            fillChoice === 'minimal'
+              ? manualRepairDialog.value.minimalYaml
+              : manualRepairDialog.value.originalYaml;
+          emit('yaml-ready', yamlToFill, job.jobId);
           appStore.addToast('YAML filled into editor for manual repair.', 'warning');
         }
         return;
@@ -342,6 +406,61 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
       @cancel="settleSaveConfirm(false)"
       @confirm="settleSaveConfirm(true)"
     />
+    <Teleport to="body">
+      <div
+        v-if="manualRepairDialog.open"
+        class="manual-repair-overlay"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="manualRepairDialog.title"
+        @click.self="settleManualRepairFill(null)"
+      >
+        <div class="manual-repair-card">
+          <div class="manual-repair-head">
+            <h3>{{ manualRepairDialog.title }}</h3>
+            <button
+              type="button"
+              class="icon-button"
+              aria-label="Close manual repair dialog"
+              @click="settleManualRepairFill(null)"
+            >
+              ×
+            </button>
+          </div>
+          <div class="manual-repair-body">
+            <p class="manual-repair-message">{{ manualRepairDialog.message }}</p>
+            <div class="manual-repair-diagnosis">
+              <span>诊断</span>
+              <strong>{{ manualRepairDialog.diagnosis }}</strong>
+              <code>{{ manualRepairDialog.rawPath }}</code>
+            </div>
+            <p class="manual-repair-hint">{{ manualRepairDialog.actionHint }}</p>
+          </div>
+          <div class="manual-repair-actions">
+            <button
+              type="button"
+              class="manual-repair-link"
+              @click="settleManualRepairFill('original')"
+            >
+              {{ manualRepairDialog.originalFillLabel }}
+              <span class="manual-repair-tip" role="tooltip">
+                {{ manualRepairDialog.originalFillTooltip }}
+              </span>
+            </button>
+            <button
+              type="button"
+              class="primary-button"
+              @click="settleManualRepairFill('minimal')"
+            >
+              {{ manualRepairDialog.primaryFillLabel }}
+              <span class="manual-repair-tip" role="tooltip">
+                {{ manualRepairDialog.primaryFillTooltip }}
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
     <AiGenerateStagePanel
       :open="stagePanelOpen"
       :step="selectedStage"
@@ -600,6 +719,139 @@ async function handleStageRegenerate(step: StepState): Promise<void> {
   margin: 0;
   color: var(--red);
   font-size: 12px;
+}
+
+.manual-repair-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.manual-repair-card {
+  width: min(440px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  box-shadow: var(--shadow-lg);
+}
+
+.manual-repair-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.manual-repair-head h3 {
+  margin: 0;
+  font-size: 17px;
+  color: var(--text);
+}
+
+.manual-repair-body {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.manual-repair-message {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.manual-repair-diagnosis {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-sm);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.manual-repair-diagnosis span {
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.manual-repair-diagnosis strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.manual-repair-diagnosis code {
+  color: var(--muted);
+  font: 11px/1.4 var(--mono);
+  word-break: break-word;
+}
+
+.manual-repair-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.manual-repair-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.manual-repair-link {
+  position: relative;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.manual-repair-actions .primary-button {
+  position: relative;
+}
+
+.manual-repair-tip {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 230px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-soft);
+  box-shadow: var(--shadow-sm);
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: left;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(2px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.manual-repair-link:hover .manual-repair-tip,
+.manual-repair-link:focus-visible .manual-repair-tip,
+.manual-repair-actions .primary-button:hover .manual-repair-tip,
+.manual-repair-actions .primary-button:focus-visible .manual-repair-tip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .result-section,

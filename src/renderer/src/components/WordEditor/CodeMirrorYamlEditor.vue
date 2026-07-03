@@ -63,6 +63,14 @@ const editableTheme = EditorView.theme({
     textUnderlineOffset: '3px',
     backgroundColor: 'rgba(220, 38, 38, 0.08)',
   },
+  '.cm-yaml-schema-underline': {
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'wavy',
+    textDecorationColor: 'var(--amber)',
+    textDecorationThickness: '1.5px',
+    textUnderlineOffset: '3px',
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+  },
   '.cm-diagnostic.cm-diagnostic-error': {
     borderLeftColor: 'var(--red)',
   },

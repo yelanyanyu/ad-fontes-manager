@@ -99,7 +99,19 @@ application:
     expect(diagnostics[0]?.message).toBe('application.meaning: Meaning is too short');
   });
 
-  it('marks mapped diagnostics with a prominent editor class', () => {
+  it('marks YAML syntax diagnostics with the red editor class', () => {
+    const diagnostics = formatDiagnosticsToCodeMirror(yamlText, [
+      {
+        code: 'yaml.parse_error',
+        path: 'yield.lemma',
+        message: 'YAML parse error',
+      },
+    ]);
+
+    expect(diagnostics[0]?.markClass).toBe('cm-yaml-error-underline');
+  });
+
+  it('marks Word Schema diagnostics with the amber editor class', () => {
     const diagnostics = formatDiagnosticsToCodeMirror(yamlText, [
       {
         code: 'schema.invalid',
@@ -108,6 +120,6 @@ application:
       },
     ]);
 
-    expect(diagnostics[0]?.markClass).toBe('cm-yaml-error-underline');
+    expect(diagnostics[0]?.markClass).toBe('cm-yaml-schema-underline');
   });
 });

@@ -14,6 +14,8 @@ const emit = defineEmits<{
 const thinkingOpen = ref(false);
 const toolsOpen = ref(false);
 const rawOpen = ref(true);
+const rawCopied = ref(false);
+let rawCopiedTimer: ReturnType<typeof setTimeout> | null = null;
 
 watch(
   () => props.step?.step,
@@ -21,8 +23,26 @@ watch(
     thinkingOpen.value = false;
     toolsOpen.value = false;
     rawOpen.value = true;
+    rawCopied.value = false;
+    if (rawCopiedTimer) clearTimeout(rawCopiedTimer);
   }
 );
+
+function rawStageText(): string {
+  return String(props.step?.rawText || props.step?.tokens || '').trim();
+}
+
+async function copyRawText(): Promise<void> {
+  const text = rawStageText();
+  if (!text) return;
+  await navigator.clipboard?.writeText(text);
+  rawCopied.value = true;
+  if (rawCopiedTimer) clearTimeout(rawCopiedTimer);
+  rawCopiedTimer = setTimeout(() => {
+    rawCopied.value = false;
+    rawCopiedTimer = null;
+  }, 1200);
+}
 </script>
 
 <template>
@@ -68,10 +88,38 @@ watch(
       </section>
 
       <section class="collapsible-section">
-        <button class="toggle-head" type="button" @click.stop="rawOpen = !rawOpen">
-          <span class="toggle-arrow">{{ rawOpen ? '&#9660;' : '&#9654;' }}</span>
-          <h3>Raw Text</h3>
-        </button>
+        <div class="raw-head">
+          <button class="toggle-head" type="button" @click.stop="rawOpen = !rawOpen">
+            <span class="toggle-arrow">{{ rawOpen ? '&#9660;' : '&#9654;' }}</span>
+            <h3>Raw Text</h3>
+          </button>
+          <button
+            v-if="rawStageText()"
+            type="button"
+            class="raw-copy-button"
+            :class="{ copied: rawCopied }"
+            aria-label="Copy raw stage text"
+            @click="copyRawText"
+          >
+            <svg
+              v-if="!rawCopied"
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            <svg v-else width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+            <span class="raw-copy-tip" role="tooltip">
+              {{ rawCopied ? '已复制' : '复制当前 Stage 的 Raw Text' }}
+            </span>
+          </button>
+        </div>
         <div v-show="rawOpen" class="collapsible-body">
           <pre>{{ step?.rawText || step?.tokens || 'No output yet.' }}</pre>
         </div>
@@ -137,6 +185,13 @@ watch(
   gap: 8px;
 }
 
+.raw-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .toggle-head {
   display: flex;
   align-items: center;
@@ -159,6 +214,59 @@ watch(
   width: 10px;
   text-align: center;
   flex-shrink: 0;
+}
+
+.raw-copy-button {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.raw-copy-button:hover {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.raw-copy-button.copied {
+  border-color: transparent;
+  background: rgba(148, 163, 184, 0.16);
+  color: var(--muted);
+}
+
+.raw-copy-tip {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  width: max-content;
+  max-width: 220px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-soft);
+  box-shadow: var(--shadow-sm);
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.raw-copy-button:hover .raw-copy-tip,
+.raw-copy-button:focus-visible .raw-copy-tip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .collapsible-body {
