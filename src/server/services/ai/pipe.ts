@@ -1,10 +1,4 @@
-import type {
-  PipelineContext,
-  PipelineContextKey,
-  PipelineRunner,
-  PipelineStage,
-  StagePolicy,
-} from './types';
+import type { PipelineContext, PipelineContextKey, PipelineRunner, PipelineStage } from './types';
 import type { Tool } from 'ai';
 import type { AssembledPrompt } from './prompts/assembler';
 
@@ -27,6 +21,8 @@ const { loggers } = require('../../utils/logger') as {
 const { assemblePrompt } = require('./prompts/assembler') as {
   assemblePrompt: (stage: PipelineStage, ctx: PipelineContext) => AssembledPrompt;
 };
+const { PipelineDefinitionNormalizer, getStagePolicy } =
+  require('./PipelineDefinitionNormalizer') as typeof import('./PipelineDefinitionNormalizer');
 const { resolveModel } = require('./modelResolver') as {
   resolveModel: (stageName?: 'fast' | 'balanced' | 'expert') => {
     provider: string;
@@ -241,99 +237,7 @@ function createProvider(model: ReturnType<typeof resolveModel>) {
   throw new Error(`Unsupported model format: ${model.format}`);
 }
 
-const STAGE_TIMEOUT_MS: Record<string, number> = {
-  searching: 240_000,
-  pondering: 600_000,
-  auditing: 600_000,
-  fixing: 1_200_000,
-};
-
-const AUDITING_MAX_COMPLETION_TOKENS = 384 * 1024;
-const DEFAULT_THINKING_BUDGET_TOKENS = 16_000;
-const AUDITING_MAX_OUTPUT_TOKENS = AUDITING_MAX_COMPLETION_TOKENS - DEFAULT_THINKING_BUDGET_TOKENS;
-
 const BACKOFF_SCHEDULE = [2000, 8000];
-
-function legacyStagePolicy(stage: PipelineStage): StagePolicy {
-  if (stage.id === 'searching') {
-    return {
-      execution: {
-        kind: stage.type,
-        timeoutMs: STAGE_TIMEOUT_MS.searching,
-        ...(stage.toolNames?.length
-          ? {
-              tools: {
-                names: stage.toolNames,
-                maxRounds: 3,
-                requiresSearchApiKey: true,
-                fallbackOnFailureToolName: 'search_etymology',
-              },
-            }
-          : {}),
-      },
-      output: { kind: 'yaml-fragment', contextKey: 'researchYaml' },
-      assembly: { kind: 'none' },
-      stopLoss: {
-        kind: 'require-text-and-context',
-        contextKey: 'researchYaml',
-        partialResultKey: 'researchYaml',
-        ...(stage.toolNames?.length
-          ? { fallback: { kind: 'retry-without-tools', useToolEvidenceSummary: true } }
-          : {}),
-      },
-    };
-  }
-
-  if (stage.id === 'pondering') {
-    return {
-      execution: { kind: stage.type, timeoutMs: STAGE_TIMEOUT_MS.pondering },
-      output: { kind: 'yaml-fragment', contextKey: 'creativeYaml' },
-      assembly: {
-        kind: 'merge-yaml',
-        sourceKeys: ['researchYaml', 'creativeYaml'],
-        targetKey: 'fullYaml',
-      },
-      stopLoss: {
-        kind: 'require-text-and-context',
-        contextKey: 'creativeYaml',
-        partialResultKey: 'researchYaml',
-      },
-    };
-  }
-
-  if (stage.id === 'auditing') {
-    return {
-      execution: {
-        kind: stage.type,
-        timeoutMs: STAGE_TIMEOUT_MS.auditing,
-        maxOutputTokens: AUDITING_MAX_OUTPUT_TOKENS,
-      },
-      output: { kind: 'scores' },
-      assembly: { kind: 'none' },
-      stopLoss: { kind: 'none' },
-    };
-  }
-
-  if (stage.id === 'fixing') {
-    return {
-      execution: { kind: stage.type, timeoutMs: STAGE_TIMEOUT_MS.fixing },
-      output: { kind: 'full-yaml', contextKey: 'fullYaml' },
-      assembly: { kind: 'none' },
-      stopLoss: { kind: 'none' },
-    };
-  }
-
-  return {
-    execution: { kind: stage.type, timeoutMs: STAGE_TIMEOUT_MS[stage.id] || 60_000 },
-    output: { kind: 'full-yaml', contextKey: 'fullYaml' },
-    assembly: { kind: 'none' },
-    stopLoss: { kind: 'none' },
-  };
-}
-
-function getStagePolicy(stage: PipelineStage): StagePolicy {
-  return stage.policy || legacyStagePolicy(stage);
-}
 
 function getContextValue(ctx: Partial<PipelineContext>, key?: PipelineContextKey): unknown {
   if (!key) return undefined;
@@ -587,7 +491,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
   const reasoningParams = buildReasoningParams(model.format, model.reasoningEffort, model.provider);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const timeoutMs = policy.execution.timeoutMs || STAGE_TIMEOUT_MS[stage.id] || 60_000;
+    const timeoutMs = policy.execution.timeoutMs || 60_000;
     const stageController = new globalThis.AbortController();
     const timeoutId = setTimeout(() => stageController.abort(), timeoutMs);
     const signals: globalThis.AbortSignal[] = [stageController.signal];
@@ -946,6 +850,7 @@ export class SequentialRunner implements PipelineRunner {
     previousSteps,
   }: Parameters<PipelineRunner['run']>[0]) {
     const startTime = Date.now();
+    const normalizedDefinition = new PipelineDefinitionNormalizer().normalize(definition);
     const runLogger = loggers.ai.child({ word: input.word, language: input.language });
     const ctx: PipelineContext = {
       word: input.word,
@@ -977,11 +882,14 @@ export class SequentialRunner implements PipelineRunner {
         }
       }
     } else {
-      runLogger.info({ event: 'pipeline:start', pipeline: definition.id }, 'AI pipeline started');
+      runLogger.info(
+        { event: 'pipeline:start', pipeline: normalizedDefinition.id },
+        'AI pipeline started'
+      );
     }
 
-    for (const stage of definition.stages) {
-      if (shouldSkipStage(definition.stages, stage.id, resumeFromStage)) {
+    for (const stage of normalizedDefinition.stages) {
+      if (shouldSkipStage(normalizedDefinition.stages, stage.id, resumeFromStage)) {
         continue;
       }
 
