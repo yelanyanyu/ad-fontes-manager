@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { StagePolicyEngine } from './StagePolicyEngine';
 import type { NormalizedPipelineStage } from './PipelineDefinitionNormalizer';
-import type { PipelineContext, PipelineProgressEvent } from './types';
+import type { PipelineContext, PipelineProgressEvent } from '../types';
 
 const baseContext = (): PipelineContext => ({
   word: 'test',
@@ -13,7 +13,7 @@ const baseContext = (): PipelineContext => ({
 });
 
 void describe('StagePolicyEngine', () => {
-  void it('runs one Stage and writes parsed output into context', async () => {
+  void it('runs one Stage and returns parsed output as a context patch', async () => {
     const stage: NormalizedPipelineStage = {
       id: 'draft',
       description: 'Draft',
@@ -36,7 +36,7 @@ void describe('StagePolicyEngine', () => {
     }).executeStage({ stage, ctx, prompt: { system: 'system', user: 'user' } });
 
     assert.equal(outcome.status, 'complete');
-    assert.equal(ctx.researchYaml, 'yield:\n  lemma: test\n');
+    assert.equal(ctx.researchYaml, undefined);
     assert.deepEqual(outcome.contextPatch, { researchYaml: 'yield:\n  lemma: test\n' });
     assert.equal(outcome.rawText, 'yield:\n  lemma: test\n');
   });
@@ -71,9 +71,11 @@ void describe('StagePolicyEngine', () => {
     }).executeStage({ stage, ctx, prompt: { system: 'system', user: 'user' } });
 
     assert.equal(outcome.status, 'complete');
-    assert.equal(ctx.creativeYaml, 'application:\n  selected_examples: []\n');
-    assert.match(ctx.fullYaml || '', /lemma: test/);
-    assert.match(ctx.fullYaml || '', /selected_examples/);
+    assert.equal(ctx.creativeYaml, undefined);
+    assert.equal(ctx.fullYaml, undefined);
+    assert.equal(outcome.contextPatch.creativeYaml, 'application:\n  selected_examples: []\n');
+    assert.match(outcome.contextPatch.fullYaml || '', /lemma: test/);
+    assert.match(outcome.contextPatch.fullYaml || '', /selected_examples/);
   });
 
   void it('keeps a usable YAML when merge assembly cannot parse creative output', async () => {
@@ -106,8 +108,8 @@ void describe('StagePolicyEngine', () => {
     }).executeStage({ stage, ctx, prompt: { system: 'system', user: 'user' } });
 
     assert.equal(outcome.status, 'complete');
-    assert.match(ctx.fullYaml || '', /lemma: test/);
-    assert.match(ctx.fullYaml || '', /selected_examples/);
+    assert.match(outcome.contextPatch.fullYaml || '', /lemma: test/);
+    assert.match(outcome.contextPatch.fullYaml || '', /selected_examples/);
   });
 
   void it('stops when required Stage output is empty', async () => {
@@ -367,7 +369,8 @@ void describe('StagePolicyEngine', () => {
     }).executeStage({ stage, ctx, prompt: { system: 'system', user: 'user' } });
 
     assert.equal(outcome.status, 'complete');
-    assert.equal(ctx.researchYaml, 'yield:\n  lemma: test\n');
+    assert.equal(ctx.researchYaml, undefined);
+    assert.deepEqual(outcome.contextPatch, { researchYaml: 'yield:\n  lemma: test\n' });
     assert.equal(calls.length, 2);
     assert.deepEqual(calls[1].stage.toolNames, []);
     assert.equal(calls[1].stage.policy.execution.tools, undefined);

@@ -3,7 +3,7 @@ import type { JobQueue } from './JobQueue';
 
 const { JobQueue: JobQueueCtor } = require('./JobQueue') as typeof import('./JobQueue');
 
-const { sequentialRunner } = require('./pipe') as {
+const { sequentialRunner } = require('./pipeline/SequentialRunner') as {
   sequentialRunner: PipelineRunner;
 };
 

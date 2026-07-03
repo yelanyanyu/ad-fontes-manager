@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { PipelineProgressEvent } from './types';
+import type { PipelineProgressEvent } from '../types';
 
 function writeMockAIConfig(): void {
   const configPath = path.join(
@@ -40,18 +40,18 @@ function writeMockAIConfig(): void {
     }),
     'utf8'
   );
-  const config = require('../../utils/config') as { clearCache: () => void };
+  const config = require('../../../utils/config') as { clearCache: () => void };
   config.clearCache();
 }
 
 void describe('SequentialRunner', () => {
   void afterEach(() => {
     delete process.env.ADFONTES_CONFIG_PATH;
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
-    delete require.cache[require.resolve('./pipe')];
-    delete require.cache[require.resolve('./definitions/english')];
-    delete require.cache[require.resolve('./definitions/german')];
+    delete require.cache[require.resolve('./SequentialRunner')];
+    delete require.cache[require.resolve('../definitions/english')];
+    delete require.cache[require.resolve('../definitions/german')];
   });
 
   void it('allows tool-enabled searching to continue after tool results before stop-loss', async () => {
@@ -104,8 +104,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     try {
       await new SequentialRunner().run({
@@ -185,8 +186,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     try {
       await new SequentialRunner().run({
@@ -282,8 +284,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     try {
       const result = await new SequentialRunner().run({
@@ -408,8 +411,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
     const events: PipelineProgressEvent[] = [];
 
     try {
@@ -479,7 +483,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const aiPath = require.resolve('ai');
     const originalAI = require(aiPath);
@@ -495,8 +499,9 @@ void describe('SequentialRunner', () => {
       }),
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
     const events: PipelineProgressEvent[] = [];
 
     try {
@@ -563,7 +568,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
 
     const aiPath = require.resolve('ai');
@@ -607,10 +612,11 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
     const { englishPipeline } =
-      require('./definitions/english') as typeof import('./definitions/english');
+      require('../definitions/english') as typeof import('../definitions/english');
 
     try {
       const result = await new SequentialRunner().run({
@@ -631,7 +637,8 @@ void describe('SequentialRunner', () => {
 
   void it('replays previous steps with raw text and reasoning intact', async () => {
     writeMockAIConfig();
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
     const events: PipelineProgressEvent[] = [];
 
     await new SequentialRunner().run({
@@ -666,9 +673,10 @@ void describe('SequentialRunner', () => {
 
   void it('runs the English mock pipeline as searching, pondering, auditing and deep-merges YAML', async () => {
     writeMockAIConfig();
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
     const { englishPipeline } =
-      require('./definitions/english') as typeof import('./definitions/english');
+      require('../definitions/english') as typeof import('../definitions/english');
     const events: PipelineProgressEvent[] = [];
 
     assert.deepEqual(
@@ -743,7 +751,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
 
     const aiPath = require.resolve('ai');
@@ -766,8 +774,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
     const events: PipelineProgressEvent[] = [];
 
     try {
@@ -884,7 +893,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
 
     const aiPath = require.resolve('ai');
@@ -902,8 +911,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     const requiredFullYamlStage = {
       id: 'final-compose-pass',
@@ -971,9 +981,10 @@ void describe('SequentialRunner', () => {
 
   void it('selects German structural keys in the German mock pipeline', async () => {
     writeMockAIConfig();
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
     const { germanPipeline } =
-      require('./definitions/german') as typeof import('./definitions/german');
+      require('../definitions/german') as typeof import('../definitions/german');
 
     const result = await new SequentialRunner().run({
       definition: germanPipeline,
@@ -989,7 +1000,8 @@ void describe('SequentialRunner', () => {
 
   void it('returns prior YAML as a partial fallback when fixing is interrupted', async () => {
     writeMockAIConfig();
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
     const events: PipelineProgressEvent[] = [];
     const priorYaml = 'yield:\n  lemma: dignity\n  language: en\n';
 
@@ -1050,7 +1062,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
 
     const aiPath = require.resolve('ai');
@@ -1079,11 +1091,12 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    delete require.cache[require.resolve('./definitions/audit-fix')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    delete require.cache[require.resolve('../definitions/audit-fix')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
     const { auditFixPipeline } =
-      require('./definitions/audit-fix') as typeof import('./definitions/audit-fix');
+      require('../definitions/audit-fix') as typeof import('../definitions/audit-fix');
 
     try {
       const result = await new SequentialRunner().run({
@@ -1131,7 +1144,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
 
     const aiPath = require.resolve('ai');
@@ -1150,8 +1163,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     try {
       await new SequentialRunner().run({
@@ -1218,7 +1232,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
 
     const aiPath = require.resolve('ai');
@@ -1237,8 +1251,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     try {
       await new SequentialRunner().run({
@@ -1311,7 +1326,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
 
     const aiPath = require.resolve('ai');
@@ -1330,8 +1345,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     try {
       await new SequentialRunner().run({
@@ -1388,7 +1404,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
 
     const aiPath = require.resolve('ai');
@@ -1410,8 +1426,9 @@ void describe('SequentialRunner', () => {
       }),
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     try {
       await new SequentialRunner().run({
@@ -1480,7 +1497,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
 
     const aiPath = require.resolve('ai');
@@ -1497,8 +1514,9 @@ void describe('SequentialRunner', () => {
       }),
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     try {
       await assert.rejects(
@@ -1564,7 +1582,7 @@ void describe('SequentialRunner', () => {
       }),
       'utf8'
     );
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const aiPath = require.resolve('ai');
     const originalAI = require(aiPath);
@@ -1589,8 +1607,9 @@ void describe('SequentialRunner', () => {
       },
     };
 
-    delete require.cache[require.resolve('./pipe')];
-    const { SequentialRunner } = require('./pipe') as typeof import('./pipe');
+    delete require.cache[require.resolve('./SequentialRunner')];
+    const { SequentialRunner } =
+      require('./SequentialRunner') as typeof import('./SequentialRunner');
 
     try {
       const result = await new SequentialRunner().run({

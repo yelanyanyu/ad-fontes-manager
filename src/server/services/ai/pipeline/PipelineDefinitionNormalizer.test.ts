@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { PipelineDefinitionNormalizer } from './PipelineDefinitionNormalizer';
-import type { PipelineDefinition, StagePolicy } from './types';
+import type { PipelineDefinition, StagePolicy } from '../types';
 
 void describe('PipelineDefinitionNormalizer', () => {
   void it('keeps an explicit Stage Policy unchanged', () => {

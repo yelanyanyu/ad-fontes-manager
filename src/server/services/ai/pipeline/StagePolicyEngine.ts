@@ -1,12 +1,12 @@
-import type { AssembledPrompt } from './prompts/assembler';
+import type { AssembledPrompt } from '../prompts/assembler';
 import type { NormalizedPipelineStage } from './PipelineDefinitionNormalizer';
-import type { PipelineContext, PipelineProgressEvent } from './types';
+import type { StageContextPatch, StageRecipeRunOutcome } from './StageRecipe';
+import type { PipelineContext, PipelineProgressEvent } from '../types';
 
 // 这个模块只处理单个 Stage 的执行规则。
-// Runner 负责排队、恢复和结束整条流水线；这里负责解析输出、Stop-loss、回退和进度事件。
-const { mergeYamlTexts } = require('./utils') as typeof import('./utils');
+// Runner 负责排队、恢复和合并上下文；这里负责解析输出、Stop-loss、回退和进度事件。
+const { mergeYamlTexts } = require('../utils') as typeof import('../utils');
 
-type StageContextPatch = Partial<PipelineContext>;
 type ToolCallEvent = Omit<
   Extract<PipelineProgressEvent, { type: 'step:tool-call' }>,
   'type' | 'step'
@@ -47,28 +47,7 @@ export interface StagePolicyEngineAdapters {
   emit?: (event: PipelineProgressEvent) => void;
 }
 
-export type StageOutcome =
-  | {
-      status: 'complete';
-      contextPatch: StageContextPatch;
-      rawText: string;
-      reasoningText?: string;
-      diagnostics?: unknown;
-      summary: string;
-      durationMs: number;
-    }
-  | {
-      status: 'stopped';
-      contextPatch: StageContextPatch;
-      rawText: string;
-      reasoningText?: string;
-      diagnostics?: unknown;
-      summary: string;
-      durationMs: number;
-      yaml: string;
-      reason: string;
-      stoppedAtStage: string;
-    };
+export type StageOutcome = StageRecipeRunOutcome;
 
 // 执行一个已经补齐 policy 的 Stage。
 // 它不拼 prompt，也不决定下一个 Stage；这些事留给 Runner。
@@ -76,7 +55,7 @@ export class StagePolicyEngine {
   constructor(private readonly adapters: StagePolicyEngineAdapters) {}
 
   /**
-   * 运行一个 Stage，把可用结果写回 ctx，并返回 Runner 需要知道的结果。
+   * 运行一个 Stage，返回 Runner 可以合并进 Pipeline Context 的补丁。
    */
   async executeStage(params: {
     stage: NormalizedPipelineStage;
@@ -120,13 +99,12 @@ export class StagePolicyEngine {
       return outcome;
     }
 
-    // 只有通过 Stop-loss 的结果才写回共享 context。
-    Object.assign(params.ctx, contextPatch);
-    this.applyAssemblyPolicy(params.stage, params.ctx);
+    // 只有通过 Stop-loss 的结果才会变成补丁；真正写回 ctx 的动作留给 Runner。
+    const acceptedPatch = this.buildAcceptedPatch(params.stage, params.ctx, contextPatch);
 
     const outcome: StageOutcome = {
       status: 'complete',
-      contextPatch,
+      contextPatch: acceptedPatch,
       rawText: stageRun.text,
       reasoningText: stageRun.reasoningText,
       diagnostics: stageRun.diagnostics,
@@ -262,6 +240,27 @@ export class StagePolicyEngine {
     }
 
     return { stopped: false };
+  }
+
+  /**
+   * 在临时 context 上应用组装规则，返回 Runner 应该合并的完整补丁。
+   */
+  private buildAcceptedPatch(
+    stage: NormalizedPipelineStage,
+    ctx: PipelineContext,
+    contextPatch: StageContextPatch
+  ): StageContextPatch {
+    const nextCtx: PipelineContext = { ...ctx, ...contextPatch };
+    const acceptedPatch: StageContextPatch = { ...contextPatch };
+
+    // Assembly 会派生出新的 context 字段，也要作为补丁交回 Runner。
+    this.applyAssemblyPolicy(stage, nextCtx);
+    const targetKey = stage.policy.assembly.targetKey;
+    if (targetKey && nextCtx[targetKey] !== ctx[targetKey]) {
+      acceptedPatch[targetKey] = nextCtx[targetKey];
+    }
+
+    return acceptedPatch;
   }
 
   /**

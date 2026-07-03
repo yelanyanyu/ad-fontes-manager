@@ -1,4 +1,5 @@
-import type { PipelineDefinition, PipelineStage, StagePolicy } from './types';
+import type { PipelineDefinition, PipelineStage, StagePolicy } from '../types';
+import type { StageRecipe } from './StageRecipe';
 
 // 这个模块把新旧流水线配置整理成同一种形状。
 // 旧配置可以不写 Stage Policy；进入 Runner 前，会在这里补齐默认规则。
@@ -13,7 +14,7 @@ const AUDITING_MAX_COMPLETION_TOKENS = 384 * 1024;
 const DEFAULT_THINKING_BUDGET_TOKENS = 16_000;
 const AUDITING_MAX_OUTPUT_TOKENS = AUDITING_MAX_COMPLETION_TOKENS - DEFAULT_THINKING_BUDGET_TOKENS;
 
-export type NormalizedPipelineStage = PipelineStage & { policy: StagePolicy };
+export type NormalizedPipelineStage = StageRecipe;
 export type NormalizedPipelineDefinition = Omit<PipelineDefinition, 'stages'> & {
   stages: NormalizedPipelineStage[];
 };

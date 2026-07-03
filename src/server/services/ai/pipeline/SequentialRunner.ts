@@ -1,6 +1,6 @@
-import type { PipelineContext, PipelineRunner, PipelineStage } from './types';
+import type { PipelineContext, PipelineRunner, PipelineStage } from '../types';
 import type { Tool } from 'ai';
-import type { AssembledPrompt } from './prompts/assembler';
+import type { AssembledPrompt } from '../prompts/assembler';
 
 // 这个文件负责整条 AI 流水线的外层编排。
 // 单个 Stage 的策略判断放在 StagePolicyEngine；这里保留模型调用、工具调用、恢复运行和最终收尾。
@@ -10,7 +10,7 @@ const { createOpenAI } = require('@ai-sdk/openai') as typeof import('@ai-sdk/ope
 const { createOpenAICompatible } =
   require('@ai-sdk/openai-compatible') as typeof import('@ai-sdk/openai-compatible');
 const { createAnthropic } = require('@ai-sdk/anthropic') as typeof import('@ai-sdk/anthropic');
-const { loggers } = require('../../utils/logger') as {
+const { loggers } = require('../../../utils/logger') as {
   loggers: {
     ai: {
       child: (payload: Record<string, unknown>) => {
@@ -20,14 +20,14 @@ const { loggers } = require('../../utils/logger') as {
     };
   };
 };
-const { assemblePrompt } = require('./prompts/assembler') as {
+const { assemblePrompt } = require('../prompts/assembler') as {
   assemblePrompt: (stage: PipelineStage, ctx: PipelineContext) => AssembledPrompt;
 };
 const { PipelineDefinitionNormalizer, getStagePolicy } =
   require('./PipelineDefinitionNormalizer') as typeof import('./PipelineDefinitionNormalizer');
 const { StagePolicyEngine } =
   require('./StagePolicyEngine') as typeof import('./StagePolicyEngine');
-const { resolveModel } = require('./modelResolver') as {
+const { resolveModel } = require('../modelResolver') as {
   resolveModel: (stageName?: 'fast' | 'balanced' | 'expert') => {
     provider: string;
     modelId: string;
@@ -38,19 +38,20 @@ const { resolveModel } = require('./modelResolver') as {
     isMock: boolean;
   };
 };
-const { mergeYamlTexts } = require('./utils') as typeof import('./utils');
-const { resolveTools } = require('./tools/adapter') as {
+const { mergeYamlTexts } = require('../utils') as typeof import('../utils');
+const { resolveTools } = require('../tools/adapter') as {
   resolveTools: (toolNames?: string[]) => Record<string, Tool>;
 };
-const { buildReasoningParams } = require('./tools/reasoning') as typeof import('./tools/reasoning');
-const { getAIConfig } = require('./configService') as {
+const { buildReasoningParams } =
+  require('../tools/reasoning') as typeof import('../tools/reasoning');
+const { getAIConfig } = require('../configService') as {
   getAIConfig: () => {
     search?: {
       apiKey?: string;
     };
   };
 };
-const { CURRENT_WORD_SCHEMA_VERSION } = require('../../schemas/word/version') as {
+const { CURRENT_WORD_SCHEMA_VERSION } = require('../../../schemas/word/version') as {
   CURRENT_WORD_SCHEMA_VERSION: number;
 };
 
@@ -954,6 +955,8 @@ export class SequentialRunner implements PipelineRunner {
           return { yaml: outcome.yaml, scores: ctx.scores || {} };
         }
 
+        // StagePolicyEngine 只返回补丁；Runner 统一维护整条流水线的 state。
+        Object.assign(ctx, outcome.contextPatch);
         runLogger.info(
           { step: stage.id, event: 'complete', durationMs: outcome.durationMs },
           'AI step complete'

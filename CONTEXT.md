@@ -256,6 +256,18 @@ _Avoid_: Pipeline config, workflow file
 One step in a Pipeline Definition. Each Stage has a model assignment (`fast`/`balanced`/`expert`), an optional Prompt, optional Tools, and an output parser. Stages run sequentially; each receives the previous Stage's output through Pipeline Context. Stage names are defined by the Pipeline Definition and are not globally limited to searching, pondering, auditing, or fixing.
 _Avoid_: Step, phase, node
 
+**Stage Recipe** (阶段配方):
+The declarative description of one LLM-driven Stage: which Pipeline Context it reads, which Prompt drives it, which Tools it may use, how its output is validated or repaired, and where the accepted result is written. Stage Recipe captures business differences between Stages without turning each business case into a new executor type.
+_Avoid_: Stage kind, runner branch, prompt-only config
+
+**LLM Stage Executor** (LLM 阶段执行器):
+The shared implementation that runs Stage Recipes. It owns model calls, Tool loops, validation, repair, Stop-loss, and Pipeline Context Patch creation for LLM-driven Stages; external agent frameworks may replace parts of this implementation, but they do not define the product meaning of Pipeline, Job, or Workset.
+_Avoid_: Workflow framework, plugin system, custom stage handler
+
+**Pipeline Context Patch** (流水线上下文补丁):
+The Stage output shape used inside a Pipeline run: a partial update to Pipeline Context rather than a final Job Result. Word-focused Pipelines still return YAML and Review Score at the outer Runner interface, but Stage Recipes should report their accepted work as Pipeline Context Patch so single-Stage and custom Stage sequences share the same sequencing model.
+_Avoid_: Stage result payload, final result, direct YAML return
+
 **Stage Policy** (阶段策略):
 The declared behaviour attached to a Stage beyond ordinary LLM execution, such as Stop-loss rules, Tool fallback, evidence synthesis, YAML assembly, token budget choices, or recovery behaviour. Stage Policy belongs with the Pipeline Definition so a Runner can execute generic sequencing without hardcoding product-specific Stage names. Stage Policy should be declarative by default: Pipeline Definitions name policy capabilities, while the implementation lives in shared policy modules. Custom executable hooks are a future escape hatch, not the first design. Stage Policy is split into Execution Policy, Output Policy, Assembly Policy, and Stop-loss Policy: Execution Policy decides whether the Stage runs as a single LLM call or an Agent Loop; Output Policy decides which Pipeline Context slot the Stage writes, such as research YAML, creative YAML, full YAML, or Review Score metadata; Assembly Policy decides whether and how Stage outputs are combined after a Stage completes; Stop-loss Policy decides when empty or unusable output should stop the Pipeline and which partial YAML is preserved.
 _Avoid_: Runner special case, stage hack
