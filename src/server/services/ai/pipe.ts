@@ -1,7 +1,9 @@
-import type { PipelineContext, PipelineContextKey, PipelineRunner, PipelineStage } from './types';
+import type { PipelineContext, PipelineRunner, PipelineStage } from './types';
 import type { Tool } from 'ai';
 import type { AssembledPrompt } from './prompts/assembler';
 
+// 这个文件负责整条 AI 流水线的外层编排。
+// 单个 Stage 的策略判断放在 StagePolicyEngine；这里保留模型调用、工具调用、恢复运行和最终收尾。
 const yaml = require('js-yaml') as typeof import('js-yaml');
 const { streamText } = require('ai') as typeof import('ai');
 const { createOpenAI } = require('@ai-sdk/openai') as typeof import('@ai-sdk/openai');
@@ -23,6 +25,8 @@ const { assemblePrompt } = require('./prompts/assembler') as {
 };
 const { PipelineDefinitionNormalizer, getStagePolicy } =
   require('./PipelineDefinitionNormalizer') as typeof import('./PipelineDefinitionNormalizer');
+const { StagePolicyEngine } =
+  require('./StagePolicyEngine') as typeof import('./StagePolicyEngine');
 const { resolveModel } = require('./modelResolver') as {
   resolveModel: (stageName?: 'fast' | 'balanced' | 'expert') => {
     provider: string;
@@ -50,6 +54,9 @@ const { CURRENT_WORD_SCHEMA_VERSION } = require('../../schemas/word/version') as
   CURRENT_WORD_SCHEMA_VERSION: number;
 };
 
+/**
+ * 生成结构化阶段的 mock YAML，供本地测试和无真实模型配置时使用。
+ */
 function buildStructuralMock(word: string, language: string, context: string): string {
   if (language === 'de') {
     return yaml.dump(
@@ -150,6 +157,9 @@ function buildStructuralMock(word: string, language: string, context: string): s
   );
 }
 
+/**
+ * 生成补充内容阶段的 mock YAML。
+ */
 function buildCreativeMock(word: string, language: string, context: string): string {
   return yaml.dump(
     {
@@ -189,6 +199,9 @@ function buildCreativeMock(word: string, language: string, context: string): str
   );
 }
 
+/**
+ * 生成审核阶段的 mock JSON。
+ */
 function buildMockReview(): string {
   return JSON.stringify({
     overall_score: 7,
@@ -216,6 +229,9 @@ function buildMockReview(): string {
   });
 }
 
+/**
+ * 根据模型配置创建 AI SDK provider。
+ */
 function createProvider(model: ReturnType<typeof resolveModel>) {
   if (model.format === 'openai') {
     const isOfficialOpenAI = model.baseUrl.includes('api.openai.com');
@@ -239,15 +255,16 @@ function createProvider(model: ReturnType<typeof resolveModel>) {
 
 const BACKOFF_SCHEDULE = [2000, 8000];
 
-function getContextValue(ctx: Partial<PipelineContext>, key?: PipelineContextKey): unknown {
-  if (!key) return undefined;
-  return ctx[key];
-}
-
+/**
+ * 判断当前 Stage 是否应该走审核 mock 输出。
+ */
 function shouldUseReviewOutput(stage: PipelineStage): boolean {
   return getStagePolicy(stage).output.kind === 'scores';
 }
 
+/**
+ * 判断当前 Stage 是否应该走结构化 mock 输出。
+ */
 function shouldUseStructuralOutput(stage: PipelineStage): boolean {
   return getStagePolicy(stage).output.contextKey === 'researchYaml';
 }
@@ -279,6 +296,9 @@ interface StageTextResult {
   toolEvidence: ToolEvidence[];
 }
 
+/**
+ * 把模型调用错误压成日志和重试逻辑需要的简单分类。
+ */
 function classifyLLMError(err: unknown): { code: string; willRetry: boolean } {
   const msg = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
   if (msg.includes('429') || (msg.includes('rate') && msg.includes('limit'))) {
@@ -293,21 +313,33 @@ function classifyLLMError(err: unknown): { code: string; willRetry: boolean } {
   return { code: 'llm_error', willRetry: false };
 }
 
+/**
+ * 等待下一次重试。
+ */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+/**
+ * 只在值确实是普通对象时返回 record。
+ */
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
 }
 
+/**
+ * 压缩工具结果里的长文本，避免下一轮 prompt 太大。
+ */
 function compactText(value: unknown, maxLength = 1200): string {
   const text = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
   return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text;
 }
 
+/**
+ * 把成功的工具结果整理成给 fallback prompt 使用的证据摘要。
+ */
 function summarizeToolEvidence(evidence: ToolEvidence[]): string {
   const lines: string[] = [];
 
@@ -354,6 +386,9 @@ function summarizeToolEvidence(evidence: ToolEvidence[]): string {
   return lines.join('\n').trim();
 }
 
+/**
+ * 把工具结果转成模型下一轮能直接阅读的短文本。
+ */
 function formatToolModelResult(toolName: string, output: unknown): string {
   const outputRecord = asRecord(output);
   if (!outputRecord) return `Tool ${toolName} returned: ${compactText(String(output), 1200)}`;
@@ -399,6 +434,9 @@ function formatToolModelResult(toolName: string, output: unknown): string {
   return `Tool ${toolName} returned: ${compactText(JSON.stringify(data), 1200)}`;
 }
 
+/**
+ * 把上一轮工具结果追加到下一轮用户 prompt 后面。
+ */
 function appendToolResultsToPrompt(prompt: string, toolModelResults: string[]): string {
   if (toolModelResults.length === 0) return prompt;
   return [
@@ -437,6 +475,9 @@ interface RunStageTextOptions {
   };
 }
 
+/**
+ * 调用一次 Stage 的 LLM，并处理流式文本、推理文本和工具回合。
+ */
 async function runStageText(options: RunStageTextOptions): Promise<StageTextResult> {
   const {
     stage,
@@ -451,6 +492,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
   } = options;
   const model = resolveModel(stage.modelKey || 'balanced');
   if (model.isMock) {
+    // Mock 模式尽量沿用真实 Stage 的 Output Policy，这样测试能覆盖同一条流水线路径。
     const mockDiagnostics: StageTextDiagnostics = {
       stageId: stage.id,
       provider: model.provider,
@@ -514,6 +556,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
       const toolModelResults: string[] = [];
 
       for (let toolRound = 0; ; toolRound += 1) {
+        // 有工具时，模型可能先产出工具调用；工具结果会压缩后放进下一轮 prompt。
         const roundModelResults: string[] = [];
         const result = streamText({
           model: createProvider(model),
@@ -610,6 +653,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
               toolName === policy.execution.tools?.fallbackOnFailureToolName &&
               resultObject.success === false
             ) {
+              // 搜索工具明确失败时，让 StagePolicyEngine 决定是否无工具重试。
               runLogger?.info(
                 {
                   step: stage.id,
@@ -655,6 +699,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
         ) {
           break;
         }
+        // 本轮没有正文但拿到了工具结果，继续让模型基于这些结果生成正文。
         toolModelResults.push(...roundModelResults);
       }
 
@@ -678,6 +723,7 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
       runLogger?.info(diagnostics as unknown as Record<string, unknown>, 'LLM stream finished');
 
       if (finishReason === 'length') {
+        // 截断输出通常不完整，交给外层按失败处理。
         const err = new Error(`${stage.id}: LLM output was truncated because finishReason=length`);
         (err as Error & { diagnostics?: StageTextDiagnostics }).diagnostics = diagnostics;
         throw err;
@@ -716,6 +762,9 @@ async function runStageText(options: RunStageTextOptions): Promise<StageTextResu
   throw lastError;
 }
 
+/**
+ * 恢复运行时，跳过 resumeFrom 之前的 Stage。
+ */
 function shouldSkipStage(stages: PipelineStage[], stageId: string, resumeFrom?: string): boolean {
   if (!resumeFrom) return false;
   const stageOrder = stages.map(stage => stage.id);
@@ -724,6 +773,9 @@ function shouldSkipStage(stages: PipelineStage[], stageId: string, resumeFrom?: 
   return stageIdx < resumeIdx;
 }
 
+/**
+ * 合并 researchYaml 和 creativeYaml。解析失败时保留拼接结果。
+ */
 function mergeCreativeYaml(
   ctx: PipelineContext,
   runLogger?: {
@@ -760,43 +812,9 @@ function mergeCreativeYaml(
   }
 }
 
-function checkStopLoss(
-  stage: PipelineStage,
-  text: string,
-  parsed: Partial<PipelineContext>
-): { stopped: boolean; reason?: string } {
-  const policy = getStagePolicy(stage).stopLoss;
-  if (policy.kind === 'none') return { stopped: false };
-
-  if (!text.trim()) {
-    return {
-      stopped: true,
-      reason: `${stage.id}: required ${policy.contextKey || 'output'} is empty because LLM returned empty text`,
-    };
-  }
-
-  const value = getContextValue(parsed, policy.contextKey);
-  if (!value || (typeof value === 'string' && !value.trim())) {
-    return {
-      stopped: true,
-      reason: `${stage.id}: parsed ${policy.contextKey || 'output'} is empty after fence stripping`,
-    };
-  }
-
-  return { stopped: false };
-}
-
-function parseStageOutput(stage: PipelineStage, text: string): Partial<PipelineContext> {
-  if (stage.outputParser) return stage.outputParser(text);
-
-  const outputPolicy = getStagePolicy(stage).output;
-  if (outputPolicy.kind === 'scores') return { scores: {} };
-  if (outputPolicy.contextKey) {
-    return { [outputPolicy.contextKey]: text } as Partial<PipelineContext>;
-  }
-  return { fullYaml: text };
-}
-
+/**
+ * 根据 Stage Policy 和本地配置决定这个 Stage 可以使用哪些工具。
+ */
 function resolveStageTools(
   stage: PipelineStage,
   runLogger?: {
@@ -819,27 +837,10 @@ function resolveStageTools(
   return resolveTools(toolNames);
 }
 
-function applyAssemblyPolicy(
-  stage: PipelineStage,
-  ctx: PipelineContext,
-  runLogger?: {
-    info: (payload: Record<string, unknown>, msg?: string) => void;
-    error: (payload: Record<string, unknown>, msg?: string) => void;
-  }
-): void {
-  const policy = getStagePolicy(stage).assembly;
-  if (policy.kind === 'merge-yaml') {
-    mergeCreativeYaml(ctx, runLogger);
-  }
-}
-
-function getPartialYamlForStop(stage: PipelineStage, ctx: PipelineContext): string {
-  const key = getStagePolicy(stage).stopLoss.partialResultKey;
-  const value = getContextValue(ctx, key);
-  return typeof value === 'string' ? value : ctx.researchYaml || '';
-}
-
 export class SequentialRunner implements PipelineRunner {
+  /**
+   * 运行整条流水线，负责恢复、进度事件和最终结果。
+   */
   async run({
     definition,
     input,
@@ -861,6 +862,7 @@ export class SequentialRunner implements PipelineRunner {
     };
 
     if (resumeFromStage) {
+      // 恢复时先把旧步骤 replay 给前端，让 UI 看到完整历史。
       runLogger.info(
         { event: 'pipeline:resume', fromStage: resumeFromStage },
         'AI pipeline resuming'
@@ -898,165 +900,60 @@ export class SequentialRunner implements PipelineRunner {
       runLogger.info({ step: stage.id, event: 'start' }, 'AI pipeline step started');
 
       try {
-        let reasoningText = '';
-        const stageRun = await runStageText({
+        // StagePolicyEngine 只管单步策略；真实模型调用仍在 runner 的适配器里。
+        const outcome = await new StagePolicyEngine({
+          emit: onProgress,
+          assemblePrompt,
+          summarizeToolEvidence,
+          runStageText: async ({
+            stage: engineStage,
+            prompt,
+            ctx: engineCtx,
+            onChunk,
+            onReasoning,
+            onToolCall,
+            onToolResult,
+          }) => {
+            let reasoningText = '';
+            const stageRun = await runStageText({
+              stage: engineStage,
+              prompt,
+              ctx: engineCtx,
+              onChunk,
+              onReasoning: chunk => {
+                reasoningText += chunk;
+                onReasoning(chunk);
+              },
+              onToolCall,
+              onToolResult,
+              externalSignal: abortSignal as globalThis.AbortSignal | undefined,
+              runLogger,
+            });
+            return { ...stageRun, reasoningText };
+          },
+        }).executeStage({
           stage,
           prompt: assemblePrompt(stage, ctx),
           ctx,
-          onChunk: chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
-          onToolCall: event => onProgress({ type: 'step:tool-call', step: stage.id, ...event }),
-          onToolResult: event => onProgress({ type: 'step:tool-result', step: stage.id, ...event }),
-          onReasoning: chunk => {
-            reasoningText += chunk;
-            onProgress({ type: 'step:reasoning', step: stage.id, chunk });
-          },
-          externalSignal: abortSignal as globalThis.AbortSignal | undefined,
-          runLogger,
         });
-        let text = stageRun.text;
-        let streamDiagnostics = stageRun.diagnostics;
-        const stagePolicy = getStagePolicy(stage);
-        const searchEvidenceSummary = stagePolicy.stopLoss.fallback?.useToolEvidenceSummary
-          ? summarizeToolEvidence(stageRun.toolEvidence)
-          : '';
-        onProgress({
-          type: 'step:diagnostic',
-          step: stage.id,
-          diagnostics: streamDiagnostics,
-        });
-        let parsed = parseStageOutput(stage, text);
-        if (stagePolicy.output.kind === 'scores' && parsed.scores?._parse_error) {
-          runLogger.error(
-            {
-              stageId: stage.id,
-              rawTextChars: text.length,
-              rawTextTail: text.slice(-500),
-              finishReason: streamDiagnostics.finishReason,
-              usage: streamDiagnostics.usage,
-            },
-            'Auditing output failed to parse'
+
+        if (outcome.status === 'stopped') {
+          // Stop-loss 不算异常，Runner 正常返回当前可用 YAML。
+          onProgress({
+            type: 'pipeline:stopped',
+            yaml: outcome.yaml,
+            stoppedAtStage: outcome.stoppedAtStage,
+            reason: outcome.reason,
+          });
+          runLogger.info(
+            { event: 'pipeline:stopped', stoppedAtStage: outcome.stoppedAtStage },
+            'AI pipeline stopped by stop-loss'
           );
-        }
-        Object.assign(ctx, parsed);
-
-        let stopResult = checkStopLoss(stage, text, parsed);
-        if (stopResult.stopped) {
-          let fallbackText = text;
-          let fallbackParsed = parsed;
-
-          if (stagePolicy.stopLoss.fallback?.kind === 'retry-without-tools') {
-            runLogger.info(
-              {
-                step: stage.id,
-                reason: stopResult.reason,
-                hasToolEvidence: Boolean(searchEvidenceSummary),
-              },
-              searchEvidenceSummary
-                ? 'Synthesizing searching stage from collected tool evidence'
-                : 'Retrying searching stage without tools'
-            );
-
-            const fallbackStage: PipelineStage = {
-              ...stage,
-              toolNames: [],
-              policy: {
-                ...stagePolicy,
-                execution: {
-                  ...stagePolicy.execution,
-                  tools: undefined,
-                },
-              },
-            };
-            const fallbackCtx: PipelineContext = searchEvidenceSummary
-              ? {
-                  ...ctx,
-                  searchSummary: [ctx.searchSummary, searchEvidenceSummary]
-                    .filter(Boolean)
-                    .join('\n\n'),
-                }
-              : ctx;
-            try {
-              reasoningText = '';
-              const fallbackRun = await runStageText({
-                stage: fallbackStage,
-                prompt: assemblePrompt(fallbackStage, fallbackCtx),
-                ctx: fallbackCtx,
-                onChunk: chunk => onProgress({ type: 'step:tokens', step: stage.id, chunk }),
-                onReasoning: chunk => {
-                  reasoningText += chunk;
-                  onProgress({ type: 'step:reasoning', step: stage.id, chunk });
-                },
-                externalSignal: abortSignal as globalThis.AbortSignal | undefined,
-                runLogger,
-              });
-              fallbackText = fallbackRun.text;
-              streamDiagnostics = fallbackRun.diagnostics;
-              onProgress({
-                type: 'step:diagnostic',
-                step: stage.id,
-                diagnostics: streamDiagnostics,
-              });
-              fallbackParsed = parseStageOutput(stage, fallbackText);
-              stopResult = checkStopLoss(stage, fallbackText, fallbackParsed);
-            } catch (err) {
-              runLogger.error(
-                { step: stage.id, error: err instanceof Error ? err.message : String(err) },
-                'Fallback searching stage also failed'
-              );
-            }
-          }
-
-          if (stopResult.stopped) {
-            const duration = Date.now() - stepStart;
-            onProgress({
-              type: 'step:complete',
-              step: stage.id,
-              duration,
-              summary: `Stopped: ${stopResult.reason}`,
-              result: fallbackParsed,
-              rawText: fallbackText,
-              reasoningText,
-              diagnostics: streamDiagnostics,
-            });
-            runLogger.info(
-              { step: stage.id, event: 'stopped', reason: stopResult.reason, durationMs: duration },
-              'AI step stopped by stop-loss'
-            );
-
-            const partialYaml = getPartialYamlForStop(stage, ctx);
-            onProgress({
-              type: 'pipeline:stopped',
-              yaml: partialYaml,
-              stoppedAtStage: stage.id,
-              reason: stopResult.reason || 'unknown',
-            });
-            runLogger.info(
-              { event: 'pipeline:stopped', stoppedAtStage: stage.id },
-              'AI pipeline stopped by stop-loss'
-            );
-            return { yaml: partialYaml, scores: ctx.scores || {} };
-          }
-
-          Object.assign(ctx, fallbackParsed);
-          text = fallbackText;
-          parsed = fallbackParsed;
-          runLogger.info({ step: stage.id }, 'Fallback searching stage succeeded');
+          return { yaml: outcome.yaml, scores: ctx.scores || {} };
         }
 
-        applyAssemblyPolicy(stage, ctx, runLogger);
-        const duration = Date.now() - stepStart;
-        onProgress({
-          type: 'step:complete',
-          step: stage.id,
-          duration,
-          summary: `${stage.description} 完成`,
-          result: parsed,
-          rawText: text,
-          reasoningText,
-          diagnostics: streamDiagnostics,
-        });
         runLogger.info(
-          { step: stage.id, event: 'complete', durationMs: duration },
+          { step: stage.id, event: 'complete', durationMs: outcome.durationMs },
           'AI step complete'
         );
       } catch (error) {
@@ -1064,6 +961,7 @@ export class SequentialRunner implements PipelineRunner {
         const errorDiagnostics = (error as { diagnostics?: StageTextDiagnostics } | undefined)
           ?.diagnostics;
         if (stage.id === 'fixing') {
+          // 修复阶段失败时，旧 YAML 通常比空结果更有用。
           const fallbackYaml = ctx.fullYaml || ctx.researchYaml || '';
           const duration = Date.now() - stepStart;
           onProgress({

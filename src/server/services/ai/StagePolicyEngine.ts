@@ -1,24 +1,50 @@
 import type { AssembledPrompt } from './prompts/assembler';
 import type { NormalizedPipelineStage } from './PipelineDefinitionNormalizer';
-import type { PipelineContext } from './types';
+import type { PipelineContext, PipelineProgressEvent } from './types';
 
+// 这个模块只处理单个 Stage 的执行规则。
+// Runner 负责排队、恢复和结束整条流水线；这里负责解析输出、Stop-loss、回退和进度事件。
 const { mergeYamlTexts } = require('./utils') as typeof import('./utils');
 
 type StageContextPatch = Partial<PipelineContext>;
+type ToolCallEvent = Omit<
+  Extract<PipelineProgressEvent, { type: 'step:tool-call' }>,
+  'type' | 'step'
+>;
+type ToolResultEvent = Omit<
+  Extract<PipelineProgressEvent, { type: 'step:tool-result' }>,
+  'type' | 'step'
+>;
 
+export interface StageToolEvidence {
+  toolName: string;
+  output?: unknown;
+  modelResult?: string;
+}
+
+// LLM 适配器返回的原始结果。Engine 只依赖这些字段，不关心具体供应商。
 export interface StageTextResult {
   text: string;
   reasoningText?: string;
   diagnostics?: unknown;
-  toolEvidence?: unknown[];
+  toolEvidence?: StageToolEvidence[];
 }
 
+// Engine 需要外部提供的能力。这样可以把策略逻辑和真实 LLM 调用分开测试。
 export interface StagePolicyEngineAdapters {
   runStageText(params: {
     stage: NormalizedPipelineStage;
     prompt: AssembledPrompt;
     ctx: PipelineContext;
+    isFallback?: boolean;
+    onChunk: (chunk: string) => void;
+    onReasoning: (chunk: string) => void;
+    onToolCall: (event: ToolCallEvent) => void;
+    onToolResult: (event: ToolResultEvent) => void;
   }): Promise<StageTextResult>;
+  assemblePrompt?: (stage: NormalizedPipelineStage, ctx: PipelineContext) => AssembledPrompt;
+  summarizeToolEvidence?: (evidence: StageToolEvidence[]) => string;
+  emit?: (event: PipelineProgressEvent) => void;
 }
 
 export type StageOutcome =
@@ -50,7 +76,7 @@ export class StagePolicyEngine {
   constructor(private readonly adapters: StagePolicyEngineAdapters) {}
 
   /**
-   * 运行一个 Stage，把结果写回 ctx，并返回 Runner 需要知道的结果。
+   * 运行一个 Stage，把可用结果写回 ctx，并返回 Runner 需要知道的结果。
    */
   async executeStage(params: {
     stage: NormalizedPipelineStage;
@@ -58,11 +84,27 @@ export class StagePolicyEngine {
     prompt: AssembledPrompt;
   }): Promise<StageOutcome> {
     const startedAt = Date.now();
-    const stageRun = await this.adapters.runStageText(params);
-    const contextPatch = this.parseStageOutput(params.stage, stageRun.text);
-    const stopResult = this.checkStopLoss(params.stage, stageRun.text, contextPatch);
+    let stageRun = await this.runStageText(params);
+
+    // 先按 Output Policy 解析，再用 Stop-loss 判断这次输出能不能继续用。
+    let contextPatch = this.parseStageOutput(params.stage, stageRun.text);
+    this.emitDiagnostic(params.stage.id, stageRun.diagnostics);
+    let stopResult = this.checkStopLoss(params.stage, stageRun.text, contextPatch);
+
+    // 有些搜索 Stage 会先用工具跑；工具没有给出正文时，再用工具证据跑一次无工具版本。
     if (stopResult.stopped) {
-      return {
+      const fallbackRun = await this.retryWithoutTools(params, stageRun);
+      if (fallbackRun) {
+        stageRun = fallbackRun;
+        contextPatch = this.parseStageOutput(params.stage, stageRun.text);
+        this.emitDiagnostic(params.stage.id, stageRun.diagnostics);
+        stopResult = this.checkStopLoss(params.stage, stageRun.text, contextPatch);
+      }
+    }
+
+    if (stopResult.stopped) {
+      // 仍然没有可用结果时，不写 ctx，直接把已有的部分 YAML 交回 Runner。
+      const outcome: StageOutcome = {
         status: 'stopped',
         contextPatch,
         rawText: stageRun.text,
@@ -74,12 +116,15 @@ export class StagePolicyEngine {
         reason: stopResult.reason || 'unknown',
         stoppedAtStage: params.stage.id,
       };
+      this.emitStepComplete(params.stage, outcome);
+      return outcome;
     }
 
+    // 只有通过 Stop-loss 的结果才写回共享 context。
     Object.assign(params.ctx, contextPatch);
     this.applyAssemblyPolicy(params.stage, params.ctx);
 
-    return {
+    const outcome: StageOutcome = {
       status: 'complete',
       contextPatch,
       rawText: stageRun.text,
@@ -88,6 +133,92 @@ export class StagePolicyEngine {
       summary: `${params.stage.description} 完成`,
       durationMs: Date.now() - startedAt,
     };
+    this.emitStepComplete(params.stage, outcome);
+    return outcome;
+  }
+
+  /**
+   * 调用外部 LLM 适配器，并把流式事件补上当前 Stage。
+   */
+  private runStageText(params: {
+    stage: NormalizedPipelineStage;
+    ctx: PipelineContext;
+    prompt: AssembledPrompt;
+    isFallback?: boolean;
+  }): Promise<StageTextResult> {
+    return this.adapters.runStageText({
+      ...params,
+      onChunk: chunk => {
+        this.adapters.emit?.({ type: 'step:tokens', step: params.stage.id, chunk });
+      },
+      onReasoning: chunk => {
+        this.adapters.emit?.({ type: 'step:reasoning', step: params.stage.id, chunk });
+      },
+      onToolCall: event => {
+        this.adapters.emit?.({ type: 'step:tool-call', step: params.stage.id, ...event });
+      },
+      onToolResult: event => {
+        this.adapters.emit?.({ type: 'step:tool-result', step: params.stage.id, ...event });
+      },
+    });
+  }
+
+  /**
+   * 需要时用无工具 Stage 再跑一次。
+   */
+  private async retryWithoutTools(
+    params: {
+      stage: NormalizedPipelineStage;
+      ctx: PipelineContext;
+      prompt: AssembledPrompt;
+    },
+    stageRun: StageTextResult
+  ): Promise<StageTextResult | undefined> {
+    const fallback = params.stage.policy.stopLoss.fallback;
+    if (fallback?.kind !== 'retry-without-tools') {
+      return Promise.resolve(undefined);
+    }
+
+    const searchEvidenceSummary =
+      fallback.useToolEvidenceSummary && this.adapters.summarizeToolEvidence
+        ? this.adapters.summarizeToolEvidence(stageRun.toolEvidence || [])
+        : '';
+    // fallbackStage 仍然是同一个 Stage，只是暂时去掉工具配置。
+    const fallbackStage: NormalizedPipelineStage = {
+      ...params.stage,
+      toolNames: [],
+      policy: {
+        ...params.stage.policy,
+        execution: {
+          ...params.stage.policy.execution,
+          tools: undefined,
+        },
+      },
+    };
+    // 工具证据只给这次 fallback prompt 使用，不提前写进主 ctx。
+    const fallbackCtx = searchEvidenceSummary
+      ? {
+          ...params.ctx,
+          searchSummary: [params.ctx.searchSummary, searchEvidenceSummary]
+            .filter(Boolean)
+            .join('\n\n'),
+        }
+      : params.ctx;
+    const fallbackPrompt = this.adapters.assemblePrompt
+      ? this.adapters.assemblePrompt(fallbackStage, fallbackCtx)
+      : params.prompt;
+
+    try {
+      return await this.runStageText({
+        stage: fallbackStage,
+        prompt: fallbackPrompt,
+        ctx: fallbackCtx,
+        isFallback: true,
+      });
+    } catch {
+      // fallback 本身失败时，保留第一次运行得到的 stopped outcome。
+      return undefined;
+    }
   }
 
   /**
@@ -138,7 +269,12 @@ export class StagePolicyEngine {
    */
   private applyAssemblyPolicy(stage: NormalizedPipelineStage, ctx: PipelineContext): void {
     if (stage.policy.assembly.kind === 'merge-yaml' && ctx.researchYaml && ctx.creativeYaml) {
-      ctx.fullYaml = mergeYamlTexts(ctx.researchYaml, ctx.creativeYaml);
+      try {
+        ctx.fullYaml = mergeYamlTexts(ctx.researchYaml, ctx.creativeYaml);
+      } catch {
+        // 合并器解析失败时，仍保留两段原文，让后面的审核或修复 Stage 有东西可看。
+        ctx.fullYaml = `${ctx.researchYaml}\n${ctx.creativeYaml}`;
+      }
     }
   }
 
@@ -156,5 +292,33 @@ export class StagePolicyEngine {
   private getContextValue(ctx: Partial<PipelineContext>, key?: keyof PipelineContext): unknown {
     if (!key) return undefined;
     return ctx[key];
+  }
+
+  /**
+   * 有诊断信息时，把它发给外层进度流。
+   */
+  private emitDiagnostic(step: string, diagnostics: unknown): void {
+    if (diagnostics === undefined) return;
+    this.adapters.emit?.({
+      type: 'step:diagnostic',
+      step,
+      diagnostics,
+    });
+  }
+
+  /**
+   * Stage 结束时发出统一的 complete 事件。
+   */
+  private emitStepComplete(stage: NormalizedPipelineStage, outcome: StageOutcome): void {
+    this.adapters.emit?.({
+      type: 'step:complete',
+      step: stage.id,
+      duration: outcome.durationMs,
+      summary: outcome.summary,
+      result: outcome.contextPatch,
+      rawText: outcome.rawText,
+      reasoningText: outcome.reasoningText,
+      diagnostics: outcome.diagnostics,
+    });
   }
 }

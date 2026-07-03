@@ -1,5 +1,7 @@
 import type { PipelineDefinition, PipelineStage, StagePolicy } from './types';
 
+// 这个模块把新旧流水线配置整理成同一种形状。
+// 旧配置可以不写 Stage Policy；进入 Runner 前，会在这里补齐默认规则。
 const STAGE_TIMEOUT_MS: Record<string, number> = {
   searching: 240_000,
   pondering: 600_000,
@@ -52,6 +54,7 @@ export function getStagePolicy(stage: PipelineStage): StagePolicy {
  */
 function legacyStagePolicy(stage: PipelineStage): StagePolicy {
   if (stage.id === 'searching') {
+    // 搜索 Stage 有工具时，失败后允许再跑一次无工具版本。
     return {
       execution: {
         kind: stage.type,
@@ -81,6 +84,7 @@ function legacyStagePolicy(stage: PipelineStage): StagePolicy {
   }
 
   if (stage.id === 'pondering') {
+    // Pondering 产出 creativeYaml，完成后和 researchYaml 合成 fullYaml。
     return {
       execution: { kind: stage.type, timeoutMs: STAGE_TIMEOUT_MS.pondering },
       output: { kind: 'yaml-fragment', contextKey: 'creativeYaml' },
@@ -98,6 +102,7 @@ function legacyStagePolicy(stage: PipelineStage): StagePolicy {
   }
 
   if (stage.id === 'auditing') {
+    // Auditing 输出 JSON 分数，不参与 YAML 合并。
     return {
       execution: {
         kind: stage.type,
@@ -111,6 +116,7 @@ function legacyStagePolicy(stage: PipelineStage): StagePolicy {
   }
 
   if (stage.id === 'fixing') {
+    // Fixing 直接替换最终 fullYaml。
     return {
       execution: { kind: stage.type, timeoutMs: STAGE_TIMEOUT_MS.fixing },
       output: { kind: 'full-yaml', contextKey: 'fullYaml' },
