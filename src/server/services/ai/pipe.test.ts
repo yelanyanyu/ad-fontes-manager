@@ -1533,6 +1533,7 @@ void describe('SequentialRunner', () => {
         event.type === 'step:error'
     );
     assert.equal((error?.diagnostics as Record<string, unknown>).finishReason, 'length');
+    assert.equal(error?.willRetry, false);
   });
 
   void it('uses fixing fullYaml as the final YAML instead of the pre-fix merged YAML', async () => {

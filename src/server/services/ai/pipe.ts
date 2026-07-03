@@ -890,6 +890,39 @@ export class SequentialRunner implements PipelineRunner {
       );
     }
 
+    // StagePolicyEngine 只管单步策略；真实模型调用仍在 runner 的适配器里。
+    const stagePolicyEngine = new StagePolicyEngine({
+      emit: onProgress,
+      assemblePrompt,
+      summarizeToolEvidence,
+      runStageText: async ({
+        stage: engineStage,
+        prompt,
+        ctx: engineCtx,
+        onChunk,
+        onReasoning,
+        onToolCall,
+        onToolResult,
+      }) => {
+        let reasoningText = '';
+        const stageRun = await runStageText({
+          stage: engineStage,
+          prompt,
+          ctx: engineCtx,
+          onChunk,
+          onReasoning: chunk => {
+            reasoningText += chunk;
+            onReasoning(chunk);
+          },
+          onToolCall,
+          onToolResult,
+          externalSignal: abortSignal as globalThis.AbortSignal | undefined,
+          runLogger,
+        });
+        return { ...stageRun, reasoningText };
+      },
+    });
+
     for (const stage of normalizedDefinition.stages) {
       if (shouldSkipStage(normalizedDefinition.stages, stage.id, resumeFromStage)) {
         continue;
@@ -900,38 +933,7 @@ export class SequentialRunner implements PipelineRunner {
       runLogger.info({ step: stage.id, event: 'start' }, 'AI pipeline step started');
 
       try {
-        // StagePolicyEngine 只管单步策略；真实模型调用仍在 runner 的适配器里。
-        const outcome = await new StagePolicyEngine({
-          emit: onProgress,
-          assemblePrompt,
-          summarizeToolEvidence,
-          runStageText: async ({
-            stage: engineStage,
-            prompt,
-            ctx: engineCtx,
-            onChunk,
-            onReasoning,
-            onToolCall,
-            onToolResult,
-          }) => {
-            let reasoningText = '';
-            const stageRun = await runStageText({
-              stage: engineStage,
-              prompt,
-              ctx: engineCtx,
-              onChunk,
-              onReasoning: chunk => {
-                reasoningText += chunk;
-                onReasoning(chunk);
-              },
-              onToolCall,
-              onToolResult,
-              externalSignal: abortSignal as globalThis.AbortSignal | undefined,
-              runLogger,
-            });
-            return { ...stageRun, reasoningText };
-          },
-        }).executeStage({
+        const outcome = await stagePolicyEngine.executeStage({
           stage,
           prompt: assemblePrompt(stage, ctx),
           ctx,
@@ -991,7 +993,7 @@ export class SequentialRunner implements PipelineRunner {
           type: 'step:error',
           step: stage.id,
           error: message,
-          willRetry: true,
+          willRetry: false,
           diagnostics: errorDiagnostics,
         });
         runLogger.error({ step: stage.id, event: 'error', error: message }, 'AI step failed');
