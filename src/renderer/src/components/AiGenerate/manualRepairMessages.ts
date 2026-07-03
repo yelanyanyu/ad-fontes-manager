@@ -4,6 +4,7 @@ export type ManualRepairKind = 'syntax' | 'schema';
 
 export interface ManualRepairDiagnostic {
   code?: string;
+  message?: string;
   path?: string;
 }
 
@@ -37,6 +38,13 @@ interface ManualRepairCopy {
   originalFillLabel: string;
   originalFillTooltip: string;
   actionHint: string;
+}
+
+type SchemaDiagnosisKind = 'missing' | 'unknown' | 'invalid';
+
+interface SchemaDiagnosis {
+  kind: SchemaDiagnosisKind;
+  path: string;
 }
 
 const COPY: Record<ManualRepairLocale, ManualRepairCopy> = {
@@ -78,17 +86,56 @@ function diagnosticPath(input: ManualRepairMessageInput): string {
   return pathFromSummary?.[1] || 'root';
 }
 
+function firstDiagnosticText(input: ManualRepairMessageInput): string {
+  return [input.diagnostics.find(diagnostic => diagnostic.message)?.message, input.summary]
+    .filter(Boolean)
+    .join('\n');
+}
+
+function unquoteDiagnosticKey(value: string): string {
+  return value.replace(/^["'`]+|["'`]+$/g, '');
+}
+
+function schemaDiagnosis(input: ManualRepairMessageInput): SchemaDiagnosis {
+  const text = firstDiagnosticText(input);
+  const unknownKey =
+    /Unrecognized key(?:s)?(?: in object)?:?\s*(["'`][^"'`]+["'`]|[A-Za-z_][\w-]*)/i.exec(text);
+  if (unknownKey?.[1]) {
+    return {
+      kind: 'unknown',
+      path: unquoteDiagnosticKey(unknownKey[1]),
+    };
+  }
+
+  return {
+    kind: /required|missing/i.test(text) ? 'missing' : 'invalid',
+    path: diagnosticPath(input),
+  };
+}
+
+function schemaDiagnosisText(diagnosis: SchemaDiagnosis, locale: ManualRepairLocale): string {
+  if (diagnosis.kind === 'unknown') {
+    return locale === 'zh'
+      ? `存在不支持的字段：${diagnosis.path}`
+      : `Unsupported field: ${diagnosis.path}`;
+  }
+  if (diagnosis.kind === 'missing') {
+    return locale === 'zh'
+      ? `缺少必填字段：${diagnosis.path}`
+      : `Missing required field: ${diagnosis.path}`;
+  }
+  return locale === 'zh'
+    ? `结构不符合词条格式：${diagnosis.path}`
+    : `Word structure is invalid: ${diagnosis.path}`;
+}
+
 // 根据诊断代码选择语法或结构文案；文案本身可以以后接入完整语言切换。
 export function buildManualRepairMessage(input: ManualRepairMessageInput): ManualRepairMessage {
   const copy = COPY[input.locale];
   const kind = resolveManualRepairKind(input.diagnostics);
-  const path = diagnosticPath(input);
-  const diagnosis =
-    kind === 'schema' && input.locale === 'zh'
-      ? `缺少必填字段：${path}`
-      : kind === 'schema'
-        ? `Missing required field: ${path}`
-        : input.summary;
+  const schema = kind === 'schema' ? schemaDiagnosis(input) : undefined;
+  const path = schema?.path || diagnosticPath(input);
+  const diagnosis = schema ? schemaDiagnosisText(schema, input.locale) : input.summary;
   return {
     kind,
     title: kind === 'syntax' ? copy.syntaxTitle : copy.schemaTitle,

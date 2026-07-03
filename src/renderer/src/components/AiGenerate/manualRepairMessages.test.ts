@@ -30,4 +30,22 @@ describe('manual repair messages', () => {
     expect(message.primaryFillTooltip).toContain('safer formatting repairs');
     expect(message.originalFillTooltip).toContain('original model output');
   });
+
+  it('does not report root as missing when schema rejects an unknown nested key', () => {
+    const message = buildManualRepairMessage({
+      locale: 'zh',
+      changed: true,
+      diagnostics: [
+        {
+          code: 'schema.invalid',
+          path: 'root',
+          message: 'root: Unrecognized key: "historical_origins_alt"',
+        },
+      ],
+      summary: 'root: Unrecognized key: "historical_origins_alt"',
+    });
+
+    expect(message.diagnosis).toBe('存在不支持的字段：historical_origins_alt');
+    expect(message.rawPath).toBe('historical_origins_alt');
+  });
 });
