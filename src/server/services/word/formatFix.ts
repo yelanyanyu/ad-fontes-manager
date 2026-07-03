@@ -1,3 +1,7 @@
+import type { ValidationError } from './WordValidator';
+
+// 这里处理“生成出来的 YAML 能不能保存”这件事。
+// 它会先做轻量修复，再把剩下的问题整理成前端可展示、编辑器可定位的诊断。
 const yaml = require('js-yaml') as typeof import('js-yaml');
 const { stripMarkdownFences, repairCommonYamlScalarSlips, repairLlmYamlQuirks } =
   require('../ai/utils') as {
@@ -15,7 +19,7 @@ const validator = require('./WordValidator') as {
     data: unknown,
     wordLower: string,
     language?: string
-  ) => { valid: boolean; errors: string[] };
+  ) => { valid: boolean; errors: ValidationError[] };
 };
 
 type WordLanguage = 'en' | 'de';
@@ -613,14 +617,17 @@ export function prepareYamlForWordSave(wordText: string, yamlText: string): Form
     .toLowerCase();
   const validation = wordLower
     ? validator.validate(data, wordLower, language)
-    : { valid: false, errors: ['yield.lemma is required'] };
+    : {
+        valid: false,
+        errors: [{ path: 'yield.lemma', message: 'yield.lemma is required' }],
+      };
   const schemaDiagnostics: FormatDiagnostic[] = validation.valid
     ? []
     : validation.errors.map(error => ({
         severity: 'error',
         code: 'schema.invalid',
-        path: 'root',
-        message: error,
+        path: error.path,
+        message: error.message,
       }));
   const allDiagnostics = [...diagnostics, ...schemaDiagnostics];
   const ok = allDiagnostics.length === 0;

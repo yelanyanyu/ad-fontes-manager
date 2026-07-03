@@ -1,3 +1,7 @@
+import type { ValidationError } from './WordValidator';
+
+// WordServiceV2 负责把 YAML、schema 校验、保存策略和数据库写入串起来。
+// 这里返回给接口层的数据要稳定：errors 给人读，diagnostics 给 UI 定位。
 const yaml = require('js-yaml') as { load: (content: string) => unknown };
 const nlp = require('compromise') as (text: string) => {
   verbs: () => { toInfinitive: () => void };
@@ -16,7 +20,7 @@ const validator = require('./WordValidator') as {
     data: unknown,
     wordLower: string,
     language?: string
-  ) => { valid: boolean; errors: string[] };
+  ) => { valid: boolean; errors: ValidationError[] };
 };
 const repositoryV2 = require('./WordRepositoryV2') as WordRepositoryV2Like;
 const assemblerV2 = require('./WordAssemblerV2') as WordAssemblerV2Like;
@@ -453,17 +457,20 @@ class WordServiceV2 {
         ensureCurrentWordSchemaMetadata(data);
         const validation = wordLower
           ? validator.validate(data, wordLower, language)
-          : { valid: false, errors: ['yield.lemma is required'] };
+          : {
+              valid: false,
+              errors: [{ path: 'yield.lemma', message: 'yield.lemma is required' }],
+            };
         const diagnostics = validation.errors.map(error => ({
           severity: 'error',
           code: 'schema.invalid',
-          path: 'root',
-          message: error,
+          path: error.path,
+          message: error.message,
         }));
 
         return {
           valid: validation.valid,
-          errors: validation.errors,
+          errors: validation.errors.map(error => error.message),
           language,
           yaml: yamlStr,
           changed: false,
