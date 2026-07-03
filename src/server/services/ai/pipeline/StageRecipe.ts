@@ -10,6 +10,42 @@ import type { PipelineContext, PipelineStage, StagePolicy } from '../types';
 export type StageContextPatch = Partial<PipelineContext>;
 
 /**
+ * Stage Tool 的来源类型。
+ *
+ * 现在的实现主要把 Tool 适配成 AI SDK function call；这里仍然先把类型说宽，
+ * 因为后续可以接 CLI 命令、MCP 工具，或者项目自己封装的调用器。
+ */
+export type StageToolKind = 'function-call' | 'cli' | 'mcp' | 'custom';
+
+/**
+ * Stage 可以调用的一个外部能力。
+ */
+export interface StageToolDescriptor {
+  name: string;
+  kind: StageToolKind;
+  description?: string;
+}
+
+/**
+ * 执行器内部真正使用的 Tool 集合。
+ *
+ * 泛型参数由具体执行器决定：AI SDK 执行器会放入 function-call Tool；
+ * 未来的执行器也可以放 CLI、MCP 或自定义调用器。
+ */
+export type StageToolSet<TTool = unknown> = Record<string, TTool>;
+
+/**
+ * Tool 调用后留下的证据。
+ */
+export interface StageToolEvidence {
+  toolName: string;
+  toolKind?: StageToolKind;
+  uiResult?: unknown;
+  output?: unknown;
+  modelResult?: string;
+}
+
+/**
  * 一条可执行的 Stage 配方。
  */
 export type StageRecipe = PipelineStage & { policy: StagePolicy };

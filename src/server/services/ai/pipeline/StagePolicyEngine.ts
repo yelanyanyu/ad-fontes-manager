@@ -1,6 +1,6 @@
 import type { AssembledPrompt } from '../prompts/assembler';
 import type { NormalizedPipelineStage } from './PipelineDefinitionNormalizer';
-import type { StageContextPatch, StageRecipeRunOutcome } from './StageRecipe';
+import type { StageContextPatch, StageRecipeRunOutcome, StageToolEvidence } from './StageRecipe';
 import type { PipelineContext, PipelineProgressEvent } from '../types';
 
 // 这个模块只处理单个 Stage 的执行规则。
@@ -15,12 +15,6 @@ type ToolResultEvent = Omit<
   Extract<PipelineProgressEvent, { type: 'step:tool-result' }>,
   'type' | 'step'
 >;
-
-export interface StageToolEvidence {
-  toolName: string;
-  output?: unknown;
-  modelResult?: string;
-}
 
 // LLM 适配器返回的原始结果。Engine 只依赖这些字段，不关心具体供应商。
 export interface StageTextResult {

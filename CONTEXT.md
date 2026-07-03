@@ -261,7 +261,7 @@ The declarative description of one LLM-driven Stage: which Pipeline Context it r
 _Avoid_: Stage kind, runner branch, prompt-only config
 
 **LLM Stage Executor** (LLM 阶段执行器):
-The shared implementation that runs Stage Recipes. It owns model calls, Tool loops, validation, repair, Stop-loss, and Pipeline Context Patch creation for LLM-driven Stages; external agent frameworks may replace parts of this implementation, but they do not define the product meaning of Pipeline, Job, or Workset.
+The shared implementation that runs Stage Recipes. It owns model calls, Tool loops, validation, repair, Stop-loss, and Pipeline Context Patch creation for LLM-driven Stages. It asks the Tool Adapter layer for Stage Tools instead of importing concrete tool implementations directly. The current adapter can expose AI SDK function calls, but the Executor contract should also leave room for CLI commands, MCP tools, and project-defined callers. External agent frameworks may replace parts of this implementation, but they do not define the product meaning of Pipeline, Job, or Workset.
 _Avoid_: Workflow framework, plugin system, custom stage handler
 
 **Pipeline Context Patch** (流水线上下文补丁):
@@ -454,8 +454,12 @@ _Avoid_: Fallback, safety net, guard
 An LLM API service (e.g., DeepSeek, OpenRouter) identified by a base URL, API format (`openai` or `anthropic`), and a list of available models.
 
 **Tool**:
-A function callable by the LLM during an Agent Loop — currently `searchEtymology` (Brave Search API) and `fetchPage` (web page scraping). Tools are capabilities available to the model inside a Stage; they are not Stages themselves.
+A capability a Stage may use during an Agent Loop. Today the web Tools are adapted as AI SDK function calls, such as `searchEtymology` (Brave Search API) and `fetchPage` (web page scraping). The domain term is broader than function call: a Tool may later be a CLI command, MCP tool, or project-defined caller, as long as the Executor can return a UI Result and a Model Result. Tools are available inside a Stage; they are not Stages themselves.
 _Avoid_: Plugin, capability, skill
+
+**Tool Adapter** (工具适配器):
+The boundary that turns a Stage Recipe's Tool names into runtime-specific Tool handles. The first implementation resolves known web Tools into AI SDK function-call tools and keeps unknown tools as non-AI-SDK descriptors, so future CLI, MCP, or custom callers can be added without teaching the Pipeline Runner about those runtimes.
+_Avoid_: Direct tool import, SDK-only tool registry
 
 **Tool Result** (工具结果):
 The result produced by a Tool during an Agent Loop. Tool Result has two channels: a UI Result for Stage Details, logs, and user inspection, and a Model Result for the next model turn. The UI Result may preserve fuller raw details, while the Model Result should be compressed, cleaned, and length-limited so Agent Loop query rounds do not explode token usage. Evidence synthesis should consume Model Results, not raw UI Results.
@@ -492,7 +496,7 @@ The protocol used to push real-time Pipeline progress (tokens, reasoning, tool c
 - **Effective Review Score** is the score used for Workset ordering and Workset Improve eligibility: User Review Score overrides AI Review Score without deleting the original AI judgment.
 - **Improve Count** follows the Job Result chain: a Workset Improve Fix Job receives source Improve Count + 1, while a fresh Generate Job starts again at 0.
 - A **Pipeline Definition** can declare **AI Flavor Markers** as a Prompt input augmenter for a Stage; that Stage then receives structured evidence summarized into the Prompt alongside the YAML.
-- Each **Stage** may use one **Provider** + model and zero or more **Tools**
+- Each **Stage** may use one **Provider** + model and zero or more **Tools** resolved through a **Tool Adapter**
 - A **Field Mapping** connects a **Data Source** (from a Word's YAML) to an Anki **Field**
 - **AnkiConnect** and **APKG** are two export paths; both use the same **Field Mapping** and **Card Template**
 

@@ -2,7 +2,7 @@
 
 Accepted: Ad Fontes Manager will keep its own Pipeline and optimize it into a small workflow runtime, rather than fully migrating Pipeline execution to a third-party agent workflow framework right now. A full migration is technically possible because the Pipeline maps cleanly to common workflow concepts: Stage Recipes are steps, Pipeline Context is workflow state, Tools are agent tools, Stop-loss and repair are feedback loops, and SSE events are trace output. The migration cost is whether the framework can preserve the same user-visible behaviour for Queue, Job History, Workset, partial YAML, Review Score, and Word save flows without a large adapter layer.
 
-Third-party frameworks may still be used inside the LLM Stage Executor. The preferred evaluation target is replacing model calls, Tool loops, streaming, tracing, and repair-loop mechanics while preserving the app-owned Pipeline interface: `PipelineRunner.run()` still returns Word YAML and scores, partial Jobs still preserve partial YAML, and users see the same Queue and Workset behaviour.
+Third-party frameworks may still be used inside the LLM Stage Executor. The preferred evaluation target is replacing model calls, Tool loops, streaming, tracing, and repair-loop mechanics while preserving the app-owned Pipeline interface: `PipelineRunner.run()` still returns Word YAML and scores, partial Jobs still preserve partial YAML, and users see the same Queue and Workset behaviour. Any framework adapter must treat Tool as a broad Stage capability, not only as that framework's function-calling API.
 
 **Considered Options**
 
