@@ -13,7 +13,10 @@ const wordServiceV2 = require('./WordServiceV2') as {
     diagnostics?: Array<{
       anchorPath?: string;
       candidatePath?: string;
+      code?: string;
       kind?: string;
+      line?: number;
+      message?: string;
       path?: string;
       suggestion?: string;
     }>;
@@ -91,6 +94,25 @@ function objectWithMalformedHistoricalOriginsKeyYaml(): string {
     .replace('  historical_origins_alt:\n    - note: "extra note"\n', '');
 }
 
+function objectWithUnindentedBlockScalarLineYaml(): string {
+  return objectWithExtraHistoricalOriginsAltYaml()
+    .replace(
+      '  visual_imagery_zh: "抛来的物"',
+      '  visual_imagery_zh: |\n    潮声\n潮退去时，那只手套留在沙滩上。'
+    )
+    .replace('  historical_origins_alt:\n    - note: "extra note"\n', '');
+}
+
+function objectWithFirstBlockScalarLineUnindentedYaml(): string {
+  return objectWithExtraHistoricalOriginsAltYaml()
+    .replace(
+      '  visual_imagery_zh: "抛来的物"',
+      '  visual_imagery_zh: |\n潮声\n  meaning_evolution_zh: "后来变成对象。"'
+    )
+    .replace('  meaning_evolution_zh: "被扔到面前的东西"', '')
+    .replace('  historical_origins_alt:\n    - note: "extra note"\n', '');
+}
+
 void describe('prepareYamlForWordSave', () => {
   void it('reports an unsupported extra key without implying root is missing', () => {
     const result = prepareYamlForWordSave('object', objectWithExtraHistoricalOriginsAltYaml());
@@ -145,5 +167,36 @@ void describe('prepareYamlForWordSave', () => {
     assert.equal(result.diagnostics?.[0]?.kind, 'malformed_key_candidate');
     assert.equal(result.diagnostics?.[0]?.anchorPath, 'etymology.historical_origins:abc');
     assert.equal(result.diagnostics?.[0]?.candidatePath, 'etymology.historical_origins');
+  });
+
+  void it('points block scalar indentation parse errors at the unindented text line', () => {
+    const result = prepareYamlForWordSave('object', objectWithUnindentedBlockScalarLineYaml());
+
+    assert.equal(result.ok, false);
+    assert.equal(result.diagnostics[0]?.code, 'yaml.block_scalar_indent');
+    assert.equal(result.diagnostics[0]?.path, 'etymology.visual_imagery_zh');
+    assert.equal(result.diagnostics[0]?.line, 33);
+    assert.match(String(result.diagnostics[0]?.message), /visual_imagery_zh/);
+    assert.match(String(result.diagnostics[0]?.suggestion), /缩进/);
+  });
+
+  void it('explains first block scalar text line indentation without referring to previous text', () => {
+    const result = prepareYamlForWordSave('object', objectWithFirstBlockScalarLineUnindentedYaml());
+
+    assert.equal(result.ok, false);
+    assert.equal(result.diagnostics[0]?.code, 'yaml.block_scalar_indent');
+    assert.equal(result.diagnostics[0]?.line, 32);
+    assert.match(String(result.diagnostics[0]?.suggestion), /字段名/);
+    assert.doesNotMatch(String(result.diagnostics[0]?.suggestion), /上一行正文/);
+  });
+
+  void it('keeps block scalar indentation guidance when validation runs without repair', async () => {
+    const result = await wordServiceV2.validateYaml({}, objectWithUnindentedBlockScalarLineYaml(), {
+      repair: false,
+    });
+
+    assert.equal(result.valid, false);
+    assert.equal(result.diagnostics?.[0]?.code, 'yaml.block_scalar_indent');
+    assert.equal(result.diagnostics?.[0]?.line, 33);
   });
 });

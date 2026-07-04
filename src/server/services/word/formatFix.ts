@@ -35,6 +35,7 @@ export interface FormatDiagnostic {
   path: string;
   expected?: string;
   actual?: string;
+  line?: number;
   message: string;
   suggestion?: string;
 }
@@ -79,6 +80,12 @@ interface UnclosedQuoteInfo {
   path: string;
   line: number;
   closingQuote: string;
+}
+
+interface BlockScalarIndentInfo {
+  path: string;
+  line: number;
+  expectedIndent: number;
 }
 
 interface DoubleQuotedScalarPreference {
@@ -499,6 +506,71 @@ function findSmartClosedDoubleQuotedScalar(text: string): UnclosedQuoteInfo | nu
   return null;
 }
 
+// 找出 `字段: |` 或 `字段: >` 下面没有缩进的正文行。
+// js-yaml 对这类错误常会报到后面的字段上；这里提前扫一遍文本，把提示落到用户真正要改的那一行。
+function findBlockScalarIndentIssue(text: string): BlockScalarIndentInfo | null {
+  const stack: Array<{ indent: number; key: string }> = [];
+  const lines = text.split(/\r?\n/);
+  let activeBlock: {
+    path: string;
+    scalarIndent: number;
+    expectedIndent: number | null;
+  } | null = null;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+
+    const indent = line.length - line.trimStart().length;
+    const keyMatch = line.match(/^(\s*)(?:-\s*)?(['"]?)([^:'"#][^:#]*?)\2\s*:\s*(.*)$/);
+
+    if (activeBlock) {
+      if (indent > activeBlock.scalarIndent) {
+        activeBlock.expectedIndent ??= indent;
+        continue;
+      }
+
+      if (!keyMatch) {
+        return {
+          path: activeBlock.path,
+          line: index + 1,
+          expectedIndent: activeBlock.expectedIndent ?? activeBlock.scalarIndent + 2,
+        };
+      }
+
+      activeBlock = null;
+    }
+
+    if (!keyMatch) continue;
+
+    const key = keyMatch[3].trim();
+    const value = keyMatch[4].trim();
+    if (!key) continue;
+
+    while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+
+    const path = [...stack.map(item => item.key), key].join('.');
+    if (value.startsWith('|') || value.startsWith('>')) {
+      // 多行文本块下面的正文必须比字段行更深；否则 YAML 会把正文误读成新结构。
+      activeBlock = {
+        path,
+        scalarIndent: indent,
+        expectedIndent: null,
+      };
+      continue;
+    }
+
+    if (value === '') {
+      stack.push({ indent, key });
+    }
+  }
+
+  return null;
+}
+
 export function buildYamlParseDiagnostic(
   error: { message?: string; code?: string; actual?: string },
   text: string
@@ -526,6 +598,25 @@ export function buildYamlParseDiagnostic(
       actual: `Closed with smart quote ${unclosedQuote.closingQuote}`,
       message: `Line ${unclosedQuote.line} has a double-quoted value closed with a smart quote at ${unclosedQuote.path || unclosedQuote.key}. Replace the final ${unclosedQuote.closingQuote} with ".`,
       suggestion: `Change the closing quote on line ${unclosedQuote.line} to an ASCII double quote, or remove both wrapping quotes.`,
+    };
+  }
+
+  const blockScalarIndent = findBlockScalarIndentIssue(text);
+  if (
+    blockScalarIndent &&
+    /multiline key may not be an implicit key|can not read a block mapping entry/i.test(
+      String(error.message || '')
+    )
+  ) {
+    return {
+      severity: 'error',
+      code: 'yaml.block_scalar_indent',
+      path: blockScalarIndent.path,
+      line: blockScalarIndent.line,
+      expected: `Line indented at least ${blockScalarIndent.expectedIndent} spaces`,
+      actual: 'Line is not indented as block scalar text',
+      message: `这行看起来仍属于 ${blockScalarIndent.path} 的多行文本。`,
+      suggestion: '请把这一行缩进到字段名下面，至少比字段名多两个空格。',
     };
   }
 
