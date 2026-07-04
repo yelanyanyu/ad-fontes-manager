@@ -1,7 +1,7 @@
 import type { PipelineContext } from './types';
 
 const yaml = require('js-yaml') as typeof import('js-yaml');
-const { getAIConfig } = require('./configService') as {
+const { getAIConfig } = require('./provider') as {
   getAIConfig: () => {
     review?: {
       aiFlavorMarkers?: AIFlavorMarkerConfig[];

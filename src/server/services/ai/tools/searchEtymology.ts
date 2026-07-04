@@ -112,7 +112,7 @@ export const searchEtymologyTool = buildTool({
     required: ['query', 'language'],
   },
   execute: async (input: { query: string; language: string }, signal: AbortSignal) => {
-    const { getAIConfig } = require('../configService') as {
+    const { getAIConfig } = require('../provider') as {
       getAIConfig: () => {
         search?: {
           provider?: 'brave' | 'tavily';

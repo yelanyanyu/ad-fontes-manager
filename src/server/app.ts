@@ -29,7 +29,7 @@ export function createApp(options: CreateAppOptions): Express {
   process.env.DATABASE_URL = options.dbPath;
 
   // Initialize the AI Job Queue singleton with the live DB connection.
-  const { initQueue } = require('./services/ai/queue');
+  const { initQueue } = require('./services/ai/queue/queue');
   initQueue();
 
   const app = express();

@@ -11,7 +11,7 @@ void describe('configService', () => {
     delete process.env.ADFONTES_CONFIG_PATH;
     delete process.env.AI_QUEUE_CONCURRENCY;
     try {
-      const config = require('../../utils/config') as { clearCache: () => void };
+      const config = require('../../../utils/config') as { clearCache: () => void };
       config.clearCache();
     } catch {
       // Ignore cleanup failures before the module exists.
@@ -109,7 +109,7 @@ void describe('configService', () => {
     );
     process.env.ADFONTES_CONFIG_PATH = configPath;
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { updateAIConfig } = loadService();
 
@@ -172,7 +172,7 @@ void describe('configService', () => {
     );
     process.env.ADFONTES_CONFIG_PATH = configPath;
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { updateAIConfig } = loadService();
 
@@ -219,7 +219,7 @@ void describe('configService', () => {
     );
     process.env.ADFONTES_CONFIG_PATH = configPath;
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { updateAIConfig } = loadService();
 
@@ -276,7 +276,7 @@ void describe('configService', () => {
       'utf8'
     );
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { updateAIConfig } = loadService();
 
@@ -311,7 +311,7 @@ void describe('configService', () => {
     );
     process.env.ADFONTES_CONFIG_PATH = configPath;
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { getAIConfig, updateAIConfig } = loadService();
 
@@ -336,7 +336,7 @@ void describe('configService', () => {
     );
     process.env.ADFONTES_CONFIG_PATH = configPath;
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { updateAIConfig } = loadService();
 
@@ -370,7 +370,7 @@ void describe('configService', () => {
     process.env.ADFONTES_CONFIG_PATH = configPath;
     fs.writeFileSync(configPath, JSON.stringify({ dataDir: 'C:\\Users\\tester\\data' }), 'utf8');
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { getAIConfig } = loadService();
 
@@ -405,7 +405,7 @@ void describe('configService', () => {
     process.env.ADFONTES_CONFIG_PATH = configPath;
     process.env.AI_QUEUE_CONCURRENCY = '4';
 
-    const config = require('../../utils/config') as {
+    const config = require('../../../utils/config') as {
       clearCache: () => void;
       get: <T = unknown>(path: string, defaultValue?: T) => T;
     };
@@ -423,7 +423,7 @@ void describe('configService', () => {
     );
     process.env.ADFONTES_CONFIG_PATH = configPath;
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { updateAIConfig } = loadService();
 
@@ -454,7 +454,7 @@ void describe('configService', () => {
     );
     process.env.ADFONTES_CONFIG_PATH = configPath;
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { resolveProviderApiKeyForTest, updateAIConfig } = loadService();
 

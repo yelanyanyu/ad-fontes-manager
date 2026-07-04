@@ -1,13 +1,13 @@
-import type { PipelineRunner } from './types';
+import type { PipelineRunner } from '../types';
 import type { JobQueue } from './JobQueue';
 
 const { JobQueue: JobQueueCtor } = require('./JobQueue') as typeof import('./JobQueue');
 
-const { sequentialRunner } = require('./pipeline/SequentialRunner') as {
+const { sequentialRunner } = require('../pipeline/SequentialRunner') as {
   sequentialRunner: PipelineRunner;
 };
 
-const { getSqlite } = require('../../db') as {
+const { getSqlite } = require('../../../db') as {
   getSqlite: () => {
     prepare: (sql: string) => {
       get: (...params: unknown[]) => Record<string, unknown> | undefined;
@@ -17,7 +17,7 @@ const { getSqlite } = require('../../db') as {
   };
 };
 
-const config = require('../../utils/config') as {
+const config = require('../../../utils/config') as {
   get: <T = unknown>(path: string, defaultValue?: T) => T;
 };
 

@@ -7,7 +7,7 @@ import path from 'node:path';
 void describe('modelResolver', () => {
   void afterEach(() => {
     delete process.env.ADFONTES_CONFIG_PATH;
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
   });
 
@@ -38,7 +38,7 @@ void describe('modelResolver', () => {
       'utf8'
     );
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { resolveModel } = require('./modelResolver') as {
       resolveModel: (stage: 'fast' | 'balanced' | 'expert') => {
@@ -84,7 +84,7 @@ void describe('modelResolver', () => {
       'utf8'
     );
 
-    const config = require('../../utils/config') as { clearCache: () => void };
+    const config = require('../../../utils/config') as { clearCache: () => void };
     config.clearCache();
     const { resolveModel } = require('./modelResolver') as {
       resolveModel: (stage: 'fast' | 'balanced' | 'expert') => {

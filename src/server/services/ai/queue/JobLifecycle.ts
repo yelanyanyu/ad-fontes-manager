@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 
-import type { PipelineProgressEvent, StepResult } from './types';
+import type { PipelineProgressEvent, StepResult } from '../types';
 import { QueueStore } from './QueueStore';
 
 export class JobLifecycle {

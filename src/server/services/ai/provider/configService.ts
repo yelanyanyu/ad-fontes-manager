@@ -1,9 +1,9 @@
-const config = require('../../utils/config') as {
+const config = require('../../../utils/config') as {
   get: <T = unknown>(path: string, defaultValue?: T) => T;
   loadConfigFile: () => Record<string, unknown>;
   saveConfigFile: (config: Record<string, unknown>) => void;
 };
-const { loggers } = require('../../utils/logger') as {
+const { loggers } = require('../../../utils/logger') as {
   loggers: {
     ai: {
       info: (payload: Record<string, unknown>, message?: string) => void;
@@ -11,11 +11,11 @@ const { loggers } = require('../../utils/logger') as {
     };
   };
 };
-const { AIConfigSchema, AIConfigUpdateSchema } = require('../../schemas/aiConfig') as {
+const { AIConfigSchema, AIConfigUpdateSchema } = require('../../../schemas/aiConfig') as {
   AIConfigSchema: { parse: (value: unknown) => AIConfig };
   AIConfigUpdateSchema: { parse: (value: unknown) => AIConfigUpdate };
 };
-const { getDefaultAIConfig } = require('../../utils/defaultAppConfig') as {
+const { getDefaultAIConfig } = require('../../../utils/defaultAppConfig') as {
   getDefaultAIConfig: () => AIConfig;
 };
 
@@ -195,7 +195,7 @@ function updateAIConfig(input: unknown): AIConfigMasked {
 
   const fullValidated = withAIEndpointDefaults(AIConfigSchema.parse(merged));
   config.saveConfigFile({ ...config.loadConfigFile(), ai: fullValidated });
-  const { updateQueueConcurrency } = require('./queue') as {
+  const { updateQueueConcurrency } = require('../queue') as {
     updateQueueConcurrency: (maxConcurrency: number) => void;
   };
   updateQueueConcurrency(fullValidated.queue_concurrency);

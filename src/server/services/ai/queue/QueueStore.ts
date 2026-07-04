@@ -1,4 +1,4 @@
-import type { PipelineProgressEvent, StepResult } from './types';
+import type { PipelineProgressEvent, StepResult } from '../types';
 
 const crypto = require('node:crypto') as typeof import('node:crypto');
 

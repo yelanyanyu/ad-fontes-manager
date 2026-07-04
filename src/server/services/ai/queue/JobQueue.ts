@@ -1,8 +1,8 @@
-import type { PipelineRunner, PipelineProgressEvent, PipelineDefinition } from './types';
-import { fixPipeline } from './definitions/fix';
-import { auditFixPipeline } from './definitions/audit-fix';
-import { englishPipeline } from './definitions/english';
-import { germanPipeline } from './definitions/german';
+import type { PipelineRunner, PipelineProgressEvent, PipelineDefinition } from '../types';
+import { fixPipeline } from '../definitions/fix';
+import { auditFixPipeline } from '../definitions/audit-fix';
+import { englishPipeline } from '../definitions/english';
+import { germanPipeline } from '../definitions/german';
 import {
   buildRunMetrics,
   QueueStore,
@@ -16,7 +16,7 @@ import { JobLifecycle } from './JobLifecycle';
 import { QueueGate } from './QueueGate';
 
 const { loadYamlObjectWithRepairs, mergeYamlTexts } =
-  require('./utils') as typeof import('./utils');
+  require('../utils') as typeof import('../utils');
 
 interface QueueConfig {
   getDb: () => SqliteLike;

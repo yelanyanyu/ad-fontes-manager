@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import type { JobQueue } from '../services/ai/JobQueue';
+import type { JobQueue } from '../services/ai/queue';
 import { saveWordWithProvenance } from '../services/word/WordSaveProvenance';
 
 const { z } = require('zod') as typeof import('zod');

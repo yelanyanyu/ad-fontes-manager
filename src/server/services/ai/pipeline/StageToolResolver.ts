@@ -9,7 +9,7 @@ const { getStagePolicy } =
 const { resolveTools } = require('../tools/adapter') as {
   resolveTools: (toolNames?: string[]) => Record<string, Tool>;
 };
-const { getAIConfig } = require('../configService') as {
+const { getAIConfig } = require('../provider') as {
   getAIConfig: () => {
     search?: {
       apiKey?: string;

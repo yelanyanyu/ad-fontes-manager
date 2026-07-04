@@ -2,7 +2,7 @@ import { beforeEach, afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 
-import type { PipelineProgressEvent, PipelineRunner } from './types';
+import type { PipelineProgressEvent, PipelineRunner } from '../types';
 
 // ---- Fake Runner ----
 
@@ -1407,7 +1407,7 @@ void describe('JobQueue queue-wide operations', () => {
 
   void it('resumes a Generate Job using a non-standard Pipeline Definition stage order', async () => {
     const englishModule =
-      require('./definitions/english') as typeof import('./definitions/english');
+      require('../definitions/english') as typeof import('../definitions/english');
     const originalStages = englishModule.englishPipeline.stages;
     englishModule.englishPipeline.stages = [
       { id: 'drafting' },

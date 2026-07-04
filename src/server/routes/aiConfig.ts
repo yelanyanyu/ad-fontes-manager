@@ -21,7 +21,7 @@ const { TestProviderInputSchema, TestSearchInputSchema } = require('../schemas/a
   TestSearchInputSchema: ZodType<unknown>;
 };
 const { getAIConfigMasked, updateAIConfig, resolveProviderApiKeyForTest } =
-  require('../services/ai/configService') as {
+  require('../services/ai/provider') as {
     getAIConfigMasked: () => unknown;
     updateAIConfig: (input: unknown) => unknown;
     resolveProviderApiKeyForTest: (providerId: string | undefined, inputApiKey: string) => string;
@@ -34,7 +34,7 @@ const { loggers } = require('../utils/logger') as {
     };
   };
 };
-const { resolveAIEndpoint } = require('../services/ai/endpointResolver') as {
+const { resolveAIEndpoint } = require('../services/ai/provider') as {
   resolveAIEndpoint: (input: {
     providerType: 'openai' | 'anthropic';
     baseUrl: string;

@@ -14,7 +14,7 @@ const { getStagePolicy } =
   require('./PipelineDefinitionNormalizer') as typeof import('./PipelineDefinitionNormalizer');
 const { StageToolResolver } =
   require('./StageToolResolver') as typeof import('./StageToolResolver');
-const { resolveModel } = require('../modelResolver') as {
+const { resolveModel } = require('../provider') as {
   resolveModel: (stageName?: 'fast' | 'balanced' | 'expert') => {
     provider: string;
     modelId: string;

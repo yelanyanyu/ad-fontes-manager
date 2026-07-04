@@ -248,11 +248,11 @@ npm run native:node              # 自动检测 + 修复 Node ABI
 
 | 文件 | 说明 |
 |------|------|
-| [src/server/services/ai/JobQueue.ts](../src/server/services/ai/JobQueue.ts) | 核心队列实现（~800 行） |
-| [src/server/services/ai/JobQueue.test.ts](../src/server/services/ai/JobQueue.test.ts) | 单元 / 集成测试（24 项） |
+| [src/server/services/ai/JobQueue.ts](../src/server/services/ai/queue/JobQueue.ts) | 核心队列实现（~800 行） |
+| [src/server/services/ai/JobQueue.test.ts](../src/server/services/ai/queue/JobQueue.test.ts) | 单元 / 集成测试（24 项） |
 | [src/server/controllers/generateController.ts](../src/server/controllers/generateController.ts) | HTTP 控制器（委托给 JobQueue） |
 | [src/server/routes/generate.ts](../src/server/routes/generate.ts) | 路由定义 |
-| [src/server/services/ai/queue.ts](../src/server/services/ai/queue.ts) | JobQueue 单例 + SqliteLike 适配器 |
+| [src/server/services/ai/queue.ts](../src/server/services/ai/queue/queue.ts) | JobQueue 单例 + SqliteLike 适配器 |
 | [src/server/db/index.ts](../src/server/db/index.ts) | 数据库初始化（含 job_queue DDL） |
 | [drizzle/0002_add_job_queue.sql](../drizzle/0002_add_job_queue.sql) | Drizzle 迁移文件 |
 | [src/server/db/schema.ts](../src/server/db/schema.ts) | Drizzle ORM Schema |
