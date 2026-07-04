@@ -27,6 +27,9 @@ type FormatDiagnosticSeverity = 'error' | 'warning';
 type FormatRepairType = 'syntax' | 'promote-section';
 
 export interface FormatDiagnostic {
+  anchorPath?: string;
+  candidatePath?: string;
+  kind?: ValidationError['kind'];
   severity: FormatDiagnosticSeverity;
   code: string;
   path: string;
@@ -626,8 +629,12 @@ export function prepareYamlForWordSave(wordText: string, yamlText: string): Form
     : validation.errors.map(error => ({
         severity: 'error',
         code: 'schema.invalid',
+        kind: error.kind,
         path: error.path,
+        anchorPath: error.anchorPath,
+        candidatePath: error.candidatePath,
         message: error.message,
+        suggestion: error.suggestion,
       }));
   const allDiagnostics = [...diagnostics, ...schemaDiagnostics];
   const ok = allDiagnostics.length === 0;

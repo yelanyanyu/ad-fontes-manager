@@ -10,7 +10,13 @@ const wordServiceV2 = require('./WordServiceV2') as {
   ) => Promise<{
     valid: boolean;
     errors: string[];
-    diagnostics?: Array<{ path?: string }>;
+    diagnostics?: Array<{
+      anchorPath?: string;
+      candidatePath?: string;
+      kind?: string;
+      path?: string;
+      suggestion?: string;
+    }>;
   }>;
 };
 
@@ -79,6 +85,12 @@ function objectWithExtraHistoricalOriginsAltYaml(): string {
   ].join('\n');
 }
 
+function objectWithMalformedHistoricalOriginsKeyYaml(): string {
+  return objectWithExtraHistoricalOriginsAltYaml()
+    .replace('  historical_origins:', '  historical_origins:abc:')
+    .replace('  historical_origins_alt:\n    - note: "extra note"\n', '');
+}
+
 void describe('prepareYamlForWordSave', () => {
   void it('reports an unsupported extra key without implying root is missing', () => {
     const result = prepareYamlForWordSave('object', objectWithExtraHistoricalOriginsAltYaml());
@@ -109,5 +121,29 @@ void describe('prepareYamlForWordSave', () => {
     assert.ok(
       result.diagnostics?.some(diagnostic => diagnostic.path === 'etymology.historical_origins_alt')
     );
+  });
+
+  void it('prioritizes malformed near-match keys over the missing field they cause', () => {
+    const result = prepareYamlForWordSave('object', objectWithMalformedHistoricalOriginsKeyYaml());
+
+    assert.equal(result.ok, false);
+    assert.equal(result.diagnostics[0]?.kind, 'malformed_key_candidate');
+    assert.equal(result.diagnostics[0]?.path, 'etymology.historical_origins:abc');
+    assert.equal(result.diagnostics[0]?.anchorPath, 'etymology.historical_origins:abc');
+    assert.equal(result.diagnostics[0]?.candidatePath, 'etymology.historical_origins');
+    assert.match(String(result.diagnostics[0]?.suggestion), /historical_origins/);
+  });
+
+  void it('keeps malformed key guidance when validation runs without repair', async () => {
+    const result = await wordServiceV2.validateYaml(
+      {},
+      objectWithMalformedHistoricalOriginsKeyYaml(),
+      { repair: false }
+    );
+
+    assert.equal(result.valid, false);
+    assert.equal(result.diagnostics?.[0]?.kind, 'malformed_key_candidate');
+    assert.equal(result.diagnostics?.[0]?.anchorPath, 'etymology.historical_origins:abc');
+    assert.equal(result.diagnostics?.[0]?.candidatePath, 'etymology.historical_origins');
   });
 });

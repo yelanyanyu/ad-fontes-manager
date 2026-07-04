@@ -2,8 +2,13 @@ import { reactive } from 'vue';
 import yaml from 'js-yaml';
 import type { EditorStatus } from '@/types/word-editor';
 
+// 编辑器验证状态只保留用户真正需要的状态和定位诊断。
+// 具体错误解释由后端生成，前端负责把它们稳定地显示到 YAML 上。
 export interface FormatDiagnosticMessage {
+  anchorPath?: string;
+  candidatePath?: string;
   code: string;
+  kind?: string;
   message: string;
   path?: string;
   suggestion?: string;

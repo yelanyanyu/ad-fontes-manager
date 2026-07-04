@@ -29,6 +29,39 @@ application:
     expect(line).toBe(2);
   });
 
+  it('uses anchorPath to locate malformed keys that contain a colon', () => {
+    const yamlWithMalformedKey = `etymology:
+  root_and_affixes:
+    root: lis
+  historical_origins:abc:
+    bcd: abasd
+`;
+    const line = resolveDiagnosticLine(yamlWithMalformedKey, {
+      code: 'schema.invalid',
+      kind: 'malformed_key_candidate',
+      path: 'etymology.historical_origins',
+      anchorPath: 'etymology.historical_origins:abc',
+      message: '字段名可能写错。这里是不是想写 historical_origins？',
+    });
+
+    expect(line).toBe(4);
+  });
+
+  it('does not treat a malformed colon key as the missing expected key', () => {
+    const yamlWithMalformedKey = `etymology:
+  historical_origins:abc:
+    bcd: abasd
+`;
+    const line = resolveDiagnosticLine(yamlWithMalformedKey, {
+      code: 'schema.invalid',
+      kind: 'missing_required',
+      path: 'etymology.historical_origins',
+      message: 'etymology.historical_origins is required',
+    });
+
+    expect(line).toBeNull();
+  });
+
   it('uses line numbers embedded in parse diagnostic messages', () => {
     const line = resolveDiagnosticLine(yamlText, {
       code: 'yaml.unclosed_quote',
@@ -97,6 +130,21 @@ application:
     expect(yamlText).toBe(before);
     expect(diagnostics).toHaveLength(1);
     expect(diagnostics[0]?.message).toBe('application.meaning: Meaning is too short');
+  });
+
+  it('includes short repair suggestions in editor diagnostics', () => {
+    const diagnostics = formatDiagnosticsToCodeMirror(yamlText, [
+      {
+        code: 'schema.invalid',
+        path: 'application.meaning',
+        message: 'Meaning is too short.',
+        suggestion: '这里需要补充 meaning。',
+      },
+    ]);
+
+    expect(diagnostics[0]?.message).toBe(
+      'application.meaning: Meaning is too short. 这里需要补充 meaning。'
+    );
   });
 
   it('marks YAML syntax diagnostics with the red editor class', () => {

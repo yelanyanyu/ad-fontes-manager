@@ -464,8 +464,12 @@ class WordServiceV2 {
         const diagnostics = validation.errors.map(error => ({
           severity: 'error',
           code: 'schema.invalid',
+          kind: error.kind,
           path: error.path,
+          anchorPath: error.anchorPath,
+          candidatePath: error.candidatePath,
           message: error.message,
+          suggestion: error.suggestion,
         }));
 
         return {

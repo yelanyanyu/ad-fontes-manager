@@ -1,6 +1,8 @@
 import type { Diagnostic as CodeMirrorDiagnostic } from '@codemirror/lint';
 import type { FormatDiagnosticMessage } from './validationController';
 
+// 把后端返回的词条结构诊断转换成 CodeMirror 可以画下划线的位置。
+// 这里尽量相信后端给出的 anchorPath，只在没有定位信息时才从文案里猜。
 type PathDiagnostic = FormatDiagnosticMessage & {
   line?: number;
   range?: { startLine?: number; endLine?: number };
@@ -26,14 +28,36 @@ function lineFromMessage(diagnostic: FormatDiagnosticMessage): number | null {
   return yamlTuple ? normalizeLine(Number(yamlTuple[1])) : null;
 }
 
+function extractYamlKey(line: string): { indent: number; key: string } | null {
+  const indent = line.length - line.trimStart().length;
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith('#')) return null;
+
+  const content = trimmed.startsWith('- ') ? trimmed.slice(2).trimStart() : trimmed;
+  // YAML 普通 key 可以包含冒号；真正分隔 key/value 的冒号后面会跟空白或行尾。
+  // 这样 `historical_origins:abc:` 会被当成完整 key，而不是误认成 `historical_origins`。
+  for (let index = 0; index < content.length; index += 1) {
+    if (content[index] !== ':') continue;
+    const next = content[index + 1];
+    if (next !== undefined && !/\s/.test(next)) continue;
+
+    const key = content
+      .slice(0, index)
+      .trim()
+      .replace(/^["']|["']$/g, '');
+    return key ? { indent, key } : null;
+  }
+
+  return null;
+}
+
 function collectYamlKeyLines(yamlText: string): YamlKeyLine[] {
   const stack: Array<{ indent: number; key: string }> = [];
   return yamlText.split('\n').flatMap((line, index) => {
-    const match = /^(\s*)([A-Za-z0-9_-]+)\s*:/.exec(line);
-    if (!match) return [];
+    const keyInfo = extractYamlKey(line);
+    if (!keyInfo) return [];
 
-    const indent = match[1].length;
-    const key = match[2];
+    const { indent, key } = keyInfo;
     while (stack.length > 0 && stack[stack.length - 1].indent >= indent) stack.pop();
     stack.push({ indent, key });
 
@@ -57,9 +81,10 @@ export function resolveDiagnosticLine(
   const messageLine = lineFromMessage(diagnostic);
   if (messageLine) return messageLine;
   const diagnosticPath =
-    diagnostic.path && diagnostic.path !== 'root'
+    pathDiagnostic.anchorPath ||
+    (diagnostic.path && diagnostic.path !== 'root'
       ? diagnostic.path
-      : inferPathFromMessage(diagnostic.message);
+      : inferPathFromMessage(diagnostic.message));
   if (!diagnosticPath) return null;
 
   const matches = collectYamlKeyLines(yamlText).filter(item => item.path === diagnosticPath);
@@ -79,7 +104,10 @@ function lineRange(yamlText: string, lineNumber: number): { from: number; to: nu
 }
 
 function diagnosticMessage(diagnostic: FormatDiagnosticMessage): string {
-  return diagnostic.path ? `${diagnostic.path}: ${diagnostic.message}` : diagnostic.message;
+  const body = diagnostic.suggestion
+    ? `${diagnostic.message} ${diagnostic.suggestion}`
+    : diagnostic.message;
+  return diagnostic.path ? `${diagnostic.path}: ${body}` : body;
 }
 
 function diagnosticMarkClass(diagnostic: FormatDiagnosticMessage): string {
