@@ -86,14 +86,15 @@ jobs:
     needs: validate
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm run type-check
       - run: pnpm run lint
+      - run: node --test scripts/after-pack.test.mjs
       - run: node ./node_modules/tsx/dist/cli.mjs --test src/main/updateService.test.ts
 
   build-windows:
@@ -105,13 +106,18 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:desktop:win
+      - name: Verify packaged app.asar runtime dependencies
+        shell: pwsh
+        run: |
+          node -e "const asar=require('@electron/asar'); const list=asar.listPackage('release/win-unpacked/resources/app.asar'); for (const name of ['ee-first','wrappy','on-finished','express']) { const needle='\\node_modules\\'+name.toLowerCase(); const hit=list.some(p=>p.toLowerCase().includes(needle+'\\') || p.toLowerCase().endsWith(needle)); if (!hit) { throw new Error(`${name} is missing from app.asar`); } }"
+          node -e "const asar=require('@electron/asar'); const fs=require('fs'); const os=require('os'); const path=require('path'); const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ad-fontes-asar-release-check-')); try { asar.extractAll('release/win-unpacked/resources/app.asar', dir); require(path.resolve(dir,'out/server/app.js')); } finally { fs.rmSync(dir,{recursive:true,force:true}); }"
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-windows
@@ -130,11 +136,11 @@ jobs:
       CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - uses: actions/checkout@v4
+      - run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
-      - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build:desktop:mac
       - uses: actions/upload-artifact@v4
