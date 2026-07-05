@@ -15,6 +15,30 @@ const typedLintRules = {
 };
 
 export default [
+  {
+    ignores: [
+      'node_modules/**',
+      'node/**',
+      'dist/**',
+      'out/**',
+      'release/**',
+      'coverage/**',
+      '.agents/**',
+      '.claude/**',
+      '.codegraph/**',
+      '.codex/**',
+      '.git/**',
+      '.idea/**',
+      '.opencode/**',
+      '.playwright-cli/**',
+      '.pnpm-store/**',
+      '.private/**',
+      '.tmp/**',
+      '.trae/**',
+      '.worktrees/**',
+      'src/renderer/public/**',
+    ],
+  },
   js.configs.recommended,
   prettier,
   ...vuePlugin.configs['flat/recommended'],
@@ -187,17 +211,5 @@ export default [
       'vue/html-self-closing': 'off',
       'vue/attributes-order': 'off',
     },
-  },
-  {
-    ignores: [
-      'node_modules/**',
-      'node/**',
-      'dist/**',
-      'out/**',
-      'release/**',
-      'coverage/**',
-      '.worktrees/**',
-      'src/renderer/public/**',
-    ],
   },
 ];

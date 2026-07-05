@@ -18,17 +18,17 @@ afterPack: scripts/after-pack.mjs
 
 files:
   - out/**/*
-  - "!out/**/*.test.js"
-  - "!out/**/*.test.js.map"
-  - "!out/**/__tests__/**"
-  - "!out/**/tests/**"
-  - "!out/**/.env*"
-  - "!out/**/config.json"
-  - "!out/**/config.json.bak"
+  - '!out/**/*.test.js'
+  - '!out/**/*.test.js.map'
+  - '!out/**/__tests__/**'
+  - '!out/**/tests/**'
+  - '!out/**/.env*'
+  - '!out/**/config.json'
+  - '!out/**/config.json.bak'
   - package.json
 
 asarUnpack:
-  - "**/*.node"
+  - '**/*.node'
 
 win:
   icon: assets/icon.ico

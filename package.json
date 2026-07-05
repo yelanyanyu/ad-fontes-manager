@@ -1,6 +1,6 @@
 {
   "name": "ad-fontes-manager",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "Ad Fontes Manager web and desktop application",
   "license": "AGPL-3.0-only",
   "packageManager": "pnpm@11.9.0",

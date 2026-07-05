@@ -153,6 +153,16 @@ asarUnpack:
 - Windows 上打包目录和根目录可能存在硬链接/文件占用问题
 - native rebuild 的时机必须可控，否则容易出现构建成功但运行时 ABI 错误
 
+`pnpm-workspace.yaml` 也必须保持：
+
+```yaml
+nodeLinker: hoisted
+```
+
+原因是 electron-builder 会读取磁盘上的 `node_modules` 来收集运行时依赖。pnpm 默认布局更严格，但桌面包需要在 `resources/app.asar` 里独立解析依赖，不能依赖开发机上的 `.pnpm` 链接结构。
+
+`scripts/after-pack.mjs` 还会修补一组生产依赖小包。它们本来属于生产依赖图，但 pnpm + electron-builder 的组合可能漏掉这类深层 CommonJS 依赖。不要随手删掉 `pnpmRuntimeDependencyPatches`；如果删除后桌面启动时报 `Cannot find module 'ee-first'`、`Cannot find module 'wrappy'` 之类错误，就是这条保护线失效了。
+
 ---
 
 ## 常见故障 1：Web/dev 出现 ECONNRESET 或 ECONNREFUSED
@@ -350,6 +360,52 @@ pnpm run native:electron
 
 ---
 
+## 常见故障 5：桌面启动时报 `Cannot find module`
+
+### 现象
+
+打包成功，但启动安装后的桌面应用时，主进程弹出：
+
+```text
+Cannot find module 'ee-first'
+Require stack:
+...resources\app.asar\node_modules\on-finished\index.js
+...resources\app.asar\node_modules\express\index.js
+...resources\app.asar\out\server\app.js
+```
+
+### 真正原因
+
+这不是 Express 代码写错了，而是桌面包里的 `app.asar` 缺少运行时依赖。pnpm 的依赖布局和 electron-builder 的依赖裁剪结合时，可能漏掉深层依赖中的小包。典型例子是 `on-finished` 依赖 `ee-first`，但 `ee-first` 没被收进 `app.asar`。
+
+### 处理
+
+先确认本地依赖存在：
+
+```powershell
+Get-ChildItem .\node_modules\ee-first
+```
+
+再检查打包产物：
+
+```powershell
+node -e "const asar=require('@electron/asar'); const list=asar.listPackage('release/win-unpacked/resources/app.asar'); console.log(list.some(p=>p.includes('ee-first')) ? 'in asar' : 'missing')"
+```
+
+如果本地存在、asar 缺失，就更新 `scripts/after-pack.mjs` 里的 `pnpmRuntimeDependencyPatches`，然后重新运行：
+
+```bash
+pnpm run build:desktop:win
+```
+
+最后用临时目录加载打包后的 server 入口验证：
+
+```powershell
+node -e "const asar=require('@electron/asar'); const fs=require('fs'); const os=require('os'); const path=require('path'); const dir=fs.mkdtempSync(path.join(os.tmpdir(),'ad-fontes-asar-repro-')); asar.extractAll('release/win-unpacked/resources/app.asar', dir); require(path.resolve(dir,'out/server/app.js')); console.log('server entry ok')"
+```
+
+---
+
 ## 为什么不通过“换同一个 Node 版本”解决？
 
 可行性低，不推荐。
@@ -404,6 +460,7 @@ release/win-unpacked/Ad Fontes Manager.exe
 3. 桌面构建前关闭所有 dev server 和已启动的桌面应用
 4. 桌面构建失败后仍应确认 `pnpm run native:node` 能通过
 5. 升级 Electron、Node.js、better-sqlite3 时，重新验证本文所有命令
+6. 升级 pnpm、electron-builder、Express 或其他 server 运行时依赖时，重新检查 `app.asar` 是否漏掉深层依赖
 
 ---
 
@@ -414,3 +471,4 @@ release/win-unpacked/Ad Fontes Manager.exe
 - `electron-builder.yml` 一度保留 `npmRebuild: true`，与显式 rebuild 流程冲突
 - Windows 下运行中的 Node 进程锁住 `better_sqlite3.node`，导致 `EPERM unlink`
 - 当前方案改为脚本化切换：Web/dev 前 `native:node`，desktop 前 `native:electron`，desktop 后 `native:node`
+- pnpm 迁移后，electron-builder 漏收 `ee-first` 等深层生产依赖，导致打包后主进程 `Cannot find module`

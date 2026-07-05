@@ -3,3 +3,7 @@ allowBuilds:
   electron: true
   electron-winstaller: true
   esbuild: true
+
+# Electron 打包工具会扫描磁盘上的 node_modules。
+# 使用 hoisted 布局，让打包器按 npm 风格收集运行时依赖，避免漏掉深层小依赖。
+nodeLinker: hoisted
