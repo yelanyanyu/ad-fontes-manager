@@ -29,24 +29,24 @@ node_modules/better-sqlite3/build/Release/better_sqlite3.node
 日常不用手动记 ABI，直接用这些入口：
 
 ```bash
-npm run dev:web
-npm run build:web
-npm run start:web
-npm run build:desktop:win
-npm run build:desktop:mac
+pnpm run dev:web
+pnpm run build:web
+pnpm run start:web
+pnpm run build:desktop:win
+pnpm run build:desktop:mac
 ```
 
 这些脚本会自动做 ABI 准备：
 
-- Web/dev 入口先运行 `npm run native:node`
-- Desktop 构建入口先运行 `npm run native:electron`
-- Desktop 构建结束后，无论成功失败，都会运行 `npm run native:node` 恢复本地开发环境
+- Web/dev 入口先运行 `pnpm run native:node`
+- Desktop 构建入口先运行 `pnpm run native:electron`
+- Desktop 构建结束后，无论成功失败，都会运行 `pnpm run native:node` 恢复本地开发环境
 
 手动诊断时才需要直接运行：
 
 ```bash
-npm run native:node      # 确保根 node_modules 可被当前 Node.js 加载
-npm run native:electron  # 为 Electron 运行时重编译 better-sqlite3
+pnpm run native:node      # 确保根 node_modules 可被当前 Node.js 加载
+pnpm run native:electron  # 为 Electron 运行时重编译 better-sqlite3
 ```
 
 ---
@@ -58,14 +58,14 @@ npm run native:electron  # 为 Electron 运行时重编译 better-sqlite3
 对应命令：
 
 ```bash
-npm run native:node
+pnpm run native:node
 ```
 
 用途：
 
 1. 先尝试用当前 Node.js 打开 `better-sqlite3` 内存数据库
 2. 如果能加载，直接跳过
-3. 如果不能加载，执行 `npm rebuild better-sqlite3`
+3. 如果不能加载，执行 `pnpm rebuild better-sqlite3`
 4. rebuild 后再次验证能否加载
 
 这保证 Web/dev 后端不会因为根 `node_modules` 仍是 Electron ABI 140 而崩。
@@ -82,7 +82,7 @@ node -e "const Database = require('better-sqlite3'); const db = new Database(':m
 对应命令：
 
 ```bash
-npm run native:electron
+pnpm run native:electron
 ```
 
 用途：
@@ -106,18 +106,18 @@ npx @electron/rebuild --version <electron version> --which-module better-sqlite3
 对应命令：
 
 ```bash
-npm run rebuild:electron:native
+pnpm run rebuild:electron:native
 ```
 
-强制重建（不检查当前 ABI，始终执行 rebuild）。用于手动修复或调试场景，日常应优先使用 `npm run native:electron`。
+强制重建（不检查当前 ABI，始终执行 rebuild）。用于手动修复或调试场景，日常应优先使用 `pnpm run native:electron`。
 
 ### `scripts/build-desktop.mjs`
 
 对应命令：
 
 ```bash
-npm run build:desktop:win
-npm run build:desktop:mac
+pnpm run build:desktop:win
+pnpm run build:desktop:mac
 ```
 
 流程：
@@ -125,10 +125,10 @@ npm run build:desktop:mac
 ```text
 node scripts/build-desktop.mjs win|mac
   ├── electron-vite build
-  ├── npm run build:desktop:server
-  ├── npm run native:electron
+  ├── pnpm run build:desktop:server
+  ├── pnpm run native:electron
   ├── electron-builder --win|--mac
-  └── finally: npm run native:node
+  └── finally: pnpm run native:node
 ```
 
 `finally` 很重要：即使桌面构建失败，也要把根 `node_modules` 恢复到当前 Node.js 可用状态。
@@ -144,7 +144,7 @@ npmRebuild: false
 buildDependenciesFromSource: false
 
 asarUnpack:
-  - "**/*.node"
+  - '**/*.node'
 ```
 
 原因：
@@ -182,8 +182,8 @@ NODE_MODULE_VERSION 127.
 ### 处理
 
 ```bash
-npm run native:node
-npm run dev:web
+pnpm run native:node
+pnpm run dev:web
 ```
 
 验证：
@@ -217,8 +217,8 @@ NODE_MODULE_VERSION 140.
 使用桌面构建入口，不要直接跳过脚本调用 electron-builder：
 
 ```bash
-npm run build:desktop:win
-npm run build:desktop:mac
+pnpm run build:desktop:win
+pnpm run build:desktop:mac
 ```
 
 不要直接运行：
@@ -227,7 +227,7 @@ npm run build:desktop:mac
 electron-builder --win
 ```
 
-除非你已经手动确认 `npm run native:electron` 成功执行。
+除非你已经手动确认 `pnpm run native:electron` 成功执行。
 
 ---
 
@@ -247,9 +247,9 @@ D:\...\node_modules\better-sqlite3\build\Release\better_sqlite3.node
 
 Windows 正在加载这个 native DLL，导致 `electron-rebuild` 无法删除/替换它。通常是某个 Node/Electron 进程还活着：
 
-- `npm run dev:web`
-- `npm run dev:server`
-- `npm run dev:desktop`
+- `pnpm run dev:web`
+- `pnpm run dev:server`
+- `pnpm run dev:desktop`
 - 之前启动的 `Ad Fontes Manager.exe`
 - Electron preview window
 
@@ -265,7 +265,7 @@ Processes currently loading this file:
 先关闭相关终端或应用，然后重试：
 
 ```bash
-npm run build:desktop:win
+pnpm run build:desktop:win
 ```
 
 如果确认某个 PID 就是旧 dev server，可手动停止：
@@ -331,7 +331,7 @@ EPERM: operation not permitted, unlink better_sqlite3.node
 然后重试：
 
 ```bash
-npm run native:electron
+pnpm run native:electron
 ```
 
 ### macOS 处理方向
@@ -345,7 +345,7 @@ xcode-select --install
 然后重试：
 
 ```bash
-npm run native:electron
+pnpm run native:electron
 ```
 
 ---
@@ -375,15 +375,15 @@ npm run native:electron
 ### Web/dev 验证
 
 ```bash
-npm run native:node
+pnpm run native:node
 node -e "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('node abi ok')"
-npm run build:web
+pnpm run build:web
 ```
 
 ### Desktop 构建验证
 
 ```bash
-npm run build:desktop:win
+pnpm run build:desktop:win
 node -e "const Database = require('better-sqlite3'); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('node abi restored')"
 ```
 
@@ -400,9 +400,9 @@ release/win-unpacked/Ad Fontes Manager.exe
 ## 维护注意事项
 
 1. 不要把 `electron-builder.yml` 改回 `npmRebuild: true`
-2. 不要绕过 `npm run build:desktop:*` 直接运行 `electron-builder`
+2. 不要绕过 `pnpm run build:desktop:*` 直接运行 `electron-builder`
 3. 桌面构建前关闭所有 dev server 和已启动的桌面应用
-4. 桌面构建失败后仍应确认 `npm run native:node` 能通过
+4. 桌面构建失败后仍应确认 `pnpm run native:node` 能通过
 5. 升级 Electron、Node.js、better-sqlite3 时，重新验证本文所有命令
 
 ---

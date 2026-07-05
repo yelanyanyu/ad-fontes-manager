@@ -13,8 +13,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci
-      - run: npm run build:desktop:mac
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:desktop:mac
       - uses: actions/upload-artifact@v4
         with:
           name: AdFontesManager-Mac

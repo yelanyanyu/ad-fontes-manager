@@ -13,8 +13,8 @@
 ### Windows
 
 ```bash
-npm install
-npm run build:desktop:win
+pnpm install
+pnpm run build:desktop:win
 ```
 
 构建流程会自动：
@@ -35,8 +35,8 @@ npm run build:desktop:win
 ### Mac
 
 ```bash
-npm install
-npm run build:desktop:mac
+pnpm install
+pnpm run build:desktop:mac
 ```
 
 产物输出到 `release/`：
@@ -46,7 +46,7 @@ npm run build:desktop:mac
 
 Mac 构建支持 x64 和 arm64 (Apple Silicon) 双架构。
 
-> **注意**：桌面构建前请关闭所有 dev server 和已启动的桌面应用，否则 Windows 可能触发 `EPERM` 文件锁错误。不要直接运行 `electron-builder`，必须通过 `npm run build:desktop:*` 入口。
+> **注意**：桌面构建前请关闭所有 dev server 和已启动的桌面应用，否则 Windows 可能触发 `EPERM` 文件锁错误。不要直接运行 `electron-builder`，必须通过 `pnpm run build:desktop:*` 入口。
 
 ### CI/CD 自动构建
 
@@ -114,7 +114,7 @@ docker image prune -f
 
 ```bash
 # 1. 构建前端
-npm run build:web
+pnpm run build:web
 
 # 2. 设置环境变量
 export NODE_ENV=production
@@ -179,6 +179,6 @@ cp /path/to/ad_fontes.db /backup/ad_fontes_$(date +%Y%m%d).db
 
 1. 检查 `config.json` 中 `dataDir` 路径可访问
 2. 确认 `ad_fontes.db` 存在于数据目录
-3. **Native ABI 不匹配**：检查是否绕过构建脚本直接运行了 electron-builder，导致 `.node` 文件 ABI 错误。使用 `npm run build:desktop:win` 重新构建
+3. **Native ABI 不匹配**：检查是否绕过构建脚本直接运行了 electron-builder，导致 `.node` 文件 ABI 错误。使用 `pnpm run build:desktop:win` 重新构建
 4. 检查 `%APPDATA%/ad-fontes-manager/config.json` 是否可读写
 5. 重新安装或清空 `%APPDATA%/ad-fontes-manager/`

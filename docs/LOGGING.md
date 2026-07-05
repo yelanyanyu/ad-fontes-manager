@@ -37,24 +37,24 @@ log.debug({ lemma: 'example' }, 'Processing word');
 
 ## 日志级别
 
-| 级别 | 数值 | 使用场景 |
-|------|------|----------|
-| fatal | 60 | 系统崩溃 |
-| error | 50 | 功能无法正常工作 |
-| warn | 40 | 潜在问题 |
-| info | 30 | 正常流程记录 |
-| debug | 20 | 开发调试信息 |
-| trace | 10 | 最详细追踪 |
+| 级别  | 数值 | 使用场景         |
+| ----- | ---- | ---------------- |
+| fatal | 60   | 系统崩溃         |
+| error | 50   | 功能无法正常工作 |
+| warn  | 40   | 潜在问题         |
+| info  | 30   | 正常流程记录     |
+| debug | 20   | 开发调试信息     |
+| trace | 10   | 最详细追踪       |
 
 ## 环境变量
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `LOG_LEVEL` | `info` | 日志级别 |
-| `LOG_DIR` | `./logs` | 日志文件目录 |
-| `LOG_ROTATION_INTERVAL` | `1d` | 切分周期 |
-| `LOG_ROTATION_MAX_SIZE` | `10M` | 单文件上限 |
-| `LOG_ROTATION_MAX_FILES` | `30` | 保留文件数 |
+| 变量                     | 默认值   | 说明         |
+| ------------------------ | -------- | ------------ |
+| `LOG_LEVEL`              | `info`   | 日志级别     |
+| `LOG_DIR`                | `./logs` | 日志文件目录 |
+| `LOG_ROTATION_INTERVAL`  | `1d`     | 切分周期     |
+| `LOG_ROTATION_MAX_SIZE`  | `10M`    | 单文件上限   |
+| `LOG_ROTATION_MAX_FILES` | `30`     | 保留文件数   |
 
 ## HTTP 请求日志
 

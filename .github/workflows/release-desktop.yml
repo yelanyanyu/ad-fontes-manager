@@ -89,10 +89,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run type-check
-      - run: npm run lint
+          cache: pnpm
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run type-check
+      - run: pnpm run lint
       - run: node ./node_modules/tsx/dist/cli.mjs --test src/main/updateService.test.ts
 
   build-windows:
@@ -107,9 +108,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build:desktop:win
+          cache: pnpm
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:desktop:win
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-windows
@@ -131,9 +133,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build:desktop:mac
+          cache: pnpm
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:desktop:mac
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-mac

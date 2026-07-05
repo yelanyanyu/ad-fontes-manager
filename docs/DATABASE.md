@@ -13,20 +13,21 @@ WAL journal mode is enabled for better concurrent read performance.
 
 Single-table design — the full YAML document is stored as JSON text in the `content` column.
 
-| Column | Type | Nullable | Default | Description |
-|--------|------|----------|---------|-------------|
-| `id` | TEXT | NO | - | UUID primary key |
-| `lemma` | TEXT | NO | - | Canonical form |
-| `language` | TEXT | NO | `'en'` | Language code (`en`, `de`) |
-| `part_of_speech` | TEXT | YES | - | Part of speech |
-| `content` | TEXT | NO | - | Full YAML document as JSON string |
-| `created_at` | TEXT | NO | `datetime('now')` | ISO timestamp |
-| `updated_at` | TEXT | NO | `datetime('now')` | ISO timestamp |
-| `revision_count` | INTEGER | NO | `1` | Update count |
+| Column           | Type    | Nullable | Default           | Description                       |
+| ---------------- | ------- | -------- | ----------------- | --------------------------------- |
+| `id`             | TEXT    | NO       | -                 | UUID primary key                  |
+| `lemma`          | TEXT    | NO       | -                 | Canonical form                    |
+| `language`       | TEXT    | NO       | `'en'`            | Language code (`en`, `de`)        |
+| `part_of_speech` | TEXT    | YES      | -                 | Part of speech                    |
+| `content`        | TEXT    | NO       | -                 | Full YAML document as JSON string |
+| `created_at`     | TEXT    | NO       | `datetime('now')` | ISO timestamp                     |
+| `updated_at`     | TEXT    | NO       | `datetime('now')` | ISO timestamp                     |
+| `revision_count` | INTEGER | NO       | `1`               | Update count                      |
 
 **Constraints:** `UNIQUE (lemma, language)`
 
 **Indexes:**
+
 - `idx_words_v2_language` on `language`
 - `idx_words_v2_lemma_lang` on `(lemma, language)`
 - `idx_words_v2_created_at` on `created_at`
@@ -59,16 +60,17 @@ npx drizzle-kit generate
 
 ## Data File Locations
 
-| Mode | Path |
-|------|------|
-| Web dev | `data/ad_fontes.db` (or `DATABASE_URL` env var) |
-| Desktop (Windows) | `%APPDATA%/ad-fontes-manager/data/ad_fontes.db` |
-| Desktop (Mac) | `~/Library/Application Support/ad-fontes-manager/data/ad_fontes.db` |
-| Docker | `/app/data/ad_fontes.db` (volume mount) |
+| Mode              | Path                                                                |
+| ----------------- | ------------------------------------------------------------------- |
+| Web dev           | `data/ad_fontes.db` (or `DATABASE_URL` env var)                     |
+| Desktop (Windows) | `%APPDATA%/ad-fontes-manager/data/ad_fontes.db`                     |
+| Desktop (Mac)     | `~/Library/Application Support/ad-fontes-manager/data/ad_fontes.db` |
+| Docker            | `/app/data/ad_fontes.db` (volume mount)                             |
 
 ## WAL Mode Notes
 
 SQLite WAL (Write-Ahead Logging) creates two companion files alongside the database:
+
 - `ad_fontes.db-wal` — Write-Ahead Log
 - `ad_fontes.db-shm` — Shared Memory index
 
@@ -79,7 +81,7 @@ These are normal and automatically cleaned up on clean shutdown. When copying or
 ```bash
 PG_DATABASE_URL=postgresql://user:pass@host:5432/db \
 DATABASE_URL=./data/ad_fontes.db \
-npm run import:pg-v2
+pnpm run import:pg-v2
 ```
 
 ## Removed v1 Schema

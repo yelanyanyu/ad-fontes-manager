@@ -21,7 +21,7 @@ const forgeMetaPath = path.join(
   '.forge-meta'
 );
 
-// Current Node ABI version — used as a marker so we don't rebuild unnecessarily.
+// 当前 Node ABI 会写进标记文件，下一次启动时可以少做一次重建。
 const nodeAbi = process.versions.modules;
 const markerFile = path.join(
   rootDir,
@@ -32,19 +32,17 @@ const markerFile = path.join(
   '.node-abi'
 );
 
-// If the marker matches the current Node ABI, the module should be ready.
+// 标记和当前 ABI 一致时，先尝试直接加载；能加载就不再重建。
 if (readMarker() === nodeAbi && fs.existsSync(nativeFilePath)) {
-  // Quick sanity check that the module actually loads.
   if (canLoadBetterSqlite3()) {
     console.log('better-sqlite3 is ready for the current Node runtime.');
     process.exit(0);
   }
-  // Module doesn't load despite matching marker — possibly corrupted. Rebuild.
+  // 标记存在但模块加载失败，通常说明本地文件损坏或被别的构建覆盖。
   console.log('better-sqlite3 marker matches but module fails to load. Rebuilding...');
 }
 
-// Module needs a rebuild for Node ABI.
-// Check if the file is locked by lingering processes.
+// 需要切回 Node ABI 时，先处理可能占用 .node 文件的残留进程。
 if (fs.existsSync(nativeFilePath)) {
   const lock = checkFileLocked(nativeFilePath);
   if (lock.locked && lock.processes.length > 0) {
@@ -66,23 +64,23 @@ if (fs.existsSync(nativeFilePath)) {
 }
 
 console.log('Rebuilding better-sqlite3 for the current Node runtime...');
-run('npm', ['rebuild', 'better-sqlite3']);
+run(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['rebuild', 'better-sqlite3']);
 
-// Clear Electron forge-meta so ensure-electron-native knows a rebuild is needed.
+// 清掉 Electron ABI 标记，下一次桌面运行前会重新构建 Electron 版本。
 try {
   fs.unlinkSync(forgeMetaPath);
 } catch {
-  // File may not exist — that's fine.
+  // 文件可能本来就不存在，这里不需要中断恢复流程。
 }
 
 if (!canLoadBetterSqlite3()) {
-  console.error('better-sqlite3 still cannot be loaded after npm rebuild.');
+  console.error('better-sqlite3 still cannot be loaded after pnpm rebuild.');
   console.error('Try closing all Node.js / Electron processes and running:');
-  console.error('  npm run rebuild:node:native');
+  console.error('  pnpm run rebuild:node:native');
   process.exit(1);
 }
 
-// Write marker so future runs skip the rebuild.
+// 写入 Node ABI 标记，后续 Web/dev 入口可以快速判断是否需要重建。
 writeMarker(nodeAbi);
 console.log('better-sqlite3 rebuilt for the current Node runtime.');
 
@@ -133,6 +131,6 @@ function writeMarker(abi) {
     fs.mkdirSync(path.dirname(markerFile), { recursive: true });
     fs.writeFileSync(markerFile, `${abi}\n`);
   } catch {
-    // Non-critical — just means we'll recheck next time.
+    // 标记写入失败不影响当前运行，只是下次会重新检查。
   }
 }

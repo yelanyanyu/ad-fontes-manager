@@ -144,6 +144,14 @@ _Avoid_: Mark duplicates, duplicate resolution plan
 
 ### Desktop data
 
+**Electron Product Target** (Electron 产品目标):
+The only supported product target for Ad Fontes Manager releases. It owns packaging, updates, native module handling, user data, and release verification. Browser-based development may still exist for debugging the renderer or server, but it is not a separate shipped product.
+_Avoid_: Web product, desktop variant, release flavor
+
+**Browser Debug Preview** (浏览器调试预览):
+A developer-only way to inspect the renderer or local server in a browser while building the Electron app. It is useful for debugging layout, network calls, and renderer behavior, but it does not define a supported Web product and should not drive release requirements.
+_Avoid_: Web app, browser product, web release
+
 **Data Directory** (数据目录):
 The desktop app directory that contains the active **App Database** file. Changing the Data Directory is a workspace switch for future app sessions, not a database migration: if the selected directory does not contain the database file, the app creates a new empty App Database there and tells the user. It must not silently copy the previous database because that makes an empty workspace look like the old one.
 _Avoid_: Database path, data migration, backup folder

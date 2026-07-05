@@ -3,7 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+// 桌面构建后的原生模块恢复脚本。
+// 打包产物里的 Electron ABI 文件要保留，本地 node_modules 则恢复成 Node ABI。
 const rootDir = process.cwd();
+const packageManager = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 const nativeRelativePath = path.join(
   'node_modules',
   'better-sqlite3',
@@ -45,7 +48,7 @@ const snapshots = existingPackagedNatives.map(candidate => {
   return { candidate, snapshot };
 });
 
-const rebuildResult = spawnSync('npm', ['rebuild', 'better-sqlite3'], {
+const rebuildResult = spawnSync(packageManager, ['rebuild', 'better-sqlite3'], {
   cwd: rootDir,
   stdio: 'inherit',
   shell: process.platform === 'win32',
@@ -63,5 +66,6 @@ for (const { candidate, snapshot } of snapshots) {
 }
 
 function snapshotsRandomSuffix() {
+  // 快照文件只需要本次进程内避开重名，不承担安全随机数职责。
   return Math.random().toString(36).slice(2, 10);
 }

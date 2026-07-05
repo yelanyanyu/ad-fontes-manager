@@ -51,13 +51,13 @@ Ad Fontes 英语/德语词源词条管理工具。它把 AI 生成、YAML 修订
 环境要求：
 
 - Node.js 22 LTS 或更高版本
-- npm 10 或更高版本
+- pnpm 11 或更高版本
 - 可选：Anki + [AnkiConnect](https://ankiweb.net/shared/info/2055492159)
 
 ```bash
 git clone https://github.com/yelanyanyu/ad-fontes-manager.git
 cd ad-fontes-manager
-npm install
+pnpm install
 cp .env.example .env
 cp config.example.json config.json
 ```
@@ -65,45 +65,45 @@ cp config.example.json config.json
 启动 Web 开发模式：
 
 ```bash
-npm run dev:web
+pnpm run dev:web
 ```
 
 启动桌面开发模式：
 
 ```bash
-npm run dev:desktop
+pnpm run dev:desktop
 ```
 
 ## 常用命令
 
 ```bash
 # 开发
-npm run dev:web
-npm run dev:desktop
-npm run dev:server
-npm run dev:renderer
+pnpm run dev:web
+pnpm run dev:desktop
+pnpm run dev:server
+pnpm run dev:renderer
 
 # 检查
-npm run type-check
-npm run lint
-npm run test
+pnpm run type-check
+pnpm run lint
+pnpm run test
 
 # 构建
-npm run build:web
-npm run build:desktop:win
-npm run build:desktop:mac
+pnpm run build:web
+pnpm run build:desktop:win
+pnpm run build:desktop:mac
 
 # 数据库维护
-npm run db:init
-npm run db:import
-npm run db:view
-npm run db:diff
+pnpm run db:init
+pnpm run db:import
+pnpm run db:view
+pnpm run db:diff
 ```
 
 桌面构建会切换 `better-sqlite3` 的原生模块 ABI。构建后如果要继续跑 Node/Web 命令，执行：
 
 ```bash
-npm run native:node
+pnpm run native:node
 ```
 
 ## 架构速览

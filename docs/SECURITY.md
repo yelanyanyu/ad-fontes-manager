@@ -7,11 +7,13 @@
 ### Token 来源（按优先级）
 
 **Web 模式：**
+
 1. 环境变量 `ADMIN_TOKEN`
 2. `localStorage` 中的 `ad_fontes_admin_token`
 3. 开发模式 fallback：`dev-token-not-for-production`
 
 **桌面模式：**
+
 1. Electron 主进程设置 `process.env.ADMIN_TOKEN`
 2. preload 通过 `window.electronAPI.adminToken` 暴露给渲染进程
 3. 环境变量 `VITE_ADMIN_TOKEN`
@@ -32,6 +34,7 @@ export ADMIN_TOKEN=$(openssl rand -hex 32)
 ```
 
 以下配置已在 `.gitignore` 中排除：
+
 - `.env`
 - `.env.production`
 - `*.db` 数据库文件
@@ -47,7 +50,7 @@ export ADMIN_TOKEN=$(openssl rand -hex 32)
 contextBridge.exposeInMainWorld('electronAPI', {
   adminToken: ADMIN_TOKEN,
   getDataDir: () => ipcRenderer.invoke('get-data-dir'),
-  setDataDir: (path) => ipcRenderer.invoke('set-data-dir', path),
+  setDataDir: path => ipcRenderer.invoke('set-data-dir', path),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
 });
 ```
@@ -63,12 +66,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 生产环境启用 Helmet 中间件：
 
-| 头 | 值 | 说明 |
-|----|-----|------|
-| Content-Security-Policy | 配置中 | 防 XSS |
-| X-Frame-Options | DENY | 防点击劫持 |
-| X-Content-Type-Options | nosniff | 防 MIME 嗅探 |
-| Strict-Transport-Security | max-age=15552000 | 强制 HTTPS |
+| 头                        | 值               | 说明         |
+| ------------------------- | ---------------- | ------------ |
+| Content-Security-Policy   | 配置中           | 防 XSS       |
+| X-Frame-Options           | DENY             | 防点击劫持   |
+| X-Content-Type-Options    | nosniff          | 防 MIME 嗅探 |
+| Strict-Transport-Security | max-age=15552000 | 强制 HTTPS   |
 
 ## 数据库安全
 

@@ -213,7 +213,7 @@ void describe('generateController with JobQueue', () => {
     getDb = () => db;
     fakeRunner = new FakeRunner();
     // Reset queue singleton and inject test config.
-    const { initQueue, _resetQueue } = require('../services/ai/queue') as {
+    const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as {
       initQueue: (overrides?: {
         getDb?: () => SqliteLike;
         maxConcurrency?: number;
@@ -227,7 +227,7 @@ void describe('generateController with JobQueue', () => {
   });
 
   afterEach(() => {
-    const { _resetQueue } = require('../services/ai/queue') as { _resetQueue: () => void };
+    const { _resetQueue } = require('../services/ai/queue/testing') as { _resetQueue: () => void };
     _resetQueue();
   });
 
@@ -285,7 +285,7 @@ void describe('generateController with JobQueue', () => {
 
     void it('returns queued:true when a job is already running (concurrency=1)', async () => {
       const blockingRunner = new BlockingFakeRunner();
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -417,7 +417,7 @@ void describe('generateController with JobQueue', () => {
 
     void it('sends job:queued when subscribing to a queued job', async () => {
       const blockingRunner = new BlockingFakeRunner();
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -498,7 +498,7 @@ void describe('generateController with JobQueue', () => {
 
     void it('cancels a queued job', async () => {
       const blockingRunner = new BlockingFakeRunner();
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -527,7 +527,7 @@ void describe('generateController with JobQueue', () => {
 
     void it('cancels a running job', async () => {
       const blockingRunner = new BlockingFakeRunner();
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -558,7 +558,7 @@ void describe('generateController with JobQueue', () => {
   void describe('handlePauseJob and handleResumeActiveJob', () => {
     void it('pauses and resumes a queued job', async () => {
       const blockingRunner = new BlockingFakeRunner();
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -619,7 +619,7 @@ void describe('generateController with JobQueue', () => {
 
     void it('returns 400 when trying to resume a running job', async () => {
       const blockingRunner = new BlockingFakeRunner();
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -693,7 +693,7 @@ void describe('generateController with JobQueue', () => {
           return { yaml: FAKE_YAML, scores: FAKE_SCORES };
         },
       };
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: capturingRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -748,7 +748,7 @@ void describe('generateController with JobQueue', () => {
           return { yaml: FAKE_YAML, scores: FAKE_SCORES };
         },
       };
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: capturingRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -903,7 +903,7 @@ void describe('generateController with JobQueue', () => {
 
     void it('enqueues a high-priority fix job so it appears in the queue overview', async () => {
       const blockingRunner = new BlockingFakeRunner();
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: blockingRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -953,7 +953,7 @@ void describe('generateController with JobQueue', () => {
           return { yaml: FAKE_YAML, scores: FAKE_SCORES };
         },
       };
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: captureRunner });
       delete require.cache[require.resolve('./generateController')];
@@ -1189,7 +1189,7 @@ void describe('generateController with JobQueue', () => {
           };
         },
       };
-      const { initQueue, _resetQueue } = require('../services/ai/queue') as any;
+      const { initQueue, _resetQueue } = require('../services/ai/queue/testing') as any;
       _resetQueue();
       initQueue({ getDb, maxConcurrency: 1, runner: captureRunner });
       delete require.cache[require.resolve('./generateController')];

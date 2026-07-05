@@ -23,12 +23,12 @@ Run commands from the repository root.
 
 ```bash
 
-npm run dev:desktop
-npm run type-check
-npm run lint
-npm run test
-npm run test-api
-npm run build:desktop:win
+pnpm run dev:desktop
+pnpm run type-check
+pnpm run lint
+pnpm run test
+pnpm run test-api
+pnpm run build:desktop:win
 ```
 
 After any desktop build, verify native modules are restored for Node:
@@ -46,6 +46,6 @@ node -e "require('better-sqlite3')"
 
 ## Verification
 
-- Run `npm run type-check` and `npm run lint` after code changes; Codex hooks remind before final response when these are missing.
+- Run `pnpm run type-check` and `pnpm run lint` after code changes; Codex hooks remind before final response when these are missing.
 - Add or update focused tests for behavior changes where practical.
 - For UI changes, verify the relevant desktop or web flow manually and include screenshots in PRs when useful.

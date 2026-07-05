@@ -3,12 +3,9 @@ export type { ResolvedModel } from './modelResolver';
 // Provider module 的公开入口。
 // 调用者从这里拿配置、模型和端点解析能力，不需要知道这些能力分别落在哪个内部文件。
 const configService = require('./configService') as {
-  maskApiKey: (key: string) => string;
   getAIConfig: () => unknown;
   getAIConfigMasked: () => unknown;
   updateAIConfig: (input: unknown) => unknown;
-  mergeProviderWithMaskedCheck: (inputProvider: unknown, existingProvider?: unknown) => unknown;
-  mergeSearchWithMaskedCheck: (inputSearch: unknown, existingSearch?: unknown) => unknown;
   resolveProviderApiKeyForTest: (providerId: string | undefined, inputApiKey: string) => string;
 };
 const modelResolver = require('./modelResolver') as {
@@ -26,7 +23,10 @@ const endpointResolver = require('./endpointResolver') as {
 };
 
 module.exports = {
-  ...configService,
-  ...modelResolver,
-  ...endpointResolver,
+  getAIConfig: configService.getAIConfig,
+  getAIConfigMasked: configService.getAIConfigMasked,
+  updateAIConfig: configService.updateAIConfig,
+  resolveProviderApiKeyForTest: configService.resolveProviderApiKeyForTest,
+  resolveModel: modelResolver.resolveModel,
+  resolveAIEndpoint: endpointResolver.resolveAIEndpoint,
 };
