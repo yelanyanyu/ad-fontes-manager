@@ -615,4 +615,66 @@ void describe('configService', () => {
     const result = resolveProviderApiKeyForTest('deepseek', 'sk-***0d1c');
     assert.equal(result, 'sk-real-key-0d1c');
   });
+
+  void it('resolveSearchApiKeyForTest reads the stored key for masked search test input', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-search-test-key-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+
+    const config = require('../../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const { resolveSearchApiKeyForTest, updateAIConfig } = loadService();
+
+    updateAIConfig({
+      search: {
+        provider: 'tavily',
+        apiKey: 'tvly-real-key-0d1c',
+        autoDomains: true,
+        domains: { common: ['etymonline.com'], en: [], de: [] },
+      },
+    });
+
+    const result = resolveSearchApiKeyForTest('tavily', '***0d1c');
+    assert.equal(result, 'tvly-real-key-0d1c');
+  });
+
+  void it('reveals raw provider and search keys only through explicit reveal helpers', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-reveal-key-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+
+    const config = require('../../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const { getAIConfigMasked, revealProviderApiKey, revealSearchApiKey, updateAIConfig } =
+      loadService();
+
+    updateAIConfig({
+      providers: [
+        {
+          id: 'deepseek',
+          name: 'deepseek',
+          type: 'openai',
+          baseUrl: 'https://api.deepseek.com',
+          apiKey: 'sk-real-provider-7339',
+          models: [{ id: 'deepseek-v4-pro', name: 'deepseek-v4-pro[1m]' }],
+        },
+      ],
+      search: {
+        provider: 'tavily',
+        apiKey: 'tvly-real-search-7339',
+        autoDomains: true,
+        domains: { common: ['etymonline.com'], en: [], de: [] },
+      },
+    });
+
+    const masked = getAIConfigMasked();
+    assert.equal(masked.providers[0].apiKey, 'sk-***7339');
+    assert.equal(masked.search.apiKey, '***7339');
+    assert.equal(revealProviderApiKey('deepseek'), 'sk-real-provider-7339');
+    assert.equal(revealSearchApiKey('tavily'), 'tvly-real-search-7339');
+  });
 });

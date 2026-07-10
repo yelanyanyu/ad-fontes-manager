@@ -31,6 +31,8 @@ pnpm run test-api
 pnpm run build:desktop:win
 ```
 
+Use `pnpm run dev:desktop` as the default debugging surface. Do not assume the web server is the primary local app; when Electron is already open for debugging, verify UI flows in that Electron window/browser context. An open Electron process may lock `better-sqlite3.node`, so do not treat that lock as a reason to switch to web debugging.
+
 After any desktop build, verify native modules are restored for Node:
 
 ```bash
@@ -48,4 +50,4 @@ node -e "require('better-sqlite3')"
 
 - Run `pnpm run type-check` and `pnpm run lint` after code changes; Codex hooks remind before final response when these are missing.
 - Add or update focused tests for behavior changes where practical.
-- For UI changes, verify the relevant desktop or web flow manually and include screenshots in PRs when useful.
+- For UI changes, verify the relevant desktop flow manually and include screenshots in PRs when useful.

@@ -126,6 +126,17 @@ const TestSearchInputSchema = z.object({
   apiKey: z.string().min(1, 'API Key is required'),
 });
 
+const RevealAISecretInputSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('provider'),
+    providerId: z.string().trim().min(1, 'Provider ID is required'),
+  }),
+  z.object({
+    kind: z.literal('search'),
+    provider: z.enum(['brave', 'tavily']),
+  }),
+]);
+
 module.exports = {
   AIConfigSchema,
   AIConfigUpdateSchema,
@@ -134,4 +145,5 @@ module.exports = {
   AIStageConfigSchema,
   TestProviderInputSchema,
   TestSearchInputSchema,
+  RevealAISecretInputSchema,
 };

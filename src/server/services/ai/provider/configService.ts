@@ -2,6 +2,8 @@ import type { UserSettingsPatch } from '../../../settings/userSettings';
 
 const { createFileSettingsAdapter, createUserSettingsModule } =
   require('../../../settings/userSettings') as typeof import('../../../settings/userSettings');
+const { containsMask, maskSecret, preserveMaskedSecret, resolveMaskedSecretForUse } =
+  require('../../../settings/secretMask') as typeof import('../../../settings/secretMask');
 const { loggers } = require('../../../utils/logger') as {
   loggers: {
     ai: {
@@ -100,15 +102,7 @@ function readAIConfigFromSettings(masked: boolean): AIConfig {
 }
 
 function maskApiKey(key: string): string {
-  if (!key) return '';
-  if (key.length <= 8) return '***';
-  const prefix = key.slice(0, 3);
-  const suffix = key.slice(-4);
-  return `${prefix}***${suffix}`;
-}
-
-function containsMask(value: string): boolean {
-  return value.includes('***');
+  return maskSecret(key);
 }
 
 function withProviderEndpointDefaults(provider: AIProvider): AIProvider {
@@ -146,13 +140,9 @@ function mergeProviderWithMaskedCheck(
   existingProvider?: AIProvider
 ): AIProvider {
   if (!existingProvider) return inputProvider;
-  if (!containsMask(inputProvider.apiKey)) return inputProvider;
   return {
     ...inputProvider,
-    apiKey:
-      existingProvider.apiKey && !containsMask(existingProvider.apiKey)
-        ? existingProvider.apiKey
-        : '',
+    apiKey: preserveMaskedSecret(inputProvider.apiKey, existingProvider.apiKey),
   };
 }
 
@@ -161,11 +151,9 @@ function mergeSearchWithMaskedCheck(
   existingSearch?: AISearchConfig
 ): AISearchConfig {
   if (!existingSearch) return inputSearch;
-  if (!containsMask(inputSearch.apiKey)) return inputSearch;
   return {
     ...inputSearch,
-    apiKey:
-      existingSearch.apiKey && !containsMask(existingSearch.apiKey) ? existingSearch.apiKey : '',
+    apiKey: preserveMaskedSecret(inputSearch.apiKey, existingSearch.apiKey),
   };
 }
 
@@ -183,9 +171,24 @@ function mergeProvidersWithMaskedKeys(
 }
 
 function resolveProviderApiKeyForTest(providerId: string | undefined, inputApiKey: string): string {
-  if (!providerId || (!containsMask(inputApiKey) && inputApiKey)) return inputApiKey;
+  if (!providerId) return inputApiKey;
   const provider = getAIConfig().providers.find(item => item.id === providerId);
-  return provider?.apiKey || inputApiKey;
+  return resolveMaskedSecretForUse(inputApiKey, provider?.apiKey);
+}
+
+function resolveSearchApiKeyForTest(provider: 'brave' | 'tavily', inputApiKey: string): string {
+  const search = getAIConfig().search;
+  const existingApiKey = search?.provider === provider ? search.apiKey : undefined;
+  return resolveMaskedSecretForUse(inputApiKey, existingApiKey);
+}
+
+function revealProviderApiKey(providerId: string): string {
+  return getAIConfig().providers.find(item => item.id === providerId)?.apiKey || '';
+}
+
+function revealSearchApiKey(provider: 'brave' | 'tavily'): string {
+  const search = getAIConfig().search;
+  return search?.provider === provider ? search.apiKey : '';
 }
 
 function updateAIConfig(input: unknown): AIConfigMasked {
@@ -238,4 +241,7 @@ module.exports = {
   mergeProviderWithMaskedCheck,
   mergeSearchWithMaskedCheck,
   resolveProviderApiKeyForTest,
+  resolveSearchApiKeyForTest,
+  revealProviderApiKey,
+  revealSearchApiKey,
 };

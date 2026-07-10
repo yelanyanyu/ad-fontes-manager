@@ -7,6 +7,9 @@ const configService = require('./configService') as {
   getAIConfigMasked: () => unknown;
   updateAIConfig: (input: unknown) => unknown;
   resolveProviderApiKeyForTest: (providerId: string | undefined, inputApiKey: string) => string;
+  resolveSearchApiKeyForTest: (provider: 'brave' | 'tavily', inputApiKey: string) => string;
+  revealProviderApiKey: (providerId: string) => string;
+  revealSearchApiKey: (provider: 'brave' | 'tavily') => string;
 };
 const modelResolver = require('./modelResolver') as {
   resolveModel: (
@@ -27,6 +30,9 @@ module.exports = {
   getAIConfigMasked: configService.getAIConfigMasked,
   updateAIConfig: configService.updateAIConfig,
   resolveProviderApiKeyForTest: configService.resolveProviderApiKeyForTest,
+  resolveSearchApiKeyForTest: configService.resolveSearchApiKeyForTest,
+  revealProviderApiKey: configService.revealProviderApiKey,
+  revealSearchApiKey: configService.revealSearchApiKey,
   resolveModel: modelResolver.resolveModel,
   resolveAIEndpoint: endpointResolver.resolveAIEndpoint,
 };

@@ -12,6 +12,7 @@ import {
 import { listStoredFieldMappingModelNames } from '@/services/ankiFieldMappingStore';
 import {
   fetchAIConfig,
+  revealAISecret,
   saveAIConfig,
   testProvider,
   testSearch,
@@ -21,6 +22,12 @@ import {
   type TestProviderResult,
 } from '@/services/aiConfigApi';
 import { mergeSavedAIConfigWithDraft } from '@/services/aiConfigDraft';
+import {
+  getNextSecretVisibility,
+  getSecretInputType,
+  getSecretToggleTitle,
+  isMaskedSecret,
+} from '@/services/secretDisplay';
 import { aiProviderPresets, type AIProviderPreset } from '@/constants/aiProviderPresets';
 import { requestOnboardingReplay } from '@/components/Onboarding/onboardingState';
 
@@ -285,6 +292,49 @@ const updateModelEndpointType = (
   model.endpointType =
     endpointType === 'openai' || endpointType === 'anthropic' ? endpointType : undefined;
   triggerAutoSave();
+};
+
+const getProviderApiKeyInputType = (provider: AIProviderMasked): 'password' | 'text' =>
+  getSecretInputType(provider.apiKey, showApiKey[provider.id]);
+
+const getProviderApiKeyToggleTitle = (provider: AIProviderMasked): string =>
+  getSecretToggleTitle(showApiKey[provider.id]);
+
+const toggleProviderApiKeyVisibility = async (provider: AIProviderMasked): Promise<void> => {
+  if (showApiKey[provider.id]) {
+    showApiKey[provider.id] = false;
+    return;
+  }
+  if (isMaskedSecret(provider.apiKey)) {
+    const result = await revealAISecret({ kind: 'provider', providerId: provider.id });
+    provider.apiKey = result.apiKey;
+  }
+  showApiKey[provider.id] = getNextSecretVisibility(provider.apiKey, showApiKey[provider.id]);
+};
+
+const getSearchApiKeyInputType = (): 'password' | 'text' =>
+  getSecretInputType(aiConfig.value?.search?.apiKey, showApiKey._search);
+
+const getSearchApiKeyToggleTitle = (): string =>
+  getSecretToggleTitle(showApiKey._search);
+
+const toggleSearchApiKeyVisibility = async (): Promise<void> => {
+  if (!aiConfig.value?.search) return;
+  if (showApiKey._search) {
+    showApiKey._search = false;
+    return;
+  }
+  if (isMaskedSecret(aiConfig.value.search.apiKey)) {
+    const result = await revealAISecret({
+      kind: 'search',
+      provider: aiConfig.value.search.provider,
+    });
+    aiConfig.value.search.apiKey = result.apiKey;
+  }
+  showApiKey._search = getNextSecretVisibility(
+    aiConfig.value.search.apiKey,
+    showApiKey._search
+  );
 };
 
 const sanitizeAIConfigForSave = (config: AIConfigMasked): AIConfigMasked => {
@@ -871,17 +921,17 @@ onMounted(() => {
                       v-model="selectedProvider.apiKey"
                       class="field-control"
                       data-tour="settings-provider-api-key"
-                      :type="showApiKey[selectedProvider.id] ? 'text' : 'password'"
+                      :type="getProviderApiKeyInputType(selectedProvider)"
                       placeholder="输入 API Key"
                       @input="triggerAutoSave()"
                     />
                     <button
                       type="button"
                       class="eye-toggle"
-                      :title="showApiKey[selectedProvider.id] ? '隐藏' : '查看'"
-                      @click="showApiKey[selectedProvider.id] = !showApiKey[selectedProvider.id]"
+                      :title="getProviderApiKeyToggleTitle(selectedProvider)"
+                      @click="toggleProviderApiKeyVisibility(selectedProvider)"
                     >
-                      <svg v-if="showApiKey[selectedProvider.id]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                      <svg v-if="getProviderApiKeyInputType(selectedProvider) === 'text'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
                       <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                     </button>
                   </div>
@@ -1148,17 +1198,17 @@ onMounted(() => {
                         <input
                           v-model="aiConfig.search.apiKey"
                           class="field-control"
-                          :type="showApiKey._search ? 'text' : 'password'"
+                          :type="getSearchApiKeyInputType()"
                           placeholder="输入搜索 API Key"
                           @input="triggerAutoSave()"
                         />
                         <button
                           type="button"
                           class="eye-toggle"
-                          :title="showApiKey._search ? '隐藏' : '查看'"
-                          @click="showApiKey._search = !showApiKey._search"
+                          :title="getSearchApiKeyToggleTitle()"
+                          @click="toggleSearchApiKeyVisibility()"
                         >
-                          <svg v-if="showApiKey._search" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+                          <svg v-if="getSearchApiKeyInputType() === 'text'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
                           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
                         </button>
                       </span>

@@ -74,3 +74,14 @@ export interface TestSearchInput {
 
 export const testSearch = (input: TestSearchInput): Promise<TestProviderResult> =>
   request.post('/v2/config/ai/test-search', input, { skipErrorToast: true });
+
+export type RevealAISecretInput =
+  | { kind: 'provider'; providerId: string }
+  | { kind: 'search'; provider: 'brave' | 'tavily' };
+
+export interface RevealAISecretResult {
+  apiKey: string;
+}
+
+export const revealAISecret = (input: RevealAISecretInput): Promise<RevealAISecretResult> =>
+  request.post('/v2/config/ai/reveal-secret', input);

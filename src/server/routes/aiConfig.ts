@@ -16,16 +16,27 @@ const { validateBody } = require('../middleware/validate') as {
     schema: ZodType<unknown>
   ) => (req: Request, res: Response, next: NextFunction) => void;
 };
-const { TestProviderInputSchema, TestSearchInputSchema } = require('../schemas/aiConfig') as {
-  TestProviderInputSchema: ZodType<unknown>;
-  TestSearchInputSchema: ZodType<unknown>;
-};
-const { getAIConfigMasked, updateAIConfig, resolveProviderApiKeyForTest } =
-  require('../services/ai/provider') as {
-    getAIConfigMasked: () => unknown;
-    updateAIConfig: (input: unknown) => unknown;
-    resolveProviderApiKeyForTest: (providerId: string | undefined, inputApiKey: string) => string;
+const { TestProviderInputSchema, TestSearchInputSchema, RevealAISecretInputSchema } =
+  require('../schemas/aiConfig') as {
+    TestProviderInputSchema: ZodType<unknown>;
+    TestSearchInputSchema: ZodType<unknown>;
+    RevealAISecretInputSchema: ZodType<unknown>;
   };
+const {
+  getAIConfigMasked,
+  updateAIConfig,
+  resolveProviderApiKeyForTest,
+  resolveSearchApiKeyForTest,
+  revealProviderApiKey,
+  revealSearchApiKey,
+} = require('../services/ai/provider') as {
+  getAIConfigMasked: () => unknown;
+  updateAIConfig: (input: unknown) => unknown;
+  resolveProviderApiKeyForTest: (providerId: string | undefined, inputApiKey: string) => string;
+  resolveSearchApiKeyForTest: (provider: 'brave' | 'tavily', inputApiKey: string) => string;
+  revealProviderApiKey: (providerId: string) => string;
+  revealSearchApiKey: (provider: 'brave' | 'tavily') => string;
+};
 const { loggers } = require('../utils/logger') as {
   loggers: {
     ai: {
@@ -52,6 +63,10 @@ interface TestProviderBody {
   modelEndpointType?: 'openai' | 'anthropic';
   model: string;
 }
+
+type RevealAISecretBody =
+  | { kind: 'provider'; providerId: string }
+  | { kind: 'search'; provider: 'brave' | 'tavily' };
 
 const API_VERSION_REGEX = /\/v\d+(?:alpha|beta)?(?:\/|$)/i;
 
@@ -92,6 +107,20 @@ router.put(
       }
       throw error;
     }
+  })
+);
+
+router.post(
+  '/config/ai/reveal-secret',
+  requireWriteAccess,
+  validateBody(RevealAISecretInputSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const body = req.body as RevealAISecretBody;
+    const apiKey =
+      body.kind === 'provider'
+        ? revealProviderApiKey(body.providerId)
+        : revealSearchApiKey(body.provider);
+    res.json({ apiKey });
   })
 );
 
@@ -202,7 +231,8 @@ router.post(
   requireWriteAccess,
   validateBody(TestSearchInputSchema),
   asyncHandler(async (req: Request, res: Response) => {
-    const { provider, apiKey } = req.body as { provider: 'brave' | 'tavily'; apiKey: string };
+    const { provider } = req.body as { provider: 'brave' | 'tavily'; apiKey: string };
+    const apiKey = resolveSearchApiKeyForTest(provider, (req.body as { apiKey: string }).apiKey);
     const start = Date.now();
     const controller = new globalThis.AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);

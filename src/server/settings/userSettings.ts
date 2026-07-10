@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { maskSecret } from './secretMask';
 import { migrateUserConfig } from '../utils/configMigration';
 import type { ConfigObject } from '../utils/defaultAppConfig';
 
@@ -124,20 +125,6 @@ function normalizeUserSettings(input: unknown): { config: ConfigObject; changed:
   return migrateUserConfig(rawConfig);
 }
 
-function maskApiKey(key: string): string {
-  if (!key) return '';
-  if (key.length <= 8) return '***';
-  const prefix = key.slice(0, 3);
-  const suffix = key.slice(-4);
-  return `${prefix}***${suffix}`;
-}
-
-function maskSearchApiKey(key: string): string {
-  if (!key) return '';
-  if (key.length <= 4) return '***';
-  return `***${key.slice(-4)}`;
-}
-
 // 生成可给 renderer/API 使用的快照；本地 secret 只在 raw snapshot 中保留。
 function maskUserSettings(config: ConfigObject): ConfigObject {
   const masked = cloneConfig(config);
@@ -148,14 +135,17 @@ function maskUserSettings(config: ConfigObject): ConfigObject {
   if (Array.isArray(providers)) {
     ai.providers = providers.map(provider =>
       isPlainObject(provider) && typeof provider.apiKey === 'string'
-        ? { ...provider, apiKey: maskApiKey(provider.apiKey) }
+        ? { ...provider, apiKey: maskSecret(provider.apiKey) }
         : provider
     ) as ConfigObject[string];
   }
 
   const search = ai.search;
   if (isPlainObject(search) && typeof search.apiKey === 'string') {
-    ai.search = { ...search, apiKey: maskSearchApiKey(search.apiKey) } as ConfigObject[string];
+    ai.search = {
+      ...search,
+      apiKey: maskSecret(search.apiKey, { visiblePrefix: 0, minimumLengthToReveal: 5 }),
+    } as ConfigObject[string];
   }
 
   return masked;
