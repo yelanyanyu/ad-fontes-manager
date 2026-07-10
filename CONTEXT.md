@@ -489,6 +489,38 @@ _Avoid_: Raw tool output, search result
 A Markdown file under `docs/prompts/` containing the system prompt template for a Stage. Supports `{{variable}}` placeholder injection at load time.
 _Avoid_: Template, instruction
 
+**Revelatory Source** (显义来源):
+A literary or artistic source chosen because its use of a Lemma best reveals the Word's inner image, even when it is not the earliest attestation. The earliest known source should still be mentioned when available, but the generation should privilege a striking poetic, dramatic, epic, or artistic use over mechanically earlier evidence.
+_Avoid_: earliest source, citation proof, research authority
+
+**Etymology Resistance** (反词源机械性):
+An interpretive stance where a Word analysis may challenge a literal etymological explanation when that explanation flattens the Word's living image. Historical etymology remains evidence to cite, but it must not overrule a stronger literary or artistic scene that better discloses the Lemma's felt meaning.
+_Avoid_: etymology denial, free association, root translation
+
+**Human Word Prose** (真人感单词正文):
+The prose style required for Markdown-based Word analysis: natural Chinese paragraphs that avoid formulaic AI writing signals such as slogan endings, inflated symbolism, rigid contrasts, "not X but Y" variants, three-part listing, vague authority, over-explained metaphors, translationese, and vague image words. Every image must have a concrete scene boundary and a touchable relation; if a sentence says a Word is slower, softer, exposed, revealed, or changed, it must show what moves, who sees it, what is uncovered, and what relation has shifted.
+_Avoid_: AI-flavored prose, prompt-shaped prose, decorative explanation
+
+**Image-Grounded Nuance** (画面落地辨析):
+The way Word Disclosure Notes compare synonyms: first establish the Lemma's own scene, then compare another Word through its existing note or through a freshly described scene of equal concreteness. A comparison must not introduce a loose image only for contrast; if it mentions cloth, doors, light, speed, hiding, or exposure, those details must already belong to one of the compared scenes or be made concrete in the same paragraph. Scene details must earn their place by serving the Word's action-relation; do not specify dinner, rooms, objects, or atmospheres unless that detail changes what is hidden, pressed, loosened, seen, or answered. Avoid meta-writing such as "this note first writes..." and do the comparison directly. Do not use vague state changes such as "loosened a little"; name the object and show its visible change, such as a folded corner, an unsealed edge, a shifted hand, or a glance that passes over it without yet understanding.
+_Avoid_: abstract synonym contrast, half-concrete metaphor, decorative wikilink
+
+**Immersive Markdown Form** (沉浸式 Markdown 形态):
+The Markdown structure for Word Disclosure Notes where metadata carries the Lemma identity and the body begins directly with continuous prose. The body should not use a `# lemma` title or section headings; bold phrases guide attention inside the prose without turning the note into visible fields. Wikilinks belong in the prose where the related Word is being thought through, not in metadata fields such as `related`.
+_Avoid_: field headings, outline note, YAML-shaped Markdown
+
+**Moneta Feedback Flow** (Moneta 反馈流):
+The modular skill flow for using and improving Moneta word, phrase, and writing-review skills. `/ask-yanyu` is the entry router and should briefly introduce the available Moneta paths. `/moneta-critique` turns a user's sense that some content is strange, unnatural, AI-flavored, or logically wrong into a confirmed rule. `/moneta-skills-improver` handles correction compression and target-skill updates as one user-facing improvement action, so users do not need to choose between corrections and skill sync. The Moneta name should appear in internal module names so they are not confused with generic code review, product feedback, or prompt iteration.
+_Avoid_: generic skill feedback, feedback dump, correction append-only flow
+
+**Moneta Skills Setup** (Moneta Skills 初始化):
+The first-run setup flow for a project that wants to use Moneta skills. `/setup-moneta-skills` explores the repo, reports which Moneta skills, output directories, and reference files already exist, asks the user before creating missing pieces, and initializes files such as `STYLE.md`, `SOURCES.md`, `CORRECTIONS.md`, `word/`, and optional phrase/write-review scaffolding. It should behave like setup-matt-pocock-skills: prompt-driven, conservative, and careful not to overwrite user content.
+_Avoid_: blind scaffolding, automatic overwrite, hidden setup script
+
+**Moneta Correction Compression** (Moneta 纠错压缩):
+The user-confirmed maintenance action that keeps long-running Moneta correction references readable. Raw objections are first classified as new rules, examples of existing rules, temporary article-specific feedback, or repeated samples. Only durable rules remain in active correction files such as `CORRECTIONS.md`; redundant examples may be replaced by one representative bad sentence or moved into an archive after user confirmation. This keeps the agent from loading an ever-growing pile of overlapping examples while preserving the user's strongest distinctions.
+_Avoid_: silent deletion, unlimited corrections, automatic summarization without confirmation
+
 **Reasoning** (推理):
 An LLM's internal chain-of-thought output, exposed via the `reasoningEffort` parameter. Streamed to the client as `step:reasoning` SSE events, distinct from visible text tokens.
 _Avoid_: Thinking, chain-of-thought, CoT
