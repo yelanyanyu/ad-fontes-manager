@@ -165,6 +165,63 @@ void describe('configService', () => {
     assert.deepEqual(saved.ai.search.domains.common, ['wiktionary.org']);
   });
 
+  void it('getAIConfigMasked reads a safe User Settings snapshot without leaking secrets', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-masked-read-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        {
+          ai: {
+            providers: [
+              {
+                id: 'deepseek',
+                name: 'deepseek',
+                type: 'openai',
+                baseUrl: 'https://api.deepseek.com',
+                apiKey: 'sk-real-provider-12345',
+                models: [{ id: 'deepseek-chat', name: 'deepseek-chat' }],
+              },
+            ],
+            queue_concurrency: 2,
+            search: {
+              provider: 'tavily',
+              apiKey: 'tvly-real-search-key',
+              autoDomains: true,
+              domains: { common: ['etymonline.com'], en: [], de: [] },
+            },
+            stages: {
+              fast: { provider: 'deepseek', model: 'deepseek-chat', reasoningEffort: 'none' },
+            },
+            review: { threshold: 6, thresholdByLanguage: {}, aiFlavorMarkers: [] },
+          },
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    const config = require('../../../utils/config') as { clearCache: () => void };
+    config.clearCache();
+    const { getAIConfig, getAIConfigMasked } = loadService();
+
+    const masked = getAIConfigMasked();
+    assert.equal(masked.providers[0].apiKey, 'sk-***2345');
+    assert.equal(masked.search.apiKey, '***-key');
+    assert.equal(masked.queue_concurrency, 2);
+    assert.equal(masked.search.provider, 'tavily');
+    assert.equal(masked.providers[0].apiKey.includes('real-provider'), false);
+    assert.equal(masked.search.apiKey.includes('real-search'), false);
+
+    const raw = getAIConfig();
+    assert.equal(raw.providers[0].apiKey, 'sk-real-provider-12345');
+    assert.equal(raw.search.apiKey, 'tvly-real-search-key');
+  });
+
   void it('updateAIConfig accepts preset providers and search config without API keys', () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),
@@ -304,6 +361,58 @@ void describe('configService', () => {
     assert.equal(saved.ai?.providers[0].id, 'deepseek');
   });
 
+  void it('updateAIConfig writes AI settings through the User Settings module', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-user-settings-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+    fs.writeFileSync(configPath, JSON.stringify({ server: { port: 4567 } }, null, 2), 'utf8');
+
+    const config = require('../../../utils/config') as { clearCache: () => void };
+    const { createFileSettingsAdapter, createUserSettingsModule } =
+      require('../../../settings/userSettings') as typeof import('../../../settings/userSettings');
+    config.clearCache();
+    const { updateAIConfig } = loadService();
+
+    const result = updateAIConfig({
+      providers: [
+        {
+          id: 'deepseek',
+          name: 'deepseek',
+          type: 'openai',
+          baseUrl: 'https://api.deepseek.com',
+          apiKey: 'sk-new-user-settings-key',
+          models: [{ id: 'deepseek-chat', name: 'deepseek-chat' }],
+        },
+      ],
+      search: {
+        provider: 'tavily',
+        apiKey: 'tvly-new-user-settings-key',
+        autoDomains: false,
+        domains: { common: ['wiktionary.org'], en: [], de: [] },
+      },
+    });
+
+    const settings = createUserSettingsModule({
+      adapter: createFileSettingsAdapter({ configPath }),
+    });
+    const snapshot = settings.readSnapshot().config as {
+      server?: { port?: number };
+      ai?: {
+        providers?: Array<{ apiKey: string }>;
+        search?: { apiKey: string; autoDomains: boolean };
+      };
+    };
+
+    assert.equal(snapshot.server?.port, 4567);
+    assert.equal(snapshot.ai?.providers?.[0]?.apiKey, 'sk-new-user-settings-key');
+    assert.equal(snapshot.ai?.search?.apiKey, 'tvly-new-user-settings-key');
+    assert.equal(snapshot.ai?.search?.autoDomains, false);
+    assert.equal(result.providers[0].apiKey, 'sk-***-key');
+    assert.equal(result.search.apiKey, '***-key');
+  });
+
   void it('updateAIConfig persists queue concurrency alongside AI settings', () => {
     const configPath = path.join(
       fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-')),
@@ -327,6 +436,38 @@ void describe('configService', () => {
     assert.equal(result.queue_concurrency, 3);
     assert.equal(getAIConfig().queue_concurrency, 3);
     assert.equal(saved.ai?.queue_concurrency, 3);
+  });
+
+  void it('updateAIConfig notifies the runtime queue when concurrency changes', () => {
+    const configPath = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'ad-fontes-ai-config-queue-notify-')),
+      'config.json'
+    );
+    process.env.ADFONTES_CONFIG_PATH = configPath;
+
+    const config = require('../../../utils/config') as { clearCache: () => void };
+    const queue = require('../queue') as {
+      updateQueueConcurrency: (maxConcurrency: number) => void;
+    };
+    const originalUpdateQueueConcurrency = queue.updateQueueConcurrency;
+    let notifiedConcurrency: number | undefined;
+    queue.updateQueueConcurrency = (maxConcurrency: number) => {
+      notifiedConcurrency = maxConcurrency;
+    };
+
+    try {
+      config.clearCache();
+      const { updateAIConfig } = loadService();
+
+      updateAIConfig({
+        providers: [],
+        queue_concurrency: 4,
+      });
+
+      assert.equal(notifiedConcurrency, 4);
+    } finally {
+      queue.updateQueueConcurrency = originalUpdateQueueConcurrency;
+    }
   });
 
   void it('updateAIConfig persists configurable AI flavor markers', () => {

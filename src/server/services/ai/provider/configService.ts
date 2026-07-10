@@ -1,8 +1,7 @@
-const config = require('../../../utils/config') as {
-  get: <T = unknown>(path: string, defaultValue?: T) => T;
-  loadConfigFile: () => Record<string, unknown>;
-  saveConfigFile: (config: Record<string, unknown>) => void;
-};
+import type { UserSettingsPatch } from '../../../settings/userSettings';
+
+const { createFileSettingsAdapter, createUserSettingsModule } =
+  require('../../../settings/userSettings') as typeof import('../../../settings/userSettings');
 const { loggers } = require('../../../utils/logger') as {
   loggers: {
     ai: {
@@ -86,6 +85,20 @@ const knownAnthropicBaseUrls: Record<string, string> = {
 
 const defaultAIConfig = (): AIConfig => getDefaultAIConfig();
 
+// AI 配置只依赖 User Settings seam；每次创建 adapter 以尊重测试和桌面启动时的动态路径。
+function createAISettings() {
+  return createUserSettingsModule({ adapter: createFileSettingsAdapter() });
+}
+
+// 从用户设置快照中取出 AI 设置块；raw/masked 由调用方决定，避免在这里混淆 secret 语义。
+function readAIConfigFromSettings(masked: boolean): AIConfig {
+  const settings = createAISettings();
+  const snapshot = masked ? settings.readMaskedSnapshot() : settings.readSnapshot();
+  const ai = snapshot.config.ai;
+  if (!ai) return defaultAIConfig();
+  return withAIEndpointDefaults(AIConfigSchema.parse(ai));
+}
+
 function maskApiKey(key: string): string {
   if (!key) return '';
   if (key.length <= 8) return '***';
@@ -116,13 +129,11 @@ function withAIEndpointDefaults(ai: AIConfig): AIConfig {
 }
 
 function getAIConfig(): AIConfig {
-  const ai = config.get<AIConfig | undefined>('ai');
-  if (!ai) return defaultAIConfig();
-  return withAIEndpointDefaults(AIConfigSchema.parse(ai));
+  return readAIConfigFromSettings(false);
 }
 
 function getAIConfigMasked(): AIConfigMasked {
-  const ai = getAIConfig();
+  const ai = readAIConfigFromSettings(true);
   return {
     ...ai,
     providers: ai.providers,
@@ -194,7 +205,9 @@ function updateAIConfig(input: unknown): AIConfigMasked {
   };
 
   const fullValidated = withAIEndpointDefaults(AIConfigSchema.parse(merged));
-  config.saveConfigFile({ ...config.loadConfigFile(), ai: fullValidated });
+  createAISettings().updateSettings({
+    ai: fullValidated as unknown as UserSettingsPatch[string],
+  });
   const { updateQueueConcurrency } = require('../queue') as {
     updateQueueConcurrency: (maxConcurrency: number) => void;
   };
@@ -209,10 +222,11 @@ function updateAIConfig(input: unknown): AIConfigMasked {
     'AI config saved'
   );
 
+  const masked = readAIConfigFromSettings(true);
   return {
-    ...fullValidated,
-    providers: fullValidated.providers,
-    search: fullValidated.search,
+    ...masked,
+    providers: masked.providers,
+    search: masked.search,
   };
 }
 
